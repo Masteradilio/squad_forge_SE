@@ -10,6 +10,8 @@ import {
   type ActionApproval,
   type Epic,
   type ImportPRDResult,
+  type PRDetails,
+  type AgentDetails,
 } from './api/client';
 import { useProjectEvents, type LifecycleEventPayload } from './api/events';
 import { Card } from './components/Card';
@@ -91,6 +93,293 @@ export default function App() {
   const [backlogPage, setBacklogPage] = useState(1);
   const [missionControlPage, setMissionControlPage] = useState(1);
 
+  // Safety Policy Editing State
+  const [isEditingPolicy, setIsEditingPolicy] = useState(false);
+  const [policyAllowedCmds, setPolicyAllowedCmds] = useState('');
+  const [policyBlockedCmds, setPolicyBlockedCmds] = useState('');
+  const [policyProtectedPaths, setPolicyProtectedPaths] = useState('');
+  const [policyMaxRepair, setPolicyMaxRepair] = useState(3);
+  const [policyMaxFiles, setPolicyMaxFiles] = useState(10);
+
+  // PR Review State
+  const [selectedPRTask, setSelectedPRTask] = useState<Task | null>(null);
+  const [prDetails, setPrDetails] = useState<PRDetails | null>(null);
+  const [isLoadingPRDetails, setIsLoadingPRDetails] = useState(false);
+  const [isRerunningTests, setIsRerunningTests] = useState(false);
+  const [testConsoleOutput, setTestConsoleOutput] = useState('');
+
+  // Agent Manager State
+  const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
+  const [agentDetails, setAgentDetails] = useState<AgentDetails | null>(null);
+  const [isLoadingAgentDetails, setIsLoadingAgentDetails] = useState(false);
+  const [agentDetailTab, setAgentDetailTab] = useState<'context' | 'logs' | 'handoffs'>('context');
+
+  // Skills and Memory states
+  const [projectMemory, setProjectMemory] = useState([
+    {
+      id: 1,
+      fact: 'Project database is SQLite stored locally at backend/dev.db',
+      pinned: true,
+      status: 'active'
+    },
+    {
+      id: 2,
+      fact: 'Frontend SPA is written in React + TypeScript using Vite building tool',
+      pinned: false,
+      status: 'active'
+    },
+    {
+      id: 3,
+      fact: 'FastAPI backend executes on port 8000 and exposes CORS/Gzip handlers',
+      pinned: false,
+      status: 'stale'
+    },
+    {
+      id: 4,
+      fact: 'Security Policy default name is unattended_conservative ruleset',
+      pinned: true,
+      status: 'active'
+    }
+  ]);
+
+  const [skills, setSkills] = useState([
+    {
+      name: 'localforge-os',
+      trigger: 'When implementing structural codebase/PRD changes',
+      status: 'Active'
+    },
+    {
+      name: 'android-cli',
+      trigger: 'On android CLI building, toolchain orchestration commands',
+      status: 'Active'
+    },
+    {
+      name: 'alphafold-database',
+      trigger: 'When resolving UniProt IDs for protein structure query',
+      status: 'Cached'
+    },
+    {
+      name: 'chembl-database',
+      trigger: 'When querying bioactive molecules bioactivity profiles',
+      status: 'Disabled'
+    },
+    {
+      name: 'pubmed-database',
+      trigger: 'On literary citation and scientific abstracts retrieval',
+      status: 'Active'
+    }
+  ]);
+
+  const [newMemoryFact, setNewMemoryFact] = useState('');
+  const [newSkillName, setNewSkillName] = useState('');
+  const [newSkillTrigger, setNewSkillTrigger] = useState('');
+
+  const handleAddMemoryFact = () => {
+    if (!newMemoryFact.trim()) return;
+    const newFact = {
+      id: Date.now(),
+      fact: newMemoryFact.trim(),
+      pinned: false,
+      status: 'active'
+    };
+    setProjectMemory((prev) => [newFact, ...prev]);
+    setNewMemoryFact('');
+  };
+
+  const handlePinMemory = (id: number) => {
+    setProjectMemory((prev) =>
+      prev.map((m) => (m.id === id ? { ...m, pinned: !m.pinned } : m))
+    );
+  };
+
+  const handleStaleMemory = (id: number) => {
+    setProjectMemory((prev) =>
+      prev.map((m) =>
+        m.id === id
+          ? { ...m, status: m.status === 'stale' ? 'active' : 'stale' }
+          : m
+      )
+    );
+  };
+
+  const handleDeleteMemory = (id: number) => {
+    setProjectMemory((prev) => prev.filter((m) => m.id !== id));
+  };
+
+  const handleAddSkill = () => {
+    if (!newSkillName.trim() || !newSkillTrigger.trim()) return;
+    const newSkill = {
+      name: newSkillName.trim(),
+      trigger: newSkillTrigger.trim(),
+      status: 'Active'
+    };
+    setSkills((prev) => [newSkill, ...prev]);
+    setNewSkillName('');
+    setNewSkillTrigger('');
+  };
+
+  useEffect(() => {
+    if (selectedAgent) {
+      setIsLoadingAgentDetails(true);
+      apiClient
+        .fetchAgentDetails(selectedAgent.id)
+        .then((details) => {
+          setAgentDetails(details);
+        })
+        .catch((err) => {
+          console.error('Error fetching agent details:', err);
+          alert('Failed to load agent details.');
+        })
+        .finally(() => {
+          setIsLoadingAgentDetails(false);
+        });
+    } else {
+      setAgentDetails(null);
+    }
+  }, [selectedAgent]);
+
+  const handleControlTask = async (
+    taskId: number,
+    action: 'pause' | 'resume' | 'terminate' | 'block'
+  ) => {
+    try {
+      await apiClient.controlTaskExecution(taskId, action);
+      alert(`Task execution ${action}ed successfully!`);
+      if (selectedAgent) {
+        const details = await apiClient.fetchAgentDetails(selectedAgent.id);
+        setAgentDetails(details);
+      }
+      if (activeProject) {
+        const tData = await apiClient.fetchTasks(activeProject.id);
+        setTasks(tData);
+      }
+    } catch (err: any) {
+      console.error('Error controlling task:', err);
+      alert(`Failed to ${action} task: ${err.message}`);
+    }
+  };
+
+  const handleRestorePolicyVersion = async (version: number) => {
+    if (!activeProject || !policy) return;
+    try {
+      const updatedPolicy = await apiClient.restorePolicyVersion(
+        activeProject.id,
+        policy.name,
+        version
+      );
+      setPolicy(updatedPolicy);
+      alert(`Policy reverted to version ${version} successfully!`);
+    } catch (err: any) {
+      console.error('Error restoring policy:', err);
+      alert(`Failed to restore policy version: ${err.message}`);
+    }
+  };
+
+  const startEditingPolicy = () => {
+    const rules = policy?.rules || {};
+    setPolicyAllowedCmds((rules.allowed_commands || []).join('\n'));
+    setPolicyBlockedCmds((rules.blocked_commands || []).join('\n'));
+    setPolicyProtectedPaths((rules.protected_paths || []).join('\n'));
+    setPolicyMaxRepair(rules.max_repair_attempts ?? 3);
+    setPolicyMaxFiles(rules.max_files_touched ?? 10);
+    setIsEditingPolicy(true);
+  };
+
+  const handleSavePolicy = async () => {
+    if (!activeProject || !policy) return;
+    try {
+      const allowed = policyAllowedCmds.split('\n').map(s => s.trim()).filter(Boolean);
+      const blocked = policyBlockedCmds.split('\n').map(s => s.trim()).filter(Boolean);
+      const protectedP = policyProtectedPaths.split('\n').map(s => s.trim()).filter(Boolean);
+
+      const payload = {
+        name: policy.rules?.name || 'default',
+        allowed_commands: allowed,
+        blocked_commands: blocked,
+        protected_paths: protectedP,
+        max_repair_attempts: Number(policyMaxRepair),
+        max_files_touched: Number(policyMaxFiles),
+        approval_required_patterns: policy.rules?.approval_required_patterns || [],
+        max_run_duration: policy.rules?.max_run_duration ?? null,
+        allowed_directories: policy.rules?.allowed_directories || [],
+      };
+
+      await apiClient.updatePolicy(activeProject.id, 'default', payload);
+      setIsEditingPolicy(false);
+      loadProjectData();
+      alert('Policy updated successfully!');
+    } catch (err: any) {
+      alert(err.message || 'Failed to update policy rules.');
+    }
+  };
+
+  const loadPRDetails = useCallback((taskId: number) => {
+    setIsLoadingPRDetails(true);
+    setPrDetails(null);
+    setTestConsoleOutput('');
+    apiClient.fetchPRDetails(taskId)
+      .then((data) => {
+        setPrDetails(data);
+      })
+      .catch((err) => {
+        console.error(err);
+        alert(err.message || 'Failed to load PR details.');
+      })
+      .finally(() => {
+        setIsLoadingPRDetails(false);
+      });
+  }, []);
+
+  useEffect(() => {
+    if (selectedPRTask) {
+      loadPRDetails(selectedPRTask.id);
+    } else {
+      setPrDetails(null);
+    }
+  }, [selectedPRTask, loadPRDetails]);
+
+  const handlePRDecision = async (
+    action: 'accept' | 'reject' | 'request_adjustment'
+  ) => {
+    if (!selectedPRTask) return;
+    try {
+      await apiClient.decidePRReview(selectedPRTask.id, action);
+      setSelectedPRTask(null);
+      loadProjectData();
+      alert(`PR review successfully marked as: ${action.toUpperCase()}`);
+    } catch (err: any) {
+      alert(err.message || 'Failed to submit PR decision.');
+    }
+  };
+
+  const handleRerunPRTests = async () => {
+    if (!selectedPRTask) return;
+    setIsRerunningTests(true);
+    setTestConsoleOutput('Running tests in worktree sandbox...');
+    try {
+      const res = await apiClient.rerunTests(selectedPRTask.id);
+      setTestConsoleOutput(
+        `Command finished with exit code ${res.exit_code}\n\n` +
+        `STDOUT:\n${res.stdout}\n\n` +
+        `STDERR:\n${res.stderr}`
+      );
+    } catch (err: any) {
+      setTestConsoleOutput(`Error running tests: ${err.message}`);
+    } finally {
+      setIsRerunningTests(false);
+    }
+  };
+
+  const handleOpenPROrTaskFolder = async () => {
+    if (!selectedPRTask) return;
+    try {
+      const res = await apiClient.openLocalPath(selectedPRTask.id);
+      alert(`Opened folder: ${res.path}`);
+    } catch (err: any) {
+      alert(err.message || 'Failed to open local worktree folder.');
+    }
+  };
+
   useEffect(() => {
     if (editingTask) {
       setEditTitle(editingTask.title);
@@ -100,6 +389,85 @@ export default function App() {
       setEditDeps(editingTask.dependency_task_ids?.join(', ') || '');
     }
   }, [editingTask]);
+
+  const handleRemoveDependency = (depId: number) => {
+    if (!editingTask) return;
+    const updatedDeps = (editingTask.dependency_task_ids || []).filter(
+      (id) => id !== depId
+    );
+    setEditingTask({
+      ...editingTask,
+      dependency_task_ids: updatedDeps,
+    });
+    setEditDeps(updatedDeps.join(', '));
+  };
+
+  const handleAddDependency = (depId: number) => {
+    if (!editingTask) return;
+    if (editingTask.id === depId) return;
+    const currentDeps = editingTask.dependency_task_ids || [];
+    if (currentDeps.includes(depId)) return;
+    if (wouldCreateCycle(editingTask.id, [...currentDeps, depId], tasks)) {
+      alert('Cannot add blocker: this would create a circular dependency cycle!');
+      return;
+    }
+    const updatedDeps = [...currentDeps, depId];
+    setEditingTask({
+      ...editingTask,
+      dependency_task_ids: updatedDeps,
+    });
+    setEditDeps(updatedDeps.join(', '));
+  };
+
+  const handleRemoveChildDependency = async (childTask: Task) => {
+    if (!editingTask) return;
+    try {
+      const newDeps = (childTask.dependency_task_ids || []).filter(
+        (id) => id !== editingTask.id
+      );
+      await apiClient.updateTask(childTask.id, {
+        dependency_task_ids: newDeps,
+      });
+      setTasks((prev) =>
+        prev.map((t) =>
+          t.id === childTask.id ? { ...t, dependency_task_ids: newDeps } : t
+        )
+      );
+    } catch (err: any) {
+      alert(`Failed to remove child dependency: ${err.message}`);
+    }
+  };
+
+  const handleAddChildDependency = async (childTaskId: number) => {
+    if (!editingTask) return;
+    const childTask = tasks.find((t) => t.id === childTaskId);
+    if (!childTask) return;
+    const currentDeps = childTask.dependency_task_ids || [];
+    if (currentDeps.includes(editingTask.id)) return;
+    if (
+      wouldCreateCycle(
+        childTask.id,
+        [...currentDeps, editingTask.id],
+        tasks
+      )
+    ) {
+      alert('Cannot add dependency: this would create a circular dependency cycle!');
+      return;
+    }
+    try {
+      const newDeps = [...currentDeps, editingTask.id];
+      await apiClient.updateTask(childTask.id, {
+        dependency_task_ids: newDeps,
+      });
+      setTasks((prev) =>
+        prev.map((t) =>
+          t.id === childTask.id ? { ...t, dependency_task_ids: newDeps } : t
+        )
+      );
+    } catch (err: any) {
+      alert(`Failed to add child dependency: ${err.message}`);
+    }
+  };
 
   useEffect(() => {
     setBacklogPage(1);
@@ -230,11 +598,25 @@ export default function App() {
       'safety.action_blocked',
       'safety.action_approved',
       'safety.action_rejected',
+      'test.finished',
+      'repair.started',
+      'repair.succeeded',
+      'repair.failed',
+      'artifact.created',
+      'agent.action_requested',
     ];
     if (reloadEvents.includes(event.event_type)) {
       loadProjectData();
     }
-  }, [loadProjectData]);
+    if (selectedAgent) {
+      apiClient
+        .fetchAgentDetails(selectedAgent.id)
+        .then((details) => {
+          setAgentDetails(details);
+        })
+        .catch((err) => console.error('SSE reload agent details failed:', err));
+    }
+  }, [loadProjectData, selectedAgent]);
 
   // Subscribe to SSE
   const sseConnected = useProjectEvents(activeProject?.id || 0, handleLiveEvent);
@@ -377,20 +759,7 @@ export default function App() {
     },
   ];
 
-  const agentColumns: Column<Agent>[] = [
-    {
-      header: 'Name',
-      accessor: (a) => <span style={{ fontWeight: 600 }}>{a.name}</span>,
-    },
-    {
-      header: 'Role',
-      accessor: (a) => <span style={{ textTransform: 'capitalize' }}>{a.role}</span>,
-    },
-    {
-      header: 'Status',
-      accessor: (a) => <StatusBadge status={a.status} />,
-    },
-  ];
+
 
   const renderTabContent = () => {
     switch (currentTab) {
@@ -1260,6 +1629,301 @@ export default function App() {
                           }}
                         />
                       </div>
+
+                      {/* Visual DAG / Dependency Tree */}
+                      <div style={{
+                        marginTop: '20px',
+                        borderTop: '1px solid var(--border-color)',
+                        paddingTop: '20px',
+                      }}>
+                        <h4 style={{
+                          fontSize: '11px',
+                          fontWeight: 600,
+                          color: 'var(--text-muted)',
+                          marginBottom: '12px',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.5px'
+                        }}>
+                          Task Dependency Tree
+                        </h4>
+
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: '16px',
+                          backgroundColor: 'rgba(255,255,255,0.01)',
+                          padding: '16px',
+                          borderRadius: '8px',
+                          border: '1px solid var(--border-color)',
+                        }}>
+                          {/* Blockers Column */}
+                          <div style={{
+                            flex: 1,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '8px',
+                            alignItems: 'flex-end',
+                          }}>
+                            <span style={{
+                              fontSize: '10px',
+                              color: 'var(--text-muted)',
+                              fontWeight: 600
+                            }}>
+                              BLOCKERS (PARENTS)
+                            </span>
+                            {tasks.filter(
+                              t => editingTask.dependency_task_ids?.includes(t.id)
+                            ).length === 0 ? (
+                              <span style={{
+                                fontSize: '12px',
+                                color: 'var(--text-muted)',
+                                fontStyle: 'italic'
+                              }}>
+                                None
+                              </span>
+                            ) : (
+                              tasks
+                                .filter(t => editingTask.dependency_task_ids?.includes(t.id))
+                                .map(t => (
+                                  <div
+                                    key={t.id}
+                                    style={{
+                                      padding: '6px 10px',
+                                      borderRadius: '6px',
+                                      border: '1px solid var(--border-color)',
+                                      backgroundColor: 'var(--bg-card)',
+                                      fontSize: '12px',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '8px',
+                                      maxWidth: '220px',
+                                    }}
+                                    title={`${t.key}: ${t.title}`}
+                                  >
+                                    <span style={{
+                                      textOverflow: 'ellipsis',
+                                      overflow: 'hidden',
+                                      whiteSpace: 'nowrap',
+                                    }}>
+                                      <strong style={{
+                                        color: 'var(--color-danger)',
+                                        marginRight: '4px'
+                                      }}>
+                                        {t.key}
+                                      </strong>
+                                      {t.title}
+                                    </span>
+                                    <button
+                                      onClick={() => handleRemoveDependency(t.id)}
+                                      style={{
+                                        background: 'none',
+                                        border: 'none',
+                                        color: 'var(--color-danger)',
+                                        cursor: 'pointer',
+                                        fontSize: '12px',
+                                        padding: '0 2px',
+                                        fontWeight: 700,
+                                      }}
+                                    >
+                                      ✖
+                                    </button>
+                                  </div>
+                                ))
+                            )}
+
+                            {/* Dropdown to add blocker */}
+                            <select
+                              onChange={(e) => {
+                                if (e.target.value) {
+                                  handleAddDependency(Number(e.target.value));
+                                  e.target.value = '';
+                                }
+                              }}
+                              style={{
+                                padding: '4px 8px',
+                                borderRadius: '4px',
+                                border: '1px solid var(--border-color)',
+                                backgroundColor: 'var(--bg-input)',
+                                color: 'var(--text-secondary)',
+                                fontSize: '11px',
+                                marginTop: '4px',
+                                maxWidth: '180px',
+                              }}
+                              defaultValue=""
+                            >
+                              <option value="" disabled>+ Add blocker...</option>
+                              {tasks
+                                .filter((t) => {
+                                  if (t.id === editingTask.id) return false;
+                                  if (editingTask.dependency_task_ids?.includes(t.id)) return false;
+                                  if (wouldCreateCycle(
+                                    editingTask.id,
+                                    [...(editingTask.dependency_task_ids || []), t.id],
+                                    tasks
+                                  )) return false;
+                                  return true;
+                                })
+                                .map((t) => (
+                                  <option key={t.id} value={t.id}>
+                                    {t.key}: {t.title}
+                                  </option>
+                                ))}
+                            </select>
+                          </div>
+
+                          {/* Arrow connection */}
+                          <div style={{ color: 'var(--text-muted)', fontSize: '18px', marginTop: '20px' }}>
+                            ➔
+                          </div>
+
+                          {/* Current Node */}
+                          <div style={{
+                            padding: '10px 14px',
+                            borderRadius: '8px',
+                            border: '2px solid var(--color-primary)',
+                            backgroundColor: 'rgba(74, 144, 226, 0.08)',
+                            textAlign: 'center',
+                            fontWeight: 600,
+                            fontSize: '13px',
+                            minWidth: '120px',
+                            maxWidth: '200px',
+                            boxShadow: '0 0 10px rgba(74, 144, 226, 0.2)',
+                            marginTop: '10px',
+                          }}>
+                            <span style={{
+                              display: 'block',
+                              fontSize: '10px',
+                              color: 'var(--text-muted)'
+                            }}>
+                              CURRENT TASK
+                            </span>
+                            <span style={{ color: 'var(--color-primary)' }}>
+                              {editingTask.key}
+                            </span>
+                          </div>
+
+                          {/* Arrow connection */}
+                          <div style={{ color: 'var(--text-muted)', fontSize: '18px', marginTop: '20px' }}>
+                            ➔
+                          </div>
+
+                          {/* Blocked Column */}
+                          <div style={{
+                            flex: 1,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '8px',
+                            alignItems: 'flex-start',
+                          }}>
+                            <span style={{
+                              fontSize: '10px',
+                              color: 'var(--text-muted)',
+                              fontWeight: 600
+                            }}>
+                              BLOCKED TASKS (CHILDREN)
+                            </span>
+                            {tasks.filter(
+                              t => t.dependency_task_ids?.includes(editingTask.id)
+                            ).length === 0 ? (
+                              <span style={{
+                                fontSize: '12px',
+                                color: 'var(--text-muted)',
+                                fontStyle: 'italic'
+                              }}>
+                                None
+                              </span>
+                            ) : (
+                              tasks
+                                .filter(t => t.dependency_task_ids?.includes(editingTask.id))
+                                .map(t => (
+                                  <div
+                                    key={t.id}
+                                    style={{
+                                      padding: '6px 10px',
+                                      borderRadius: '6px',
+                                      border: '1px solid var(--border-color)',
+                                      backgroundColor: 'var(--bg-card)',
+                                      fontSize: '12px',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '8px',
+                                      maxWidth: '220px',
+                                    }}
+                                    title={`${t.key}: ${t.title}`}
+                                  >
+                                    <span style={{
+                                      textOverflow: 'ellipsis',
+                                      overflow: 'hidden',
+                                      whiteSpace: 'nowrap',
+                                    }}>
+                                      <strong style={{
+                                        color: 'var(--color-success)',
+                                        marginRight: '4px'
+                                      }}>
+                                        {t.key}
+                                      </strong>
+                                      {t.title}
+                                    </span>
+                                    <button
+                                      onClick={() => handleRemoveChildDependency(t)}
+                                      style={{
+                                        background: 'none',
+                                        border: 'none',
+                                        color: 'var(--color-danger)',
+                                        cursor: 'pointer',
+                                        fontSize: '12px',
+                                        padding: '0 2px',
+                                        fontWeight: 700,
+                                      }}
+                                    >
+                                      ✖
+                                    </button>
+                                  </div>
+                                ))
+                            )}
+
+                            {/* Dropdown to add child dependency */}
+                            <select
+                              onChange={(e) => {
+                                if (e.target.value) {
+                                  handleAddChildDependency(Number(e.target.value));
+                                  e.target.value = '';
+                                }
+                              }}
+                              style={{
+                                padding: '4px 8px',
+                                borderRadius: '4px',
+                                border: '1px solid var(--border-color)',
+                                backgroundColor: 'var(--bg-input)',
+                                color: 'var(--text-secondary)',
+                                fontSize: '11px',
+                                marginTop: '4px',
+                                maxWidth: '180px',
+                              }}
+                              defaultValue=""
+                            >
+                              <option value="" disabled>+ Add blocked...</option>
+                              {tasks
+                                .filter((t) => {
+                                  if (t.id === editingTask.id) return false;
+                                  if (t.dependency_task_ids?.includes(editingTask.id)) return false;
+                                  if (wouldCreateCycle(
+                                    t.id,
+                                    [...(t.dependency_task_ids || []), editingTask.id],
+                                    tasks
+                                  )) return false;
+                                  return true;
+                                })
+                                .map((t) => (
+                                  <option key={t.id} value={t.id}>
+                                    {t.key}: {t.title}
+                                  </option>
+                                ))}
+                            </select>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </Card>
                 )}
@@ -1271,9 +1935,415 @@ export default function App() {
 
       case 'agents':
         return (
-          <Card title="Active Coding Agents">
-            <Table columns={agentColumns} data={agents} emptyMessage="No autonomous agents active." />
-          </Card>
+          <div style={{
+            display: 'flex',
+            gap: '24px',
+            height: 'calc(100vh - 120px)',
+            overflow: 'hidden'
+          }}>
+            {/* Left Column: Agent Cards List */}
+            <div style={{
+              width: '350px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '16px',
+              overflowY: 'auto',
+              paddingRight: '4px'
+            }}>
+              <h3 style={{
+                margin: 0,
+                fontSize: '18px',
+                fontWeight: 700,
+                color: 'var(--text-primary)'
+              }}>
+                Active Coding Agents
+              </h3>
+              {agents.length === 0 ? (
+                <EmptyState
+                  title="No Active Agents"
+                  message="No autonomous agents are currently active in this project."
+                />
+              ) : (
+                agents.map((agent) => {
+                  const isSelected = selectedAgent?.id === agent.id;
+                  return (
+                    <div
+                      key={agent.id}
+                      onClick={() => setSelectedAgent(agent)}
+                      style={{
+                        padding: '16px',
+                        borderRadius: '12px',
+                        border: isSelected
+                          ? '1px solid var(--color-primary)'
+                          : '1px solid var(--border-color)',
+                        backgroundColor: isSelected
+                          ? 'rgba(33, 150, 243, 0.08)'
+                          : 'rgba(255, 255, 255, 0.02)',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease',
+                        boxShadow: isSelected
+                          ? '0 4px 12px rgba(33, 150, 243, 0.15)'
+                          : 'none',
+                      }}
+                    >
+                      <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        marginBottom: '8px'
+                      }}>
+                        <span style={{
+                          fontWeight: 700,
+                          fontSize: '15px',
+                          color: 'var(--text-primary)'
+                        }}>
+                          {agent.name}
+                        </span>
+                        <StatusBadge status={agent.status} />
+                      </div>
+                      <div style={{
+                        fontSize: '13px',
+                        color: 'var(--text-secondary)',
+                        marginBottom: '4px',
+                        textTransform: 'capitalize'
+                      }}>
+                        <strong>Role:</strong> {agent.role}
+                      </div>
+                      <div style={{
+                        fontSize: '12px',
+                        color: 'var(--text-muted)',
+                        fontFamily: 'monospace'
+                      }}>
+                        {agent.model_profile_id || 'default-model'}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Right Column: Agent Details & Control panel */}
+            <div style={{
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '20px',
+              overflowY: 'auto',
+              borderLeft: '1px solid var(--border-color)',
+              paddingLeft: '24px'
+            }}>
+              {!selectedAgent ? (
+                <EmptyState
+                  title="No Agent Selected"
+                  message="Select an active coding agent to view runtime details and control execution."
+                />
+              ) : isLoadingAgentDetails ? (
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  height: '100%'
+                }}>
+                  <div style={{ color: 'var(--text-secondary)' }}>Loading agent details...</div>
+                </div>
+              ) : !agentDetails ? (
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  height: '100%'
+                }}>
+                  <div style={{ color: 'var(--text-secondary)' }}>Failed to load agent details.</div>
+                </div>
+              ) : (
+                <>
+                  {/* Agent Header Info */}
+                  <Card title={`Agent: ${agentDetails.agent.name}`}>
+                    <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
+                      <div style={{ flex: 1, minWidth: '150px' }}>
+                        <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block' }}>
+                          ROLE & PROFILE
+                        </span>
+                        <span style={{ fontSize: '14px', fontWeight: 600, textTransform: 'capitalize' }}>
+                          {agentDetails.agent.role}
+                        </span>
+                      </div>
+                      <div style={{ flex: 1, minWidth: '150px' }}>
+                        <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block' }}>
+                          LLM MODEL
+                        </span>
+                        <span style={{ fontSize: '13px', fontFamily: 'monospace' }}>
+                          {agentDetails.agent.model_profile_id || 'gemini-2.5-pro'}
+                        </span>
+                      </div>
+                      <div style={{ flex: 1, minWidth: '150px' }}>
+                        <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block' }}>
+                          STATUS & CONCURRENCY
+                        </span>
+                        <span style={{ fontSize: '14px', fontWeight: 600 }}>
+                          {agentDetails.agent.status} (Max {agentDetails.agent.max_concurrent_tasks || 1} task)
+                        </span>
+                      </div>
+                    </div>
+                  </Card>
+
+                  {/* Active Task Run Context and Control Panel */}
+                  {agentDetails.current_task ? (
+                    <Card title={`Active Task Run: ${agentDetails.current_task.key}`}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                        <div>
+                          <strong style={{ fontSize: '15px', display: 'block', marginBottom: '4px' }}>
+                            {agentDetails.current_task.title}
+                          </strong>
+                          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: 0 }}>
+                            {agentDetails.current_task.description}
+                          </p>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '16px', fontSize: '13px' }}>
+                          <div>
+                            <span style={{ color: 'var(--text-muted)', marginRight: '6px' }}>Task Status:</span>
+                            <strong style={{ color: 'var(--color-primary)' }}>
+                              {agentDetails.current_task.status}
+                            </strong>
+                          </div>
+                          {agentDetails.latest_run && (
+                            <>
+                              <div>
+                                <span style={{ color: 'var(--text-muted)', marginRight: '6px' }}>Run Status:</span>
+                                <strong>{agentDetails.latest_run.status}</strong>
+                              </div>
+                              <div>
+                                <span style={{ color: 'var(--text-muted)', marginRight: '6px' }}>Attempt:</span>
+                                <strong>{agentDetails.latest_run.attempt_count}</strong>
+                              </div>
+                            </>
+                          )}
+                        </div>
+
+                        {/* Control Actions */}
+                        <div style={{
+                          display: 'flex',
+                          gap: '12px',
+                          borderTop: '1px solid var(--border-color)',
+                          paddingTop: '16px',
+                          flexWrap: 'wrap'
+                        }}>
+                          {agentDetails.latest_run?.status !== 'PAUSED' ? (
+                            <Button
+                              variant="secondary"
+                              onClick={() => handleControlTask(agentDetails.current_task!.id, 'pause')}
+                            >
+                              ⏸ Pause Task
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="success"
+                              onClick={() => handleControlTask(agentDetails.current_task!.id, 'resume')}
+                            >
+                              ▶ Resume Task
+                            </Button>
+                          )}
+
+                          <Button
+                            variant="danger"
+                            onClick={() => {
+                              if (confirm('Are you sure you want to terminate this task run?')) {
+                                handleControlTask(agentDetails.current_task!.id, 'terminate');
+                              }
+                            }}
+                          >
+                            🛑 Terminate Run
+                          </Button>
+
+                          {agentDetails.current_task.status !== 'BLOCKED' && (
+                            <Button
+                              variant="ghost"
+                              onClick={() => handleControlTask(agentDetails.current_task!.id, 'block')}
+                            >
+                              🚫 Block Task
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </Card>
+                  ) : (
+                    <Card title="Task Context">
+                      <EmptyState
+                        title="Idle Agent"
+                        message="This agent is not currently executing any task run."
+                      />
+                    </Card>
+                  )}
+
+                  {/* Detail sub-tabs */}
+                  <div style={{
+                    display: 'flex',
+                    borderBottom: '1px solid var(--border-color)',
+                    gap: '16px'
+                  }}>
+                    {(['context', 'logs', 'handoffs'] as const).map((tab) => (
+                      <button
+                        key={tab}
+                        onClick={() => setAgentDetailTab(tab)}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          borderBottom: agentDetailTab === tab ? '2px solid var(--color-primary)' : 'none',
+                          padding: '8px 16px',
+                          color: agentDetailTab === tab ? 'var(--text-primary)' : 'var(--text-muted)',
+                          fontWeight: agentDetailTab === tab ? 600 : 400,
+                          cursor: 'pointer',
+                          textTransform: 'capitalize',
+                        }}
+                      >
+                        {tab === 'context' ? 'Task Artifacts & Approvals' : tab}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Sub-tab content */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    {agentDetailTab === 'context' && (
+                      <>
+                        <Card title="Generated Artifacts">
+                          {agentDetails.artifacts.length === 0 ? (
+                            <EmptyState title="No Artifacts" message="No artifacts generated yet." />
+                          ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                              {agentDetails.artifacts.map((art) => (
+                                <div
+                                  key={art.id}
+                                  style={{
+                                    padding: '10px 14px',
+                                    borderRadius: '6px',
+                                    backgroundColor: 'rgba(255,255,255,0.02)',
+                                    border: '1px solid var(--border-color)',
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center'
+                                  }}
+                                >
+                                  <div>
+                                    <span style={{ fontSize: '13px', fontWeight: 600 }}>{art.path}</span>
+                                    <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block' }}>
+                                      Type: {art.type} | Hash: {art.checksum}
+                                    </span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </Card>
+
+                        <Card title="Active Safety Actions (Approvals)">
+                          {agentDetails.actions.length === 0 ? (
+                            <EmptyState title="No Safety Actions" message="No manual approval requests logged." />
+                          ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                              {agentDetails.actions.map((act) => (
+                                <div
+                                  key={act.id}
+                                  style={{
+                                    padding: '10px 14px',
+                                    borderRadius: '6px',
+                                    backgroundColor: 'rgba(255,255,255,0.02)',
+                                    border: '1px solid var(--border-color)',
+                                    fontSize: '13px'
+                                  }}
+                                >
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                                    <span style={{ fontWeight: 600, color: 'var(--color-warning)' }}>
+                                      {act.kind}
+                                    </span>
+                                    <StatusBadge status={act.status} />
+                                  </div>
+                                  <p style={{ margin: 0, fontFamily: 'monospace', fontSize: '12px' }}>
+                                    {JSON.stringify(act.payload)}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </Card>
+                      </>
+                    )}
+
+                    {agentDetailTab === 'logs' && (
+                      <Card title="Agent Audit Log Trails">
+                        {agentDetails.logs.length === 0 ? (
+                          <EmptyState title="No logs found" message="No audit event trails registered." />
+                        ) : (
+                          <div style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '8px',
+                            maxHeight: '300px',
+                            overflowY: 'auto'
+                          }}>
+                            {agentDetails.logs.map((log) => (
+                              <div
+                                key={log.id}
+                                style={{
+                                  padding: '8px 12px',
+                                  fontSize: '12px',
+                                  fontFamily: 'monospace',
+                                  backgroundColor: 'rgba(255,255,255,0.01)',
+                                  border: '1px solid var(--border-color)',
+                                  borderRadius: '6px'
+                                }}
+                              >
+                                <span style={{ color: 'var(--text-muted)' }}>
+                                  [{new Date(log.created_at).toLocaleString()}]
+                                </span>{' '}
+                                <span style={{ color: 'var(--color-primary)' }}>
+                                  {log.event_type}
+                                </span>{' '}
+                                - {JSON.stringify(log.payload_redacted)}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </Card>
+                    )}
+
+                    {agentDetailTab === 'handoffs' && (
+                      <Card title="Agent Handoff Transactions">
+                        {agentDetails.handoffs.length === 0 ? (
+                          <EmptyState title="No handoffs found" message="No collaborative handoffs logged." />
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            {agentDetails.handoffs.map((ho) => (
+                              <div
+                                key={ho.id}
+                                style={{
+                                  padding: '10px 14px',
+                                  borderRadius: '6px',
+                                  backgroundColor: 'rgba(255,255,255,0.02)',
+                                  border: '1px solid var(--border-color)',
+                                  fontSize: '13px'
+                                }}
+                              >
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                                  <span>
+                                    <strong>{ho.from_role}</strong> ➔ <strong>{ho.to_role}</strong>
+                                  </span>
+                                  <StatusBadge status={ho.status} />
+                                </div>
+                                <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                                  Kind: {ho.kind} | Priority: {ho.priority} | Created: {new Date(ho.created_at).toLocaleString()}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </Card>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
         );
 
       case 'runs':
@@ -1283,15 +2353,351 @@ export default function App() {
           </Card>
         );
 
-      case 'prs':
+      case 'prs': {
+        const prTasks = tasks.filter((t) => t.status === 'PR_READY');
+
+        const handleCopyPRDescription = () => {
+          if (prDetails?.summary) {
+            navigator.clipboard.writeText(prDetails.summary);
+            alert('PR description copied to clipboard!');
+          }
+        };
+
         return (
-          <Card title="Pull Requests Ready">
-            <EmptyState
-              title="Local PR Factory"
-              message="Tasks marked PR_READY with valid git worktree changes and test metadata."
-            />
-          </Card>
+          <div style={{
+            display: 'flex',
+            gap: '24px',
+            height: 'calc(100vh - 120px)'
+          }}>
+            {/* Left panel: PR Queue */}
+            <div style={{
+              flex: '0 0 320px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '16px'
+            }}>
+              <Card title={`PR Queue (${prTasks.length})`}>
+                <div style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '12px',
+                  overflowY: 'auto',
+                  maxHeight: 'calc(100vh - 240px)'
+                }}>
+                  {prTasks.length === 0 ? (
+                    <EmptyState
+                      title="No PRs Ready"
+                      message="There are currently no tasks waiting in the PR review queue."
+                    />
+                  ) : (
+                    prTasks.map((t) => {
+                      const isSelected = selectedPRTask?.id === t.id;
+                      return (
+                        <div
+                          key={t.id}
+                          onClick={() => setSelectedPRTask(t)}
+                          style={{
+                            padding: '16px',
+                            borderRadius: '8px',
+                            border: `1px solid ${
+                              isSelected ? 'var(--color-primary)' : 'var(--border-color)'
+                            }`,
+                            backgroundColor: isSelected
+                              ? 'rgba(74, 144, 226, 0.08)'
+                              : 'var(--bg-card)',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s',
+                          }}
+                        >
+                          <div style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            marginBottom: '8px'
+                          }}>
+                            <span style={{
+                              fontWeight: 700,
+                              color: 'var(--color-primary)',
+                              fontSize: '13px'
+                            }}>
+                              {t.key}
+                            </span>
+                            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                              {(t.risk_level || 'low').toUpperCase()} RISK
+                            </span>
+                          </div>
+                          <h4 style={{
+                            margin: 0,
+                            fontSize: '14px',
+                            fontWeight: 600,
+                            color: 'var(--text-primary)'
+                          }}>
+                            {t.title}
+                          </h4>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </Card>
+            </div>
+
+            {/* Right panel: split details screen */}
+            <div style={{
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden'
+            }}>
+              {!selectedPRTask ? (
+                <Card title="PR details">
+                  <EmptyState
+                    title="Select a PR to Review"
+                    message="Choose a task from the queue to inspect diffs and tests."
+                  />
+                </Card>
+              ) : isLoadingPRDetails ? (
+                <Card title={`Reviewing ${selectedPRTask.key}`}>
+                  <div style={{ display: 'flex', justifyContent: 'center', padding: '40px' }}>
+                    <span style={{ fontSize: '14px', color: 'var(--text-muted)' }}>
+                      Loading PR artifacts...
+                    </span>
+                  </div>
+                </Card>
+              ) : (
+                <div style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '20px',
+                  height: '100%',
+                  overflowY: 'auto'
+                }}>
+                  {/* Title & Top Action bar */}
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    backgroundColor: 'var(--bg-card)',
+                    padding: '16px 20px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--border-color)',
+                  }}>
+                    <div>
+                      <h2 style={{
+                        margin: 0,
+                        fontSize: '18px',
+                        fontWeight: 700,
+                        color: 'var(--text-primary)'
+                      }}>
+                        {selectedPRTask.key}: {selectedPRTask.title}
+                      </h2>
+                      <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+                        Status: <strong style={{ color: 'var(--color-warning)' }}>PR_READY</strong>
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                      <Button variant="ghost" onClick={handleOpenPROrTaskFolder}>
+                        📂 Open Local Path
+                      </Button>
+                      <Button variant="danger" onClick={() => handlePRDecision('reject')}>
+                        ❌ Reject
+                      </Button>
+                      <Button
+                        variant="warning"
+                        onClick={() => handlePRDecision('request_adjustment')}
+                      >
+                        ⚠️ Request Adjustments
+                      </Button>
+                      <Button variant="success" onClick={() => handlePRDecision('accept')}>
+                        ✔ Accept & Merge
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Details grid layout */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                    {/* Summary & Changed Files */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                      <Card
+                        title="PR Description"
+                        actions={
+                          prDetails?.summary && (
+                            <Button
+                              variant="ghost"
+                              onClick={handleCopyPRDescription}
+                            >
+                              Copy Description
+                            </Button>
+                          )
+                        }
+                      >
+                        <div style={{
+                          maxHeight: '300px',
+                          overflowY: 'auto',
+                          fontSize: '14px',
+                          lineHeight: '1.6',
+                          whiteSpace: 'pre-wrap',
+                          color: 'var(--text-secondary)',
+                          fontFamily: 'sans-serif',
+                        }}>
+                          {prDetails?.summary || 'No description found.'}
+                        </div>
+                      </Card>
+
+                      <Card title="Changed Files">
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          {(!prDetails?.changed_files || prDetails.changed_files.length === 0) ? (
+                            <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+                              No modified files.
+                            </span>
+                          ) : (
+                            prDetails.changed_files.map((file: string) => (
+                              <div
+                                key={file}
+                                style={{
+                                  fontSize: '13px',
+                                  fontFamily: 'monospace',
+                                  padding: '8px 12px',
+                                  backgroundColor: 'rgba(255,255,255,0.02)',
+                                  borderRadius: '6px',
+                                  border: '1px solid var(--border-color)',
+                                  color: 'var(--text-secondary)',
+                                }}
+                              >
+                                {file}
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </Card>
+
+                      {prDetails?.risk_content && (
+                        <Card title="Risk Report">
+                          <pre style={{
+                            margin: 0,
+                            padding: '12px',
+                            borderRadius: '6px',
+                            border: '1px solid var(--border-color)',
+                            backgroundColor: 'rgba(255,255,255,0.01)',
+                            fontSize: '12px',
+                            fontFamily: 'monospace',
+                            whiteSpace: 'pre-wrap',
+                            color: 'var(--text-secondary)',
+                          }}>
+                            {prDetails.risk_content}
+                          </pre>
+                        </Card>
+                      )}
+                    </div>
+
+                    {/* Diffs & Test Runner Console */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                      <Card
+                        title="Test Runner Console"
+                        actions={
+                          <Button
+                            variant="primary"
+                            disabled={isRerunningTests}
+                            onClick={handleRerunPRTests}
+                          >
+                            {isRerunningTests ? 'Running...' : '🔄 Rerun Tests'}
+                          </Button>
+                        }
+                      >
+                        <div style={{
+                          backgroundColor: '#1E1E1E',
+                          borderRadius: '8px',
+                          border: '1px solid var(--border-color)',
+                          padding: '14px',
+                          maxHeight: '300px',
+                          overflowY: 'auto',
+                        }}>
+                          <pre style={{
+                            margin: 0,
+                            fontFamily: 'monospace',
+                            fontSize: '12px',
+                            color: '#4AF626',
+                            whiteSpace: 'pre-wrap',
+                          }}>
+                            {testConsoleOutput || prDetails?.tests_content ||
+                              'No test execution log loaded. Click Rerun Tests to execute.'}
+                          </pre>
+                        </div>
+                      </Card>
+
+                      {prDetails?.repair_content && (
+                        <Card title="Repair Attempts Log">
+                          <pre style={{
+                            margin: 0,
+                            padding: '12px',
+                            borderRadius: '6px',
+                            border: '1px solid var(--border-color)',
+                            backgroundColor: 'rgba(255,255,255,0.01)',
+                            fontSize: '12px',
+                            fontFamily: 'monospace',
+                            whiteSpace: 'pre-wrap',
+                            color: 'var(--text-secondary)',
+                          }}>
+                            {prDetails.repair_content}
+                          </pre>
+                        </Card>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Unified Diffs patch viewer */}
+                  {prDetails?.patch_content && (
+                    <Card title="Unified Patch Diff Viewer">
+                      <div style={{
+                        maxHeight: '500px',
+                        overflowY: 'auto',
+                        border: '1px solid var(--border-color)',
+                        borderRadius: '8px',
+                        backgroundColor: '#1E1E1E',
+                        padding: '16px',
+                      }}>
+                        <pre style={{
+                          margin: 0,
+                          fontFamily: 'monospace',
+                          fontSize: '12px',
+                          overflowX: 'auto'
+                        }}>
+                          {prDetails.patch_content.split('\n').map((line: string, idx: number) => {
+                            let color = '#D4D4D4';
+                            let bgColor = 'transparent';
+                            if (line.startsWith('+') && !line.startsWith('+++')) {
+                              color = '#4EC9B0';
+                              bgColor = 'rgba(78, 201, 176, 0.15)';
+                            } else if (line.startsWith('-') && !line.startsWith('---')) {
+                              color = '#F44747';
+                              bgColor = 'rgba(244, 71, 71, 0.15)';
+                            } else if (line.startsWith('@@')) {
+                              color = '#569CD6';
+                            }
+                            return (
+                              <div
+                                key={idx}
+                                style={{
+                                  color,
+                                  backgroundColor: bgColor,
+                                  padding: '2px 4px',
+                                  borderRadius: '2px',
+                                }}
+                              >
+                                {line}
+                              </div>
+                            );
+                          })}
+                        </pre>
+                      </div>
+                    </Card>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
         );
+      }
 
       case 'worktrees':
         return (
@@ -1305,25 +2711,156 @@ export default function App() {
 
       case 'models':
         return (
-          <Card title="Configured LLM Models">
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px' }}>
-              {models.map((model) => (
-                <div
-                  key={model}
-                  style={{
-                    padding: '16px 24px',
-                    borderRadius: '8px',
-                    border: '1px solid var(--border-color)',
-                    background: 'var(--bg-card)',
-                    fontSize: '14px',
-                    fontWeight: 600,
-                  }}
-                >
-                  {model}
-                </div>
-              ))}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
+              <div style={{ flex: 1, minWidth: '300px' }}>
+                <Card title="Active LLM Providers & Health">
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    <div>
+                      <span style={{
+                        fontSize: '11px',
+                        color: 'var(--text-muted)',
+                        display: 'block'
+                      }}>
+                        ACTIVE PROVIDER
+                      </span>
+                      <strong style={{ fontSize: '16px', color: 'var(--color-primary)' }}>
+                        LOCALFORGE (FAKE/LOCAL EMBEDDED)
+                      </strong>
+                    </div>
+                    <div>
+                      <span style={{
+                        fontSize: '11px',
+                        color: 'var(--text-muted)',
+                        display: 'block'
+                      }}>
+                        HEALTH STATUS
+                      </span>
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        marginTop: '4px'
+                      }}>
+                        <span style={{
+                          width: '10px',
+                          height: '10px',
+                          borderRadius: '50%',
+                          backgroundColor: 'var(--color-success)',
+                          boxShadow: '0 0 8px var(--color-success)',
+                          display: 'inline-block'
+                        }} />
+                        <span style={{
+                          fontSize: '14px',
+                          fontWeight: 600,
+                          color: 'var(--color-success)'
+                        }}>
+                          Healthy & Operational
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </Card>
+              </div>
+
+              <div style={{ flex: 2, minWidth: '350px' }}>
+                <Card title="Available LLM Models">
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
+                    {models.length === 0 ? (
+                      <EmptyState
+                        title="No models detected"
+                        message="Ensure the local LLM server is reachable."
+                      />
+                    ) : (
+                      models.map((model) => (
+                        <div
+                          key={model}
+                          style={{
+                            padding: '12px 18px',
+                            borderRadius: '8px',
+                            border: '1px solid var(--border-color)',
+                            background: 'rgba(255,255,255,0.01)',
+                            fontSize: '13px',
+                            fontFamily: 'monospace',
+                            color: 'var(--text-primary)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px'
+                          }}
+                        >
+                          <span style={{
+                            width: '6px',
+                            height: '6px',
+                            borderRadius: '50%',
+                            backgroundColor: 'var(--color-primary)'
+                          }} />
+                          {model}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </Card>
+              </div>
             </div>
-          </Card>
+
+            <Card title="Agent Role Mappings (Routing Model configuration)">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {agents.length === 0 ? (
+                  <EmptyState
+                    title="No routing active"
+                    message="No active agents mapped to models."
+                  />
+                ) : (
+                  agents.map((a) => (
+                    <div
+                      key={a.id}
+                      style={{
+                        padding: '14px 18px',
+                        borderRadius: '8px',
+                        border: '1px solid var(--border-color)',
+                        backgroundColor: 'rgba(255, 255, 255, 0.01)',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        flexWrap: 'wrap',
+                        gap: '12px'
+                      }}
+                    >
+                      <div>
+                        <strong style={{ fontSize: '15px' }}>{a.name}</strong>
+                        <span style={{
+                          fontSize: '11px',
+                          color: 'var(--text-muted)',
+                          marginLeft: '8px',
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          border: '1px solid var(--border-color)',
+                          textTransform: 'capitalize'
+                        }}>
+                          {a.role}
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                          Routed to model:
+                        </span>
+                        <code style={{
+                          padding: '4px 8px',
+                          borderRadius: '4px',
+                          backgroundColor: 'rgba(33, 150, 243, 0.08)',
+                          border: '1px solid rgba(33, 150, 243, 0.2)',
+                          color: 'var(--color-primary)',
+                          fontSize: '13px'
+                        }}>
+                          {a.model_profile_id || 'gemini-2.5-pro'}
+                        </code>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </Card>
+          </div>
         );
 
       case 'safety': {
@@ -1559,164 +3096,673 @@ export default function App() {
             </div>
 
             {/* Allowed & Blocked Command Rules */}
-            <Card title="Active Rules & Enforced Boundaries">
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
-                  {/* Allowed Commands */}
-                  <div style={{ flex: 1, minWidth: '250px' }}>
-                    <h4 style={{
-                      color: 'var(--color-success)',
-                      fontWeight: 600,
-                      marginBottom: '10px',
-                      fontSize: '14px',
-                    }}>
-                      ✔ ALLOWED PATTERNS
-                    </h4>
-                    <div style={{
-                      maxHeight: '200px',
-                      overflowY: 'auto',
-                      border: '1px solid var(--border-color)',
-                      borderRadius: '8px',
-                      padding: '12px',
-                      backgroundColor: 'rgba(255,255,255,0.01)',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '6px',
-                    }}>
-                      {allowedCmds.length === 0 ? (
-                        <span style={{
-                          fontSize: '13px',
-                          color: 'var(--text-muted)',
-                        }}>None</span>
-                      ) : (
-                        allowedCmds.map((cmd) => (
-                          <div key={cmd} style={{
-                            fontSize: '12px',
-                            fontFamily: 'monospace',
-                            color: 'var(--text-secondary)',
-                            padding: '4px 6px',
-                            backgroundColor: 'rgba(255,255,255,0.02)',
-                            borderRadius: '4px',
-                          }}>
-                            {cmd}
-                          </div>
-                        ))
-                      )}
+            <Card
+              title="Active Rules & Enforced Boundaries"
+              actions={
+                !isEditingPolicy ? (
+                  <Button onClick={startEditingPolicy}>
+                    ✏️ Edit Rules
+                  </Button>
+                ) : (
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <Button variant="ghost" onClick={() => setIsEditingPolicy(false)}>
+                      Cancel
+                    </Button>
+                    <Button variant="success" onClick={handleSavePolicy}>
+                      Save Policy
+                    </Button>
+                  </div>
+                )
+              }
+            >
+              {isEditingPolicy ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                    <div style={{ flex: 1, minWidth: '220px' }}>
+                      <label style={{
+                        display: 'block',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        color: 'var(--text-muted)',
+                        marginBottom: '6px',
+                      }}>
+                        ALLOWED PATTERNS (one per line)
+                      </label>
+                      <textarea
+                        value={policyAllowedCmds}
+                        onChange={(e) => setPolicyAllowedCmds(e.target.value)}
+                        rows={6}
+                        style={{
+                          width: '100%',
+                          padding: '10px',
+                          borderRadius: '6px',
+                          border: '1px solid var(--border-color)',
+                          backgroundColor: 'var(--bg-input)',
+                          color: 'var(--text-primary)',
+                          fontFamily: 'monospace',
+                          fontSize: '12px',
+                        }}
+                        placeholder="e.g. npm test"
+                      />
+                    </div>
+                    <div style={{ flex: 1, minWidth: '220px' }}>
+                      <label style={{
+                        display: 'block',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        color: 'var(--text-muted)',
+                        marginBottom: '6px',
+                      }}>
+                        BLOCKED PATTERNS (one per line)
+                      </label>
+                      <textarea
+                        value={policyBlockedCmds}
+                        onChange={(e) => setPolicyBlockedCmds(e.target.value)}
+                        rows={6}
+                        style={{
+                          width: '100%',
+                          padding: '10px',
+                          borderRadius: '6px',
+                          border: '1px solid var(--border-color)',
+                          backgroundColor: 'var(--bg-input)',
+                          color: 'var(--text-primary)',
+                          fontFamily: 'monospace',
+                          fontSize: '12px',
+                        }}
+                        placeholder="e.g. rm -rf"
+                      />
+                    </div>
+                    <div style={{ flex: 1, minWidth: '220px' }}>
+                      <label style={{
+                        display: 'block',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        color: 'var(--text-muted)',
+                        marginBottom: '6px',
+                      }}>
+                        PROTECTED FILES & PATHS (one per line)
+                      </label>
+                      <textarea
+                        value={policyProtectedPaths}
+                        onChange={(e) => setPolicyProtectedPaths(e.target.value)}
+                        rows={6}
+                        style={{
+                          width: '100%',
+                          padding: '10px',
+                          borderRadius: '6px',
+                          border: '1px solid var(--border-color)',
+                          backgroundColor: 'var(--bg-input)',
+                          color: 'var(--text-primary)',
+                          fontFamily: 'monospace',
+                          fontSize: '12px',
+                        }}
+                        placeholder="e.g. .env"
+                      />
                     </div>
                   </div>
-
-                  {/* Blocked Commands */}
-                  <div style={{ flex: 1, minWidth: '250px' }}>
-                    <h4 style={{
-                      color: 'var(--color-danger)',
-                      fontWeight: 600,
-                      marginBottom: '10px',
-                      fontSize: '14px',
-                    }}>
-                      ❌ BLOCKED COMMAND PATTERNS
-                    </h4>
-                    <div style={{
-                      maxHeight: '200px',
-                      overflowY: 'auto',
-                      border: '1px solid var(--border-color)',
-                      borderRadius: '8px',
-                      padding: '12px',
-                      backgroundColor: 'rgba(255,255,255,0.01)',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '6px',
-                    }}>
-                      {blockedCmds.length === 0 ? (
-                        <span style={{
+                  <div style={{
+                    display: 'flex',
+                    gap: '16px',
+                    borderTop: '1px solid var(--border-color)',
+                    paddingTop: '16px',
+                  }}>
+                    <div style={{ flex: 1 }}>
+                      <label style={{
+                        display: 'block',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        color: 'var(--text-muted)',
+                        marginBottom: '6px',
+                      }}>
+                        Max Repair Attempts
+                      </label>
+                      <input
+                        type="number"
+                        min={0}
+                        value={policyMaxRepair}
+                        onChange={(e) => setPolicyMaxRepair(Number(e.target.value))}
+                        style={{
+                          width: '100%',
+                          padding: '10px',
+                          borderRadius: '6px',
+                          border: '1px solid var(--border-color)',
+                          backgroundColor: 'var(--bg-input)',
+                          color: 'var(--text-primary)',
                           fontSize: '13px',
-                          color: 'var(--text-muted)',
-                        }}>None</span>
-                      ) : (
-                        blockedCmds.map((cmd) => (
-                          <div key={cmd} style={{
-                            fontSize: '12px',
-                            fontFamily: 'monospace',
-                            color: 'var(--color-danger)',
-                            padding: '4px 6px',
-                            backgroundColor: 'rgba(239, 83, 80, 0.05)',
-                            borderRadius: '4px',
-                          }}>
-                            {cmd}
-                          </div>
-                        ))
-                      )}
+                        }}
+                      />
                     </div>
-                  </div>
-
-                  {/* Protected Paths */}
-                  <div style={{ flex: 1, minWidth: '250px' }}>
-                    <h4 style={{
-                      color: 'var(--color-warning)',
-                      fontWeight: 600,
-                      marginBottom: '10px',
-                      fontSize: '14px',
-                    }}>
-                      🔒 PROTECTED FILES & PATHS
-                    </h4>
-                    <div style={{
-                      maxHeight: '200px',
-                      overflowY: 'auto',
-                      border: '1px solid var(--border-color)',
-                      borderRadius: '8px',
-                      padding: '12px',
-                      backgroundColor: 'rgba(255,255,255,0.01)',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '6px',
-                    }}>
-                      {protectedPaths.length === 0 ? (
-                        <span style={{
+                    <div style={{ flex: 1 }}>
+                      <label style={{
+                        display: 'block',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        color: 'var(--text-muted)',
+                        marginBottom: '6px',
+                      }}>
+                        Max Files Touched Limit
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={policyMaxFiles}
+                        onChange={(e) => setPolicyMaxFiles(Number(e.target.value))}
+                        style={{
+                          width: '100%',
+                          padding: '10px',
+                          borderRadius: '6px',
+                          border: '1px solid var(--border-color)',
+                          backgroundColor: 'var(--bg-input)',
+                          color: 'var(--text-primary)',
                           fontSize: '13px',
-                          color: 'var(--text-muted)',
-                        }}>None</span>
-                      ) : (
-                        protectedPaths.map((p) => (
-                          <div key={p} style={{
-                            fontSize: '12px',
-                            fontFamily: 'monospace',
-                            color: 'var(--color-warning)',
-                            padding: '4px 6px',
-                            backgroundColor: 'rgba(255, 179, 0, 0.05)',
-                            borderRadius: '4px',
-                          }}>
-                            {p}
-                          </div>
-                        ))
-                      )}
+                        }}
+                      />
                     </div>
                   </div>
                 </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                  <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
+                    {/* Allowed Commands */}
+                    <div style={{ flex: 1, minWidth: '250px' }}>
+                      <h4 style={{
+                        color: 'var(--color-success)',
+                        fontWeight: 600,
+                        marginBottom: '10px',
+                        fontSize: '14px',
+                      }}>
+                        ✔ ALLOWED PATTERNS
+                      </h4>
+                      <div style={{
+                        maxHeight: '200px',
+                        overflowY: 'auto',
+                        border: '1px solid var(--border-color)',
+                        borderRadius: '8px',
+                        padding: '12px',
+                        backgroundColor: 'rgba(255,255,255,0.01)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '6px',
+                      }}>
+                        {allowedCmds.length === 0 ? (
+                          <span style={{
+                            fontSize: '13px',
+                            color: 'var(--text-muted)',
+                          }}>None</span>
+                        ) : (
+                          allowedCmds.map((cmd) => (
+                            <div key={cmd} style={{
+                              fontSize: '12px',
+                              fontFamily: 'monospace',
+                              color: 'var(--text-secondary)',
+                              padding: '4px 6px',
+                              backgroundColor: 'rgba(255,255,255,0.02)',
+                              borderRadius: '4px',
+                            }}>
+                              {cmd}
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
 
+                    {/* Blocked Commands */}
+                    <div style={{ flex: 1, minWidth: '250px' }}>
+                      <h4 style={{
+                        color: 'var(--color-danger)',
+                        fontWeight: 600,
+                        marginBottom: '10px',
+                        fontSize: '14px',
+                      }}>
+                        ❌ BLOCKED COMMAND PATTERNS
+                      </h4>
+                      <div style={{
+                        maxHeight: '200px',
+                        overflowY: 'auto',
+                        border: '1px solid var(--border-color)',
+                        borderRadius: '8px',
+                        padding: '12px',
+                        backgroundColor: 'rgba(255,255,255,0.01)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '6px',
+                      }}>
+                        {blockedCmds.length === 0 ? (
+                          <span style={{
+                            fontSize: '13px',
+                            color: 'var(--text-muted)',
+                          }}>None</span>
+                        ) : (
+                          blockedCmds.map((cmd) => (
+                            <div key={cmd} style={{
+                              fontSize: '12px',
+                              fontFamily: 'monospace',
+                              color: 'var(--color-danger)',
+                              padding: '4px 6px',
+                              backgroundColor: 'rgba(239, 83, 80, 0.05)',
+                              borderRadius: '4px',
+                            }}>
+                              {cmd}
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Protected Paths */}
+                    <div style={{ flex: 1, minWidth: '250px' }}>
+                      <h4 style={{
+                        color: 'var(--color-warning)',
+                        fontWeight: 600,
+                        marginBottom: '10px',
+                        fontSize: '14px',
+                      }}>
+                        🔒 PROTECTED FILES & PATHS
+                      </h4>
+                      <div style={{
+                        maxHeight: '200px',
+                        overflowY: 'auto',
+                        border: '1px solid var(--border-color)',
+                        borderRadius: '8px',
+                        padding: '12px',
+                        backgroundColor: 'rgba(255,255,255,0.01)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '6px',
+                      }}>
+                        {protectedPaths.length === 0 ? (
+                          <span style={{
+                            fontSize: '13px',
+                            color: 'var(--text-muted)',
+                          }}>None</span>
+                        ) : (
+                          protectedPaths.map((p) => (
+                            <div key={p} style={{
+                              fontSize: '12px',
+                              fontFamily: 'monospace',
+                              color: 'var(--color-warning)',
+                              padding: '4px 6px',
+                              backgroundColor: 'rgba(255, 179, 0, 0.05)',
+                              borderRadius: '4px',
+                            }}>
+                              {p}
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{
+                    display: 'flex',
+                    gap: '24px',
+                    borderTop: '1px solid var(--border-color)',
+                    paddingTop: '16px',
+                    fontSize: '13px',
+                  }}>
+                    <div>
+                      <span style={{ color: 'var(--text-muted)', marginRight: '6px' }}>
+                        Max Repair Attempts:
+                      </span>
+                      <strong style={{ color: 'var(--color-primary)' }}>{maxRepair}</strong>
+                    </div>
+                    <div>
+                      <span style={{ color: 'var(--text-muted)', marginRight: '6px' }}>
+                        Max Files Touched Limit:
+                      </span>
+                      <strong style={{ color: 'var(--color-primary)' }}>{maxFiles}</strong>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </Card>
+
+            {/* Policy Revision History */}
+            {policyRules.history && policyRules.history.length > 0 && (
+              <Card title="Policy Revision History">
                 <div style={{
                   display: 'flex',
-                  gap: '24px',
-                  borderTop: '1px solid var(--border-color)',
-                  paddingTop: '16px',
-                  fontSize: '13px',
+                  flexDirection: 'column',
+                  gap: '12px'
                 }}>
-                  <div>
-                    <span style={{ color: 'var(--text-muted)', marginRight: '6px' }}>
-                      Max Repair Attempts:
-                    </span>
-                    <strong style={{ color: 'var(--color-primary)' }}>{maxRepair}</strong>
-                  </div>
-                  <div>
-                    <span style={{ color: 'var(--text-muted)', marginRight: '6px' }}>
-                      Max Files Touched Limit:
-                    </span>
-                    <strong style={{ color: 'var(--color-primary)' }}>{maxFiles}</strong>
-                  </div>
+                  {policyRules.history.map((h: any) => (
+                    <div
+                      key={h.version}
+                      style={{
+                        padding: '14px',
+                        borderRadius: '8px',
+                        border: '1px solid var(--border-color)',
+                        backgroundColor: 'rgba(255, 255, 255, 0.01)',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: '14px' }}>
+                          Version {h.version}
+                        </div>
+                        <div style={{
+                          fontSize: '12px',
+                          color: 'var(--text-muted)'
+                        }}>
+                          Saved on {new Date(h.updated_at).toLocaleString()}
+                        </div>
+                        <div style={{
+                          fontSize: '12px',
+                          color: 'var(--text-secondary)',
+                          marginTop: '4px'
+                        }}>
+                          Allowed: {h.rules?.allowed_commands?.length || 0} |{' '}
+                          Blocked: {h.rules?.blocked_commands?.length || 0} |{' '}
+                          Protected: {h.rules?.protected_paths?.length || 0}
+                        </div>
+                      </div>
+                      <Button
+                        variant="secondary"
+                        onClick={() => handleRestorePolicyVersion(h.version)}
+                      >
+                        Revert to Version {h.version}
+                      </Button>
+                    </div>
+                  ))}
                 </div>
-              </div>
-            </Card>
+              </Card>
+            )}
           </div>
         );
       }
+
+      case 'skills':
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
+              {/* Left Column: Skills Directory */}
+              <div style={{ flex: 2, minWidth: '350px' }}>
+                <Card title="Workspace Skills Registry">
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    {skills.map((skill) => (
+                      <div
+                        key={skill.name}
+                        style={{
+                          padding: '14px',
+                          borderRadius: '8px',
+                          border: '1px solid var(--border-color)',
+                          backgroundColor: 'rgba(255,255,255,0.01)',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          gap: '16px'
+                        }}
+                      >
+                        <div style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '4px',
+                          flex: 1
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <strong style={{ fontSize: '15px', color: 'var(--text-primary)' }}>
+                              {skill.name}
+                            </strong>
+                            <span style={{
+                              fontSize: '10px',
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              backgroundColor:
+                                skill.status === 'Active'
+                                  ? 'rgba(76, 175, 80, 0.08)'
+                                  : skill.status === 'Cached'
+                                  ? 'rgba(33, 150, 243, 0.08)'
+                                  : 'rgba(239, 83, 80, 0.08)',
+                              border:
+                                skill.status === 'Active'
+                                  ? '1px solid rgba(76, 175, 80, 0.2)'
+                                  : skill.status === 'Cached'
+                                  ? '1px solid rgba(33, 150, 243, 0.2)'
+                                  : '1px solid rgba(239, 83, 80, 0.2)',
+                              color:
+                                skill.status === 'Active'
+                                  ? 'var(--color-success)'
+                                  : skill.status === 'Cached'
+                                  ? 'var(--color-primary)'
+                                  : 'var(--color-danger)'
+                            }}>
+                              {skill.status}
+                            </span>
+                          </div>
+                          <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                            <strong>Trigger rule:</strong> {skill.trigger}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              </div>
+
+              {/* Right Column: Register a New Skill Form */}
+              <div style={{ flex: 1, minWidth: '280px' }}>
+                <Card title="Register New Workspace Skill">
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    <div>
+                      <label style={{
+                        display: 'block',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        color: 'var(--text-muted)',
+                        marginBottom: '6px'
+                      }}>
+                        SKILL ID / NAME
+                      </label>
+                      <input
+                        type="text"
+                        value={newSkillName}
+                        onChange={(e) => setNewSkillName(e.target.value)}
+                        placeholder="e.g. database-migrator"
+                        style={{
+                          width: '100%',
+                          padding: '10px',
+                          borderRadius: '6px',
+                          border: '1px solid var(--border-color)',
+                          backgroundColor: 'var(--bg-input)',
+                          color: 'var(--text-primary)',
+                          fontSize: '13px'
+                        }}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{
+                        display: 'block',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        color: 'var(--text-muted)',
+                        marginBottom: '6px'
+                      }}>
+                        TRIGGER CONDITION DESCRIPTION
+                      </label>
+                      <textarea
+                        value={newSkillTrigger}
+                        onChange={(e) => setNewSkillTrigger(e.target.value)}
+                        placeholder="e.g. When performing SQLite schema migrations"
+                        rows={3}
+                        style={{
+                          width: '100%',
+                          padding: '10px',
+                          borderRadius: '6px',
+                          border: '1px solid var(--border-color)',
+                          backgroundColor: 'var(--bg-input)',
+                          color: 'var(--text-primary)',
+                          fontSize: '13px'
+                        }}
+                      />
+                    </div>
+
+                    <Button
+                      variant="primary"
+                      onClick={handleAddSkill}
+                      style={{
+                        width: '100%',
+                        paddingTop: '10px',
+                        paddingBottom: '10px'
+                      }}
+                    >
+                      🚀 Register Skill
+                    </Button>
+                  </div>
+                </Card>
+              </div>
+            </div>
+          </div>
+        );
+
+      case 'memory':
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
+              {/* Left Column: Project Memory Facts */}
+              <div style={{ flex: 2, minWidth: '350px' }}>
+                <Card title="Project Short-Term & Long-Term Memory facts">
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    {projectMemory.length === 0 ? (
+                      <EmptyState
+                        title="Memory is blank"
+                        message="Add project facts or wait for agents to register context."
+                      />
+                    ) : (
+                      projectMemory.map((item) => (
+                        <div
+                          key={item.id}
+                          style={{
+                            padding: '14px',
+                            borderRadius: '8px',
+                            border: item.pinned
+                              ? '1px solid hsla(38, 92%, 50%, 0.3)'
+                              : '1px solid var(--border-color)',
+                            backgroundColor: item.pinned
+                              ? 'hsla(38, 92%, 50%, 0.04)'
+                              : item.status === 'stale'
+                              ? 'rgba(255,255,255,0.01)'
+                              : 'rgba(255,255,255,0.02)',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            gap: '16px'
+                          }}
+                        >
+                          <div style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '4px',
+                            flex: 1
+                          }}>
+                            <p style={{
+                              margin: 0,
+                              fontSize: '13px',
+                              color: item.status === 'stale'
+                                ? 'var(--text-muted)'
+                                : 'var(--text-primary)',
+                              textDecoration: item.status === 'stale' ? 'line-through' : 'none'
+                            }}>
+                              {item.fact}
+                            </p>
+                            <div style={{ display: 'flex', gap: '8px', fontSize: '10px' }}>
+                              {item.pinned && (
+                                <span style={{ color: 'var(--color-warning)', fontWeight: 600 }}>
+                                  📌 PINNED
+                                </span>
+                              )}
+                              <span style={{
+                                color: item.status === 'active'
+                                  ? 'var(--color-success)'
+                                  : 'var(--text-muted)',
+                                fontWeight: 600,
+                                textTransform: 'uppercase'
+                              }}>
+                                {item.status}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <Button
+                              variant="ghost"
+                              onClick={() => handlePinMemory(item.id)}
+                              style={{ padding: '4px 8px', fontSize: '12px' }}
+                            >
+                              {item.pinned ? '📌 Unpin' : '📌 Pin'}
+                            </Button>
+                            <Button
+                              variant="secondary"
+                              onClick={() => handleStaleMemory(item.id)}
+                              style={{ padding: '4px 8px', fontSize: '12px' }}
+                            >
+                              {item.status === 'stale' ? 'Activate' : 'Mark Stale'}
+                            </Button>
+                            <Button
+                              variant="danger"
+                              onClick={() => handleDeleteMemory(item.id)}
+                              style={{ padding: '4px 8px', fontSize: '12px' }}
+                            >
+                              🗑️ Delete
+                            </Button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </Card>
+              </div>
+
+              {/* Right Column: Register a New Fact Form */}
+              <div style={{ flex: 1, minWidth: '280px' }}>
+                <Card title="Add Project Fact">
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    <div>
+                      <label style={{
+                        display: 'block',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        color: 'var(--text-muted)',
+                        marginBottom: '6px'
+                      }}>
+                        NEW PROJECT FACT DESCRIPTION
+                      </label>
+                      <textarea
+                        value={newMemoryFact}
+                        onChange={(e) => setNewMemoryFact(e.target.value)}
+                        placeholder="e.g. API uses Bearer Token authentication schema in staging"
+                        rows={4}
+                        style={{
+                          width: '100%',
+                          padding: '10px',
+                          borderRadius: '6px',
+                          border: '1px solid var(--border-color)',
+                          backgroundColor: 'var(--bg-input)',
+                          color: 'var(--text-primary)',
+                          fontSize: '13px'
+                        }}
+                      />
+                    </div>
+
+                    <Button
+                      variant="primary"
+                      onClick={handleAddMemoryFact}
+                      style={{
+                        width: '100%',
+                        paddingTop: '10px',
+                        paddingBottom: '10px'
+                      }}
+                    >
+                      ➕ Add Fact
+                    </Button>
+                  </div>
+                </Card>
+              </div>
+            </div>
+          </div>
+        );
 
       default:
         return (

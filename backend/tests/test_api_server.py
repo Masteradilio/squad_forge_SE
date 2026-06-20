@@ -292,3 +292,107 @@ def test_api_prd_and_backlog_studio_endpoints(tmp_path):
     finally:
         close_manager(manager)
 
+
+def test_api_pr_review_center_and_policy_updates(tmp_path):
+    manager = make_db_manager(tmp_path)
+    try:
+        ids = seed_api_state(manager, tmp_path)
+        client = TestClient(create_app(db_manager=manager))
+
+        # 1. Test PUT policy rules
+        policy_url = f"/projects/{ids['project_id']}/policies/default"
+        rules_payload = {
+            "name": "default",
+            "allowed_commands": ["npm test", "python -m pytest"],
+            "blocked_commands": ["rm -rf"],
+            "protected_paths": ["config/"],
+            "approval_required_patterns": [],
+            "max_repair_attempts": 3,
+            "max_files_touched": 5,
+            "max_run_duration": 10,
+            "allowed_directories": []
+        }
+        policy_res = client.put(policy_url, json=rules_payload)
+        assert policy_res.status_code == 200
+        assert policy_res.json()["rules"]["blocked_commands"] == ["rm -rf"]
+
+        # 2. Test GET task pr-details
+        pr_details_res = client.get(f"/tasks/{ids['task_id']}/pr-details")
+        assert pr_details_res.status_code == 200
+        details = pr_details_res.json()
+        assert "tests_content" in details
+        assert details["tests_content"] == "tests passed\n"
+
+        # 3. Test POST open path
+        open_res = client.post(f"/tasks/{ids['task_id']}/open-path")
+        assert open_res.status_code == 200
+        assert open_res.json()["status"] == "ok"
+
+        # 4. Test POST rerun tests
+        rerun_res = client.post(f"/tasks/{ids['task_id']}/rerun-tests")
+        assert rerun_res.status_code == 200
+        assert "exit_code" in rerun_res.json()
+
+        # 5. Test POST PR reviews: reject
+        review_reject_res = client.post(
+            f"/tasks/{ids['task_id']}/pr-review/reject"
+        )
+        assert review_reject_res.status_code == 200
+        assert review_reject_res.json()["status"] == "FAILED_SAFE"
+
+        # Reset status back to PR_READY to test request_adjustment
+        async def reset_status():
+            async with await manager.get_session() as session:
+                from localforge.storage.orm import TaskORM
+                task = await session.get(TaskORM, ids["task_id"])
+                task.status = "PR_READY"
+                await session.commit()
+        asyncio.run(reset_status())
+
+        # Test POST PR reviews: request_adjustment
+        review_adj_res = client.post(
+            f"/tasks/{ids['task_id']}/pr-review/request_adjustment"
+        )
+        assert review_adj_res.status_code == 200
+        assert review_adj_res.json()["status"] == "READY"
+
+        # Reset status back to PR_READY to test accept
+        asyncio.run(reset_status())
+
+        # Test POST PR reviews: accept
+        review_accept_res = client.post(
+            f"/tasks/{ids['task_id']}/pr-review/accept"
+        )
+        assert review_accept_res.status_code == 200
+        assert review_accept_res.json()["status"] == "DONE"
+
+        async def assign_agent():
+            async with await manager.get_session() as session:
+                from localforge.storage.orm import TaskORM
+                task = await session.get(TaskORM, ids["task_id"])
+                task.assigned_agent_id = 1
+                task.status = "READY"
+                await session.commit()
+        asyncio.run(assign_agent())
+
+        agent_details_res = client.get("/agents/1/details")
+        assert agent_details_res.status_code == 200
+        details = agent_details_res.json()
+        assert details["agent"]["id"] == 1
+        assert len(details["artifacts"]) > 0
+
+        # 7. Test POST tasks control block
+        control_res = client.post(f"/tasks/{ids['task_id']}/control/block")
+        assert control_res.status_code == 200
+        assert control_res.json()["status"] == "BLOCKED"
+
+        # 8. Test POST restore policy version
+        client.put(policy_url, json=rules_payload)
+        restore_res = client.post(
+            f"/projects/{ids['project_id']}/policies/default/restore/1"
+        )
+        assert restore_res.status_code == 200
+
+    finally:
+        close_manager(manager)
+

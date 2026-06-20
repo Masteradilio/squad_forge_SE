@@ -4,6 +4,49 @@ All notable changes to LocalForge OS will be documented in this file.
 
 ## [Unreleased]
 
+## [Phase 22] - 2026-06-20 - Models, Skills, Memory UI
+
+### Added
+- Developed Configured LLM Models view ('models') showcasing active providers, health status,
+  available models, and agent role-routing mappings.
+- Developed Workspace Skills Registry view ('skills') displaying skill triggers, current cached
+  or active statuses, and forms to register new workspace skills.
+- Developed Project Memory facts manager view ('memory') with local interactive states allowing
+  user-facing delete, pin/unpin, and stale/activate triggers.
+- Implemented real-time re-fetching of selected agent details, logs, artifacts, and handoffs
+  upon receiving SSE project events.
+
+## [Phase 21] - 2026-06-20 - Agent Manager UI & Interactive Safety Policy History
+
+### Added
+- Developed the Agent Manager split-view tab ('agents') showing active coding agent cards.
+- Implemented Agent details panel displaying role, model, status, current task execution context,
+  generated artifacts, logged safety approvals, handoffs, and audit trails.
+- Added Task Execution Controls directly on the Agent Manager UI, enabling user-facing task
+  pause, resume, block, and termination actions.
+- Integrated interactive task dependency (DAG) tree editing directly on node trees inside Backlog
+  Studio, allowing blockers and children dependencies removal/addition.
+- Integrated safety policy version restore buttons and revision history display inside the Safety tab.
+- Exposed backend REST API endpoints: GET /agents/{id}/details, POST /tasks/{id}/control/{action},
+  and POST /projects/{id}/policies/{name}/restore/{version}.
+- Added unit test coverage for new endpoints in backend/tests/test_api_server.py.
+
+## [Phase 20] - 2026-06-20 - PR Review Center & Safety Enhancements
+
+### Added
+- Developed the PR Review Center ('prs' tab) showing a queue of PR-ready tasks.
+- Created a side-by-side details panel containing summary, changed files, copy button,
+  test runner console, unified diff viewer, and action buttons.
+- Integrated interactive policy rules editor (allow/block commands, protected paths,
+  max repair/files limits) inside the Safety tab.
+- Added visual DAG tree representation of task dependencies (blockers/blocked tasks)
+  inside the task details view in Backlog Studio.
+- Exposed backend REST API endpoints: PUT /projects/{id}/policies/{name},
+  GET /tasks/{id}/pr-details, POST /tasks/{id}/open-path, POST /tasks/{id}/rerun-tests,
+  and POST /tasks/{id}/pr-review/{action}.
+- Added unit test coverage test_api_pr_review_center_and_policy_updates
+  in backend/tests/test_api_server.py.
+
 ## [Phase 19] - 2026-06-20 - Safety Center UI
 
 ### Added

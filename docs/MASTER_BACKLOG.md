@@ -1696,9 +1696,19 @@ Handoffs consumed exactly once in priority order.
 
 Each role produces its own artifact.
 
+#### LF-2305 — Visual Routing Editor (From Phase 22 Enhancements)
+
+Implement visual UI form components inside the Models tab to dynamically edit agent model mappings (e.g., mapping coding roles to specific LLM endpoints) and save routing maps permanently in the database.
+
+#### LF-2306 — Memory Persistence Engine & Backup Exports (From Phase 22 Enhancements)
+
+Develop backend services to persist project memory facts, and implement export/import actions (JSON/YAML) to backup and restore project context metadata.
+
 ### Phase Completion Gate
 
 - default pipeline completes sample task;
+- model routing visually editable;
+- memory persistence and backups operational;
 - Phase 23 changelog entry added.
 
 ---

@@ -45,6 +45,47 @@ export interface Agent {
   role: string;
   status: string;
   current_task_run_id?: number;
+  model_profile_id?: string;
+  active?: boolean;
+  max_concurrent_tasks?: number;
+  current_task_id?: number;
+}
+
+export interface TaskRun {
+  id: number;
+  run_id: number;
+  task_id: number;
+  status: string;
+  worktree_path?: string;
+  branch_name?: string;
+  sandbox_id?: string;
+  attempt_count: number;
+  started_at: string;
+  ended_at?: string;
+  final_summary?: string;
+}
+
+export interface Handoff {
+  id: number;
+  task_run_id: number;
+  from_role: string;
+  to_role: string;
+  kind: string;
+  payload_json: Record<string, any>;
+  priority: number;
+  status: string;
+  created_at: string;
+  consumed_at?: string;
+}
+
+export interface AgentDetails {
+  agent: Agent;
+  current_task?: Task;
+  latest_run?: TaskRun;
+  handoffs: Handoff[];
+  artifacts: Artifact[];
+  actions: ActionApproval[];
+  logs: AuditEvent[];
 }
 
 export interface Artifact {
@@ -108,6 +149,16 @@ export interface ImportPRDResult {
   tasks: string[];
 }
 
+export interface PRDetails {
+  summary: string;
+  changed_files: string[];
+  tests_content: string;
+  risk_content: string;
+  repair_content: string;
+  patch_content: string;
+  artifacts: Artifact[];
+}
+
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(url, options);
   if (!response.ok) {
@@ -168,6 +219,18 @@ export const apiClient = {
     return request<Policy>(`/api/projects/${projectId}/policies/${name}`);
   },
 
+  updatePolicy(
+    projectId: number,
+    name: string,
+    rules: Record<string, any>
+  ): Promise<Policy> {
+    return request<Policy>(`/api/projects/${projectId}/policies/${name}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(rules),
+    });
+  },
+
   fetchModels(): Promise<ModelsResponse> {
     return request<ModelsResponse>('/api/models');
   },
@@ -199,6 +262,56 @@ export const apiClient = {
 
   fetchArtifactContent(artifactId: number): Promise<ArtifactContent> {
     return request<ArtifactContent>(`/api/artifacts/${artifactId}/content`);
+  },
+
+  fetchPRDetails(taskId: number): Promise<PRDetails> {
+    return request<PRDetails>(`/api/tasks/${taskId}/pr-details`);
+  },
+
+  openLocalPath(taskId: number): Promise<{ status: string; path: string }> {
+    return request<{ status: string; path: string }>(`/api/tasks/${taskId}/open-path`, {
+      method: 'POST',
+    });
+  },
+
+  rerunTests(taskId: number): Promise<{ exit_code: number; stdout: string; stderr: string }> {
+    return request<{ exit_code: number; stdout: string; stderr: string }>(
+      `/api/tasks/${taskId}/rerun-tests`,
+      { method: 'POST' }
+    );
+  },
+
+  decidePRReview(
+    taskId: number,
+    action: 'accept' | 'reject' | 'request_adjustment'
+  ): Promise<Task> {
+    return request<Task>(`/api/tasks/${taskId}/pr-review/${action}`, {
+      method: 'POST',
+    });
+  },
+
+  fetchAgentDetails(agentId: number): Promise<AgentDetails> {
+    return request<AgentDetails>(`/api/agents/${agentId}/details`);
+  },
+
+  controlTaskExecution(
+    taskId: number,
+    action: 'pause' | 'resume' | 'terminate' | 'block'
+  ): Promise<Task> {
+    return request<Task>(`/api/tasks/${taskId}/control/${action}`, {
+      method: 'POST',
+    });
+  },
+
+  restorePolicyVersion(
+    projectId: number,
+    name: string,
+    version: number
+  ): Promise<Policy> {
+    return request<Policy>(
+      `/api/projects/${projectId}/policies/${name}/restore/${version}`,
+      { method: 'POST' }
+    );
   },
 };
 

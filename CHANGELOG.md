@@ -4,6 +4,14 @@ All notable changes to LocalForge OS will be documented in this file.
 
 ## [Unreleased]
 
+## [Phase 19] - 2026-06-20 - Safety Center UI
+
+### Added
+- Developed Safety Center controls in App.tsx showing active policy name, rules, and configuration file.
+- Developed Allowed Commands list, Blocked Commands list, and Protected Paths UI panels.
+- Integrated interactive pending safety manual approvals queue.
+- Implemented Emergency Kill Switch halting all active scheduling runs immediately.
+
 ## [Phase 18] - 2026-06-20 - PRD & Backlog Studio
 
 ### Added
@@ -14,6 +22,9 @@ All notable changes to LocalForge OS will be documented in this file.
 - Implemented Task Detail Editor supporting title, description, risk level, and acceptance criteria.
 - Implemented plan approval UI with "Approve Plan" action to activate backlog tasks to READY state.
 - Created `test_api_prd_and_backlog_studio_endpoints` in `backend/tests/test_api_server.py`.
+- Added client-side dependency cycle validation preventing loops in the task editor.
+- Added reactive validation warnings and title/description required fields checks.
+- Added paginated task lists in PRD & Backlog Studio and Mission Control panels.
 
 ## [Phase 17] - 2026-06-20 - Mission Control UI & Backend Enhancements
 

@@ -21,6 +21,28 @@ import { Timeline, type TimelineItem } from './components/Timeline';
 import { EmptyState } from './components/EmptyState';
 import { CodeBlock } from './components/CodeBlock';
 
+const wouldCreateCycle = (
+  taskId: number,
+  newDeps: number[],
+  allTasks: Task[]
+): boolean => {
+  const visited = new Set<number>();
+  const queue = [...newDeps];
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    if (current === taskId) return true;
+    if (!visited.has(current)) {
+      visited.add(current);
+      const task = allTasks.find((t) => t.id === current);
+      if (task && task.dependency_task_ids) {
+        queue.push(...task.dependency_task_ids);
+      }
+    }
+  }
+  return false;
+};
+
+
 type Tab =
   | 'mission-control'
   | 'prd-backlog'
@@ -66,6 +88,9 @@ export default function App() {
   const [editCriteria, setEditCriteria] = useState('');
   const [editDeps, setEditDeps] = useState('');
 
+  const [backlogPage, setBacklogPage] = useState(1);
+  const [missionControlPage, setMissionControlPage] = useState(1);
+
   useEffect(() => {
     if (editingTask) {
       setEditTitle(editingTask.title);
@@ -75,6 +100,12 @@ export default function App() {
       setEditDeps(editingTask.dependency_task_ids?.join(', ') || '');
     }
   }, [editingTask]);
+
+  useEffect(() => {
+    setBacklogPage(1);
+    setMissionControlPage(1);
+    setImportResult(null);
+  }, [activeProject, activeEpic]);
 
   // Live SSE events
   const [events, setEvents] = useState<LifecycleEventPayload[]>([]);
@@ -607,7 +638,53 @@ export default function App() {
             <div style={{ display: 'flex', gap: '24px', alignItems: 'stretch' }}>
               <div style={{ flex: 2, display: 'flex', flexDirection: 'column', gap: '24px' }}>
                 <Card title="Project Backlog Tasks">
-                  <Table columns={taskColumns} data={tasks} emptyMessage="No tasks found for this project." />
+                  {(() => {
+                    const mcPageSize = 5;
+                    const mcTotalPages = Math.ceil(tasks.length / mcPageSize) || 1;
+                    const mcPaginatedTasks = tasks.slice(
+                      (missionControlPage - 1) * mcPageSize,
+                      missionControlPage * mcPageSize
+                    );
+                    return (
+                      <>
+                        <Table
+                          columns={taskColumns}
+                          data={mcPaginatedTasks}
+                          emptyMessage="No tasks found for this project."
+                        />
+                        <div style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          marginTop: '16px',
+                          borderTop: '1px solid var(--border-color)',
+                          paddingTop: '16px',
+                        }}>
+                          <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+                            Page {missionControlPage} of {mcTotalPages} ({tasks.length} tasks)
+                          </span>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <Button
+                              variant="ghost"
+                              disabled={missionControlPage <= 1}
+                              onClick={() => setMissionControlPage((p) => Math.max(p - 1, 1))}
+                            >
+                              Previous
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              disabled={missionControlPage >= mcTotalPages}
+                              onClick={() =>
+                                setMissionControlPage((p) => Math.min(p + 1, mcTotalPages))
+                              }
+                            >
+                              Next
+                            </Button>
+                          </div>
+                        </div>
+                      </>
+                    );
+                  })()}
                 </Card>
               </div>
 
@@ -697,16 +774,27 @@ export default function App() {
           ? tasks.filter((t) => t.epic_id === activeEpic.id)
           : tasks;
 
+        const depsList = editDeps
+          .split(',')
+          .map((d) => parseInt(d.trim(), 10))
+          .filter((d) => !isNaN(d));
+
+        const validationError = (() => {
+          if (!editTitle.trim()) return 'Title is required.';
+          if (!editDesc.trim()) return 'Description is required.';
+          if (editingTask && wouldCreateCycle(editingTask.id, depsList, tasks)) {
+            return 'Cyclic dependency loop detected! A task cannot depend on its descendants.';
+          }
+          return null;
+        })();
+
         const onSaveTask = () => {
+          if (validationError) return;
           if (!editingTask) return;
           const criteriaList = editCriteria
             .split('\n')
             .map((c) => c.trim())
             .filter((c) => c.length > 0);
-          const depsList = editDeps
-            .split(',')
-            .map((d) => parseInt(d.trim(), 10))
-            .filter((d) => !isNaN(d));
 
           handleUpdateTask(editingTask, {
             title: editTitle,
@@ -729,6 +817,14 @@ export default function App() {
         };
 
         const isAllSelected = activeEpic === null;
+
+        // Paginate tasks list
+        const pageSize = 5;
+        const totalPages = Math.ceil(filteredTasks.length / pageSize) || 1;
+        const paginatedTasks = filteredTasks.slice(
+          (backlogPage - 1) * pageSize,
+          backlogPage * pageSize
+        );
 
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -878,85 +974,117 @@ export default function App() {
                 <Card
                   title={activeEpic ? `Epic: ${activeEpic.title}` : 'All Project Tasks'}
                 >
-                  {filteredTasks.length === 0 ? (
+                  {paginatedTasks.length === 0 ? (
                     <EmptyState
                       title="No Tasks"
                       message="No tasks generated under this view."
                     />
                   ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                      {filteredTasks.map((t) => (
-                        <div
-                          key={t.id}
-                          style={{
-                            padding: '16px',
-                            borderRadius: '8px',
-                            border: '1px solid var(--border-color)',
-                            backgroundColor: 'rgba(255, 255, 255, 0.01)',
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                          }}
-                        >
-                          <div style={{ flex: 1, marginRight: '16px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <span style={{
-                                fontWeight: 700,
-                                color: 'var(--color-primary)',
-                              }}>{t.key}</span>
-                              <span style={{ fontWeight: 600 }}>{t.title}</span>
-                            </div>
-                            <p style={{
-                              fontSize: '13px',
-                              color: 'var(--text-muted)',
-                              marginTop: '6px',
-                              lineHeight: '1.4',
-                            }}>
-                              {t.description}
-                            </p>
-                            <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
-                              <StatusBadge status={t.status} />
-                              {t.risk_level && (
+                    <>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        {paginatedTasks.map((t) => (
+                          <div
+                            key={t.id}
+                            style={{
+                              padding: '16px',
+                              borderRadius: '8px',
+                              border: '1px solid var(--border-color)',
+                              backgroundColor: 'rgba(255, 255, 255, 0.01)',
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                            }}
+                          >
+                            <div style={{ flex: 1, marginRight: '16px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 <span style={{
-                                  fontSize: '11px',
-                                  padding: '2px 6px',
-                                  borderRadius: '4px',
-                                  fontWeight: 600,
-                                  textTransform: 'uppercase',
-                                  backgroundColor: getRiskColor(t.risk_level),
-                                  color: getRiskTextColor(t.risk_level),
-                                }}>
-                                  {t.risk_level} risk
-                                </span>
-                              )}
-                              {t.dependency_task_ids && t.dependency_task_ids.length > 0 && (
-                                <span style={{
-                                  fontSize: '11px',
-                                  padding: '2px 6px',
-                                  borderRadius: '4px',
-                                  fontWeight: 500,
-                                  backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                                  color: 'var(--text-muted)',
-                                }}>
-                                  Deps: {t.dependency_task_ids.join(', ')}
-                                </span>
-                              )}
+                                  fontWeight: 700,
+                                  color: 'var(--color-primary)',
+                                }}>{t.key}</span>
+                                <span style={{ fontWeight: 600 }}>{t.title}</span>
+                              </div>
+                              <p style={{
+                                fontSize: '13px',
+                                color: 'var(--text-muted)',
+                                marginTop: '6px',
+                                lineHeight: '1.4',
+                              }}>
+                                {t.description}
+                              </p>
+                              <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                                <StatusBadge status={t.status} />
+                                {t.risk_level && (
+                                  <span style={{
+                                    fontSize: '11px',
+                                    padding: '2px 6px',
+                                    borderRadius: '4px',
+                                    fontWeight: 600,
+                                    textTransform: 'uppercase',
+                                    backgroundColor: getRiskColor(t.risk_level),
+                                    color: getRiskTextColor(t.risk_level),
+                                  }}>
+                                    {t.risk_level} risk
+                                  </span>
+                                )}
+                                {t.dependency_task_ids && t.dependency_task_ids.length > 0 && (
+                                  <span style={{
+                                    fontSize: '11px',
+                                    padding: '2px 6px',
+                                    borderRadius: '4px',
+                                    fontWeight: 500,
+                                    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                                    color: 'var(--text-muted)',
+                                  }}>
+                                    Deps: {t.dependency_task_ids.join(', ')}
+                                  </span>
+                                )}
+                              </div>
                             </div>
-                          </div>
 
-                          <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
-                            {t.status === 'BACKLOG' && (
-                              <Button variant="success" onClick={() => handleApproveTask(t.id)}>
-                                Approve Plan
+                            <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
+                              {t.status === 'BACKLOG' && (
+                                <Button variant="success" onClick={() => handleApproveTask(t.id)}>
+                                  Approve Plan
+                                </Button>
+                              )}
+                              <Button variant="ghost" onClick={() => setEditingTask(t)}>
+                                Edit
                               </Button>
-                            )}
-                            <Button variant="ghost" onClick={() => setEditingTask(t)}>
-                              Edit
-                            </Button>
+                            </div>
                           </div>
+                        ))}
+                      </div>
+
+                      {/* Pagination Controls */}
+                      <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        marginTop: '16px',
+                        borderTop: '1px solid var(--border-color)',
+                        paddingTop: '16px',
+                      }}>
+                        <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+                          Page {backlogPage} of {totalPages} ({filteredTasks.length} tasks)
+                        </span>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <Button
+                            variant="ghost"
+                            disabled={backlogPage <= 1}
+                            onClick={() => setBacklogPage((p) => Math.max(p - 1, 1))}
+                          >
+                            Previous
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            disabled={backlogPage >= totalPages}
+                            onClick={() => setBacklogPage((p) => Math.min(p + 1, totalPages))}
+                          >
+                            Next
+                          </Button>
                         </div>
-                      ))}
-                    </div>
+                      </div>
+                    </>
                   )}
                 </Card>
 
@@ -969,12 +1097,30 @@ export default function App() {
                         <Button variant="ghost" onClick={() => setEditingTask(null)}>
                           Cancel
                         </Button>
-                        <Button variant="success" onClick={onSaveTask}>
+                        <Button
+                          variant="success"
+                          disabled={!!validationError}
+                          onClick={onSaveTask}
+                        >
                           Save Changes
                         </Button>
                       </div>
                     }
                   >
+                    {validationError && (
+                      <div style={{
+                        color: 'var(--color-danger)',
+                        fontSize: '13px',
+                        fontWeight: 600,
+                        padding: '8px 12px',
+                        borderRadius: '6px',
+                        backgroundColor: 'rgba(239, 83, 80, 0.08)',
+                        border: '1px solid var(--color-danger)',
+                        marginBottom: '16px',
+                      }}>
+                        ⚠️ {validationError}
+                      </div>
+                    )}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                       <div>
                         <label style={{
@@ -1180,19 +1326,397 @@ export default function App() {
           </Card>
         );
 
-      case 'safety':
-        return (
-          <Card title="Safety Policies">
-            {policy ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                <h3>Policy Name: {policy.name}</h3>
-                <CodeBlock code={JSON.stringify(policy.rules, null, 2)} />
-              </div>
-            ) : (
-              <EmptyState title="No Policy Found" message="Verify default project safety policies." />
-            )}
-          </Card>
+      case 'safety': {
+        const activeRun = runs.find(
+          (r) => r.status === 'RUNNING' || r.status === 'PAUSED'
         );
+
+        const handleKillSwitch = async () => {
+          if (!activeRun) {
+            alert('No active runs to stop.');
+            return;
+          }
+          if (
+            confirm(
+              'ARE YOU SURE YOU WANT TO TRIGGER THE EMERGENCY KILL SWITCH? ' +
+                'This will halt all current run operations immediately.'
+            )
+          ) {
+            try {
+              await apiClient.commandRun(activeRun.id, 'stop');
+              loadProjectData();
+            } catch (err: any) {
+              alert(err.message || 'Failed to trigger kill switch.');
+            }
+          }
+        };
+
+        const handleDecision = async (
+          id: number,
+          action: 'approve' | 'reject'
+        ) => {
+          try {
+            await apiClient.decideApproval(id, action);
+            loadProjectData();
+          } catch (err: any) {
+            alert(err.message || 'Failed to submit decision.');
+          }
+        };
+
+        // Extract policy fields
+        const policyRules = policy?.rules || {};
+        const policyName = policyRules.name || 'unattended_conservative';
+        const allowedCmds: string[] = policyRules.allowed_commands || [];
+        const blockedCmds: string[] = policyRules.blocked_commands || [];
+        const protectedPaths: string[] = policyRules.protected_paths || [];
+        const maxRepair = policyRules.max_repair_attempts ?? 3;
+        const maxFiles = policyRules.max_files_touched ?? 10;
+
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
+              {/* Emergency controls */}
+              <div style={{ flex: 1, minWidth: '320px' }}>
+                <Card title="Safety Mode & Emergency Controls">
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    <div>
+                      <span style={{
+                        fontSize: '11px',
+                        color: 'var(--text-muted)',
+                        display: 'block',
+                      }}>
+                        ACTIVE SAFETY POLICY
+                      </span>
+                      <span style={{
+                        fontSize: '16px',
+                        fontWeight: 700,
+                        color: 'var(--color-success)',
+                      }}>
+                        {policyName.toUpperCase().replace('_', ' ')}
+                      </span>
+                    </div>
+
+                    <div>
+                      <span style={{
+                        fontSize: '11px',
+                        color: 'var(--text-muted)',
+                        display: 'block',
+                      }}>
+                        POLICY DEFINITION FILE
+                      </span>
+                      <span style={{
+                        fontSize: '13px',
+                        fontFamily: 'monospace',
+                        color: 'var(--text-secondary)',
+                      }}>
+                        {activeProject?.localforge_config_path ||
+                          '.localforge/policies/default.yaml'}
+                      </span>
+                    </div>
+
+                    <div>
+                      <span style={{
+                        fontSize: '11px',
+                        color: 'var(--text-muted)',
+                        display: 'block',
+                        marginBottom: '4px',
+                      }}>
+                        SYSTEM CONTROL LOCK
+                      </span>
+                      {activeRun ? (
+                        <div style={{
+                          padding: '10px 12px',
+                          borderRadius: '6px',
+                          backgroundColor: 'rgba(239, 83, 80, 0.08)',
+                          border: '1px solid var(--color-danger)',
+                          color: 'var(--color-danger)',
+                          fontSize: '13px',
+                          fontWeight: 600,
+                          textAlign: 'center',
+                        }}>
+                          ACTIVE RUN ENFORCED (RUNNING #{activeRun.id})
+                        </div>
+                      ) : (
+                        <div style={{
+                          padding: '10px 12px',
+                          borderRadius: '6px',
+                          backgroundColor: 'rgba(76, 175, 80, 0.08)',
+                          border: '1px solid var(--color-success)',
+                          color: 'var(--color-success)',
+                          fontSize: '13px',
+                          fontWeight: 600,
+                          textAlign: 'center',
+                        }}>
+                          NO ACTIVE RUNS (STANDBY)
+                        </div>
+                      )}
+                    </div>
+
+                    <div style={{
+                      borderTop: '1px solid var(--border-color)',
+                      paddingTop: '16px',
+                    }}>
+                      <Button
+                        variant="danger"
+                        disabled={!activeRun}
+                        onClick={handleKillSwitch}
+                        style={{
+                          width: '100%',
+                          padding: '14px',
+                          fontSize: '14px',
+                          fontWeight: 700,
+                          letterSpacing: '0.5px',
+                        }}
+                      >
+                        🚨 TRIGGER EMERGENCY KILL SWITCH
+                      </Button>
+                      <p style={{
+                        fontSize: '11px',
+                        color: 'var(--text-muted)',
+                        marginTop: '8px',
+                        textAlign: 'center',
+                        lineHeight: '1.4',
+                      }}>
+                        Halts the active run executor immediately by canceling the task scheduler.
+                      </p>
+                    </div>
+                  </div>
+                </Card>
+              </div>
+
+              {/* Pending Approvals */}
+              <div style={{ flex: 1.5, minWidth: '380px' }}>
+                <Card title="Pending Safety Approvals Queue">
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    {pendingApprovals.length === 0 ? (
+                      <EmptyState
+                        title="All Checks Passed"
+                        message="No actions are currently blocked or waiting for manual approval."
+                      />
+                    ) : (
+                      pendingApprovals.map((app) => (
+                        <div
+                          key={app.id}
+                          style={{
+                            padding: '14px',
+                            borderRadius: '8px',
+                            border: '1px solid hsla(38, 92%, 50%, 0.3)',
+                            backgroundColor: 'hsla(38, 92%, 50%, 0.08)',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '10px',
+                          }}
+                        >
+                          <div style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                          }}>
+                            <span style={{
+                              fontWeight: 700,
+                              color: 'var(--color-warning)',
+                              fontSize: '12px',
+                              textTransform: 'uppercase',
+                            }}>
+                              {app.kind} REQUIRED
+                            </span>
+                            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                              Run #{app.run_id}
+                            </span>
+                          </div>
+                          <p style={{
+                            fontSize: '13px',
+                            fontFamily: 'monospace',
+                            margin: 0,
+                            wordBreak: 'break-all',
+                          }}>
+                            {app.payload.cmd || app.payload.path || 'Access Request'}
+                          </p>
+                          <div style={{
+                            display: 'flex',
+                            gap: '8px',
+                            alignSelf: 'flex-end',
+                          }}>
+                            <Button
+                              variant="success"
+                              onClick={() => handleDecision(app.id, 'approve')}
+                            >
+                              Approve
+                            </Button>
+                            <Button
+                              variant="danger"
+                              onClick={() => handleDecision(app.id, 'reject')}
+                            >
+                              Reject
+                            </Button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </Card>
+              </div>
+            </div>
+
+            {/* Allowed & Blocked Command Rules */}
+            <Card title="Active Rules & Enforced Boundaries">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
+                  {/* Allowed Commands */}
+                  <div style={{ flex: 1, minWidth: '250px' }}>
+                    <h4 style={{
+                      color: 'var(--color-success)',
+                      fontWeight: 600,
+                      marginBottom: '10px',
+                      fontSize: '14px',
+                    }}>
+                      ✔ ALLOWED PATTERNS
+                    </h4>
+                    <div style={{
+                      maxHeight: '200px',
+                      overflowY: 'auto',
+                      border: '1px solid var(--border-color)',
+                      borderRadius: '8px',
+                      padding: '12px',
+                      backgroundColor: 'rgba(255,255,255,0.01)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '6px',
+                    }}>
+                      {allowedCmds.length === 0 ? (
+                        <span style={{
+                          fontSize: '13px',
+                          color: 'var(--text-muted)',
+                        }}>None</span>
+                      ) : (
+                        allowedCmds.map((cmd) => (
+                          <div key={cmd} style={{
+                            fontSize: '12px',
+                            fontFamily: 'monospace',
+                            color: 'var(--text-secondary)',
+                            padding: '4px 6px',
+                            backgroundColor: 'rgba(255,255,255,0.02)',
+                            borderRadius: '4px',
+                          }}>
+                            {cmd}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Blocked Commands */}
+                  <div style={{ flex: 1, minWidth: '250px' }}>
+                    <h4 style={{
+                      color: 'var(--color-danger)',
+                      fontWeight: 600,
+                      marginBottom: '10px',
+                      fontSize: '14px',
+                    }}>
+                      ❌ BLOCKED COMMAND PATTERNS
+                    </h4>
+                    <div style={{
+                      maxHeight: '200px',
+                      overflowY: 'auto',
+                      border: '1px solid var(--border-color)',
+                      borderRadius: '8px',
+                      padding: '12px',
+                      backgroundColor: 'rgba(255,255,255,0.01)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '6px',
+                    }}>
+                      {blockedCmds.length === 0 ? (
+                        <span style={{
+                          fontSize: '13px',
+                          color: 'var(--text-muted)',
+                        }}>None</span>
+                      ) : (
+                        blockedCmds.map((cmd) => (
+                          <div key={cmd} style={{
+                            fontSize: '12px',
+                            fontFamily: 'monospace',
+                            color: 'var(--color-danger)',
+                            padding: '4px 6px',
+                            backgroundColor: 'rgba(239, 83, 80, 0.05)',
+                            borderRadius: '4px',
+                          }}>
+                            {cmd}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Protected Paths */}
+                  <div style={{ flex: 1, minWidth: '250px' }}>
+                    <h4 style={{
+                      color: 'var(--color-warning)',
+                      fontWeight: 600,
+                      marginBottom: '10px',
+                      fontSize: '14px',
+                    }}>
+                      🔒 PROTECTED FILES & PATHS
+                    </h4>
+                    <div style={{
+                      maxHeight: '200px',
+                      overflowY: 'auto',
+                      border: '1px solid var(--border-color)',
+                      borderRadius: '8px',
+                      padding: '12px',
+                      backgroundColor: 'rgba(255,255,255,0.01)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '6px',
+                    }}>
+                      {protectedPaths.length === 0 ? (
+                        <span style={{
+                          fontSize: '13px',
+                          color: 'var(--text-muted)',
+                        }}>None</span>
+                      ) : (
+                        protectedPaths.map((p) => (
+                          <div key={p} style={{
+                            fontSize: '12px',
+                            fontFamily: 'monospace',
+                            color: 'var(--color-warning)',
+                            padding: '4px 6px',
+                            backgroundColor: 'rgba(255, 179, 0, 0.05)',
+                            borderRadius: '4px',
+                          }}>
+                            {p}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{
+                  display: 'flex',
+                  gap: '24px',
+                  borderTop: '1px solid var(--border-color)',
+                  paddingTop: '16px',
+                  fontSize: '13px',
+                }}>
+                  <div>
+                    <span style={{ color: 'var(--text-muted)', marginRight: '6px' }}>
+                      Max Repair Attempts:
+                    </span>
+                    <strong style={{ color: 'var(--color-primary)' }}>{maxRepair}</strong>
+                  </div>
+                  <div>
+                    <span style={{ color: 'var(--text-muted)', marginRight: '6px' }}>
+                      Max Files Touched Limit:
+                    </span>
+                    <strong style={{ color: 'var(--color-primary)' }}>{maxFiles}</strong>
+                  </div>
+                </div>
+              </div>
+            </Card>
+          </div>
+        );
+      }
 
       default:
         return (

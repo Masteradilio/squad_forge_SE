@@ -3,6 +3,7 @@ export interface Project {
   name: string;
   root_path: string;
   default_branch: string;
+  localforge_config_path?: string;
 }
 
 export interface Epic {

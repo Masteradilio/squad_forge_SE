@@ -1,0 +1,276 @@
+import os
+
+import pytest
+from localforge.models import domain
+from localforge.models.enums import (
+    AuditEventActorType,
+    AuditEventType,
+    RunMode,
+    RunStatus,
+    TaskStatus,
+)
+from localforge.services.audit import AuditService
+from localforge.services.execution import ExecutionService
+from localforge.services.project import ProjectService
+from localforge.services.scheduler import Scheduler
+from localforge.services.task import TaskService
+from localforge.storage import UnitOfWork
+from sqlalchemy.ext.asyncio import AsyncSession
+
+
+@pytest.mark.anyio
+async def test_task_status_transition_auditing(db_manager, db_session: AsyncSession):
+    """Verify that every task status transition generates a persisted AuditEvent."""
+    uow = UnitOfWork(db_manager)
+    uow.session = db_session
+    uow.projects = ProjectService(db_session)
+    uow.tasks = TaskService(db_session)
+    uow.audits = AuditService(db_session)
+
+    proj = await uow.projects.create_project(
+        domain.Project(name="TransitionProj", root_path="/p", default_branch="main")
+    )
+    assert proj.id is not None
+    task = await uow.tasks.create_task(
+        domain.Task(project_id=proj.id, key="LF-10", title="Task", description="")
+    )
+    assert task.id is not None
+
+    # Transition: BACKLOG -> READY
+    await uow.tasks.update_task_status(task.id, TaskStatus.READY)
+    await uow.session.commit()
+
+    events = await uow.audits.list_audit_events_for_project(proj.id)
+    assert len(events) == 1
+    assert events[0].event_type == AuditEventType.STATE_CHANGE
+    assert events[0].payload_redacted["task_key"] == "LF-10"
+    assert events[0].payload_redacted["from_status"] == "BACKLOG"
+    assert events[0].payload_redacted["to_status"] == "READY"
+
+
+@pytest.mark.anyio
+async def test_dependency_resolution_blocks_task(db_manager, db_session: AsyncSession):
+    """Assert that a task with blocked/failed dependencies is blocked."""
+    uow = UnitOfWork(db_manager)
+    uow.session = db_session
+    uow.projects = ProjectService(db_session)
+    uow.tasks = TaskService(db_session)
+
+    proj = await uow.projects.create_project(
+        domain.Project(name="DepProj", root_path="/p", default_branch="main")
+    )
+    assert proj.id is not None
+
+    # Task A (Dependency)
+    task_a = await uow.tasks.create_task(
+        domain.Task(project_id=proj.id, key="LF-20", title="DepA", description="")
+    )
+    assert task_a.id is not None
+
+    # Task B (Dependent)
+    task_b = await uow.tasks.create_task(
+        domain.Task(
+            project_id=proj.id,
+            key="LF-21",
+            title="DependentB",
+            description="",
+            dependency_task_ids=[task_a.id],
+        )
+    )
+    assert task_b.id is not None
+
+    tasks = [task_a, task_b]
+
+    # Task A is BACKLOG -> not resolved -> Task B not runnable
+    assert not await uow.tasks.is_task_runnable(task_b.id, tasks)
+
+    # Move Task A to READY -> not resolved -> Task B not runnable
+    task_a = await uow.tasks.update_task_status(task_a.id, TaskStatus.READY)
+    assert task_a.id is not None
+    tasks = [task_a, task_b]
+    assert not await uow.tasks.is_task_runnable(task_b.id, tasks)
+
+    # Move Task A through active statuses to FAILED_SAFE
+    task_a = await uow.tasks.update_task_status(task_a.id, TaskStatus.CLAIMED)
+    assert task_a.id is not None
+    task_a = await uow.tasks.update_task_status(task_a.id, TaskStatus.PLANNING)
+    assert task_a.id is not None
+    task_a = await uow.tasks.update_task_status(task_a.id, TaskStatus.IMPLEMENTING)
+    assert task_a.id is not None
+    task_a = await uow.tasks.update_task_status(task_a.id, TaskStatus.TESTING)
+    assert task_a.id is not None
+    task_a = await uow.tasks.update_task_status(task_a.id, TaskStatus.REPAIRING)
+    assert task_a.id is not None
+    task_a = await uow.tasks.update_task_status(task_a.id, TaskStatus.FAILED_SAFE)
+    assert task_a.id is not None
+    tasks = [task_a, task_b]
+    assert not await uow.tasks.is_task_runnable(task_b.id, tasks)
+
+    # Check Task B status is updated to BLOCKED
+    refreshed_b = await uow.tasks.get_task(task_b.id)
+    assert refreshed_b is not None
+    assert refreshed_b.status == TaskStatus.BLOCKED
+
+
+@pytest.mark.anyio
+async def test_replay_pagination(db_manager, db_session: AsyncSession):
+    """Verify that export_run_replay correctly supports limit and offset pagination parameters."""
+    uow = UnitOfWork(db_manager)
+    uow.session = db_session
+    uow.projects = ProjectService(db_session)
+    uow.audits = AuditService(db_session)
+
+    proj = await uow.projects.create_project(
+        domain.Project(name="PaginationProj", root_path="/p", default_branch="main")
+    )
+    assert proj.id is not None
+
+    # Append 3 events
+    for i in range(3):
+        await uow.audits.append_audit_event(
+            domain.AuditEvent(
+                project_id=proj.id,
+                run_id=100,
+                actor_type=AuditEventActorType.SYSTEM,
+                event_type=AuditEventType.SYSTEM_EVENT,
+                payload_redacted={"count": i},
+            )
+        )
+    await uow.session.commit()
+
+    # Replay with limit=2, offset=0 -> returns first 2 events
+    page1 = await uow.audits.export_run_replay(proj.id, 100, limit=2, offset=0)
+    assert len(page1) == 2
+    assert page1[0]["payload"]["count"] == 0
+    assert page1[1]["payload"]["count"] == 1
+
+    # Replay with limit=2, offset=2 -> returns remaining 1 event
+    page2 = await uow.audits.export_run_replay(proj.id, 100, limit=2, offset=2)
+    assert len(page2) == 1
+    assert page2[0]["payload"]["count"] == 2
+
+
+@pytest.mark.anyio
+async def test_scheduler_lifecycle_and_parallel_limits(
+    tmp_path, db_manager, db_session: AsyncSession
+):
+    """Verify scheduler loop claiming tasks, creating TaskRuns, and running cleanups."""
+    uow = UnitOfWork(db_manager)
+    uow.session = db_session
+    uow.projects = ProjectService(db_session)
+    uow.tasks = TaskService(db_session)
+    uow.executions = ExecutionService(db_session)
+    uow.audits = AuditService(db_session)
+
+    # 1. Setup project
+    proj = await uow.projects.create_project(
+        domain.Project(name="SchProj", root_path=str(tmp_path), default_branch="main")
+    )
+    assert proj.id is not None
+
+    # Initial commit to create main branch and HEAD in temp repository
+    import git
+    repo = git.Repo.init(str(tmp_path))
+    readme = tmp_path / "README.md"
+    readme.write_text("# Test Repo")
+    repo.index.add([str(readme)])
+    repo.index.commit("initial commit")
+    try:
+        repo.git.branch("-M", "main")
+    except Exception:
+        pass
+
+    # 2. Setup run
+    run = await uow.executions.create_run(
+        domain.Run(
+            project_id=proj.id,
+            mode=RunMode.INTERACTIVE,
+            initiated_by="test-agent",
+            status=RunStatus.PENDING,
+        )
+    )
+    assert run.id is not None
+
+    # 3. Setup tasks
+    task1 = await uow.tasks.create_task(
+        domain.Task(project_id=proj.id, key="LF-30", title="Task 1", description="")
+    )
+    assert task1.id is not None
+    task2 = await uow.tasks.create_task(
+        domain.Task(project_id=proj.id, key="LF-31", title="Task 2", description="")
+    )
+    assert task2.id is not None
+    task3 = await uow.tasks.create_task(
+        domain.Task(project_id=proj.id, key="LF-32", title="Task 3", description="")
+    )
+    assert task3.id is not None
+
+    # Move them to READY
+    await uow.tasks.update_task_status(task1.id, TaskStatus.READY)
+    await uow.tasks.update_task_status(task2.id, TaskStatus.READY)
+    await uow.tasks.update_task_status(task3.id, TaskStatus.READY)
+    await uow.session.commit()
+
+    # 4. Instantiate scheduler with max_parallel_tasks=2
+    scheduler = Scheduler(
+        project_id=proj.id,
+        run_id=run.id,
+        max_parallel_tasks=2,
+        db_manager=db_manager,
+    )
+
+    # Run one single processing iteration of the scheduler
+    # Using private method to test deterministically without launching asyncio background loop
+    await scheduler._process_iteration()
+    await uow.session.commit()
+
+    # Refreshed states
+    run_ref = await uow.executions.get_run(run.id)
+    assert run_ref is not None
+    assert run_ref.status == RunStatus.RUNNING
+
+    t1_ref = await uow.tasks.get_task(task1.id)
+    t2_ref = await uow.tasks.get_task(task2.id)
+    t3_ref = await uow.tasks.get_task(task3.id)
+    assert t1_ref is not None
+    assert t2_ref is not None
+    assert t3_ref is not None
+
+    # Exactly 2 tasks should have been claimed and moved to PLANNING (due to max_parallel_tasks=2)
+    planning_count = 0
+    ready_count = 0
+    for t in (t1_ref, t2_ref, t3_ref):
+        if t.status == TaskStatus.PLANNING:
+            planning_count += 1
+        elif t.status == TaskStatus.READY:
+            ready_count += 1
+
+    assert planning_count == 2
+    assert ready_count == 1
+
+    # Verify that TaskRun database records were created for the executing tasks
+    claimed_ids: list[int] = []
+    for t in (t1_ref, t2_ref):
+        if t.status == TaskStatus.PLANNING:
+            assert t.id is not None
+            claimed_ids.append(t.id)
+
+    for tid in claimed_ids:
+        runs = await uow.tasks.list_runs_for_task(tid)
+        assert len(runs) == 1
+        assert runs[0].status == RunStatus.RUNNING
+        assert runs[0].worktree_path is not None
+        assert os.path.exists(runs[0].worktree_path)
+
+    # Clean up worktrees physically
+    from localforge.gitops.manager import WorktreeManager
+    wt_manager = WorktreeManager(project_id=proj.id, uow=uow)
+    for tid in claimed_ids:
+        # Move task status to final state (DONE) to allow cleanup
+        await uow.tasks.update_task_status(tid, TaskStatus.IMPLEMENTING)
+        await uow.tasks.update_task_status(tid, TaskStatus.TESTING)
+        await uow.tasks.update_task_status(tid, TaskStatus.REVIEWING)
+        await uow.tasks.update_task_status(tid, TaskStatus.PR_READY)
+        await uow.tasks.update_task_status(tid, TaskStatus.DONE)
+        await uow.session.commit()
+        await wt_manager.cleanup_worktree(tid)

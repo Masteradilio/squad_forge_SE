@@ -961,6 +961,27 @@ Acceptance criteria:
 - supports `--dry-run`;
 - supports `--json`.
 
+#### LF-0906 — Implement event-driven scheduler trigger
+
+Optimize the loop polling interval in `Scheduler` with an event-driven mechanism.
+
+Acceptance criteria:
+
+- Scheduler wakes up immediately on task status or run updates without waiting for loop interval.
+- Uses `asyncio.Event` or in-memory pub-sub/event dispatching mechanism.
+- Polling loop interval is kept only as a fallback watchdog trigger.
+
+#### LF-0907 — Implement execution abstraction and runners pool
+
+Abstract task execution into sandbox runner drivers to decouple scheduler from git worktrees.
+
+Acceptance criteria:
+
+- Implements a `BaseTaskRunner` defining setup, execution, checkpointing, and cleanup.
+- Creates a `LocalWorktreeTaskRunner` implementing this interface.
+- Scheduler orchestrates a pool of runners rather than git worktrees directly.
+- Prepares architecture for docker/container-based runner isolation.
+
 ### Phase Completion Gate
 
 - PRD import works on sample docs;

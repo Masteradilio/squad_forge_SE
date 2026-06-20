@@ -5,14 +5,26 @@ export interface Project {
   default_branch: string;
 }
 
+export interface Epic {
+  id: number;
+  project_id: number;
+  title: string;
+  summary: string;
+  priority: number;
+  status: string;
+}
+
 export interface Task {
   id: number;
   project_id: number;
+  epic_id?: number;
   key: string;
   title: string;
   description: string;
   status: string;
   dependency_task_ids: number[];
+  risk_level?: string;
+  acceptance_criteria?: string[];
 }
 
 export interface Run {
@@ -61,6 +73,19 @@ export interface Policy {
   rules: Record<string, any>;
 }
 
+export interface ActionApproval {
+  id: number;
+  project_id: number;
+  run_id?: number;
+  task_id?: number;
+  kind: string;
+  payload: Record<string, any>;
+  status: string;
+  created_at: string;
+  decided_at?: string;
+  decided_by?: string;
+}
+
 export interface ModelsResponse {
   provider: string;
   models: string[];
@@ -70,6 +95,16 @@ export interface ArtifactContent {
   id: number;
   path: string;
   content: string;
+}
+
+export interface ImportPRDResult {
+  persisted: boolean;
+  document_hash: string;
+  changed: boolean;
+  epics_created: number;
+  tasks_created: number;
+  epics: string[];
+  tasks: string[];
 }
 
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
@@ -88,6 +123,32 @@ export const apiClient = {
 
   fetchTasks(projectId: number): Promise<Task[]> {
     return request<Task[]>(`/api/projects/${projectId}/tasks`);
+  },
+
+  fetchEpics(projectId: number): Promise<Epic[]> {
+    return request<Epic[]>(`/api/projects/${projectId}/epics`);
+  },
+
+  importPRD(projectId: number, path: string, dryRun: boolean): Promise<ImportPRDResult> {
+    return request<ImportPRDResult>(`/api/projects/${projectId}/import-prd`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path, dry_run: dryRun }),
+    });
+  },
+
+  updateTask(taskId: number, payload: Partial<Task>): Promise<Task> {
+    return request<Task>(`/api/tasks/${taskId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  approveTask(taskId: number): Promise<Task> {
+    return request<Task>(`/api/tasks/${taskId}/approve`, {
+      method: 'POST',
+    });
   },
 
   fetchRuns(projectId: number): Promise<Run[]> {
@@ -122,7 +183,21 @@ export const apiClient = {
     return request<Run>(`/api/runs/${runId}/${action}`, { method: 'POST' });
   },
 
+  fetchPendingApprovals(projectId: number): Promise<ActionApproval[]> {
+    return request<ActionApproval[]>(`/api/projects/${projectId}/safety/pending`);
+  },
+
+  decideApproval(
+    approvalId: number,
+    action: 'approve' | 'reject'
+  ): Promise<ActionApproval> {
+    return request<ActionApproval>(`/api/safety/approvals/${approvalId}/${action}`, {
+      method: 'POST',
+    });
+  },
+
   fetchArtifactContent(artifactId: number): Promise<ArtifactContent> {
     return request<ArtifactContent>(`/api/artifacts/${artifactId}/content`);
   },
 };
+

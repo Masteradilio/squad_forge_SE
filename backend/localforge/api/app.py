@@ -1,25 +1,71 @@
 import asyncio
 import json
 import os
+from datetime import datetime
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 
 from localforge.events.bus import EventBus, LifecycleEvent
 from localforge.llm.fake import FakeLLMProvider
 from localforge.models import domain
-from localforge.models.enums import AuditEventActorType, AuditEventType, RunStatus, TaskStatus
+from localforge.models.enums import (
+    ActionApprovalStatus,
+    AuditEventActorType,
+    AuditEventType,
+    RunStatus,
+    TaskStatus,
+)
+from localforge.prd import import_prd
 from localforge.services.audit import redact_secrets
 from localforge.storage import DatabaseManager, UnitOfWork
 from localforge.storage import db_manager as default_db_manager
 from localforge.storage.orm import ArtifactORM, TaskRunORM
 
 
+class ImportPRDRequest(BaseModel):
+    path: str
+    dry_run: bool = False
+
+
+class TaskUpdateRequest(BaseModel):
+    epic_id: int | None = None
+    title: str
+    description: str
+    acceptance_criteria: list[str]
+    dependency_task_ids: list[int]
+    risk_level: str
+    status: TaskStatus
+
+
+
 def create_app(db_manager: DatabaseManager | None = None) -> FastAPI:
     manager = db_manager or default_db_manager
     app = FastAPI(title="LocalForge OS API", version="0.1.0")
     app.state.event_bus = EventBus(db_manager=manager)
+
+    allowed_origins_raw = os.getenv("LOCALFORGE_ALLOWED_ORIGINS")
+    if allowed_origins_raw:
+        origins = [o.strip() for o in allowed_origins_raw.split(",") if o.strip()]
+    else:
+        origins = [
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+            "http://localhost:8000",
+            "http://127.0.0.1:8000",
+        ]
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+    app.add_middleware(GZipMiddleware, minimum_size=1000)
 
     @app.get("/health")
     async def health() -> dict[str, str]:
@@ -194,6 +240,127 @@ def create_app(db_manager: DatabaseManager | None = None) -> FastAPI:
                 with open(target, encoding="utf-8") as handle:
                     content = redact_secrets(handle.read())
                 return {"id": artifact.id, "path": artifact.path, "content": content}
+
+    @app.get("/projects/{project_id}/safety/pending")
+    async def list_pending_approvals(project_id: int) -> list[dict[str, Any]]:
+        async with UnitOfWork(manager) as uow:
+            assert uow.safety is not None
+            approvals = await uow.safety.list_pending_approvals(project_id)
+            return [_dump(approval) for approval in approvals]
+
+    @app.post("/safety/approvals/{approval_id}/{action}")
+    async def decide_approval(approval_id: int, action: str) -> dict[str, Any]:
+        allowed = {
+            "approve": ActionApprovalStatus.APPROVED,
+            "reject": ActionApprovalStatus.REJECTED,
+        }
+        if action not in allowed:
+            raise HTTPException(status_code=400, detail="Invalid approval decision")
+        async with UnitOfWork(manager) as uow:
+            assert uow.safety is not None
+            assert uow.audits is not None
+            approval = await uow.safety.get_approval(approval_id)
+            if not approval:
+                raise HTTPException(status_code=404, detail="Approval request not found")
+            approval.status = allowed[action]
+            approval.decided_at = datetime.utcnow()
+            approval.decided_by = "local-api"
+            updated = await uow.safety.update_approval(approval)
+            
+            # Publish event
+            await app.state.event_bus.publish(
+                LifecycleEvent(
+                    project_id=updated.project_id,
+                    run_id=updated.run_id,
+                    event_type=f"safety.action_{action}d",
+                    payload={"approval_id": updated.id, "status": updated.status.value},
+                )
+            )
+            return _dump(updated)
+
+    @app.get("/projects/{project_id}/epics")
+    async def list_epics(project_id: int) -> list[dict[str, Any]]:
+        async with UnitOfWork(manager) as uow:
+            assert uow.tasks is not None
+            epics = await uow.tasks.list_epics_for_project(project_id)
+            return [_dump(epic) for epic in epics]
+
+    @app.post("/projects/{project_id}/import-prd")
+    async def api_import_prd(
+        project_id: int, req: ImportPRDRequest
+    ) -> dict[str, Any]:
+        try:
+            result = await import_prd(
+                path=req.path,
+                project_id=project_id,
+                db_manager=manager,
+                dry_run=req.dry_run,
+            )
+            return result.model_dump()
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.put("/tasks/{task_id}")
+    async def update_task(
+        task_id: int, req: TaskUpdateRequest
+    ) -> dict[str, Any]:
+        async with UnitOfWork(manager) as uow:
+            assert uow.tasks is not None
+            task = await uow.tasks.get_task(task_id)
+            if not task:
+                raise HTTPException(status_code=404, detail="Task not found")
+
+            task.epic_id = req.epic_id
+            task.title = req.title
+            task.description = req.description
+            task.acceptance_criteria = req.acceptance_criteria
+            task.dependency_task_ids = req.dependency_task_ids
+            task.risk_level = req.risk_level
+
+            status_changed = task.status != req.status
+            task.status = req.status
+
+            try:
+                updated = await uow.tasks.update_task(task)
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+            if status_changed:
+                await app.state.event_bus.publish(
+                    LifecycleEvent(
+                        project_id=updated.project_id,
+                        event_type="task.status_changed",
+                        payload={
+                            "task_id": updated.id,
+                            "status": updated.status.value,
+                        },
+                    )
+                )
+
+            return _dump(updated)
+
+    @app.post("/tasks/{task_id}/approve")
+    async def approve_task_plan(task_id: int) -> dict[str, Any]:
+        async with UnitOfWork(manager) as uow:
+            assert uow.tasks is not None
+            try:
+                updated = await uow.tasks.update_task_status(
+                    task_id, TaskStatus.READY
+                )
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+            await app.state.event_bus.publish(
+                LifecycleEvent(
+                    project_id=updated.project_id,
+                    event_type="task.status_changed",
+                    payload={
+                        "task_id": updated.id,
+                        "status": updated.status.value,
+                    },
+                )
+            )
+            return _dump(updated)
 
     # Serve static files from frontend/dist if the directory exists
     frontend_dist = os.path.abspath(

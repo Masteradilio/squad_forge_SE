@@ -3,7 +3,14 @@ import asyncio
 from fastapi.testclient import TestClient
 from localforge.api.app import create_app
 from localforge.models import domain
-from localforge.models.enums import AgentRole, ArtifactType, RunMode, RunStatus, TaskStatus
+from localforge.models.enums import (
+    ActionKind,
+    AgentRole,
+    ArtifactType,
+    RunMode,
+    RunStatus,
+    TaskStatus,
+)
 from localforge.storage import UnitOfWork
 from localforge.storage.bootstrap import bootstrap_database
 from localforge.storage.database import DatabaseManager
@@ -164,3 +171,124 @@ def poison_artifact_path(db_manager: DatabaseManager, artifact_id: int) -> None:
             await session.commit()
 
     asyncio.run(poison())
+
+
+def test_api_cors_and_gzip_middlewares_and_safety_endpoints(tmp_path):
+    manager = make_db_manager(tmp_path)
+    try:
+        ids = seed_api_state(manager, tmp_path)
+        
+        # Seed a pending safety approval
+        async def seed_approval():
+            async with UnitOfWork(manager) as uow:
+                assert uow.safety is not None
+                await uow.safety.create_approval(
+                    domain.ActionApproval(
+                        project_id=ids["project_id"],
+                        run_id=ids["run_id"],
+                        action_kind=ActionKind.RUN_COMMAND,
+                        payload={"cmd": "rm -rf /"},
+                        purpose="test purpose",
+                        risk_level="high",
+                        status=domain.ActionApprovalStatus.PENDING,
+                    )
+                )
+        asyncio.run(seed_approval())
+
+        client = TestClient(create_app(db_manager=manager))
+
+        # 1. Test CORS Middleware
+        cors_res = client.get("/health", headers={"Origin": "http://localhost:5173"})
+        assert cors_res.headers.get("access-control-allow-origin") == "http://localhost:5173"
+
+        # 2. Test Gzip Middleware
+        gzip_res = client.get("/openapi.json", headers={"Accept-Encoding": "gzip"})
+        assert gzip_res.headers.get("content-encoding") == "gzip"
+
+        # 3. Test GET pending safety approvals
+        pending = client.get(f"/projects/{ids['project_id']}/safety/pending").json()
+        assert len(pending) == 1
+        assert pending[0]["payload"]["cmd"] == "rm -rf /"
+        app_id = pending[0]["id"]
+
+        # 4. Test POST approve safety approval
+        approved = client.post(f"/safety/approvals/{app_id}/approve").json()
+        assert approved["status"] == "APPROVED"
+
+        # 5. Verify it's no longer pending
+        pending_after = client.get(f"/projects/{ids['project_id']}/safety/pending").json()
+        assert len(pending_after) == 0
+
+    finally:
+        close_manager(manager)
+
+
+def test_api_prd_and_backlog_studio_endpoints(tmp_path):
+    manager = make_db_manager(tmp_path)
+    try:
+        ids = seed_api_state(manager, tmp_path)
+        client = TestClient(create_app(db_manager=manager))
+
+        # 1. Test GET epics (empty initially)
+        epics = client.get(f"/projects/{ids['project_id']}/epics").json()
+        assert len(epics) == 0
+
+        # 2. Write mock PRD
+        prd_file = tmp_path / "PRD.md"
+        prd_file.write_text(
+            "# App\n\n## Authentication\n- Add login\n- Add logout\n",
+            encoding="utf-8",
+        )
+
+        # 3. Test import-prd (dry_run=True)
+        import_res = client.post(
+            f"/projects/{ids['project_id']}/import-prd",
+            json={"path": str(prd_file), "dry_run": True},
+        ).json()
+        assert import_res["persisted"] is False
+        assert import_res["tasks_created"] == 2
+
+        # 4. Test import-prd (dry_run=False)
+        import_res2 = client.post(
+            f"/projects/{ids['project_id']}/import-prd",
+            json={"path": str(prd_file), "dry_run": False},
+        ).json()
+        assert import_res2["persisted"] is True
+        assert import_res2["tasks_created"] == 2
+
+        # 5. Verify epics and tasks loaded
+        epics = client.get(f"/projects/{ids['project_id']}/epics").json()
+        assert len(epics) == 1
+        assert epics[0]["title"] == "Authentication"
+
+        tasks = client.get(f"/projects/{ids['project_id']}/tasks").json()
+        backlog_tasks = [t for t in tasks if t["status"] == "BACKLOG"]
+        assert len(backlog_tasks) >= 2
+        login_task = next(t for t in backlog_tasks if "login" in t["title"])
+        assert login_task["risk_level"] == "low"
+
+        # 6. Test PUT /tasks/{task_id} update details
+        updated_task = client.put(
+            f"/tasks/{login_task['id']}",
+            json={
+                "epic_id": login_task["epic_id"],
+                "title": "Add secure login",
+                "description": "Secure login implementation",
+                "acceptance_criteria": ["Username exists", "Password checks"],
+                "dependency_task_ids": [],
+                "risk_level": "medium",
+                "status": "BACKLOG",
+            },
+        ).json()
+        assert updated_task["title"] == "Add secure login"
+        assert updated_task["risk_level"] == "medium"
+
+        # 7. Test POST /tasks/{task_id}/approve
+        approved_task = client.post(
+            f"/tasks/{login_task['id']}/approve"
+        ).json()
+        assert approved_task["status"] == "READY"
+
+    finally:
+        close_manager(manager)
+

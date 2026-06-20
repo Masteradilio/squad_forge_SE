@@ -4,6 +4,27 @@ All notable changes to LocalForge OS will be documented in this file.
 
 ## [Unreleased]
 
+## [Phase 18] - 2026-06-20 - PRD & Backlog Studio
+
+### Added
+- Implemented Epic and ImportPRDResult models in client.ts.
+- Exposed backend endpoints: GET /epics, POST /import-prd, PUT /tasks/{id}, POST /tasks/{id}/approve.
+- Developed PRD Compiler & Importer view in App.tsx (dry-run, spec analyzer).
+- Developed Epics Map navigator sidebar and task list component.
+- Implemented Task Detail Editor supporting title, description, risk level, and acceptance criteria.
+- Implemented plan approval UI with "Approve Plan" action to activate backlog tasks to READY state.
+- Created `test_api_prd_and_backlog_studio_endpoints` in `backend/tests/test_api_server.py`.
+
+## [Phase 17] - 2026-06-20 - Mission Control UI & Backend Enhancements
+
+### Added
+- Implemented CORS configuration in app.py allowing local dev environments (port 5173).
+- Implemented Gzip compression middleware in app.py for optimized asset payloads.
+- Implemented manual safety approvals endpoints (GET pending, POST decide action).
+- Created interactive overview dashboard showing Run Summary, Agent Fleet cards, and Risk Alerts.
+- Added live subscribing SSE operations timeline feed.
+- Created `test_api_cors_and_gzip_middlewares_and_safety_endpoints` in `test_api_server.py`.
+
 ## [Phase 16] - 2026-06-20 - Frontend Foundation
 
 ### Added

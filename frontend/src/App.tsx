@@ -7,6 +7,9 @@ import {
   type Agent,
   type Artifact,
   type Policy,
+  type ActionApproval,
+  type Epic,
+  type ImportPRDResult,
 } from './api/client';
 import { useProjectEvents, type LifecycleEventPayload } from './api/events';
 import { Card } from './components/Card';
@@ -50,9 +53,33 @@ export default function App() {
     content: string;
   } | null>(null);
 
+  const [epics, setEpics] = useState<Epic[]>([]);
+  const [prdPath, setPrdPath] = useState<string>('');
+  const [dryRun, setDryRun] = useState<boolean>(false);
+  const [importResult, setImportResult] = useState<ImportPRDResult | null>(null);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [activeEpic, setActiveEpic] = useState<Epic | null>(null);
+
+  const [editTitle, setEditTitle] = useState('');
+  const [editDesc, setEditDesc] = useState('');
+  const [editRisk, setEditRisk] = useState('low');
+  const [editCriteria, setEditCriteria] = useState('');
+  const [editDeps, setEditDeps] = useState('');
+
+  useEffect(() => {
+    if (editingTask) {
+      setEditTitle(editingTask.title);
+      setEditDesc(editingTask.description);
+      setEditRisk(editingTask.risk_level || 'low');
+      setEditCriteria(editingTask.acceptance_criteria?.join('\n') || '');
+      setEditDeps(editingTask.dependency_task_ids?.join(', ') || '');
+    }
+  }, [editingTask]);
+
   // Live SSE events
   const [events, setEvents] = useState<LifecycleEventPayload[]>([]);
   const [backendHealthy, setBackendHealthy] = useState<boolean | null>(null);
+  const [pendingApprovals, setPendingApprovals] = useState<ActionApproval[]>([]);
   const [, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -124,13 +151,17 @@ export default function App() {
       apiClient.fetchAgents(),
       apiClient.fetchModels(),
       apiClient.fetchPolicy(activeProject.id, 'default').catch(() => null),
+      apiClient.fetchPendingApprovals(activeProject.id).catch(() => []),
+      apiClient.fetchEpics(activeProject.id).catch(() => []),
     ])
-      .then(([tData, rData, aData, mData, pData]) => {
+      .then(([tData, rData, aData, mData, pData, paData, eData]) => {
         setTasks(tData);
         setRuns(rData);
         setAgents(aData);
         setModels(mData.models);
         setPolicy(pData);
+        setPendingApprovals(paData);
+        setEpics(eData);
         setError(null);
       })
       .catch((err) => {
@@ -160,8 +191,16 @@ export default function App() {
   // SSE handler callback
   const handleLiveEvent = useCallback((event: LifecycleEventPayload) => {
     setEvents((prev) => [event, ...prev].slice(0, 50));
-    // Reload state if task status changed or runs modified
-    if (['task.status_changed', 'run.started'].includes(event.event_type)) {
+    // Reload state if task status changed or runs modified or approvals decided
+    const reloadEvents = [
+      'task.status_changed',
+      'run.started',
+      'safety.action_allowed',
+      'safety.action_blocked',
+      'safety.action_approved',
+      'safety.action_rejected',
+    ];
+    if (reloadEvents.includes(event.event_type)) {
       loadProjectData();
     }
   }, [loadProjectData]);
@@ -187,6 +226,43 @@ export default function App() {
       setSelectedArtifactContent({ path, content: data.content });
     } catch (err: any) {
       alert(err.message || 'Failed to read artifact content.');
+    }
+  };
+
+  const handleImportPRD = async () => {
+    if (!activeProject) return;
+    if (!prdPath.trim()) {
+      alert('Please specify a PRD file path.');
+      return;
+    }
+    try {
+      setError(null);
+      const res = await apiClient.importPRD(activeProject.id, prdPath, dryRun);
+      setImportResult(res);
+      loadProjectData();
+    } catch (err: any) {
+      alert(err.message || 'Failed to import PRD.');
+    }
+  };
+
+  const handleUpdateTask = async (task: Task, fields: Partial<Task>) => {
+    try {
+      setError(null);
+      await apiClient.updateTask(task.id, fields);
+      setEditingTask(null);
+      loadProjectData();
+    } catch (err: any) {
+      alert(err.message || 'Failed to update task.');
+    }
+  };
+
+  const handleApproveTask = async (taskId: number) => {
+    try {
+      setError(null);
+      await apiClient.approveTask(taskId);
+      loadProjectData();
+    } catch (err: any) {
+      alert(err.message || 'Failed to approve task.');
     }
   };
 
@@ -287,9 +363,247 @@ export default function App() {
 
   const renderTabContent = () => {
     switch (currentTab) {
-      case 'mission-control':
+      case 'mission-control': {
+        const activeRun =
+          runs.find((r) => r.status === 'RUNNING' || r.status === 'PAUSED') ||
+          runs[0];
+        const lastEvent = events[0];
+
+        const taskCounts = {
+          total: tasks.length,
+          ready: tasks.filter((t) => t.status === 'READY').length,
+          active: tasks.filter((t) => [
+            'CLAIMED', 'PLANNING', 'IMPLEMENTING', 'TESTING', 'REPAIRING', 'REVIEWING'
+          ].includes(t.status)).length,
+          blocked: tasks.filter((t) => t.status === 'BLOCKED').length,
+          prReady: tasks.filter((t) => t.status === 'PR_READY').length,
+          done: tasks.filter((t) => t.status === 'DONE').length,
+        };
+
+        const handleDecision = async (id: number, action: 'approve' | 'reject') => {
+          try {
+            await apiClient.decideApproval(id, action);
+            loadProjectData();
+          } catch (err: any) {
+            alert(err.message || 'Failed to submit decision.');
+          }
+        };
+
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
+              <div style={{ flex: 2, minWidth: '400px' }}>
+                <Card
+                  title={activeRun ? `Current Execution: Run #${activeRun.id}` : 'No Active Run'}
+                  actions={
+                    activeRun && (
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        {activeRun.status === 'PENDING' && (
+                          <Button variant="success" onClick={() => triggerRunCommand(activeRun.id, 'start')}>
+                            Start
+                          </Button>
+                        )}
+                        {activeRun.status === 'RUNNING' && (
+                          <Button variant="warning" onClick={() => triggerRunCommand(activeRun.id, 'pause')}>
+                            Pause
+                          </Button>
+                        )}
+                        {activeRun.status === 'PAUSED' && (
+                          <Button variant="success" onClick={() => triggerRunCommand(activeRun.id, 'resume')}>
+                            Resume
+                          </Button>
+                        )}
+                        {['RUNNING', 'PAUSED'].includes(activeRun.status) && (
+                          <Button variant="danger" onClick={() => triggerRunCommand(activeRun.id, 'stop')}>
+                            Stop
+                          </Button>
+                        )}
+                      </div>
+                    )
+                  }
+                >
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                    {activeRun ? (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <span style={{ color: 'var(--text-muted)', fontSize: '12px', display: 'block' }}>MODE</span>
+                          <span style={{ fontWeight: 600, textTransform: 'capitalize' }}>{activeRun.mode}</span>
+                        </div>
+                        <div>
+                          <span style={{ color: 'var(--text-muted)', fontSize: '12px', display: 'block' }}>INITIATOR</span>
+                          <span>{activeRun.initiated_by}</span>
+                        </div>
+                        <div>
+                          <span style={{ color: 'var(--text-muted)', fontSize: '12px', display: 'block' }}>STATUS</span>
+                          <StatusBadge status={activeRun.status} />
+                        </div>
+                      </div>
+                    ) : (
+                      <p style={{ color: 'var(--text-secondary)' }}>No runs are currently active or pending.</p>
+                    )}
+
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(80px, 1fr))',
+                      gap: '12px',
+                      borderTop: '1px solid var(--border-color)',
+                      borderBottom: '1px solid var(--border-color)',
+                      padding: '16px 0',
+                    }}>
+                      {[
+                        { label: 'Total', count: taskCounts.total, color: 'var(--text-primary)' },
+                        { label: 'Ready', count: taskCounts.ready, color: 'var(--color-primary)' },
+                        { label: 'Active', count: taskCounts.active, color: 'var(--color-info)' },
+                        { label: 'Blocked', count: taskCounts.blocked, color: 'var(--color-blocked)' },
+                        { label: 'PR Ready', count: taskCounts.prReady, color: 'var(--color-success)' },
+                        { label: 'Done', count: taskCounts.done, color: 'var(--color-success)' },
+                      ].map((cell) => (
+                        <div key={cell.label} style={{ textAlign: 'center' }}>
+                          <span style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'block' }}>
+                            {cell.label}
+                          </span>
+                          <span style={{ fontSize: '20px', fontWeight: 700, color: cell.color }}>
+                            {cell.count}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div>
+                      <span style={{ color: 'var(--text-muted)', fontSize: '12px', display: 'block', marginBottom: '4px' }}>
+                        LAST EVENT
+                      </span>
+                      {lastEvent ? (
+                        <div style={{
+                          padding: '10px 12px',
+                          borderRadius: '6px',
+                          background: 'rgba(255,255,255,0.02)',
+                          border: '1px solid var(--border-color)',
+                          fontSize: '13px',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                        }}>
+                          <span style={{ fontWeight: 600, color: 'var(--color-primary)' }}>{lastEvent.event_type}</span>
+                          <span style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>
+                            {lastEvent.payload.action || lastEvent.payload.status || 'system alert'}
+                          </span>
+                        </div>
+                      ) : (
+                        <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>No events streamed yet.</p>
+                      )}
+                    </div>
+                  </div>
+                </Card>
+              </div>
+
+              <div style={{ flex: 1, minWidth: '300px' }}>
+                <Card title="Risk & Safety Approvals">
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    {pendingApprovals.length === 0 && (
+                      <EmptyState
+                        title="Safe Operations"
+                        message="No pending safety manual approvals or policy blocks requiring human intervention."
+                      />
+                    )}
+
+                    {pendingApprovals.map((app) => (
+                      <div
+                        key={app.id}
+                        style={{
+                          padding: '14px',
+                          borderRadius: '8px',
+                          border: '1px solid hsla(38, 92%, 50%, 0.3)',
+                          backgroundColor: 'hsla(38, 92%, 50%, 0.08)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '10px',
+                        }}
+                      >
+                        <div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{
+                              fontWeight: 700,
+                              color: 'var(--color-warning)',
+                              fontSize: '12px',
+                              textTransform: 'uppercase',
+                            }}>
+                              {app.kind} REQUIRED
+                            </span>
+                            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                              Run #{app.run_id}
+                            </span>
+                          </div>
+                          <p style={{ fontSize: '13px', marginTop: '4px', fontFamily: 'monospace' }}>
+                            {app.payload.cmd || app.payload.path || 'Access request'}
+                          </p>
+                        </div>
+                        <div style={{ display: 'flex', gap: '8px', alignSelf: 'flex-end' }}>
+                          <Button variant="success" onClick={() => handleDecision(app.id, 'approve')}>
+                            Approve
+                          </Button>
+                          <Button variant="danger" onClick={() => handleDecision(app.id, 'reject')}>
+                            Reject
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              </div>
+            </div>
+
+            <div>
+              <Card title="Agent Fleet Status">
+                {agents.length === 0 ? (
+                  <EmptyState title="No Active Agents" message="No autonomous agents are currently active in this run." />
+                ) : (
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                    gap: '16px',
+                  }}>
+                    {agents.map((agent) => (
+                      <div
+                        key={agent.id}
+                        style={{
+                          padding: '16px',
+                          borderRadius: '8px',
+                          border: '1px solid var(--border-color)',
+                          background: 'rgba(255,255,255,0.02)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '12px',
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontWeight: 600 }}>{agent.name}</span>
+                          <StatusBadge status={agent.status} />
+                        </div>
+                        <div>
+                          <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block' }}>ROLE</span>
+                          <span style={{ fontSize: '14px', textTransform: 'capitalize' }}>{agent.role}</span>
+                        </div>
+                        {agent.current_task_run_id ? (
+                          <div>
+                            <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block' }}>ACTIVE TASK</span>
+                            <span style={{ fontSize: '13px', color: 'var(--color-primary)' }}>
+                              Task Run #{agent.current_task_run_id}
+                            </span>
+                          </div>
+                        ) : (
+                          <div>
+                            <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block' }}>ACTIVITY</span>
+                            <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Idle / Scanning</span>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </Card>
+            </div>
+
             <div style={{ display: 'flex', gap: '24px', alignItems: 'stretch' }}>
               <div style={{ flex: 2, display: 'flex', flexDirection: 'column', gap: '24px' }}>
                 <Card title="Project Backlog Tasks">
@@ -346,7 +660,6 @@ export default function App() {
                                   justifyContent: 'space-between',
                                   alignItems: 'center',
                                 }}
-                                className="artifact-item"
                               >
                                 <span>{art.path.split('/').pop()}</span>
                                 <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
@@ -377,16 +690,438 @@ export default function App() {
             )}
           </div>
         );
+      }
 
-      case 'prd-backlog':
+      case 'prd-backlog': {
+        const filteredTasks = activeEpic
+          ? tasks.filter((t) => t.epic_id === activeEpic.id)
+          : tasks;
+
+        const onSaveTask = () => {
+          if (!editingTask) return;
+          const criteriaList = editCriteria
+            .split('\n')
+            .map((c) => c.trim())
+            .filter((c) => c.length > 0);
+          const depsList = editDeps
+            .split(',')
+            .map((d) => parseInt(d.trim(), 10))
+            .filter((d) => !isNaN(d));
+
+          handleUpdateTask(editingTask, {
+            title: editTitle,
+            description: editDesc,
+            risk_level: editRisk,
+            acceptance_criteria: criteriaList,
+            dependency_task_ids: depsList,
+          });
+        };
+
+        const getRiskColor = (level?: string) => {
+          if (level === 'high') return 'var(--color-danger)';
+          if (level === 'medium') return 'var(--color-warning)';
+          return 'rgba(255, 255, 255, 0.1)';
+        };
+
+        const getRiskTextColor = (level?: string) => {
+          if (level === 'high' || level === 'medium') return '#000';
+          return 'inherit';
+        };
+
+        const isAllSelected = activeEpic === null;
+
         return (
-          <Card title="Product Requirements & Epics">
-            <EmptyState
-              title="PRD Compiler View"
-              message="Import and review Markdown specs, generate epic maps, and split oversized tasks."
-            />
-          </Card>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            {/* PRD Importer Panel */}
+            <Card title="PRD Compiler & Importer">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
+                  Analyze specification Markdown documents to extract project epics,
+                  user stories, sizing heuristics, and dependencies.
+                </p>
+                <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+                  <input
+                    type="text"
+                    placeholder="e.g. docs/LocalForge_OS_PRD.md"
+                    value={prdPath}
+                    onChange={(e) => setPrdPath(e.target.value)}
+                    style={{
+                      flex: 1,
+                      padding: '10px 12px',
+                      borderRadius: '8px',
+                      backgroundColor: 'var(--bg-input)',
+                      border: '1px solid var(--border-color)',
+                      color: 'var(--text-primary)',
+                      outline: 'none',
+                    }}
+                  />
+                  <label style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    cursor: 'pointer',
+                  }}>
+                    <input
+                      type="checkbox"
+                      checked={dryRun}
+                      onChange={(e) => setDryRun(e.target.checked)}
+                      style={{ cursor: 'pointer' }}
+                    />
+                    <span style={{ fontSize: '13px' }}>Dry Run</span>
+                  </label>
+                  <Button variant="success" onClick={handleImportPRD}>
+                    Compile & Import
+                  </Button>
+                </div>
+
+                {importResult && (
+                  <div style={{
+                    padding: '16px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--color-success)',
+                    background: 'rgba(46, 125, 50, 0.08)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '8px',
+                  }}>
+                    <h4 style={{ color: 'var(--color-success)', fontWeight: 600 }}>
+                      PRD compiled successfully!
+                    </h4>
+                    <p style={{ fontSize: '13px', margin: 0, lineHeight: '1.6' }}>
+                      <strong>Document Hash:</strong> {importResult.document_hash} <br />
+                      <strong>Persisted:</strong> {importResult.persisted ? 'Yes' : 'No'} <br />
+                      <strong>Epics Created:</strong> {importResult.epics_created} <br />
+                      <strong>Tasks Created:</strong> {importResult.tasks_created}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </Card>
+
+            <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
+              {/* Epics Map List */}
+              <div style={{ flex: 1, minWidth: '250px' }}>
+                <Card title="Epics Map">
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div
+                      onClick={() => setActiveEpic(null)}
+                      style={{
+                        padding: '12px',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        backgroundColor: isAllSelected
+                          ? 'var(--color-primary)'
+                          : 'rgba(255, 255, 255, 0.02)',
+                        border: '1px solid var(--border-color)',
+                        fontWeight: isAllSelected ? 600 : 500,
+                        color: isAllSelected ? '#fff' : 'var(--text-primary)',
+                      }}
+                    >
+                      All Project Tasks
+                    </div>
+                    {epics.length === 0 && (
+                      <p style={{
+                        fontSize: '13px',
+                        color: 'var(--text-muted)',
+                        padding: '8px',
+                      }}>
+                        No epics loaded. Import a PRD to begin.
+                      </p>
+                    )}
+                    {epics.map((epic) => {
+                      const isSelected = activeEpic?.id === epic.id;
+                      return (
+                        <div
+                          key={epic.id}
+                          onClick={() => setActiveEpic(epic)}
+                          style={{
+                            padding: '12px',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            backgroundColor: isSelected
+                              ? 'var(--color-primary)'
+                              : 'rgba(255, 255, 255, 0.02)',
+                            border: '1px solid var(--border-color)',
+                            fontWeight: isSelected ? 600 : 500,
+                            color: isSelected ? '#fff' : 'var(--text-primary)',
+                          }}
+                        >
+                          <div style={{ fontWeight: 600, fontSize: '14px' }}>
+                            {epic.title}
+                          </div>
+                          <div style={{
+                            fontSize: '11px',
+                            color: isSelected
+                              ? 'rgba(255,255,255,0.7)'
+                              : 'var(--text-muted)',
+                            marginTop: '4px',
+                          }}>
+                            {epic.summary.length > 50
+                              ? epic.summary.slice(0, 50) + '...'
+                              : epic.summary}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </Card>
+              </div>
+
+              {/* Tasks List */}
+              <div style={{
+                flex: 2,
+                minWidth: '400px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '24px',
+              }}>
+                <Card
+                  title={activeEpic ? `Epic: ${activeEpic.title}` : 'All Project Tasks'}
+                >
+                  {filteredTasks.length === 0 ? (
+                    <EmptyState
+                      title="No Tasks"
+                      message="No tasks generated under this view."
+                    />
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      {filteredTasks.map((t) => (
+                        <div
+                          key={t.id}
+                          style={{
+                            padding: '16px',
+                            borderRadius: '8px',
+                            border: '1px solid var(--border-color)',
+                            backgroundColor: 'rgba(255, 255, 255, 0.01)',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                          }}
+                        >
+                          <div style={{ flex: 1, marginRight: '16px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{
+                                fontWeight: 700,
+                                color: 'var(--color-primary)',
+                              }}>{t.key}</span>
+                              <span style={{ fontWeight: 600 }}>{t.title}</span>
+                            </div>
+                            <p style={{
+                              fontSize: '13px',
+                              color: 'var(--text-muted)',
+                              marginTop: '6px',
+                              lineHeight: '1.4',
+                            }}>
+                              {t.description}
+                            </p>
+                            <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                              <StatusBadge status={t.status} />
+                              {t.risk_level && (
+                                <span style={{
+                                  fontSize: '11px',
+                                  padding: '2px 6px',
+                                  borderRadius: '4px',
+                                  fontWeight: 600,
+                                  textTransform: 'uppercase',
+                                  backgroundColor: getRiskColor(t.risk_level),
+                                  color: getRiskTextColor(t.risk_level),
+                                }}>
+                                  {t.risk_level} risk
+                                </span>
+                              )}
+                              {t.dependency_task_ids && t.dependency_task_ids.length > 0 && (
+                                <span style={{
+                                  fontSize: '11px',
+                                  padding: '2px 6px',
+                                  borderRadius: '4px',
+                                  fontWeight: 500,
+                                  backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                                  color: 'var(--text-muted)',
+                                }}>
+                                  Deps: {t.dependency_task_ids.join(', ')}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
+                            {t.status === 'BACKLOG' && (
+                              <Button variant="success" onClick={() => handleApproveTask(t.id)}>
+                                Approve Plan
+                              </Button>
+                            )}
+                            <Button variant="ghost" onClick={() => setEditingTask(t)}>
+                              Edit
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </Card>
+
+                {/* Task Editor Form */}
+                {editingTask && (
+                  <Card
+                    title={`Edit Task: ${editingTask.key}`}
+                    actions={
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <Button variant="ghost" onClick={() => setEditingTask(null)}>
+                          Cancel
+                        </Button>
+                        <Button variant="success" onClick={onSaveTask}>
+                          Save Changes
+                        </Button>
+                      </div>
+                    }
+                  >
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                      <div>
+                        <label style={{
+                          display: 'block',
+                          fontSize: '11px',
+                          fontWeight: 600,
+                          color: 'var(--text-muted)',
+                          marginBottom: '6px',
+                        }}>
+                          TITLE
+                        </label>
+                        <input
+                          type="text"
+                          value={editTitle}
+                          onChange={(e) => setEditTitle(e.target.value)}
+                          style={{
+                            width: '100%',
+                            padding: '10px',
+                            borderRadius: '8px',
+                            backgroundColor: 'var(--bg-input)',
+                            border: '1px solid var(--border-color)',
+                            color: 'var(--text-primary)',
+                            outline: 'none',
+                          }}
+                        />
+                      </div>
+
+                      <div>
+                        <label style={{
+                          display: 'block',
+                          fontSize: '11px',
+                          fontWeight: 600,
+                          color: 'var(--text-muted)',
+                          marginBottom: '6px',
+                        }}>
+                          DESCRIPTION
+                        </label>
+                        <textarea
+                          rows={4}
+                          value={editDesc}
+                          onChange={(e) => setEditDesc(e.target.value)}
+                          style={{
+                            width: '100%',
+                            padding: '10px',
+                            borderRadius: '8px',
+                            backgroundColor: 'var(--bg-input)',
+                            border: '1px solid var(--border-color)',
+                            color: 'var(--text-primary)',
+                            outline: 'none',
+                            resize: 'vertical',
+                          }}
+                        />
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                        <div style={{ flex: 1, minWidth: '150px' }}>
+                          <label style={{
+                            display: 'block',
+                            fontSize: '11px',
+                            fontWeight: 600,
+                            color: 'var(--text-muted)',
+                            marginBottom: '6px',
+                          }}>
+                            RISK LEVEL
+                          </label>
+                          <select
+                            value={editRisk}
+                            onChange={(e) => setEditRisk(e.target.value)}
+                            style={{
+                              width: '100%',
+                              padding: '10px',
+                              borderRadius: '8px',
+                              backgroundColor: 'var(--bg-input)',
+                              border: '1px solid var(--border-color)',
+                              color: 'var(--text-primary)',
+                              outline: 'none',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            <option value="low">Low</option>
+                            <option value="medium">Medium</option>
+                            <option value="high">High</option>
+                          </select>
+                        </div>
+
+                        <div style={{ flex: 1, minWidth: '150px' }}>
+                          <label style={{
+                            display: 'block',
+                            fontSize: '11px',
+                            fontWeight: 600,
+                            color: 'var(--text-muted)',
+                            marginBottom: '6px',
+                          }}>
+                            DEPENDENCIES (COMMA-SEPARATED TASK IDS)
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. 1, 2, 3"
+                            value={editDeps}
+                            onChange={(e) => setEditDeps(e.target.value)}
+                            style={{
+                              width: '100%',
+                              padding: '10px',
+                              borderRadius: '8px',
+                              backgroundColor: 'var(--bg-input)',
+                              border: '1px solid var(--border-color)',
+                              color: 'var(--text-primary)',
+                              outline: 'none',
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label style={{
+                          display: 'block',
+                          fontSize: '11px',
+                          fontWeight: 600,
+                          color: 'var(--text-muted)',
+                          marginBottom: '6px',
+                        }}>
+                          ACCEPTANCE CRITERIA (ONE PER LINE)
+                        </label>
+                        <textarea
+                          rows={4}
+                          value={editCriteria}
+                          onChange={(e) => setEditCriteria(e.target.value)}
+                          style={{
+                            width: '100%',
+                            padding: '10px',
+                            borderRadius: '8px',
+                            backgroundColor: 'var(--bg-input)',
+                            border: '1px solid var(--border-color)',
+                            color: 'var(--text-primary)',
+                            outline: 'none',
+                            resize: 'vertical',
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </Card>
+                )}
+              </div>
+            </div>
+          </div>
         );
+      }
 
       case 'agents':
         return (

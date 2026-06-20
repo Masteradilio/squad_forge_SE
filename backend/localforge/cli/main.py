@@ -1,5 +1,6 @@
 import typer
 from localforge.cli.doctor import doctor_cmd
+from localforge.cli.import_prd import import_prd_cmd
 from localforge.cli.init import init_cmd
 from localforge.cli.status import status_cmd
 
@@ -14,6 +15,9 @@ app.command(name="init", help="Initialize a new LocalForge workspace in the curr
     init_cmd
 )
 app.command(name="doctor", help="Run system diagnostics and verify dependencies.")(doctor_cmd)
+app.command(name="import-prd", help="Import a Markdown PRD into draft epics and tasks.")(
+    import_prd_cmd
+)
 app.command(name="status", help="Display project, task, and daemon status summary.")(status_cmd)
 
 

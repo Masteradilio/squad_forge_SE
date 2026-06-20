@@ -6,6 +6,7 @@ from typing import Any
 from localforge.gitops.manager import WorktreeManager
 from localforge.models import domain
 from localforge.models.enums import RunStatus, TaskRunStatus, TaskStatus
+from localforge.services.runners import LocalWorktreeTaskRunner, TaskRunnerPool
 from localforge.storage.transactions import UnitOfWork
 
 logger = logging.getLogger("localforge.scheduler")
@@ -23,12 +24,16 @@ class Scheduler:
         max_parallel_tasks: int = 2,
         loop_interval: float = 0.5,
         db_manager: Any | None = None,
+        runner_pool: TaskRunnerPool | None = None,
     ):
         self.project_id = project_id
         self.run_id = run_id
         self.max_parallel_tasks = max_parallel_tasks
         self.loop_interval = loop_interval
         self.db_manager = db_manager
+        self.runner_pool = runner_pool or TaskRunnerPool(
+            [LocalWorktreeTaskRunner(project_id=project_id)]
+        )
         self._running = False
         self._task: asyncio.Task | None = None
         self._trigger_event = asyncio.Event()
@@ -77,12 +82,15 @@ class Scheduler:
                 logger.error(f"Error in scheduler loop: {e}", exc_info=True)
 
             # Wait for event trigger or interval timeout
-            try:
-                await asyncio.wait_for(
-                    self._trigger_event.wait(), timeout=self.loop_interval
-                )
-            except TimeoutError:
-                pass
+            await self._wait_for_trigger()
+
+    async def _wait_for_trigger(self) -> bool:
+        """Wait until an event wakes the scheduler or the watchdog interval expires."""
+        try:
+            await asyncio.wait_for(self._trigger_event.wait(), timeout=self.loop_interval)
+            return True
+        except TimeoutError:
+            return False
 
     async def _cleanup_orphans(self) -> None:
         """Call WorktreeManager to clean up orphan directories."""
@@ -185,13 +193,13 @@ class Scheduler:
                     )
                     task_run = await uow.tasks.create_task_run(task_run_data)
 
-                    # Set up Git Worktree
-                    wt_manager = WorktreeManager(project_id=self.project_id, uow=uow)
-                    wt_path, branch = await wt_manager.setup_worktree(t.id)
+                    runner = self.runner_pool.acquire(t)
+                    runner_context = await runner.setup(t, run_id=self.run_id, uow=uow)
 
-                    # Update task run with worktree details
-                    task_run.worktree_path = wt_path
-                    task_run.branch_name = branch
+                    # Update task run with runner details
+                    task_run.worktree_path = runner_context.worktree_path
+                    task_run.branch_name = runner_context.branch_name
+                    task_run.sandbox_id = runner_context.sandbox_id
                     await uow.tasks.update_task_run(task_run)
 
                     executing_count += 1

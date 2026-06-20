@@ -1,3 +1,4 @@
+import asyncio
 import os
 
 import pytest
@@ -12,10 +13,46 @@ from localforge.models.enums import (
 from localforge.services.audit import AuditService
 from localforge.services.execution import ExecutionService
 from localforge.services.project import ProjectService
+from localforge.services.runners import BaseTaskRunner, RunnerContext, TaskRunnerPool
 from localforge.services.scheduler import Scheduler
 from localforge.services.task import TaskService
 from localforge.storage import UnitOfWork
 from sqlalchemy.ext.asyncio import AsyncSession
+
+
+class FakeRunner(BaseTaskRunner):
+    def __init__(self) -> None:
+        self.setup_task_ids: list[int] = []
+
+    async def setup(self, task: domain.Task, *, run_id: int, uow) -> RunnerContext:
+        assert task.id is not None
+        self.setup_task_ids.append(task.id)
+        return RunnerContext(
+            worktree_path=f"/tmp/localforge/{task.key.lower()}",
+            branch_name=f"localforge/{task.key.lower()}",
+            sandbox_id="fake-local",
+        )
+
+    async def execute(self, task_run: domain.TaskRun, *, uow) -> None:
+        pass
+
+    async def checkpoint(self, task_run: domain.TaskRun, name: str, *, uow) -> str:
+        return f"checkpoint-{name}"
+
+    async def cleanup(self, task_run: domain.TaskRun, *, uow) -> None:
+        pass
+
+
+def test_scheduler_trigger_wakes_event_wait_without_polling_delay():
+    scheduler = Scheduler(project_id=1, run_id=1, loop_interval=60.0)
+
+    async def wait_and_trigger() -> bool:
+        waiter = asyncio.create_task(scheduler._wait_for_trigger())
+        await asyncio.sleep(0)
+        scheduler.trigger()
+        return await asyncio.wait_for(waiter, timeout=0.1)
+
+    assert asyncio.run(wait_and_trigger()) is True
 
 
 @pytest.mark.anyio
@@ -148,6 +185,52 @@ async def test_replay_pagination(db_manager, db_session: AsyncSession):
     page2 = await uow.audits.export_run_replay(proj.id, 100, limit=2, offset=2)
     assert len(page2) == 1
     assert page2[0]["payload"]["count"] == 2
+
+
+@pytest.mark.anyio
+async def test_scheduler_uses_runner_pool_to_prepare_task_execution(
+    db_manager, db_session: AsyncSession
+):
+    uow = UnitOfWork(db_manager)
+    uow.session = db_session
+    uow.projects = ProjectService(db_session)
+    uow.tasks = TaskService(db_session)
+    uow.executions = ExecutionService(db_session)
+
+    proj = await uow.projects.create_project(
+        domain.Project(name="RunnerProj", root_path="/p", default_branch="main")
+    )
+    assert proj.id is not None
+    run = await uow.executions.create_run(
+        domain.Run(project_id=proj.id, mode=RunMode.INTERACTIVE, initiated_by="test")
+    )
+    assert run.id is not None
+    task = await uow.tasks.create_task(
+        domain.Task(project_id=proj.id, key="LF-40", title="Runner task", description="")
+    )
+    assert task.id is not None
+    await uow.tasks.update_task_status(task.id, TaskStatus.READY)
+    await uow.session.commit()
+
+    runner = FakeRunner()
+    scheduler = Scheduler(
+        project_id=proj.id,
+        run_id=run.id,
+        max_parallel_tasks=1,
+        db_manager=db_manager,
+        runner_pool=TaskRunnerPool([runner]),
+    )
+
+    await scheduler._process_iteration()
+
+    refreshed = await uow.tasks.get_task(task.id)
+    assert refreshed is not None
+    assert refreshed.status == TaskStatus.PLANNING
+    assert runner.setup_task_ids == [task.id]
+    task_runs = await uow.tasks.list_runs_for_task(task.id)
+    assert task_runs[0].worktree_path == "/tmp/localforge/lf-40"
+    assert task_runs[0].branch_name == "localforge/lf-40"
+    assert task_runs[0].sandbox_id == "fake-local"
 
 
 @pytest.mark.anyio

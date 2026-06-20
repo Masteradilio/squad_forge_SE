@@ -83,6 +83,21 @@ class ProjectService:
         orm_obj = result.scalar_one_or_none()
         return orm_obj.to_domain() if orm_obj else None
 
+    async def get_document_by_path(
+        self, project_id: int, path: str
+    ) -> domain.ProductDocument | None:
+        """Retrieve the latest document imported from a project path."""
+        result = await self.session.execute(
+            select(ProductDocumentORM)
+            .where(
+                ProductDocumentORM.project_id == project_id,
+                ProductDocumentORM.path == path,
+            )
+            .order_by(ProductDocumentORM.imported_at.desc())
+        )
+        orm_obj = result.scalars().first()
+        return orm_obj.to_domain() if orm_obj else None
+
     async def list_documents_for_project(self, project_id: int) -> list[domain.ProductDocument]:
         """List all product documents for a given project."""
         result = await self.session.execute(

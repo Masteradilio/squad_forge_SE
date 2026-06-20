@@ -1,0 +1,83 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap');
+
+:root {
+  --font-sans: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+  /* Theme colors - Dark slate/indigo HSL */
+  --bg-app: hsl(224, 71%, 4%);
+  --bg-sidebar: hsl(224, 71%, 7%);
+  --bg-card: hsla(224, 71%, 11%, 0.6);
+  --bg-card-hover: hsla(224, 71%, 15%, 0.8);
+  --bg-input: hsl(224, 71%, 9%);
+
+  --border-color: hsla(224, 30%, 20%, 0.5);
+  --border-active: hsla(250, 80%, 65%, 0.6);
+
+  --text-primary: hsl(210, 40%, 98%);
+  --text-secondary: hsl(215, 20%, 65%);
+  --text-muted: hsl(215, 15%, 45%);
+
+  /* Accent states */
+  --color-primary: hsl(250, 80%, 60%);
+  --color-primary-hover: hsl(250, 80%, 65%);
+  
+  --color-success: hsl(142, 70%, 45%);
+  --color-success-bg: hsla(142, 70%, 45%, 0.15);
+  
+  --color-warning: hsl(38, 92%, 50%);
+  --color-warning-bg: hsla(38, 92%, 50%, 0.15);
+  
+  --color-danger: hsl(0, 84%, 60%);
+  --color-danger-bg: hsla(0, 84%, 60%, 0.15);
+  
+  --color-info: hsl(199, 89%, 48%);
+  --color-info-bg: hsla(199, 89%, 48%, 0.15);
+  
+  --color-blocked: hsl(24, 94%, 50%);
+  --color-blocked-bg: hsla(24, 94%, 50%, 0.15);
+
+  --sidebar-width: 260px;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--bg-app);
+  color: var(--text-primary);
+  line-height: 1.5;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-sidebar);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-primary);
+}
+
+/* Glassmorphism utility */
+.glass {
+  background: var(--bg-card);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+}
+
+.glow {
+  box-shadow: 0 0 15px var(--color-primary);
+}

@@ -4,6 +4,136 @@ All notable changes to LocalForge OS will be documented in this file.
 
 ## [Unreleased]
 
+## [Phase 16] - 2026-06-20 - Frontend Foundation
+
+### Added
+- Created the React + TypeScript frontend structure under `frontend/` using Vite.
+- Implemented a typed API client in `frontend/src/api/client.ts` matching backend REST endpoints.
+- Implemented `useProjectEvents` hook in `frontend/src/api/events.ts` subscribing to SSE.
+- Designed a dark HSL glassmorphic design system in `frontend/src/index.css`.
+- Created basic design system components in `frontend/src/components/`: `Card`, `Table`, `Badge`,
+  `Button`, `Alert`, `Timeline`, `EmptyState`, and `CodeBlock`.
+- Built main dashboard shell in `frontend/src/App.tsx` featuring responsive sidebar, project
+  selection, client-side hash router, and real-time operations stream sidebar.
+
+### Changed
+- Mounted static file serving from `frontend/dist` on `/` in `backend/localforge/api/app.py`
+  to serve the compiled SPA directly when the FastAPI server is running.
+
+### Tests
+- Passed TS compilation and production build: `npm run build` in `frontend`.
+- Passed full backend test suite: `pytest` (85 passed).
+- Passed backend static analysis: `ruff` and `mypy`.
+
+## [Phase 15] - 2026-06-20 - Realtime Events
+
+### Added
+- Added `backend/localforge/events/` with `EventBus`, compact lifecycle event payloads, publish/subscribe queues, and audit-log replay.
+- Added lifecycle event mapping for `run.started`, `task.status_changed`, `agent.action_requested`, `safety.action_allowed`, `safety.action_blocked`, `test.finished`, `repair.started`, `repair.succeeded`, `repair.failed`, `pr.created`, and `artifact.created`.
+- Added SSE endpoint `GET /projects/{project_id}/events` with replay via `last_event_id`, bounded replay `limit`, live in-memory subscription, compact payloads, and keep-alive handling.
+- Added realtime publication for local API run command bridge operations.
+- Added `backend/tests/test_realtime_events.py` covering LF-1501 through LF-1503.
+
+### Tests
+- Passed linting: `.\.venv\Scripts\ruff.exe check backend\localforge\events backend\localforge\api\app.py backend\tests\test_realtime_events.py`.
+- Passed syntax validation for Phase 15 files using bundled Codex Python: `python -m py_compile ...`.
+
+### Known limitations
+- Agent-side pytest/mypy execution is blocked by this shell's broken `.venv` Python launcher; validate Phase 15 with `python -m pytest backend/tests/test_realtime_events.py -q` and `mypy backend` in the activated venv.
+
+## [Phase 14] - 2026-06-20 - Local API Server
+
+### Added
+- Added `backend/localforge/api/` with a FastAPI app factory for local API serving.
+- Implemented endpoints for health, projects, tasks, runs, agents, artifacts, policies, models, audit events, and local PR-ready tasks.
+- Implemented a safe command bridge for run `start`, `pause`, `resume`, and `stop` operations with audit events.
+- Implemented artifact content serving with project-root path traversal blocking and secret redaction.
+- Added `backend/tests/test_api_server.py` using FastAPI `TestClient`.
+
+### Tests
+- Passed linting: `.\.venv\Scripts\ruff.exe check backend\localforge\api backend\tests\test_api_server.py`.
+- Passed syntax validation for Phase 14 files using bundled Codex Python: `python -m py_compile ...`.
+- Passed Phase 14 tests in the activated venv: `python -m pytest backend/tests/test_api_server.py -q`.
+- Passed static typing in the activated venv: `mypy backend`.
+
+## [Phase 13] - 2026-06-20 - PR Factory
+
+### Added
+- Added `backend/localforge/pr_factory/` with local PR artifact generation and an opt-in GitHub PR adapter.
+- Implemented `pr.md` generation with title, summary, acceptance criteria, changed files, tests, risk, repair attempts, evidence paths, and checklist.
+- Implemented local PR-ready handling that marks tasks `PR_READY` when branch metadata, diff artifact, test artifact, and risk artifact exist, without requiring GitHub configuration.
+- Added GitHub adapter defaulting to disabled unless explicitly configured with `LOCALFORGE_ENABLE_GITHUB_PR` and token environment variables; disabled or unavailable remote creation falls back to local PR artifacts.
+- Added `backend/tests/test_pr_factory.py` covering LF-1301 through LF-1303.
+
+### Tests
+- Passed linting: `.\.venv\Scripts\ruff.exe check backend\localforge\pr_factory backend\tests\test_pr_factory.py`.
+- Passed syntax validation for Phase 13 files using bundled Codex Python: `python -m py_compile ...`.
+- Passed Phase 13 tests in the activated venv: `python -m pytest backend/tests/test_pr_factory.py -q`.
+- Passed static typing in the activated venv: `mypy backend`.
+
+## [Phase 12] - 2026-06-20 - Self-Healing Engine
+
+### Added
+- Added `backend/localforge/healing/` with failure classification, bounded repair policy, and a minimal self-healing engine.
+- Implemented representative failure classes for test assertions, typecheck, lint, build, dependency/import failures, runtime exceptions, model failures, policy denial, sandbox failures, timeouts, git conflicts, and unknown failures.
+- Implemented repair policy limits for max attempts, repeated same failure, diff growth, and safety denial.
+- Implemented a deterministic repair loop that checkpoints file contents before repair, applies safe file edits, reruns focused tests, writes `repair.md`, blocks safely with `blocker.md`, and rolls back bad repairs with audit events.
+- Added `backend/tests/test_self_healing.py` covering LF-1201 through LF-1204.
+
+### Tests
+- Passed linting: `.\.venv\Scripts\ruff.exe check backend\localforge\healing backend\tests\test_self_healing.py`.
+- Passed syntax validation for Phase 12 files using bundled Codex Python: `python -m py_compile ...`.
+- Passed Phase 12 tests in the activated venv: `python -m pytest backend/tests/test_self_healing.py -q`.
+- Passed static typing in the activated venv: `mypy backend`.
+
+## [Phase 11] - 2026-06-20 - Test Runner and Quality Gates
+
+### Added
+- Added `backend/localforge/quality/` with test command discovery, focused test execution, and quality gate evaluation.
+- Implemented project-specific test command overrides through `.localforge/config.yaml` plus detection for Python, npm, pnpm, lint, mypy, ruff, and TypeScript commands.
+- Implemented `FocusedTestRunner` to execute task-relevant commands through the Safety Kernel, enforce timeouts, capture stdout/stderr, and write `tests.md` artifacts.
+- Implemented `QualityGateEvaluator` to block failed tests, require risk notes for missing tests, require approval records for protected file changes, and emit `risk.md` artifacts.
+- Added `backend/tests/test_quality_gates.py` covering LF-1101 through LF-1103.
+
+### Tests
+- Passed linting: `.\.venv\Scripts\ruff.exe check backend\localforge\quality backend\tests\test_quality_gates.py`.
+- Passed syntax validation for Phase 11 files using bundled Codex Python: `python -m py_compile ...`.
+- Passed Phase 11 tests in the activated venv: `python -m pytest backend/tests/test_quality_gates.py -q`.
+- Passed static typing in the activated venv: `mypy backend`.
+
+## [Phase 10] - 2026-06-20 - Basic Agent Runtime
+
+### Added
+- Added `backend/localforge/runtime/` with `TaskContextBuilder`, `SafeFileEditor`, `RuntimeHandoffService`, and `LeadAgentRuntime`.
+- Implemented bounded task context rendering with task description, acceptance criteria, policy summary, relevant file snippets, omitted-file markers, and current worktree path.
+- Implemented safe runtime file reads/writes constrained to the task worktree, Safety Kernel evaluation for file actions, unified diff generation, and `diff.patch` artifact emission.
+- Implemented a basic deterministic lead-agent loop that writes a plan artifact, executes metadata-declared file and command actions through safe tools, records summaries, and advances a trivial task to `PR_READY`.
+- Implemented runtime handoff creation and consume-once handling with audit events visible in run replay.
+- Added `backend/tests/test_agent_runtime.py` covering LF-1001 through LF-1004.
+
+### Tests
+- Passed linting: `.\.venv\Scripts\ruff.exe check backend`.
+- Passed syntax validation for Phase 10 files using bundled Codex Python: `python -m py_compile ...`.
+- Passed Phase 10 tests in the activated venv: `python -m pytest backend/tests/test_agent_runtime.py -q`.
+- Passed static typing in the activated venv: `mypy backend`.
+
+## [Phase 9] - 2026-06-20 - PRD Compiler
+
+### Added
+- Added `backend/localforge/prd/` with a Markdown document loader, deterministic PRD extractor, model-assisted plan generation through the existing validated LLM adapter, task sizing heuristics, and transactional PRD import flow.
+- Added `localforge import-prd` with `--dry-run` and `--json` output.
+- Added `BaseTaskRunner`, `LocalWorktreeTaskRunner`, `RunnerContext`, and `TaskRunnerPool` to decouple scheduler task preparation from direct worktree orchestration.
+- Added Phase 9 tests for Markdown loading/hash change detection, deterministic extraction, fake-LLM assisted generation, invalid JSON rollback behavior, sizing heuristics, CLI dry-run JSON output, event-driven scheduler wakeups, and runner pool integration.
+
+### Changed
+- Updated `Scheduler` to expose an event wait helper and use the runner pool when preparing task execution.
+- Extended `ProjectService` with latest-document lookup by project path for PRD change detection.
+
+### Tests
+- Passed full test suite in the activated venv: `python -m pytest backend/tests -q` (59 passed).
+- Passed static typing in the activated venv: `mypy backend` (Success: no issues found in 62 source files).
+- Passed linting: `.\.venv\Scripts\ruff.exe check backend`.
+
 ## [Phase 8] - 2026-06-20 - Task State Machine and Scheduler & Improvements
 
 ### Added

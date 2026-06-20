@@ -1704,11 +1704,21 @@ Implement visual UI form components inside the Models tab to dynamically edit ag
 
 Develop backend services to persist project memory facts, and implement export/import actions (JSON/YAML) to backup and restore project context metadata.
 
+#### LF-2307 — CI/CD Workflow Setup (From Phase 23 Enhancements)
+
+Create a GitHub Actions configuration (.github/workflows/ci.yml) that automatically runs backend unit tests (pytest) and checks frontend build compilation (npm run build) on every push to remote branches.
+
+#### LF-2308 — Branch Protection Rules and PR Factory Integration (From Phase 23 Enhancements)
+
+Set up project branch protection policies requiring pull request review before merging to main, and ensure coordination with the PR Factory (Phase 13) flow.
+
 ### Phase Completion Gate
 
 - default pipeline completes sample task;
 - model routing visually editable;
 - memory persistence and backups operational;
+- CI/CD workflow active and validated;
+- branch protection guidelines integrated;
 - Phase 23 changelog entry added.
 
 ---

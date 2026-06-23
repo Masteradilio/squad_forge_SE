@@ -34,6 +34,7 @@ DEFAULT_POLICY_TEMPLATE: dict[str, Any] = {
             "git reset",
             "git clean",
             "pytest",
+            "python -m pytest",
             "ruff check",
             "mypy",
         ],

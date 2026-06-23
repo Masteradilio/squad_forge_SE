@@ -15,6 +15,19 @@ def test_cli_help():
     assert "init" in result.stdout
     assert "doctor" in result.stdout
     assert "status" in result.stdout
+    for command in [
+        "pause",
+        "resume",
+        "stop",
+        "tasks",
+        "task",
+        "logs",
+        "replay",
+        "models",
+        "skills",
+        "safety",
+    ]:
+        assert command in result.stdout
 
 
 def test_cli_doctor():

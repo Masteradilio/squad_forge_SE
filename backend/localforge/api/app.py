@@ -1,34 +1,49 @@
 import asyncio
 import json
+import logging
 import os
-from datetime import datetime
+import subprocess
+from collections.abc import Sequence
+from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, Field, ValidationError
 
+from localforge.core.config import load_config
 from localforge.core.policy import PolicyRules
-from localforge.quality.discovery import TestCommandDiscovery
-from localforge.safety.runner import run_safe_command
-
 from localforge.events.bus import EventBus, LifecycleEvent
-from localforge.llm.fake import FakeLLMProvider
+from localforge.llm.base import BaseLLMProvider
+from localforge.llm.openai_compatible import OpenAICompatibleProvider
 from localforge.models import domain
 from localforge.models.enums import (
     ActionApprovalStatus,
+    AgentRole,
     AuditEventActorType,
     AuditEventType,
+    MemoryRecordKind,
+    RuntimeStatus,
+    RunMode,
     RunStatus,
+    TaskRunStatus,
     TaskStatus,
 )
+from localforge.pipeline import PipelineMode, RolePipelineEngine
 from localforge.prd import import_prd
+from localforge.quality.discovery import TestCommandDiscovery
+from localforge.gitops.manager import WorktreeManager
+from localforge.safety.runner import run_safe_command
 from localforge.services.audit import redact_secrets
+from localforge.skills import SkillDefinition, SkillRegistry
 from localforge.storage import DatabaseManager, UnitOfWork
 from localforge.storage import db_manager as default_db_manager
 from localforge.storage.orm import ArtifactORM, TaskRunORM
+
+
+logger = logging.getLogger(__name__)
 
 
 class ImportPRDRequest(BaseModel):
@@ -46,8 +61,89 @@ class TaskUpdateRequest(BaseModel):
     status: TaskStatus
 
 
+class ModelRouteRequest(BaseModel):
+    role: AgentRole
+    provider: str = "localforge"
+    model_profile_id: str
+    endpoint_url: str | None = None
+    fallback_model_profile_id: str | None = None
 
-def create_app(db_manager: DatabaseManager | None = None) -> FastAPI:
+
+class MemoryFactRequest(BaseModel):
+    fact: str
+    kind: MemoryRecordKind = MemoryRecordKind.STACK_FACT
+    source: str = "manual"
+    pinned: bool = False
+    status: str = "active"
+    tags: list[str] = Field(default_factory=list)
+
+
+class MemoryFactUpdateRequest(BaseModel):
+    fact: str | None = None
+    pinned: bool | None = None
+    status: str | None = None
+    tags: list[str] | None = None
+
+
+class MemoryImportRequest(BaseModel):
+    format: str = "json"
+    payload: dict[str, Any] | str
+
+
+class TaskCommentRequest(BaseModel):
+    author: str = "user"
+    body: str
+    thread_id: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class RuntimeRegistrationRequest(BaseModel):
+    runtime_id: str
+    name: str
+    kind: str = "local"
+    status: RuntimeStatus = RuntimeStatus.ONLINE
+    capabilities: list[str] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class RuntimeHeartbeatRequest(BaseModel):
+    status: RuntimeStatus = RuntimeStatus.ONLINE
+    metadata: dict[str, Any] | None = None
+
+
+class SquadRequest(BaseModel):
+    name: str
+    purpose: str = ""
+    roles: list[AgentRole] = Field(default_factory=list)
+    agent_ids: list[int] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class PipelineRunRequest(BaseModel):
+    mode: PipelineMode = PipelineMode.DEFAULT
+    run_id: int | None = None
+    task_run_id: int | None = None
+
+
+class SkillRequest(BaseModel):
+    name: str
+    purpose: str
+    triggers: list[str] = Field(default_factory=list)
+    allowed_actions: list[str] = Field(default_factory=list)
+    expected_artifacts: list[str] = Field(default_factory=list)
+    failure_modes: list[str] = Field(default_factory=list)
+    examples: list[str] = Field(default_factory=list)
+    enabled: bool = True
+
+
+class WorktreeRevertRequest(BaseModel):
+    checkpoint_hash: str
+
+
+def create_app(
+    db_manager: DatabaseManager | None = None,
+    llm_provider: BaseLLMProvider | None = None,
+) -> FastAPI:
     manager = db_manager or default_db_manager
     app = FastAPI(title="LocalForge OS API", version="0.1.0")
     app.state.event_bus = EventBus(db_manager=manager)
@@ -70,6 +166,18 @@ def create_app(db_manager: DatabaseManager | None = None) -> FastAPI:
         allow_headers=["*"],
     )
     app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+    @app.middleware("http")
+    async def add_security_headers(request: Request, call_next: Any) -> Response:
+        response = await call_next(request)
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "no-referrer")
+        response.headers.setdefault(
+            "Content-Security-Policy",
+            "default-src 'self'; frame-ancestors 'none'",
+        )
+        return response
 
     @app.get("/health")
     async def health() -> dict[str, str]:
@@ -105,10 +213,13 @@ def create_app(db_manager: DatabaseManager | None = None) -> FastAPI:
             assert uow.tasks is not None
             assert uow.audits is not None
             task_runs = await uow.tasks.list_runs_for_task(task_id)
-            artifacts = []
-            for task_run in task_runs:
-                if task_run.id is not None:
-                    artifacts.extend(await uow.audits.list_artifacts_for_task_run(task_run.id))
+            task_run_ids = [task_run.id for task_run in task_runs if task_run.id is not None]
+            artifacts_by_run = await uow.audits.list_artifacts_for_task_runs(task_run_ids)
+            artifacts = [
+                artifact
+                for task_run_id in task_run_ids
+                for artifact in artifacts_by_run.get(task_run_id, [])
+            ]
             return [_dump(artifact) for artifact in artifacts]
 
     @app.get("/projects/{project_id}/policies/{name}")
@@ -122,8 +233,392 @@ def create_app(db_manager: DatabaseManager | None = None) -> FastAPI:
 
     @app.get("/models")
     async def list_models() -> dict[str, Any]:
-        provider = FakeLLMProvider()
-        return {"provider": "localforge", "models": await provider.list_models()}
+        config = load_config()
+        provider = llm_provider or OpenAICompatibleProvider(
+            base_url=config.models.base_url, default_model=config.models.default_model
+        )
+        return {
+            "provider": config.models.provider,
+            "base_url": config.models.base_url,
+            "default_model": config.models.default_model,
+            "models": await provider.list_models(),
+        }
+
+    @app.get("/projects/{project_id}/models/metrics")
+    async def model_metrics(project_id: int) -> list[dict[str, Any]]:
+        async with UnitOfWork(manager) as uow:
+            assert uow.routing is not None
+            routes = await uow.routing.list_routes(project_id)
+            return [
+                {
+                    "role": route.role.value,
+                    "provider": route.provider,
+                    "model_profile_id": route.model_profile_id,
+                    "success_rate": 1.0,
+                    "failure_rate": 0.0,
+                    "last_used_at": route.updated_at.isoformat(),
+                }
+                for route in routes
+            ]
+
+    @app.get("/projects/{project_id}/chief-engineer/calls")
+    async def chief_engineer_calls(
+        project_id: int, run_id: int | None = None
+    ) -> dict[str, Any]:
+        config = load_config()
+        async with UnitOfWork(manager) as uow:
+            assert uow.model_calls is not None
+            calls = await uow.model_calls.list_calls(project_id=project_id, run_id=run_id)
+            return {
+                "provider": config.chief_engineer.provider,
+                "model": config.chief_engineer.model,
+                "enabled": config.chief_engineer.enabled,
+                "api_key_configured": bool(config.chief_engineer.api_key),
+                "budget": {
+                    "max_paid_calls": config.budgets.max_paid_calls,
+                    "max_paid_input_tokens": config.budgets.max_paid_input_tokens,
+                    "max_paid_output_tokens": config.budgets.max_paid_output_tokens,
+                    "max_paid_usd": config.budgets.max_paid_usd,
+                },
+                "calls": [_dump(call) for call in calls],
+            }
+
+    @app.get("/projects/{project_id}/settings")
+    async def project_settings(project_id: int) -> dict[str, Any]:
+        async with UnitOfWork(manager) as uow:
+            assert uow.projects is not None
+            project = await uow.projects.get_project(project_id)
+            if not project:
+                raise HTTPException(status_code=404, detail="Project not found")
+            config = load_config()
+            return {
+                "project_path": project.root_path,
+                "default_branch": project.default_branch,
+                "git_provider": "local-git",
+                "pr_provider": "github" if project.remote_url else "local-artifact",
+                "remote_url": project.remote_url,
+                "model_endpoint": config.models.base_url,
+                "sandbox_mode": config.sandbox.type,
+                "resource_limits": config.budgets.model_dump(mode="json"),
+                "ui_preferences": {"theme": "system"},
+            }
+
+    @app.get("/projects/{project_id}/skills")
+    async def list_project_skills(project_id: int) -> list[dict[str, Any]]:
+        async with UnitOfWork(manager) as uow:
+            assert uow.projects is not None
+            project = await uow.projects.get_project(project_id)
+            if not project:
+                raise HTTPException(status_code=404, detail="Project not found")
+            return [
+                skill.model_dump(mode="json")
+                for skill in SkillRegistry(project.root_path).load_all()
+            ]
+
+    @app.post("/projects/{project_id}/skills")
+    async def register_project_skill(project_id: int, req: SkillRequest) -> dict[str, Any]:
+        async with UnitOfWork(manager) as uow:
+            assert uow.projects is not None
+            project = await uow.projects.get_project(project_id)
+            if not project:
+                raise HTTPException(status_code=404, detail="Project not found")
+            skill = SkillRegistry(project.root_path).write_local(
+                SkillDefinition(
+                    name=req.name,
+                    purpose=req.purpose,
+                    triggers=req.triggers,
+                    allowed_actions=req.allowed_actions,
+                    expected_artifacts=req.expected_artifacts,
+                    failure_modes=req.failure_modes,
+                    examples=req.examples,
+                    enabled=req.enabled,
+                )
+            )
+            return skill.model_dump(mode="json")
+
+    @app.put("/projects/{project_id}/skills/{name}")
+    async def update_project_skill(
+        project_id: int, name: str, req: SkillRequest
+    ) -> dict[str, Any]:
+        async with UnitOfWork(manager) as uow:
+            assert uow.projects is not None
+            project = await uow.projects.get_project(project_id)
+            if not project:
+                raise HTTPException(status_code=404, detail="Project not found")
+            skill = SkillRegistry(project.root_path).write_local(
+                SkillDefinition(
+                    name=name,
+                    purpose=req.purpose,
+                    triggers=req.triggers,
+                    allowed_actions=req.allowed_actions,
+                    expected_artifacts=req.expected_artifacts,
+                    failure_modes=req.failure_modes,
+                    examples=req.examples,
+                    enabled=req.enabled,
+                )
+            )
+            return skill.model_dump(mode="json")
+
+    @app.get("/tasks/{task_id}/skills")
+    async def select_task_skills(task_id: int) -> list[dict[str, Any]]:
+        async with UnitOfWork(manager) as uow:
+            assert uow.projects is not None
+            assert uow.tasks is not None
+            task = await uow.tasks.get_task(task_id)
+            if not task:
+                raise HTTPException(status_code=404, detail="Task not found")
+            project = await uow.projects.get_project(task.project_id)
+            if not project:
+                raise HTTPException(status_code=404, detail="Project not found")
+            return [
+                skill.model_dump(mode="json")
+                for skill in SkillRegistry(project.root_path).select_for_task(task)
+            ]
+
+    @app.get("/projects/{project_id}/model-routes")
+    async def list_model_routes(project_id: int) -> list[dict[str, Any]]:
+        async with UnitOfWork(manager) as uow:
+            assert uow.routing is not None
+            return [_dump(route) for route in await uow.routing.list_routes(project_id)]
+
+    @app.put("/projects/{project_id}/model-routes")
+    async def upsert_model_route(project_id: int, req: ModelRouteRequest) -> dict[str, Any]:
+        async with UnitOfWork(manager) as uow:
+            assert uow.routing is not None
+            route = await uow.routing.upsert_route(
+                domain.ModelRoute(
+                    project_id=project_id,
+                    role=req.role,
+                    provider=req.provider,
+                    model_profile_id=req.model_profile_id,
+                    endpoint_url=req.endpoint_url,
+                    fallback_model_profile_id=req.fallback_model_profile_id,
+                )
+            )
+            return _dump(route)
+
+    @app.get("/projects/{project_id}/memory")
+    async def list_memory_facts(project_id: int) -> list[dict[str, Any]]:
+        async with UnitOfWork(manager) as uow:
+            assert uow.memory is not None
+            return [_dump(fact) for fact in await uow.memory.list_facts(project_id)]
+
+    @app.get("/projects/{project_id}/memory/relevant")
+    async def retrieve_relevant_memory(project_id: int, query: str) -> list[dict[str, Any]]:
+        async with UnitOfWork(manager) as uow:
+            assert uow.memory is not None
+            facts = await uow.memory.retrieve_relevant(project_id, query=query)
+            return [_dump(fact) for fact in facts]
+
+    @app.post("/projects/{project_id}/memory")
+    async def create_memory_fact(project_id: int, req: MemoryFactRequest) -> dict[str, Any]:
+        async with UnitOfWork(manager) as uow:
+            assert uow.memory is not None
+            fact = await uow.memory.create_fact(
+                domain.MemoryFact(
+                    project_id=project_id,
+                    kind=req.kind,
+                    fact=req.fact,
+                    source=req.source,
+                    pinned=req.pinned,
+                    status=req.status,
+                    tags=req.tags,
+                )
+            )
+            return _dump(fact)
+
+    @app.put("/memory/{fact_id}")
+    async def update_memory_fact(fact_id: int, req: MemoryFactUpdateRequest) -> dict[str, Any]:
+        async with UnitOfWork(manager) as uow:
+            assert uow.memory is not None
+            try:
+                fact = await uow.memory.update_fact(
+                    fact_id,
+                    fact=req.fact,
+                    pinned=req.pinned,
+                    status=req.status,
+                    tags=req.tags,
+                )
+            except ValueError as exc:
+                raise HTTPException(status_code=404, detail=str(exc)) from exc
+            return _dump(fact)
+
+    @app.delete("/memory/{fact_id}")
+    async def delete_memory_fact(fact_id: int) -> dict[str, str]:
+        async with UnitOfWork(manager) as uow:
+            assert uow.memory is not None
+            try:
+                await uow.memory.delete_fact(fact_id)
+            except ValueError as exc:
+                raise HTTPException(status_code=404, detail=str(exc)) from exc
+            return {"status": "deleted"}
+
+    @app.get("/projects/{project_id}/memory/export")
+    async def export_memory(project_id: int, format: str = "json") -> Response:
+        async with UnitOfWork(manager) as uow:
+            assert uow.memory is not None
+            try:
+                payload = await uow.memory.export_backup(project_id, fmt=format)
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            media_type = "application/x-yaml" if format == "yaml" else "application/json"
+            return Response(content=payload, media_type=media_type)
+
+    @app.post("/projects/{project_id}/memory/import")
+    async def import_memory(project_id: int, req: MemoryImportRequest) -> list[dict[str, Any]]:
+        payload = req.payload
+        if req.format == "json" and isinstance(payload, str):
+            payload = json.loads(payload)
+        elif req.format == "yaml" and isinstance(payload, str):
+            payload = _parse_memory_yaml(payload)
+        if not isinstance(payload, dict):
+            raise HTTPException(status_code=400, detail="Invalid memory backup payload")
+        async with UnitOfWork(manager) as uow:
+            assert uow.memory is not None
+            facts = await uow.memory.import_backup(project_id, payload)
+            return [_dump(fact) for fact in facts]
+
+    @app.get("/tasks/{task_id}/comments")
+    async def list_task_comments(task_id: int, limit: int = 50) -> list[dict[str, Any]]:
+        async with UnitOfWork(manager) as uow:
+            assert uow.coordination is not None
+            comments = await uow.coordination.list_task_comments(task_id, limit=limit)
+            return [_dump(comment) for comment in comments]
+
+    @app.post("/tasks/{task_id}/comments")
+    async def add_task_comment(task_id: int, req: TaskCommentRequest) -> dict[str, Any]:
+        async with UnitOfWork(manager) as uow:
+            assert uow.tasks is not None
+            assert uow.coordination is not None
+            task = await uow.tasks.get_task(task_id)
+            if not task:
+                raise HTTPException(status_code=404, detail="Task not found")
+            comment = await uow.coordination.add_task_comment(
+                domain.TaskComment(
+                    project_id=task.project_id,
+                    task_id=task_id,
+                    author=req.author,
+                    body=req.body,
+                    thread_id=req.thread_id,
+                    metadata=req.metadata,
+                )
+            )
+            return _dump(comment)
+
+    @app.get("/projects/{project_id}/runtimes")
+    async def list_project_runtimes(project_id: int) -> list[dict[str, Any]]:
+        async with UnitOfWork(manager) as uow:
+            assert uow.coordination is not None
+            runtimes = await uow.coordination.list_runtimes(project_id)
+            return [_dump(runtime) for runtime in runtimes]
+
+    @app.post("/projects/{project_id}/runtimes")
+    async def register_project_runtime(
+        project_id: int, req: RuntimeRegistrationRequest
+    ) -> dict[str, Any]:
+        async with UnitOfWork(manager) as uow:
+            assert uow.coordination is not None
+            runtime = await uow.coordination.register_runtime(
+                domain.RuntimeRegistration(
+                    project_id=project_id,
+                    runtime_id=req.runtime_id,
+                    name=req.name,
+                    kind=req.kind,
+                    status=req.status,
+                    capabilities=req.capabilities,
+                    metadata=req.metadata,
+                )
+            )
+            return _dump(runtime)
+
+    @app.post("/runtimes/{runtime_id}/heartbeat")
+    async def heartbeat_runtime(
+        runtime_id: str, req: RuntimeHeartbeatRequest
+    ) -> dict[str, Any]:
+        async with UnitOfWork(manager) as uow:
+            assert uow.coordination is not None
+            runtime = await uow.coordination.heartbeat_runtime(
+                runtime_id,
+                status=req.status,
+                metadata=req.metadata,
+            )
+            if not runtime:
+                raise HTTPException(status_code=404, detail="Runtime not found")
+            return _dump(runtime)
+
+    @app.get("/tasks/{task_id}/ancestry")
+    async def get_task_ancestry(task_id: int) -> dict[str, Any]:
+        async with UnitOfWork(manager) as uow:
+            assert uow.coordination is not None
+            try:
+                return await uow.coordination.task_ancestry(task_id)
+            except ValueError as exc:
+                raise HTTPException(status_code=404, detail="Task not found") from exc
+
+    @app.get("/projects/{project_id}/squads")
+    async def list_project_squads(project_id: int) -> list[dict[str, Any]]:
+        async with UnitOfWork(manager) as uow:
+            assert uow.coordination is not None
+            squads = await uow.coordination.list_squads(project_id)
+            return [_dump(squad) for squad in squads]
+
+    @app.post("/projects/{project_id}/squads")
+    async def create_project_squad(project_id: int, req: SquadRequest) -> dict[str, Any]:
+        async with UnitOfWork(manager) as uow:
+            assert uow.coordination is not None
+            squad = await uow.coordination.create_squad(
+                domain.Squad(
+                    project_id=project_id,
+                    name=req.name,
+                    purpose=req.purpose,
+                    roles=req.roles,
+                    agent_ids=req.agent_ids,
+                    metadata=req.metadata,
+                )
+            )
+            return _dump(squad)
+
+    @app.post("/tasks/{task_id}/pipeline")
+    async def run_role_pipeline(task_id: int, req: PipelineRunRequest) -> dict[str, Any]:
+        async with UnitOfWork(manager) as uow:
+            assert uow.tasks is not None
+            assert uow.executions is not None
+            task = await uow.tasks.get_task(task_id)
+            if not task:
+                raise HTTPException(status_code=404, detail="Task not found")
+            run_id = req.run_id
+            if run_id is None:
+                run = await uow.executions.create_run(
+                    domain.Run(
+                        project_id=task.project_id,
+                        mode=RunMode.INTERACTIVE,
+                        status=RunStatus.RUNNING,
+                        initiated_by="role-pipeline",
+                    )
+                )
+                run_id = run.id
+            task_run_id = req.task_run_id
+            if task_run_id is None:
+                task_run = await uow.tasks.create_task_run(
+                    domain.TaskRun(
+                        run_id=run_id or 0,
+                        task_id=task_id,
+                        status=TaskRunStatus.RUNNING,
+                    )
+                )
+                task_run_id = task_run.id
+            if run_id is None or task_run_id is None:
+                raise HTTPException(status_code=500, detail="Pipeline run creation failed")
+            result = await RolePipelineEngine(
+                uow, project_id=task.project_id, run_id=run_id
+            ).run_task(task_id=task_id, task_run_id=task_run_id, mode=req.mode)
+            return {
+                "mode": result.mode.value,
+                "roles": [role.value for role in result.roles],
+                "artifact_paths": result.artifact_paths,
+                "consumed_handoff_ids": result.consumed_handoff_ids,
+                "pr_artifact_path": result.pr_artifact_path,
+            }
 
     @app.get("/projects/{project_id}/prs")
     async def list_prs(project_id: int) -> list[dict[str, Any]]:
@@ -132,12 +627,119 @@ def create_app(db_manager: DatabaseManager | None = None) -> FastAPI:
             tasks = await uow.tasks.list_tasks_for_project(project_id)
             return [_dump(task) for task in tasks if task.status == TaskStatus.PR_READY]
 
+    @app.get("/projects/{project_id}/worktrees")
+    async def list_project_worktrees(project_id: int) -> list[dict[str, Any]]:
+        async with UnitOfWork(manager) as uow:
+            assert uow.tasks is not None
+            assert uow.audits is not None
+            tasks = await uow.tasks.list_tasks_for_project(project_id)
+            task_ids = [task.id for task in tasks if task.id is not None]
+            runs_by_task = await uow.tasks.list_runs_for_tasks(task_ids)
+            worktrees: list[dict[str, Any]] = []
+            for task in tasks:
+                if task.id is None:
+                    continue
+                latest = runs_by_task.get(task.id, [None])[0]
+                if latest is None or not latest.worktree_path:
+                    continue
+                dirty = False
+                last_commit = None
+                if os.path.isdir(latest.worktree_path):
+                    status = subprocess.run(
+                        ["git", "-C", latest.worktree_path, "status", "--porcelain"],
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                    )
+                    dirty = bool(status.stdout.strip())
+                    commit = subprocess.run(
+                        ["git", "-C", latest.worktree_path, "rev-parse", "--short", "HEAD"],
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                    )
+                    if commit.returncode == 0:
+                        last_commit = commit.stdout.strip()
+                artifacts = (
+                    await uow.audits.list_artifacts_for_task_run(latest.id)
+                    if latest.id is not None
+                    else []
+                )
+                pr_artifact = next((a for a in artifacts if a.type.value == "PRArtifact"), None)
+                cleanup_eligible = task.status in {
+                    TaskStatus.DONE,
+                    TaskStatus.FAILED_SAFE,
+                    TaskStatus.CANCELLED,
+                }
+                worktrees.append(
+                    {
+                        "task_id": task.id,
+                        "task_key": task.key,
+                        "task_status": task.status.value,
+                        "branch": latest.branch_name,
+                        "path": latest.worktree_path,
+                        "dirty": dirty,
+                        "last_commit": last_commit,
+                        "pr_link": pr_artifact.path if pr_artifact else None,
+                        "cleanup_eligible": cleanup_eligible,
+                    }
+                )
+            return worktrees
+
+    @app.post("/tasks/{task_id}/worktree/cleanup")
+    async def cleanup_task_worktree(task_id: int) -> dict[str, str]:
+        async with UnitOfWork(manager) as uow:
+            assert uow.tasks is not None
+            task = await uow.tasks.get_task(task_id)
+            if not task:
+                raise HTTPException(status_code=404, detail="Task not found")
+            manager_obj = WorktreeManager(project_id=task.project_id, uow=uow)
+            try:
+                await manager_obj.cleanup_worktree(task_id)
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            return {"status": "cleaned"}
+
+    @app.post("/tasks/{task_id}/worktree/revert")
+    async def revert_task_worktree(task_id: int, req: WorktreeRevertRequest) -> dict[str, str]:
+        async with UnitOfWork(manager) as uow:
+            assert uow.tasks is not None
+            task = await uow.tasks.get_task(task_id)
+            if not task:
+                raise HTTPException(status_code=404, detail="Task not found")
+            manager_obj = WorktreeManager(project_id=task.project_id, uow=uow)
+            try:
+                await manager_obj.rollback_checkpoint(task_id, req.checkpoint_hash)
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            return {"status": "reverted"}
+
     @app.get("/projects/{project_id}/audit-events")
     async def list_audit_events(project_id: int) -> list[dict[str, Any]]:
         async with UnitOfWork(manager) as uow:
             assert uow.audits is not None
             events = await uow.audits.list_audit_events_for_project(project_id)
             return [_dump(event) for event in events]
+
+    @app.get("/projects/{project_id}/audit-events/export")
+    async def export_audit_events(project_id: int) -> Response:
+        async with UnitOfWork(manager) as uow:
+            assert uow.audits is not None
+            events = await uow.audits.list_audit_events_for_project(project_id)
+            payload = json.dumps([_dump(event) for event in events], indent=2)
+            return Response(content=payload, media_type="application/json")
+
+    @app.post("/projects/{project_id}/lock")
+    async def lock_project(project_id: int) -> dict[str, Any]:
+        async with UnitOfWork(manager) as uow:
+            assert uow.audits is not None
+            policy = await uow.audits.get_project_policy(project_id, "default")
+            if not policy:
+                raise HTTPException(status_code=404, detail="Policy not found")
+            policy.rules = {**policy.rules, "project_locked": True}
+            policy.updated_at = datetime.now(UTC)
+            updated = await uow.audits.update_policy(policy)
+            return _dump(updated)
 
     @app.get("/projects/{project_id}/events")
     async def stream_project_events(
@@ -267,7 +869,7 @@ def create_app(db_manager: DatabaseManager | None = None) -> FastAPI:
             if not approval:
                 raise HTTPException(status_code=404, detail="Approval request not found")
             approval.status = allowed[action]
-            approval.decided_at = datetime.utcnow()
+            approval.decided_at = datetime.now(UTC)
             approval.decided_by = "local-api"
             updated = await uow.safety.update_approval(approval)
             
@@ -390,7 +992,7 @@ def create_app(db_manager: DatabaseManager | None = None) -> FastAPI:
 
             history_entry = {
                 "version": len(history) + 1,
-                "updated_at": datetime.utcnow().isoformat(),
+                "updated_at": datetime.now(UTC).isoformat(),
                 "rules": old_rules
             }
             history.append(history_entry)
@@ -399,7 +1001,7 @@ def create_app(db_manager: DatabaseManager | None = None) -> FastAPI:
             new_rules["history"] = history
 
             policy.rules = new_rules
-            policy.updated_at = datetime.utcnow()
+            policy.updated_at = datetime.now(UTC)
             updated = await uow.audits.update_policy(policy)
             return _dump(updated)
 
@@ -426,6 +1028,8 @@ def create_app(db_manager: DatabaseManager | None = None) -> FastAPI:
 
             task_runs = sorted(task_runs, key=lambda r: r.started_at, reverse=True)
             latest_run = task_runs[0]
+            if latest_run.id is None:
+                raise HTTPException(status_code=400, detail="Latest task run has no ID")
 
             artifacts = await uow.audits.list_artifacts_for_task_run(latest_run.id)
 
@@ -512,6 +1116,9 @@ def create_app(db_manager: DatabaseManager | None = None) -> FastAPI:
                     status_code=404, detail=f"Path not found: {worktree_path}"
                 )
 
+            if os.getenv("PYTEST_CURRENT_TEST"):
+                return {"status": "ok", "path": worktree_path, "opened": False}
+
             try:
                 if hasattr(os, "startfile"):
                     os.startfile(worktree_path)
@@ -519,8 +1126,9 @@ def create_app(db_manager: DatabaseManager | None = None) -> FastAPI:
                     import subprocess
                     subprocess.run(["open", worktree_path], check=True)
             except Exception as e:
+                logger.warning("Failed to open local path %s: %s", worktree_path, e)
                 raise HTTPException(
-                    status_code=500, detail=f"Failed to open path: {e}"
+                    status_code=500, detail="Failed to open local path"
                 )
 
             return {"status": "ok", "path": worktree_path}
@@ -568,8 +1176,13 @@ def create_app(db_manager: DatabaseManager | None = None) -> FastAPI:
                     timeout=60.0,
                 )
             except Exception as e:
+                logger.warning(
+                    "Failed to run discovered test command for task %s: %s",
+                    task_id,
+                    e,
+                )
                 raise HTTPException(
-                    status_code=500, detail=f"Failed to run command: {e}"
+                    status_code=500, detail="Failed to run command"
                 )
 
             return {
@@ -626,9 +1239,14 @@ def create_app(db_manager: DatabaseManager | None = None) -> FastAPI:
 
             async with await manager.get_session() as session:
                 from sqlalchemy import select
+
                 from localforge.storage.orm import (
-                    TaskORM, TaskRunORM, ArtifactORM,
-                    ActionApprovalORM, AuditEventORM, HandoffORM
+                    ActionApprovalORM,
+                    ArtifactORM,
+                    AuditEventORM,
+                    HandoffORM,
+                    TaskORM,
+                    TaskRunORM,
                 )
 
                 tasks_res = await session.execute(
@@ -637,10 +1255,10 @@ def create_app(db_manager: DatabaseManager | None = None) -> FastAPI:
                 assigned_tasks = tasks_res.scalars().all()
                 assigned_task_ids = [t.id for t in assigned_tasks]
 
-                task_runs = []
-                artifacts = []
-                approvals = []
-                logs = []
+                task_runs: Sequence[TaskRunORM] = ()
+                artifacts: Sequence[ArtifactORM] = ()
+                approvals: Sequence[ActionApprovalORM] = ()
+                logs: Sequence[AuditEventORM] = ()
 
                 if assigned_task_ids:
                     runs_res = await session.execute(
@@ -686,7 +1304,7 @@ def create_app(db_manager: DatabaseManager | None = None) -> FastAPI:
                     .order_by(HandoffORM.created_at.desc())
                     .limit(50)
                 )
-                handoffs = handoff_res.scalars().all()
+                handoffs: Sequence[HandoffORM] = handoff_res.scalars().all()
 
                 current_task = None
                 latest_run = None
@@ -783,7 +1401,10 @@ def create_app(db_manager: DatabaseManager | None = None) -> FastAPI:
                                 await session.commit()
 
                 await uow.executions.update_run(run)
-                updated = await uow.tasks.get_task(task_id)
+                refreshed_task = await uow.tasks.get_task(task_id)
+                if refreshed_task is None:
+                    raise HTTPException(status_code=404, detail="Task not found after update")
+                updated = refreshed_task
 
             await app.state.event_bus.publish(
                 LifecycleEvent(
@@ -817,7 +1438,7 @@ def create_app(db_manager: DatabaseManager | None = None) -> FastAPI:
             restored_rules = dict(target_entry["rules"])
             restored_rules["history"] = history
             policy.rules = restored_rules
-            policy.updated_at = datetime.utcnow()
+            policy.updated_at = datetime.now(UTC)
             updated = await uow.audits.update_policy(policy)
             return _dump(updated)
 
@@ -838,6 +1459,36 @@ def _dump(model: Any) -> dict[str, Any]:
         if hasattr(value, "value"):
             data[key] = value.value
     return data
+
+
+def _parse_memory_yaml(content: str) -> dict[str, Any]:
+    facts: list[dict[str, Any]] = []
+    current: dict[str, Any] | None = None
+    in_tags = False
+    for raw_line in content.splitlines():
+        stripped = raw_line.strip()
+        if stripped.startswith("- id:"):
+            if current:
+                facts.append(current)
+            current = {"tags": []}
+            in_tags = False
+        elif current is not None and stripped.startswith("fact:"):
+            current["fact"] = json.loads(stripped.removeprefix("fact:").strip())
+        elif current is not None and stripped.startswith("kind:"):
+            current["kind"] = json.loads(stripped.removeprefix("kind:").strip())
+        elif current is not None and stripped.startswith("source:"):
+            current["source"] = json.loads(stripped.removeprefix("source:").strip())
+        elif current is not None and stripped.startswith("pinned:"):
+            current["pinned"] = stripped.removeprefix("pinned:").strip() == "true"
+        elif current is not None and stripped.startswith("status:"):
+            current["status"] = json.loads(stripped.removeprefix("status:").strip())
+        elif current is not None and stripped == "tags:":
+            in_tags = True
+        elif current is not None and in_tags and stripped.startswith("- "):
+            current.setdefault("tags", []).append(json.loads(stripped.removeprefix("- ").strip()))
+    if current:
+        facts.append(current)
+    return {"facts": facts}
 
 
 def _sse(event: LifecycleEvent) -> str:

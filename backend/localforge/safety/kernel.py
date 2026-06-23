@@ -47,10 +47,19 @@ def is_path_safe(target_path: str, root_path: str) -> bool:
     attacks (../).
     """
     try:
+        # Standardize path separators and drive letters
         real_target = os.path.realpath(os.path.abspath(target_path))
         real_root = os.path.realpath(os.path.abspath(root_path))
-        common = os.path.commonpath([real_target, real_root])
-        return common == real_root
+
+        # On Windows, drive letters and paths are case-insensitive
+        if os.name == 'nt':
+            real_target_norm = os.path.normcase(real_target)
+            real_root_norm = os.path.normcase(real_root)
+            common = os.path.commonpath([real_target_norm, real_root_norm])
+            return os.path.normcase(common) == real_root_norm
+        else:
+            common = os.path.commonpath([real_target, real_root])
+            return common == real_root
     except Exception:
         return False
 
@@ -94,8 +103,12 @@ class SafetyKernel:
                 real_target = target
 
             for protected in policy_rules.protected_paths:
-                # Check if protected path segment exists in absolute target path
-                if protected in real_target or protected in target:
+                norm_protected = protected.replace("\\", "/").lower()
+                norm_real_target = real_target.replace("\\", "/").lower()
+                norm_target = target.replace("\\", "/").lower()
+
+                # Check if protected path segment exists in absolute target path (case-insensitive)
+                if norm_protected in norm_real_target or norm_protected in norm_target:
                     return (
                         SafetyDecision.DENY,
                         f"Access to protected path '{protected}' is denied: {target}",

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -57,7 +57,7 @@ class ExecutionService:
     async def register_agent(self, agent: domain.Agent) -> domain.Agent:
         """Register a new local agent."""
         orm_obj = AgentORM.from_domain(agent)
-        orm_obj.heartbeat_at = datetime.utcnow()
+        orm_obj.heartbeat_at = datetime.now(UTC)
         self.session.add(orm_obj)
         await self.session.flush()
         return orm_obj.to_domain()
@@ -73,7 +73,7 @@ class ExecutionService:
         result = await self.session.execute(select(AgentORM).where(AgentORM.id == agent_id))
         orm_obj = result.scalar_one_or_none()
         if orm_obj:
-            orm_obj.heartbeat_at = datetime.utcnow()
+            orm_obj.heartbeat_at = datetime.now(UTC)
             await self.session.flush()
             return orm_obj.to_domain()
         return None
@@ -128,7 +128,7 @@ class ExecutionService:
             raise ValueError(f"Handoff with ID {handoff_id} not found")
 
         orm_obj.status = HandoffStatus.CONSUMED.value
-        orm_obj.consumed_at = datetime.utcnow()
+        orm_obj.consumed_at = datetime.now(UTC)
         await self.session.flush()
         return orm_obj.to_domain()
 

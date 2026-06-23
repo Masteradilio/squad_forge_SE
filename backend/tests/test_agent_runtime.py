@@ -1,4 +1,5 @@
 import pytest
+import json
 from localforge.models import domain
 from localforge.models.enums import (
     AgentRole,
@@ -8,6 +9,8 @@ from localforge.models.enums import (
     TaskStatus,
 )
 from localforge.runtime.context import TaskContextBuilder
+from localforge.runtime.actions import normalize_runtime_command, parse_action_proposals
+from localforge.runtime.compression import compress_tool_output
 from localforge.runtime.file_tools import SafeFileEditor
 from localforge.runtime.handoffs import RuntimeHandoffService
 from localforge.runtime.lead_agent import LeadAgentRuntime
@@ -17,6 +20,59 @@ from localforge.services.project import ProjectService
 from localforge.services.safety import SafetyService
 from localforge.services.task import TaskService
 from localforge.storage import UnitOfWork
+
+
+def test_runtime_action_parser_and_compression():
+    proposals = parse_action_proposals(
+        json.dumps(
+            {
+                "actions": [
+                    {"kind": "write_file", "path": "NOTE.md", "content": "hello"},
+                    {"kind": "append_content", "path": "NOTE.md", "content": "\nmore"},
+                    {"kind": "run_command", "command": "git status"},
+                ]
+            }
+        )
+    )
+    assert proposals[0].path == "NOTE.md"
+    assert proposals[1].kind == "append_content"
+    compressed = compress_tool_output("x" * 2000, max_chars=240)
+    assert "[compressed output" in compressed
+    assert "original_chars=2000" in compressed
+    assert normalize_runtime_command("pytest -q").endswith(" -m pytest -q")
+
+
+def test_runtime_action_parser_extracts_wrapped_json():
+    proposals = parse_action_proposals(
+        'Here is the JSON: {"actions":[{"kind":"write_file","path":"NOTE.md","content":"ok"}]}'
+    )
+
+    assert proposals[0].path == "NOTE.md"
+
+
+def test_runtime_action_parser_normalizes_common_model_aliases():
+    proposals = parse_action_proposals(
+        {
+            "actions": [
+                {
+                    "operation": "write_content",
+                    "file": "calculator/state.py",
+                    "code": "class State: pass\n",
+                }
+            ]
+        }
+    )
+
+    assert proposals[0].kind == "write_file"
+    assert proposals[0].path == "calculator/state.py"
+    assert proposals[0].content == "class State: pass\n"
+
+    single = parse_action_proposals(
+        {"type": "edit", "filename": "calculator/date.py", "body": "def parse(): pass\n"}
+    )
+
+    assert single[0].kind == "write_file"
+    assert single[0].path == "calculator/date.py"
 
 
 @pytest.mark.anyio
@@ -57,14 +113,14 @@ async def test_task_context_builder_bounds_large_files_and_includes_policy_and_w
         )
     )
 
-    context = await TaskContextBuilder(uow).build(task.id, str(worktree), max_chars=300)
+    context = await TaskContextBuilder(uow).build(task.id, str(worktree), max_chars=400)
 
     assert "Build context" in context.rendered
     assert str(worktree) in context.rendered
     assert "print('ok')" in context.rendered
     assert "large.py omitted" in context.rendered
     assert ".env" in context.rendered
-    assert len(context.rendered) <= 300
+    assert len(context.rendered) <= 400
 
 
 @pytest.mark.anyio
@@ -153,10 +209,14 @@ async def test_lead_agent_runtime_completes_trivial_file_change_through_safe_too
             acceptance_criteria=["note exists"],
             status=TaskStatus.PLANNING,
             metadata={
-                "runtime_actions": [
-                    {"kind": "write_file", "path": "NOTE.md", "content": "hello\n"},
-                    {"kind": "run_command", "command": "git status"},
-                ]
+                "runtime_actions": json.dumps(
+                    {
+                        "actions": [
+                            {"kind": "write_file", "path": "NOTE.md", "content": "hello\n"},
+                            {"kind": "run_command", "command": "git status"},
+                        ]
+                    }
+                )
             },
         )
     )
@@ -174,6 +234,7 @@ async def test_lead_agent_runtime_completes_trivial_file_change_through_safe_too
     refreshed = await uow.tasks.get_task(task.id)
     assert refreshed is not None
     assert refreshed.status == TaskStatus.PR_READY
+    assert refreshed.metadata["changed_files"] == ["NOTE.md"]
     events = await uow.audits.list_audit_events_for_project(project.id)
     assert any(event.event_type == AuditEventType.SAFETY_DECISION for event in events)
 

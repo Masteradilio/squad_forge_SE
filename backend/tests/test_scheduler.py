@@ -234,6 +234,58 @@ async def test_scheduler_uses_runner_pool_to_prepare_task_execution(
 
 
 @pytest.mark.anyio
+async def test_scheduler_marks_pipeline_failure_failed_safe_and_recovers_session(
+    db_manager, db_session: AsyncSession, monkeypatch
+):
+    uow = UnitOfWork(db_manager)
+    uow.session = db_session
+    uow.projects = ProjectService(db_session)
+    uow.tasks = TaskService(db_session)
+    uow.executions = ExecutionService(db_session)
+
+    proj = await uow.projects.create_project(
+        domain.Project(name="PipelineFailureProj", root_path="/p", default_branch="main")
+    )
+    assert proj.id is not None
+    run = await uow.executions.create_run(
+        domain.Run(project_id=proj.id, mode=RunMode.UNATTENDED, initiated_by="test")
+    )
+    assert run.id is not None
+    task = await uow.tasks.create_task(
+        domain.Task(project_id=proj.id, key="LF-41", title="Pipeline task", description="")
+    )
+    assert task.id is not None
+    await uow.tasks.update_task_status(task.id, TaskStatus.READY)
+    await uow.session.commit()
+
+    async def fail_pipeline(self, **kwargs):
+        raise RuntimeError("pipeline failed")
+
+    monkeypatch.setattr(
+        "localforge.services.scheduler.RolePipelineEngine.run_task",
+        fail_pipeline,
+    )
+
+    scheduler = Scheduler(
+        project_id=proj.id,
+        run_id=run.id,
+        max_parallel_tasks=1,
+        db_manager=db_manager,
+        runner_pool=TaskRunnerPool([FakeRunner()]),
+        execute_pipeline=True,
+    )
+
+    await scheduler._process_iteration()
+
+    refreshed = await uow.tasks.get_task(task.id)
+    assert refreshed is not None
+    assert refreshed.status == TaskStatus.FAILED_SAFE
+    task_runs = await uow.tasks.list_runs_for_task(task.id)
+    assert task_runs[0].status.value == "FAILED"
+    assert "pipeline failed" in (task_runs[0].final_summary or "")
+
+
+@pytest.mark.anyio
 async def test_scheduler_lifecycle_and_parallel_limits(
     tmp_path, db_manager, db_session: AsyncSession
 ):

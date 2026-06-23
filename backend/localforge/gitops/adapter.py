@@ -67,7 +67,7 @@ class GitAdapter:
         return out.strip()
 
     async def default_branch(self) -> str:
-        """Find the remote origin HEAD reference branch name or fallback to main."""
+        """Find the remote origin HEAD branch or fall back to the current local branch."""
         try:
             out = await self._execute_git(["rev-parse", "--abbrev-ref", "origin/HEAD"])
             branch = out.strip()
@@ -75,7 +75,7 @@ class GitAdapter:
                 return branch[7:]
             return branch
         except Exception:
-            return "main"
+            return await self.current_branch()
 
     async def branch_exists(self, branch_name: str) -> bool:
         """Check if a branch exists locally or in refs/heads/."""
@@ -137,6 +137,13 @@ class GitAdapter:
     async def commit(self, message: str) -> None:
         """Add all unstaged edits and commit changes into the active branch."""
         await self._execute_git(["add", "-A"])
+        await self._execute_git(["commit", "-m", message, "--allow-empty"])
+
+    async def commit_paths(self, paths: list[str], message: str) -> None:
+        """Commit only selected relative paths in the active branch."""
+        if not paths:
+            return
+        await self._execute_git(["add", "--", *paths])
         await self._execute_git(["commit", "-m", message, "--allow-empty"])
 
     async def reset_hard(self, ref: str) -> None:

@@ -97,6 +97,24 @@ class AuditService:
         )
         return [orm_obj.to_domain() for orm_obj in result.scalars().all()]
 
+    async def list_artifacts_for_task_runs(
+        self, task_run_ids: list[int]
+    ) -> dict[int, list[domain.Artifact]]:
+        """List artifacts for several task runs using a single query."""
+        if not task_run_ids:
+            return {}
+        result = await self.session.execute(
+            select(ArtifactORM)
+            .where(ArtifactORM.task_run_id.in_(task_run_ids))
+            .order_by(ArtifactORM.task_run_id, ArtifactORM.created_at.desc())
+        )
+        artifacts_by_task_run: dict[int, list[domain.Artifact]] = {}
+        for orm_obj in result.scalars().all():
+            artifacts_by_task_run.setdefault(orm_obj.task_run_id, []).append(
+                orm_obj.to_domain()
+            )
+        return artifacts_by_task_run
+
     # Policy Operations
     async def create_policy(self, policy: domain.Policy) -> domain.Policy:
         """Create a new policy."""
@@ -167,15 +185,14 @@ class AuditService:
         )
         task_run_ids = [r[0] for r in task_runs_result.all()]
 
-        artifacts_by_task_run: dict[int, list[domain.Artifact]] = {}
+        artifacts_by_task_run = await self.list_artifacts_for_task_runs(task_run_ids)
+        task_run_ids_by_task: dict[int, list[int]] = {}
         if task_run_ids:
-            from localforge.storage.orm import ArtifactORM
-            artifacts_result = await self.session.execute(
-                select(ArtifactORM).where(ArtifactORM.task_run_id.in_(task_run_ids))
+            task_runs_for_map = await self.session.execute(
+                select(TaskRunORM.id, TaskRunORM.task_id).where(TaskRunORM.run_id == run_id)
             )
-            for art_orm in artifacts_result.scalars().all():
-                art = art_orm.to_domain()
-                artifacts_by_task_run.setdefault(art.task_run_id, []).append(art)
+            for tr_id, task_id in task_runs_for_map.all():
+                task_run_ids_by_task.setdefault(task_id, []).append(tr_id)
 
         # 3. Build chronological timeline
         timeline: list[dict[str, Any]] = []
@@ -197,15 +214,8 @@ class AuditService:
             }
 
             # If the event is bound to a task, include artifacts for its task run
-            if event.task_id and task_run_ids:
-                tr_result = await self.session.execute(
-                    select(TaskRunORM.id).where(
-                        TaskRunORM.run_id == run_id,
-                        TaskRunORM.task_id == event.task_id,
-                    )
-                )
-                tr_ids = [r[0] for r in tr_result.all()]
-                for tr_id in tr_ids:
+            if event.task_id and task_run_ids_by_task:
+                for tr_id in task_run_ids_by_task.get(event.task_id, []):
                     if tr_id in artifacts_by_task_run:
                         for art in artifacts_by_task_run[tr_id]:
                             artifacts_list.append({

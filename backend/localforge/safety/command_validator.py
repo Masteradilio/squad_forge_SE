@@ -1,4 +1,5 @@
 import shlex
+from pathlib import PureWindowsPath
 
 from localforge.core.policy import PolicyRules
 
@@ -123,10 +124,12 @@ def validate_command(cmd_str: str, policy: PolicyRules) -> tuple[bool, str]:
             if blocked in sub_cmd:
                 return False, f"Blocked command pattern: '{blocked}' in '{sub_cmd}'"
 
-        # 2. Check protected paths
+        # 2. Check protected paths (standardized separators and case-insensitive check)
         for path in policy.protected_paths:
+            normalized_path = path.replace("\\", "/").lower()
             for token in tokens:
-                if path in token:
+                normalized_token = token.replace("\\", "/").lower()
+                if normalized_path in normalized_token:
                     return (
                         False,
                         f"Access to protected path '{path}' is denied in command '{sub_cmd}'",
@@ -135,6 +138,7 @@ def validate_command(cmd_str: str, policy: PolicyRules) -> tuple[bool, str]:
         # 3. Check allowed commands list (if configured and not empty)
         if policy.allowed_commands:
             is_allowed = False
+            comparable_tokens = _normalize_command_tokens(tokens)
             for allowed in policy.allowed_commands:
                 try:
                     allowed_tokens = shlex.split(allowed)
@@ -145,8 +149,8 @@ def validate_command(cmd_str: str, policy: PolicyRules) -> tuple[bool, str]:
                     continue
 
                 if (
-                    len(tokens) >= len(allowed_tokens)
-                    and tokens[: len(allowed_tokens)] == allowed_tokens
+                    len(comparable_tokens) >= len(allowed_tokens)
+                    and comparable_tokens[: len(allowed_tokens)] == allowed_tokens
                 ):
                     is_allowed = True
                     break
@@ -155,3 +159,13 @@ def validate_command(cmd_str: str, policy: PolicyRules) -> tuple[bool, str]:
                 return False, f"Command '{sub_cmd}' is not in the allowed commands list"
 
     return True, ""
+
+
+def _normalize_command_tokens(tokens: list[str]) -> list[str]:
+    if not tokens:
+        return tokens
+    executable = tokens[0].replace("\\", "/").lower()
+    name = PureWindowsPath(executable).name
+    if name in {"python", "python.exe"}:
+        return ["python", *tokens[1:]]
+    return tokens

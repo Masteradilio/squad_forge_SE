@@ -64,6 +64,8 @@ class WorktreeManager:
 
         # 2. Determine paths and branch names
         branch_name = get_task_branch_name(task.key, task.title)
+        if self.run_id is not None:
+            branch_name = f"{branch_name}-run-{self.run_id}"
         worktree_path = os.path.realpath(
             os.path.abspath(
                 os.path.join(
@@ -85,15 +87,56 @@ class WorktreeManager:
         )
 
         default_branch = await git.default_branch()
+        base_branch = await self._base_branch_for_task(task_id, default_branch)
         lock = self._get_worktree_lock(worktree_path)
         async with lock:
-            await git.create_worktree(
-                path=worktree_path,
-                branch_name=branch_name,
-                base_branch=default_branch,
-            )
+            await self._remove_stale_worktree_path(git, worktree_path, project.root_path)
+            try:
+                await git.create_worktree(
+                    path=worktree_path,
+                    branch_name=branch_name,
+                    base_branch=base_branch,
+                )
+            except Exception:
+                await self._remove_stale_worktree_path(git, worktree_path, project.root_path)
+                raise
 
         return worktree_path, branch_name
+
+    async def _remove_stale_worktree_path(
+        self, git: GitAdapter, worktree_path: str, project_root: str
+    ) -> None:
+        worktrees_root = os.path.realpath(
+            os.path.abspath(os.path.join(project_root, ".localforge", "worktrees"))
+        )
+        target = os.path.realpath(os.path.abspath(worktree_path))
+        if os.path.commonpath([worktrees_root, target]) != worktrees_root:
+            raise ValueError(f"Refusing to clean worktree path outside {worktrees_root}: {target}")
+        if not os.path.exists(target):
+            return
+        try:
+            await git.remove_worktree(target)
+        except Exception:
+            pass
+        if os.path.exists(target):
+            shutil.rmtree(target, ignore_errors=True)
+
+    async def _base_branch_for_task(self, task_id: int, default_branch: str) -> str:
+        assert self.uow.tasks is not None
+
+        task = await self.uow.tasks.get_task(task_id)
+        if not task or not task.dependency_task_ids:
+            return default_branch
+
+        for dependency_id in reversed(task.dependency_task_ids):
+            dependency = await self.uow.tasks.get_task(dependency_id)
+            if not dependency or dependency.status not in (TaskStatus.PR_READY, TaskStatus.DONE):
+                continue
+            for task_run in await self.uow.tasks.list_runs_for_task(dependency_id):
+                if task_run.branch_name:
+                    return task_run.branch_name
+
+        return default_branch
 
     async def create_checkpoint(self, task_id: int, checkpoint_name: str) -> str:
         """Create a checkpoint commit in the task's worktree.

@@ -1,5 +1,6 @@
 from localforge.core.config import (
     GitConfig,
+    ChiefEngineerConfig,
     LocalForgeConfig,
     ModelsConfig,
     ProjectConfig,
@@ -12,6 +13,7 @@ __all__ = [
     "LocalForgeConfig",
     "ProjectConfig",
     "GitConfig",
+    "ChiefEngineerConfig",
     "ModelsConfig",
     "load_config",
     "PolicyConfig",

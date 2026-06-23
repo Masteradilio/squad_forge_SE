@@ -1,4 +1,8 @@
+import os
+
 from localforge.models.enums import TaskStatus
+from localforge.runtime.actions import normalize_runtime_command, parse_action_proposals
+from localforge.runtime.compression import compress_tool_output
 from localforge.runtime.context import TaskContextBuilder
 from localforge.runtime.file_tools import SafeFileEditor
 from localforge.safety.runner import run_safe_command
@@ -30,7 +34,7 @@ class LeadAgentRuntime:
             summary="Lead agent plan",
         )
 
-        await self.uow.tasks.update_task_status(task_id, TaskStatus.IMPLEMENTING)
+        task = await self.uow.tasks.update_task_status(task_id, TaskStatus.IMPLEMENTING)
         editor = SafeFileEditor(
             self.uow,
             project_id=self.project_id,
@@ -38,37 +42,65 @@ class LeadAgentRuntime:
             task_id=task_id,
         )
         actions = task.metadata.get("runtime_actions", [])
-        if not isinstance(actions, list):
-            actions = []
+        try:
+            proposals = parse_action_proposals(actions)
+        except ValueError:
+            proposals = []
 
         command_summaries: list[str] = []
-        for action in actions:
-            if not isinstance(action, dict):
-                continue
-            if action.get("kind") == "write_file":
-                path = action.get("path")
-                content = action.get("content", "")
-                if isinstance(path, str) and isinstance(content, str):
-                    await editor.write_text(
-                        task_run.worktree_path,
-                        path,
-                        content,
-                        task_run_id=task_run_id,
-                        task_key=task.key,
+        changed_files: list[str] = []
+        for action in proposals:
+            if action.kind == "write_file" and action.path:
+                result = await editor.write_text(
+                    task_run.worktree_path,
+                    action.path,
+                    action.content,
+                    task_run_id=task_run_id,
+                    task_key=task.key,
+                )
+                changed_files.append(
+                    os.path.relpath(result.path, task_run.worktree_path).replace("\\", "/")
+                )
+            elif action.kind == "append_content" and action.path:
+                existing_content = ""
+                target_path = os.path.join(task_run.worktree_path, action.path)
+                if os.path.exists(target_path):
+                    existing_content = await editor.read_text(task_run.worktree_path, action.path)
+                result = await editor.write_text(
+                    task_run.worktree_path,
+                    action.path,
+                    existing_content + action.content,
+                    task_run_id=task_run_id,
+                    task_key=task.key,
+                )
+                changed_files.append(
+                    os.path.relpath(result.path, task_run.worktree_path).replace("\\", "/")
+                )
+            elif action.kind == "run_command" and action.command:
+                command = normalize_runtime_command(action.command)
+                code, stdout, stderr = await run_safe_command(
+                    project_id=self.project_id,
+                    command=command,
+                    uow=self.uow,
+                    run_id=self.run_id,
+                    task_id=task_id,
+                )
+                command_summaries.append(
+                    compress_tool_output(
+                        f"{command}: exit {code}; stdout={stdout}; stderr={stderr}",
+                        max_chars=260,
                     )
-            elif action.get("kind") == "run_command":
-                command = action.get("command")
-                if isinstance(command, str):
-                    code, stdout, stderr = await run_safe_command(
-                        project_id=self.project_id,
-                        command=command,
-                        uow=self.uow,
-                        run_id=self.run_id,
-                        task_id=task_id,
-                    )
-                    command_summaries.append(
-                        f"{command}: exit {code}; stdout={stdout[:120]}; stderr={stderr[:120]}"
-                    )
+                )
+
+        if changed_files:
+            existing = task.metadata.get("changed_files", [])
+            if not isinstance(existing, list):
+                existing = []
+            task.metadata["changed_files"] = [
+                *[path for path in existing if isinstance(path, str)],
+                *changed_files,
+            ]
+            await self.uow.tasks.update_task(task)
 
         await self.uow.tasks.update_task_status(task_id, TaskStatus.TESTING)
         await self.uow.tasks.update_task_status(task_id, TaskStatus.REVIEWING)

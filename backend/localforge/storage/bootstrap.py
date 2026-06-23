@@ -1,5 +1,6 @@
 import logging
 import os
+import tempfile
 
 from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
@@ -10,7 +11,7 @@ from localforge.storage.orm import Base, SchemaVersionORM
 
 logger = logging.getLogger(__name__)
 
-CURRENT_VERSION = 1
+CURRENT_VERSION = 5
 
 
 async def ensure_db_directory(db_url: str) -> None:
@@ -55,6 +56,41 @@ async def bootstrap_database(db_manager: DatabaseManager) -> int:
 
     Returns the applied schema version.
     """
+    # Safety check for test environments to prevent writes/deadlocks on the real development DB
+    if "PYTEST_CURRENT_TEST" in os.environ:
+        db_url = db_manager.db_url
+        if db_url.startswith("sqlite+aiosqlite:///"):
+            db_path = db_url[len("sqlite+aiosqlite:///") :]
+            if db_path.startswith("/") and len(db_path) > 2 and db_path[2] == ":":
+                db_path = db_path[1:]
+
+            if db_path != ":memory:":
+                abs_db_path = os.path.abspath(db_path)
+                normalized_abs = abs_db_path.lower().replace("\\", "/")
+
+                # Block if resolving to the default dev DB and not in a temp path
+                is_prod_db = "/local_forge_os/.localforge/localforge.db" in normalized_abs
+                temp_roots = {
+                    os.path.abspath(path).lower().replace("\\", "/")
+                    for path in {
+                        tempfile.gettempdir(),
+                        os.getenv("TMP", ""),
+                        os.getenv("TEMP", ""),
+                    }
+                    if path
+                }
+                in_temp = any(
+                    normalized_abs.startswith(f"{temp_root}/")
+                    or normalized_abs == temp_root
+                    for temp_root in temp_roots
+                )
+                if is_prod_db and not in_temp:
+                    raise RuntimeError(
+                        "Database bootstrap BLOCKED: Attempting to write to the "
+                        f"primary development database ({abs_db_path}) under pytest. "
+                        "Please isolate tests using tmp_path and a temporary URL."
+                    )
+
     await ensure_db_directory(db_manager.db_url)
 
     async with await db_manager.get_session() as session:
@@ -62,26 +98,36 @@ async def bootstrap_database(db_manager: DatabaseManager) -> int:
         logger.info(f"Current database schema version: {current_version}")
 
         if current_version == 0:
-            logger.info("Initializing new database schema (Version 1)...")
+            logger.info(f"Initializing new database schema (Version {CURRENT_VERSION})...")
             # In SQLAlchemy async, we run create_all on the sync connection within a run_sync block
             async with db_manager.engine.begin() as conn:
                 await conn.run_sync(Base.metadata.create_all)
 
-            # Record version 1 application
-            version_record = SchemaVersionORM(version=1)
+            version_record = SchemaVersionORM(version=CURRENT_VERSION)
             session.add(version_record)
             await session.commit()
             logger.info("Database schema initialized successfully.")
-            return 1
+            return CURRENT_VERSION
 
         elif current_version < CURRENT_VERSION:
-            # Here we would handle incremental migrations if CURRENT_VERSION was > 1.
-            # e.g., if current_version == 1: run_migration_to_2(session)
             logger.info(
                 f"Migrating database from version {current_version} to {CURRENT_VERSION}..."
             )
-            # For now, version 1 is the latest, so we do nothing.
-            return current_version
+            async with db_manager.engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+                if current_version < 3:
+                    columns = await conn.execute(text("PRAGMA table_info(memory_facts)"))
+                    column_names = {str(row[1]) for row in columns.fetchall()}
+                    if "kind" not in column_names:
+                        await conn.execute(
+                            text(
+                                "ALTER TABLE memory_facts "
+                                "ADD COLUMN kind VARCHAR(50) NOT NULL DEFAULT 'stack_fact'"
+                            )
+                        )
+            session.add(SchemaVersionORM(version=CURRENT_VERSION))
+            await session.commit()
+            return CURRENT_VERSION
 
         else:
             logger.info("Database is already up to date.")

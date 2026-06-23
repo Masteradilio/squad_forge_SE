@@ -1,7 +1,7 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from localforge.models import domain
@@ -15,7 +15,7 @@ class SchemaVersionORM(Base):
     __tablename__ = "schema_versions"
 
     version: Mapped[int] = mapped_column(Integer, primary_key=True)
-    applied_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    applied_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
 
 
 class ProjectORM(Base):
@@ -27,9 +27,9 @@ class ProjectORM(Base):
     default_branch: Mapped[str] = mapped_column(String(100), nullable=False)
     remote_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     localforge_config_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC)
     )
 
     def to_domain(self) -> domain.Project:
@@ -59,7 +59,7 @@ class ProductDocumentORM(Base):
     kind: Mapped[str] = mapped_column(String(50), nullable=False)
     path: Mapped[str] = mapped_column(String(1024), nullable=False)
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
-    imported_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    imported_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     parsed_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     def to_domain(self) -> domain.ProductDocument:
@@ -132,9 +132,9 @@ class TaskORM(Base):
         ForeignKey("agents.id", ondelete="SET NULL"), nullable=True
     )
     metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC)
     )
 
     def to_domain(self) -> domain.Task:
@@ -216,7 +216,7 @@ class RunORM(Base):
     )
     mode: Mapped[str] = mapped_column(String(50), nullable=False)
     status: Mapped[str] = mapped_column(String(50), default="PENDING", nullable=False)
-    started_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    started_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     ended_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     initiated_by: Mapped[str] = mapped_column(String(100), nullable=False)
     resource_limits: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
@@ -251,7 +251,7 @@ class TaskRunORM(Base):
     branch_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     sandbox_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     attempt_count: Mapped[int] = mapped_column(Integer, default=1)
-    started_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    started_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     ended_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     final_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -288,7 +288,7 @@ class HandoffORM(Base):
     payload_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
     priority: Mapped[int] = mapped_column(Integer, default=1)
     status: Mapped[str] = mapped_column(String(50), default="PENDING", nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     consumed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     def to_domain(self) -> domain.Handoff:
@@ -321,7 +321,7 @@ class ArtifactORM(Base):
     path: Mapped[str] = mapped_column(String(1024), nullable=False)
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
 
     def to_domain(self) -> domain.Artifact:
         return domain.Artifact.model_validate(self)
@@ -339,6 +339,161 @@ class ArtifactORM(Base):
         )
 
 
+class ModelRouteORM(Base):
+    __tablename__ = "model_routes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
+    role: Mapped[str] = mapped_column(String(50), nullable=False)
+    provider: Mapped[str] = mapped_column(String(100), default="localforge", nullable=False)
+    model_profile_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    endpoint_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    fallback_model_profile_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC)
+    )
+
+    def to_domain(self) -> domain.ModelRoute:
+        return domain.ModelRoute(
+            id=self.id,
+            project_id=self.project_id,
+            role=domain.AgentRole(self.role),
+            provider=self.provider,
+            model_profile_id=self.model_profile_id,
+            endpoint_url=self.endpoint_url,
+            fallback_model_profile_id=self.fallback_model_profile_id,
+            updated_at=self.updated_at,
+        )
+
+    @classmethod
+    def from_domain(cls, d: domain.ModelRoute) -> "ModelRouteORM":
+        return cls(
+            id=d.id,
+            project_id=d.project_id,
+            role=d.role.value,
+            provider=d.provider,
+            model_profile_id=d.model_profile_id,
+            endpoint_url=d.endpoint_url,
+            fallback_model_profile_id=d.fallback_model_profile_id,
+            updated_at=d.updated_at,
+        )
+
+
+class ModelCallLedgerORM(Base):
+    __tablename__ = "model_call_ledger"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
+    run_id: Mapped[int | None] = mapped_column(
+        ForeignKey("runs.id", ondelete="SET NULL"), nullable=True
+    )
+    task_id: Mapped[int | None] = mapped_column(
+        ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True
+    )
+    provider: Mapped[str] = mapped_column(String(100), nullable=False)
+    model: Mapped[str] = mapped_column(String(255), nullable=False)
+    reason: Mapped[str] = mapped_column(String(100), nullable=False)
+    input_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    output_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    estimated_cost_usd: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    status: Mapped[str] = mapped_column(String(30), default="success", nullable=False)
+    error_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    duration_ms: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+
+    def to_domain(self) -> domain.ModelCallLedger:
+        return domain.ModelCallLedger(
+            id=self.id,
+            project_id=self.project_id,
+            run_id=self.run_id,
+            task_id=self.task_id,
+            provider=self.provider,
+            model=self.model,
+            reason=domain.ChiefEngineerCallReason(self.reason),
+            input_tokens=self.input_tokens,
+            output_tokens=self.output_tokens,
+            estimated_cost_usd=self.estimated_cost_usd,
+            status=self.status,
+            error_summary=self.error_summary,
+            duration_ms=self.duration_ms,
+            metadata=self.metadata_json,
+            created_at=self.created_at,
+        )
+
+    @classmethod
+    def from_domain(cls, d: domain.ModelCallLedger) -> "ModelCallLedgerORM":
+        return cls(
+            id=d.id,
+            project_id=d.project_id,
+            run_id=d.run_id,
+            task_id=d.task_id,
+            provider=d.provider,
+            model=d.model,
+            reason=d.reason.value,
+            input_tokens=d.input_tokens,
+            output_tokens=d.output_tokens,
+            estimated_cost_usd=d.estimated_cost_usd,
+            status=d.status,
+            error_summary=d.error_summary,
+            duration_ms=d.duration_ms,
+            metadata_json=d.metadata,
+            created_at=d.created_at,
+        )
+
+
+class MemoryFactORM(Base):
+    __tablename__ = "memory_facts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
+    kind: Mapped[str] = mapped_column(String(50), default="stack_fact", nullable=False)
+    fact: Mapped[str] = mapped_column(Text, nullable=False)
+    source: Mapped[str] = mapped_column(String(100), default="manual", nullable=False)
+    pinned: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    status: Mapped[str] = mapped_column(String(30), default="active", nullable=False)
+    tags: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC)
+    )
+
+    def to_domain(self) -> domain.MemoryFact:
+        return domain.MemoryFact(
+            id=self.id,
+            project_id=self.project_id,
+            kind=domain.MemoryRecordKind(self.kind),
+            fact=self.fact,
+            source=self.source,
+            pinned=self.pinned,
+            status=self.status,
+            tags=self.tags,
+            created_at=self.created_at,
+            updated_at=self.updated_at,
+        )
+
+    @classmethod
+    def from_domain(cls, d: domain.MemoryFact) -> "MemoryFactORM":
+        return cls(
+            id=d.id,
+            project_id=d.project_id,
+            kind=d.kind.value,
+            fact=d.fact,
+            source=d.source,
+            pinned=d.pinned,
+            status=d.status,
+            tags=d.tags,
+            created_at=d.created_at,
+            updated_at=d.updated_at,
+        )
+
+
 class PolicyORM(Base):
     __tablename__ = "policies"
 
@@ -348,9 +503,9 @@ class PolicyORM(Base):
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     rules: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC)
     )
 
     def to_domain(self) -> domain.Policy:
@@ -385,7 +540,7 @@ class AuditEventORM(Base):
     actor_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     event_type: Mapped[str] = mapped_column(String(50), nullable=False)
     payload_redacted: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
 
     def to_domain(self) -> domain.AuditEvent:
         return domain.AuditEvent.model_validate(self)
@@ -423,7 +578,7 @@ class ActionApprovalORM(Base):
     purpose: Mapped[str] = mapped_column(Text, nullable=False)
     risk_level: Mapped[str] = mapped_column(String(20), nullable=False)
     status: Mapped[str] = mapped_column(String(50), default="PENDING", nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     decided_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     decided_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
@@ -460,3 +615,138 @@ class ActionApprovalORM(Base):
             decided_by=d.decided_by,
         )
 
+
+class TaskCommentORM(Base):
+    __tablename__ = "task_comments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
+    task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False)
+    author: Mapped[str] = mapped_column(String(100), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    thread_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+
+    def to_domain(self) -> domain.TaskComment:
+        return domain.TaskComment(
+            id=self.id,
+            project_id=self.project_id,
+            task_id=self.task_id,
+            author=self.author,
+            body=self.body,
+            thread_id=self.thread_id,
+            metadata=self.metadata_json,
+            created_at=self.created_at,
+        )
+
+    @classmethod
+    def from_domain(cls, d: domain.TaskComment) -> "TaskCommentORM":
+        return cls(
+            id=d.id,
+            project_id=d.project_id,
+            task_id=d.task_id,
+            author=d.author,
+            body=d.body,
+            thread_id=d.thread_id,
+            metadata_json=d.metadata,
+            created_at=d.created_at,
+        )
+
+
+class RuntimeRegistrationORM(Base):
+    __tablename__ = "runtime_registrations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
+    runtime_id: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    kind: Mapped[str] = mapped_column(String(50), default="local", nullable=False)
+    status: Mapped[str] = mapped_column(String(50), default="ONLINE", nullable=False)
+    capabilities: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    heartbeat_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    registered_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC)
+    )
+
+    def to_domain(self) -> domain.RuntimeRegistration:
+        return domain.RuntimeRegistration(
+            id=self.id,
+            project_id=self.project_id,
+            runtime_id=self.runtime_id,
+            name=self.name,
+            kind=self.kind,
+            status=domain.RuntimeStatus(self.status),
+            capabilities=self.capabilities,
+            metadata=self.metadata_json,
+            heartbeat_at=self.heartbeat_at,
+            registered_at=self.registered_at,
+            updated_at=self.updated_at,
+        )
+
+    @classmethod
+    def from_domain(cls, d: domain.RuntimeRegistration) -> "RuntimeRegistrationORM":
+        return cls(
+            id=d.id,
+            project_id=d.project_id,
+            runtime_id=d.runtime_id,
+            name=d.name,
+            kind=d.kind,
+            status=d.status.value,
+            capabilities=d.capabilities,
+            metadata_json=d.metadata,
+            heartbeat_at=d.heartbeat_at,
+            registered_at=d.registered_at,
+            updated_at=d.updated_at,
+        )
+
+
+class SquadORM(Base):
+    __tablename__ = "squads"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    purpose: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    roles: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    agent_ids: Mapped[list[int]] = mapped_column(JSON, default=list, nullable=False)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC)
+    )
+
+    def to_domain(self) -> domain.Squad:
+        return domain.Squad(
+            id=self.id,
+            project_id=self.project_id,
+            name=self.name,
+            purpose=self.purpose,
+            roles=[domain.AgentRole(role) for role in self.roles],
+            agent_ids=self.agent_ids,
+            metadata=self.metadata_json,
+            created_at=self.created_at,
+            updated_at=self.updated_at,
+        )
+
+    @classmethod
+    def from_domain(cls, d: domain.Squad) -> "SquadORM":
+        return cls(
+            id=d.id,
+            project_id=d.project_id,
+            name=d.name,
+            purpose=d.purpose,
+            roles=[role.value for role in d.roles],
+            agent_ids=d.agent_ids,
+            metadata_json=d.metadata,
+            created_at=d.created_at,
+            updated_at=d.updated_at,
+        )

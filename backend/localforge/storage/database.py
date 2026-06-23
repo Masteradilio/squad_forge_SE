@@ -21,15 +21,21 @@ class DatabaseManager:
 
         # Check if we are using SQLite and setup appropriate connection options
         is_sqlite = db_url.startswith("sqlite")
-        connect_args = {}
+        connect_args: dict[str, object] = {}
+        kwargs = {}
         if is_sqlite:
             # check_same_thread=False is required for sqlite+aiosqlite in async mode
             connect_args["check_same_thread"] = False
+            connect_args["timeout"] = 30
+            if ":memory:" in db_url:
+                from sqlalchemy.pool import StaticPool
+                kwargs["poolclass"] = StaticPool
 
         self.engine: AsyncEngine = create_async_engine(
             db_url,
             echo=False,
             connect_args=connect_args,
+            **kwargs,
         )
         self.session_factory = async_sessionmaker(
             self.engine,

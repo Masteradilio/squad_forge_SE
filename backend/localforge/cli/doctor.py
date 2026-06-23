@@ -77,13 +77,26 @@ async def check_sqlite() -> tuple[str, str, str]:
 
 
 async def check_docker() -> tuple[str, str, str]:
-    """Check if Docker is installed and running (optional warning)."""
+    """Check if Docker is installed, running and Python SDK is functional."""
+    # First check Python SDK
+    sdk_installed = False
+    try:
+        import docker
+        sdk_installed = True
+    except ImportError:
+        pass
+
     docker_path = shutil.which("docker")
     if not docker_path:
-        return "WARN", "Docker is not installed. Containerized sandboxing will be unavailable.", ""
+        return (
+            "WARN",
+            "Docker is not installed. Containerized sandboxing will be unavailable.",
+            "not_installed",
+        )
 
+    # Check daemon status
+    daemon_running = False
     try:
-        # Run docker info with 2s timeout
         proc = await asyncio.create_subprocess_exec(
             "docker",
             "info",
@@ -92,15 +105,48 @@ async def check_docker() -> tuple[str, str, str]:
         )
         try:
             await asyncio.wait_for(proc.communicate(), timeout=3.0)
-            if proc.returncode == 0:
-                return "PASS", "Docker daemon is running.", "active"
-            else:
-                return "WARN", "Docker command exists, but daemon is not running.", "inactive"
+            daemon_running = (proc.returncode == 0)
         except TimeoutError:
             proc.kill()
-            return "WARN", "Docker command timed out checking daemon. Is it running?", "timeout"
+            await proc.wait()
+            return (
+                "WARN",
+                "Docker command timed out checking daemon. Is it running?",
+                "timeout",
+            )
     except Exception as e:
-        return "WARN", f"Failed to execute Docker check: {e}", ""
+        return "WARN", f"Failed to execute Docker check: {e}", "error"
+
+    if daemon_running:
+        if sdk_installed:
+            try:
+                # Verify SDK can connect
+                client = docker.from_env()
+                await asyncio.get_running_loop().run_in_executor(None, client.ping)
+                return (
+                    "PASS",
+                    "Docker daemon is running and Python SDK is functional.",
+                    "active",
+                )
+            except Exception as e:
+                return (
+                    "WARN",
+                    f"Docker daemon is running, but Python SDK connection failed: {e}",
+                    "sdk_connection_error",
+                )
+        else:
+            return (
+                "WARN",
+                "Docker daemon is running, but Python 'docker' SDK is missing.",
+                "missing_sdk",
+            )
+    else:
+        return (
+            "WARN",
+            "Docker command exists, but daemon is not running.",
+            "inactive",
+        )
+
 
 
 async def check_ollama() -> tuple[str, str, str]:

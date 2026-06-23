@@ -168,6 +168,29 @@ async def test_quality_gate_requires_approval_for_protected_file_changes(db_sess
     assert allowed.allowed is True
 
 
+@pytest.mark.anyio
+async def test_quality_gate_blocks_likely_secret_changes(db_session, tmp_path):
+    uow = bind_uow(db_session)
+    project, run, task, task_run = await seed_quality_task(uow, tmp_path, TaskStatus.TESTING)
+    assert project.id is not None
+    assert run.id is not None
+    assert task.id is not None
+    assert task_run.id is not None
+    secret_file = tmp_path / "config.py"
+    secret_file.write_text('API_TOKEN="abc123456789SECRET"\n', encoding="utf-8")
+    task.metadata["changed_files"] = ["config.py"]
+    await uow.tasks.update_task(task)  # type: ignore[union-attr]
+
+    blocked = await QualityGateEvaluator(uow, project_id=project.id, run_id=run.id).evaluate(
+        task_id=task.id,
+        task_run_id=task_run.id,
+        test_results=[{"command": "pytest", "exit_code": 0}],
+    )
+
+    assert blocked.allowed is False
+    assert "likely secret detected" in blocked.reasons
+
+
 def bind_uow(db_session) -> UnitOfWork:
     uow = UnitOfWork()
     uow.session = db_session

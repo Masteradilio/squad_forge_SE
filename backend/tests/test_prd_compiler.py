@@ -150,3 +150,76 @@ async def test_import_prd_dry_run_does_not_persist_and_normal_import_creates_tas
         assert uow.tasks is not None
         tasks = await uow.tasks.list_tasks_for_project(project.id)
     assert tasks[0].title == "Load Markdown"
+
+
+@pytest.mark.anyio
+async def test_import_prd_creates_architecture_contract_and_task_packets(
+    db_manager, tmp_path
+):
+    prd_path = tmp_path / "PRD.md"
+    prd_path.write_text(
+        "# PRD\n\n"
+        "## Calculator\n"
+        "- Implement numeric entry\n"
+        "- Implement TVM solving\n",
+        encoding="utf-8",
+    )
+    async with UnitOfWork(db_manager) as uow:
+        assert uow.projects is not None
+        project = await uow.projects.create_project(
+            domain.Project(name="Contract", root_path=str(tmp_path), default_branch="main")
+        )
+        assert project.id is not None
+
+    imported = await import_prd(prd_path, project.id, db_manager=db_manager, dry_run=False)
+
+    async with UnitOfWork(db_manager) as uow:
+        assert uow.projects is not None
+        assert uow.tasks is not None
+        documents = await uow.projects.list_documents_for_project(project.id)
+        tasks = await uow.tasks.list_tasks_for_project(project.id)
+
+    architecture_docs = [doc for doc in documents if doc.kind == DocumentKind.ARCHITECTURE]
+    assert imported.architecture_contract_path
+    assert len(architecture_docs) == 1
+    assert (tmp_path / imported.architecture_contract_path).exists()
+    assert tasks[0].metadata["contract_id"] == "architecture-contract-v1"
+    assert tasks[0].metadata["task_contract"]["allowed_files"]
+    assert tasks[0].metadata["task_contract"]["canonical_test_command"].startswith(
+        "python -m pytest tests/"
+    )
+
+
+def test_architecture_contract_uses_bounded_calculator_task_packets():
+    from localforge.prd.contracts import build_architecture_contract
+    from localforge.prd.schemas import ExtractedPlan, ExtractedTask
+
+    contract = build_architecture_contract(
+        ExtractedPlan(
+            tasks=[
+                ExtractedTask(title="Initialize calculator app structure", description=""),
+                ExtractedTask(title="Implement four-level RPN stack", description=""),
+                ExtractedTask(title="Implement TVM register model", description=""),
+                ExtractedTask(title="Implement TVM solving", description=""),
+                ExtractedTask(title="Implement NPV and IRR", description=""),
+                ExtractedTask(title="Prepare PR-ready summary", description=""),
+            ]
+        )
+    )
+
+    assert contract.task_contracts["Initialize calculator app structure"].required_public_apis == [
+        "Calculator",
+        "CalculatorState",
+    ]
+    assert contract.task_contracts["Implement four-level RPN stack"].allowed_files == [
+        "calculator/stack.py",
+        "tests/test_rpn_stack.py",
+    ]
+    assert contract.task_contracts["Implement TVM register model"].allowed_files != (
+        contract.task_contracts["Implement TVM solving"].allowed_files
+    )
+    assert "Implement TVM register model" in contract.dependency_graph["Implement TVM solving"]
+    assert contract.task_contracts["Implement NPV and IRR"].risk_level == "high"
+    assert "docs/pr_ready_summary.md" in (
+        contract.task_contracts["Prepare PR-ready summary"].canonical_test_command
+    )

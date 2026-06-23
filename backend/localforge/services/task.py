@@ -19,14 +19,26 @@ VALID_TRANSITIONS: dict[TaskStatus, set[TaskStatus]] = {
         TaskStatus.READY,
         TaskStatus.BLOCKED,
         TaskStatus.CANCELLED,
+        TaskStatus.FAILED_SAFE,
     },
-    TaskStatus.PLANNING: {TaskStatus.IMPLEMENTING, TaskStatus.BLOCKED, TaskStatus.CANCELLED},
-    TaskStatus.IMPLEMENTING: {TaskStatus.TESTING, TaskStatus.BLOCKED, TaskStatus.CANCELLED},
+    TaskStatus.PLANNING: {
+        TaskStatus.IMPLEMENTING,
+        TaskStatus.BLOCKED,
+        TaskStatus.CANCELLED,
+        TaskStatus.FAILED_SAFE,
+    },
+    TaskStatus.IMPLEMENTING: {
+        TaskStatus.TESTING,
+        TaskStatus.BLOCKED,
+        TaskStatus.CANCELLED,
+        TaskStatus.FAILED_SAFE,
+    },
     TaskStatus.TESTING: {
         TaskStatus.REVIEWING,
         TaskStatus.REPAIRING,
         TaskStatus.BLOCKED,
         TaskStatus.CANCELLED,
+        TaskStatus.FAILED_SAFE,
     },
     TaskStatus.REPAIRING: {
         TaskStatus.TESTING,
@@ -39,6 +51,7 @@ VALID_TRANSITIONS: dict[TaskStatus, set[TaskStatus]] = {
         TaskStatus.REPAIRING,
         TaskStatus.BLOCKED,
         TaskStatus.CANCELLED,
+        TaskStatus.FAILED_SAFE,
     },
     TaskStatus.PR_READY: {TaskStatus.DONE, TaskStatus.FAILED_SAFE, TaskStatus.CANCELLED},
     TaskStatus.BLOCKED: {TaskStatus.READY, TaskStatus.CANCELLED},
@@ -190,6 +203,29 @@ class TaskService:
         )
         return [orm_obj.to_domain() for orm_obj in result.scalars().all()]
 
+    async def list_runs_for_tasks(self, task_ids: list[int]) -> dict[int, list[domain.TaskRun]]:
+        """List execution runs for several tasks using a single query."""
+        if not task_ids:
+            return {}
+        result = await self.session.execute(
+            select(TaskRunORM)
+            .where(TaskRunORM.task_id.in_(task_ids))
+            .order_by(TaskRunORM.task_id, TaskRunORM.started_at.desc())
+        )
+        runs_by_task: dict[int, list[domain.TaskRun]] = {}
+        for orm_obj in result.scalars().all():
+            runs_by_task.setdefault(orm_obj.task_id, []).append(orm_obj.to_domain())
+        return runs_by_task
+
+    async def list_runs_for_run(self, run_id: int) -> list[domain.TaskRun]:
+        """List all task runs belonging to a single execution run."""
+        result = await self.session.execute(
+            select(TaskRunORM)
+            .where(TaskRunORM.run_id == run_id)
+            .order_by(TaskRunORM.started_at.desc())
+        )
+        return [orm_obj.to_domain() for orm_obj in result.scalars().all()]
+
     async def update_task_run(self, task_run: domain.TaskRun) -> domain.TaskRun:
         """Update a task run's status or details."""
         if not task_run.id:
@@ -246,4 +282,3 @@ class TaskService:
                 return False
 
         return True
-

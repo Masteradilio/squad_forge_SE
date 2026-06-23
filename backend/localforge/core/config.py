@@ -2,6 +2,7 @@ import os
 from typing import Any
 
 import yaml
+from dotenv import dotenv_values
 from pydantic import BaseModel, Field, ValidationError
 
 # Default configuration dictionary used as baseline
@@ -19,6 +20,34 @@ DEFAULT_CONFIG = {
         "base_url": "http://localhost:11434/v1",
         "default_model": "llama3",
         "roles": {},
+    },
+    "chief_engineer": {
+        "provider": "openrouter",
+        "base_url": "https://openrouter.ai/api/v1",
+        "model": None,
+        "api_key": None,
+        "enabled": True,
+        "timeout": 240.0,
+        "max_input_tokens_per_call": 12000,
+        "max_output_tokens_per_call": 2000,
+    },
+    "sandbox": {
+        "type": "local",
+        "image": "python:3.12-slim",
+        "network_enabled": False,
+    },
+    "budgets": {
+        "max_run_time": 3600.0,
+        "max_task_duration": 600.0,
+        "max_repair_attempts": 3,
+        "max_parallel_tasks": 2,
+        "max_active_model_calls": 50,
+        "max_diff_growth": 50000,
+        "max_file_count": 20,
+        "max_paid_calls": 20,
+        "max_paid_input_tokens": 250000,
+        "max_paid_output_tokens": 40000,
+        "max_paid_usd": 2.0,
     },
 }
 
@@ -39,11 +68,45 @@ class ModelsConfig(BaseModel):
     roles: dict[str, str] = Field(default_factory=dict)
 
 
+class ChiefEngineerConfig(BaseModel):
+    provider: str = Field(default="openrouter")
+    base_url: str = Field(default="https://openrouter.ai/api/v1")
+    model: str | None = Field(default=None)
+    api_key: str | None = Field(default=None)
+    enabled: bool = Field(default=True)
+    timeout: float = Field(default=240.0)
+    max_input_tokens_per_call: int = Field(default=12000)
+    max_output_tokens_per_call: int = Field(default=2000)
+
+
+class SandboxConfig(BaseModel):
+    type: str = Field(default="local")
+    image: str = Field(default="python:3.12-slim")
+    network_enabled: bool = Field(default=False)
+
+
+class BudgetsConfig(BaseModel):
+    max_run_time: float = Field(default=3600.0)
+    max_task_duration: float = Field(default=600.0)
+    max_repair_attempts: int = Field(default=3)
+    max_parallel_tasks: int = Field(default=2)
+    max_active_model_calls: int = Field(default=50)
+    max_diff_growth: int = Field(default=50000)
+    max_file_count: int = Field(default=20)
+    max_paid_calls: int = Field(default=20)
+    max_paid_input_tokens: int = Field(default=250000)
+    max_paid_output_tokens: int = Field(default=40000)
+    max_paid_usd: float = Field(default=2.0)
+
+
 class LocalForgeConfig(BaseModel):
     version: int = Field(default=1)
     project: ProjectConfig = Field(default_factory=ProjectConfig)
     git: GitConfig = Field(default_factory=GitConfig)
     models: ModelsConfig = Field(default_factory=ModelsConfig)
+    chief_engineer: ChiefEngineerConfig = Field(default_factory=ChiefEngineerConfig)
+    sandbox: SandboxConfig = Field(default_factory=SandboxConfig)
+    budgets: BudgetsConfig = Field(default_factory=BudgetsConfig)
 
 
 def load_config(cli_args: dict[str, Any] | None = None) -> LocalForgeConfig:
@@ -69,7 +132,16 @@ def load_config(cli_args: dict[str, Any] | None = None) -> LocalForgeConfig:
         except Exception as e:
             raise ValueError(f"Failed to parse workspace config file at {config_path}: {e}") from e
 
-    # 2. Load from Environment Variables
+    # 2. Load from .env without mutating process environment or logging secrets.
+    env_file_path = os.path.join(cwd, ".env")
+    if os.path.exists(env_file_path):
+        env_file_values = dotenv_values(env_file_path)
+        if env_file_values.get("OPENROUTER_MODEL"):
+            config_dict["chief_engineer"]["model"] = env_file_values["OPENROUTER_MODEL"]
+        if env_file_values.get("OPENROUTER_API_KEY"):
+            config_dict["chief_engineer"]["api_key"] = env_file_values["OPENROUTER_API_KEY"]
+
+    # 3. Load from Environment Variables
     env_mappings = {
         "LOCALFORGE_PROJECT_NAME": ("project", "name"),
         "LOCALFORGE_DEFAULT_BRANCH": ("git", "default_branch"),
@@ -77,6 +149,8 @@ def load_config(cli_args: dict[str, Any] | None = None) -> LocalForgeConfig:
         "LOCALFORGE_MODEL_PROVIDER": ("models", "provider"),
         "LOCALFORGE_MODEL_BASE_URL": ("models", "base_url"),
         "LOCALFORGE_DEFAULT_MODEL": ("models", "default_model"),
+        "OPENROUTER_MODEL": ("chief_engineer", "model"),
+        "OPENROUTER_API_KEY": ("chief_engineer", "api_key"),
     }
     for env_var, path in env_mappings.items():
         val = os.getenv(env_var)
@@ -84,7 +158,7 @@ def load_config(cli_args: dict[str, Any] | None = None) -> LocalForgeConfig:
             section, key = path
             config_dict[section][key] = val
 
-    # 3. Load from CLI arguments
+    # 4. Load from CLI arguments
     if cli_args:
         cli_mappings = {
             "project_name": ("project", "name"),
@@ -100,7 +174,7 @@ def load_config(cli_args: dict[str, Any] | None = None) -> LocalForgeConfig:
                 section, key = path
                 config_dict[section][key] = val
 
-    # 4. Validate with Pydantic
+    # 5. Validate with Pydantic
     try:
         return LocalForgeConfig.model_validate(config_dict)
     except ValidationError as e:

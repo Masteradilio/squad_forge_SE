@@ -74,6 +74,74 @@ class SafeFileEditor:
                 content=diff,
                 summary=f"Diff for {rel_display}",
             )
+        # Check budgets limits
+        from localforge.core.config import load_config
+        try:
+            config = load_config()
+            max_files = config.budgets.max_file_count
+            max_diff = config.budgets.max_diff_growth
+        except Exception:
+            max_files = 20
+            max_diff = 50000
+
+        # Load overrides from run if available
+        if self.run_id is not None:
+            assert self.uow.executions is not None
+            run = await self.uow.executions.get_run(self.run_id)
+            if run and run.resource_limits:
+                max_files = run.resource_limits.get("max_file_count", max_files)
+                max_diff = run.resource_limits.get("max_diff_growth", max_diff)
+
+        # Run git checks in worktree_root
+        import subprocess
+        try:
+            toplevel_res = subprocess.run(
+                ["git", "rev-parse", "--show-toplevel"],
+                cwd=worktree_root,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            toplevel = os.path.realpath(toplevel_res.stdout.strip())
+            if toplevel != os.path.realpath(worktree_root):
+                raise subprocess.SubprocessError()
+
+            # Check file count
+            status_res = subprocess.run(
+                ["git", "status", "--porcelain"],
+                cwd=worktree_root,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            modified_files = [
+                line[3:].strip()
+                for line in status_res.stdout.splitlines()
+                if line.strip()
+            ]
+            if len(modified_files) > max_files:
+                raise ValueError(
+                    f"Workspace file count budget exceeded: {len(modified_files)} "
+                    f"files modified/created (Limit: {max_files})."
+                )
+
+            # Check diff size
+            diff_res = subprocess.run(
+                ["git", "diff"],
+                cwd=worktree_root,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            diff_len = len(diff_res.stdout)
+            if diff_len > max_diff:
+                raise ValueError(
+                    f"Workspace diff growth budget exceeded: {diff_len} "
+                    f"characters generated (Limit: {max_diff})."
+                )
+        except subprocess.SubprocessError:
+            pass
+
         await self._audit("write_file", {"path": target, "decision": "ALLOW"})
         return FileEditResult(path=target, diff=diff)
 

@@ -1,15 +1,21 @@
 import asyncio
 import logging
-from datetime import datetime
+import os
+from datetime import UTC, datetime
 from typing import Any
 
 from localforge.gitops.manager import WorktreeManager
 from localforge.models import domain
-from localforge.models.enums import RunStatus, TaskRunStatus, TaskStatus
+from localforge.models.enums import AuditEventType, RunStatus, TaskRunStatus, TaskStatus
+from localforge.pipeline import PipelineMode, RolePipelineEngine
 from localforge.services.runners import LocalWorktreeTaskRunner, TaskRunnerPool
 from localforge.storage.transactions import UnitOfWork
 
 logger = logging.getLogger("localforge.scheduler")
+
+
+def _as_utc(value: datetime) -> datetime:
+    return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
 
 
 class Scheduler:
@@ -25,12 +31,14 @@ class Scheduler:
         loop_interval: float = 0.5,
         db_manager: Any | None = None,
         runner_pool: TaskRunnerPool | None = None,
+        execute_pipeline: bool = False,
     ):
         self.project_id = project_id
         self.run_id = run_id
         self.max_parallel_tasks = max_parallel_tasks
         self.loop_interval = loop_interval
         self.db_manager = db_manager
+        self.execute_pipeline = execute_pipeline
         self.runner_pool = runner_pool or TaskRunnerPool(
             [LocalWorktreeTaskRunner(project_id=project_id)]
         )
@@ -47,15 +55,24 @@ class Scheduler:
         self._task = asyncio.create_task(self._scheduler_loop())
         logger.info(f"Scheduler started for run {self.run_id}")
 
-    async def stop(self) -> None:
+    async def stop(self, timeout: float | None = 5.0) -> None:
         """Gracefully stop the scheduler background task."""
-        if not self._running:
+        if not self._running and self._task is None:
             return
         self._running = False
         self.trigger()  # Wake up if sleeping
         if self._task:
             try:
-                await self._task
+                if timeout is None:
+                    await self._task
+                else:
+                    await asyncio.wait_for(self._task, timeout=timeout)
+            except TimeoutError:
+                self._task.cancel()
+                try:
+                    await self._task
+                except asyncio.CancelledError:
+                    pass
             except asyncio.CancelledError:
                 pass
             self._task = None
@@ -112,6 +129,40 @@ class Scheduler:
                 self._running = False
                 return
 
+            # Check max_run_time budget
+            from localforge.core.config import load_config
+
+            try:
+                config = load_config()
+                max_run_time = config.budgets.max_run_time
+            except Exception:
+                max_run_time = 3600.0
+
+            if run.resource_limits:
+                max_run_time = run.resource_limits.get(
+                    "max_run_time", max_run_time
+                )
+
+            elapsed_run_time = (datetime.now(UTC) - _as_utc(run.started_at)).total_seconds()
+            if elapsed_run_time > max_run_time:
+                logger.warning(
+                    f"Run {self.run_id} exceeded maximum run time limit "
+                    f"of {max_run_time}s. Aborting."
+                )
+                run.status = RunStatus.FAILED
+                run.summary = (
+                    f"Run exceeded maximum run time budget of {max_run_time} seconds."
+                )
+                run.ended_at = datetime.now(UTC)
+                await uow.executions.update_run(run)
+
+                await self._abort_active_tasks(uow)
+                self._running = False
+                return
+
+            # Watchdog check for stuck tasks
+            await self._run_watchdog_checks(uow)
+
             if run.status in (
                 RunStatus.COMPLETED,
                 RunStatus.FAILED,
@@ -156,13 +207,93 @@ class Scheduler:
                     if not has_failed
                     else RunStatus.FAILED
                 )
-                run.ended_at = datetime.utcnow()
-                run.summary = (
-                    "All tasks executed successfully."
-                    if not has_failed
-                    else "Execution contains safe failures."
+                run.ended_at = datetime.now(UTC)
+
+                prs_ready_count = len(
+                    [
+                        t
+                        for t in tasks
+                        if t.status in (TaskStatus.PR_READY, TaskStatus.DONE)
+                    ]
                 )
+                blocked_count = len([t for t in tasks if t.status == TaskStatus.BLOCKED])
+                failed_safe_count = len(
+                    [t for t in tasks if t.status == TaskStatus.FAILED_SAFE]
+                )
+
+                # Fetch safety audit blocks
+                safety_blocks = 0
+                if uow.audits is not None:
+                    audits = await uow.audits.list_audit_events_for_project(
+                        self.project_id
+                    )
+                    safety_blocks = len(
+                        [
+                            e
+                            for e in audits
+                            if e.run_id == self.run_id
+                            and e.event_type == AuditEventType.SAFETY_DECISION
+                            and e.payload_redacted.get("decision") == "DENY"
+                        ]
+                    )
+
+                # Recommendations
+                recommendations = []
+                if failed_safe_count > 0:
+                    recommendations.append(
+                        "- Review logs for FAILED_SAFE tasks and adjust resource "
+                        "budgets or LLM configurations."
+                    )
+                if blocked_count > 0:
+                    recommendations.append(
+                        "- Resolve dependency tasks that blocked subsequent "
+                        "tasks in the execution queue."
+                    )
+                if safety_blocks > 0:
+                    recommendations.append(
+                        "- Review Safety Kernel logs to see why commands or files were blocked."
+                    )
+                if not recommendations:
+                    recommendations.append(
+                        "- Execution completed cleanly. Ready to merge PRs!"
+                    )
+
+                summary_text = (
+                    f"Execution Summary:\n"
+                    f"- PRs Ready/Done: {prs_ready_count}\n"
+                    f"- Blocked Tasks: {blocked_count}\n"
+                    f"- Failed-Safe Tasks: {failed_safe_count}\n"
+                    f"- Safety Blocks: {safety_blocks}\n\n"
+                    f"Recommended Next Steps:\n" + "\n".join(recommendations)
+                )
+                run.summary = summary_text
                 await uow.executions.update_run(run)
+
+                # Write run_summary.md artifact
+                assert uow.projects is not None
+                project = await uow.projects.get_project(self.project_id)
+                if project:
+                    summary_md = (
+                        f"# LocalForge OS — Run Execution Summary\n\n"
+                        f"**Run ID**: {self.run_id}\n"
+                        f"**Status**: {run.status.value}\n"
+                        f"**Ended At**: {run.ended_at.isoformat()}\n\n"
+                        f"### Statistics\n"
+                        f"- **PRs Ready/Done**: {prs_ready_count}\n"
+                        f"- **Blocked Tasks**: {blocked_count}\n"
+                        f"- **Failed-Safe Tasks**: {failed_safe_count}\n"
+                        f"- **Safety Kernel Blocks**: {safety_blocks}\n\n"
+                        f"### Recommended Next Steps\n"
+                        + "\n".join(recommendations)
+                        + "\n"
+                    )
+                    try:
+                        filepath = os.path.join(project.root_path, "run_summary.md")
+                        with open(filepath, "w", encoding="utf-8") as f:
+                            f.write(summary_md)
+                    except Exception as e:
+                        logger.error(f"Failed to write run_summary.md: {e}")
+
                 self._running = False
                 return
 
@@ -194,7 +325,19 @@ class Scheduler:
                     task_run = await uow.tasks.create_task_run(task_run_data)
 
                     runner = self.runner_pool.acquire(t)
-                    runner_context = await runner.setup(t, run_id=self.run_id, uow=uow)
+                    try:
+                        runner_context = await runner.setup(t, run_id=self.run_id, uow=uow)
+                    except Exception as e:
+                        logger.error(
+                            f"Task {t.key} failed during runner setup: {e}",
+                            exc_info=True,
+                        )
+                        task_run.status = TaskRunStatus.FAILED
+                        task_run.final_summary = f"Runner setup failed: {e}"
+                        task_run.ended_at = datetime.now(UTC)
+                        await uow.tasks.update_task_run(task_run)
+                        await uow.tasks.update_task_status(t.id, TaskStatus.FAILED_SAFE)
+                        continue
 
                     # Update task run with runner details
                     task_run.worktree_path = runner_context.worktree_path
@@ -202,4 +345,152 @@ class Scheduler:
                     task_run.sandbox_id = runner_context.sandbox_id
                     await uow.tasks.update_task_run(task_run)
 
+                    if self.execute_pipeline:
+                        assert task_run.id is not None
+                        try:
+                            await RolePipelineEngine(
+                                uow, project_id=self.project_id, run_id=self.run_id
+                            ).run_task(
+                                task_id=t.id,
+                                task_run_id=task_run.id,
+                                mode=PipelineMode.DEFAULT,
+                                complete_run=False,
+                            )
+                        except Exception as e:
+                            logger.error(
+                                f"Task {t.key} failed during pipeline execution: {e}",
+                                exc_info=True,
+                            )
+                            if uow.session is not None:
+                                await uow.session.rollback()
+                            failed_task_run = await uow.tasks.get_task_run(task_run.id)
+                            if failed_task_run is not None:
+                                failed_task_run.status = TaskRunStatus.FAILED
+                                failed_task_run.final_summary = f"Pipeline execution failed: {e}"
+                                failed_task_run.ended_at = datetime.now(UTC)
+                                await uow.tasks.update_task_run(failed_task_run)
+                            else:
+                                await uow.tasks.create_task_run(
+                                    domain.TaskRun(
+                                        run_id=self.run_id,
+                                        task_id=t.id,
+                                        status=TaskRunStatus.FAILED,
+                                        worktree_path=task_run.worktree_path,
+                                        branch_name=task_run.branch_name,
+                                        sandbox_id=task_run.sandbox_id,
+                                        ended_at=datetime.now(UTC),
+                                        final_summary=f"Pipeline execution failed: {e}",
+                                    )
+                                )
+                            await self._mark_task_failed_safe(uow, t.id)
+                            if uow.session is not None:
+                                await uow.session.commit()
+                            latest_runs = await uow.tasks.list_runs_for_task(t.id)
+                            if latest_runs:
+                                await runner.cleanup(latest_runs[0], uow=uow)
+                            continue
+
                     executing_count += 1
+
+    async def _mark_task_failed_safe(self, uow: UnitOfWork, task_id: int) -> None:
+        assert uow.tasks is not None
+        task = await uow.tasks.get_task(task_id)
+        if task is None:
+            return
+        if task.status == TaskStatus.FAILED_SAFE:
+            return
+        if task.status in (TaskStatus.BACKLOG, TaskStatus.READY):
+            if task.status == TaskStatus.BACKLOG:
+                await uow.tasks.update_task_status(task_id, TaskStatus.READY)
+            await uow.tasks.update_task_status(task_id, TaskStatus.CLAIMED)
+            await uow.tasks.update_task_status(task_id, TaskStatus.PLANNING)
+            await uow.tasks.update_task_status(task_id, TaskStatus.IMPLEMENTING)
+        await uow.tasks.update_task_status(task_id, TaskStatus.FAILED_SAFE)
+
+    async def _abort_active_tasks(self, uow: UnitOfWork) -> None:
+        """Abort all active task runs and move their tasks to FAILED_SAFE status."""
+        assert uow.tasks is not None
+        tasks = await uow.tasks.list_tasks_for_project(self.project_id)
+        active_tasks = [
+            t
+            for t in tasks
+            if t.status
+            in (
+                TaskStatus.CLAIMED,
+                TaskStatus.PLANNING,
+                TaskStatus.IMPLEMENTING,
+                TaskStatus.TESTING,
+                TaskStatus.REPAIRING,
+                TaskStatus.REVIEWING,
+            )
+            and t.id is not None
+        ]
+        active_task_ids = [t.id for t in active_tasks if t.id is not None]
+        runs_by_task = await uow.tasks.list_runs_for_tasks(active_task_ids)
+        for t in active_tasks:
+            assert t.id is not None
+            await uow.tasks.update_task_status(t.id, TaskStatus.FAILED_SAFE)
+            for r in runs_by_task.get(t.id, []):
+                if r.run_id == self.run_id and r.status == TaskRunStatus.RUNNING:
+                    r.status = TaskRunStatus.FAILED
+                    r.final_summary = "Task run aborted due to run budget timeout."
+                    r.ended_at = datetime.now(UTC)
+                    await uow.tasks.update_task_run(r)
+
+                    runner = self.runner_pool.acquire(t)
+                    await runner.cleanup(r, uow=uow)
+
+    async def _run_watchdog_checks(self, uow: UnitOfWork) -> None:
+        """Scan active task runs and abort those whose heartbeat (updated_at) has stopped."""
+        assert uow.tasks is not None
+        assert uow.executions is not None
+        from localforge.core.config import load_config
+
+        try:
+            config = load_config()
+            task_timeout = config.budgets.max_task_duration
+        except Exception:
+            task_timeout = 600.0
+
+        run = await uow.executions.get_run(self.run_id)
+        if run and run.resource_limits:
+            task_timeout = run.resource_limits.get("max_task_duration", task_timeout)
+
+        tasks = await uow.tasks.list_tasks_for_project(self.project_id)
+        active_tasks = [
+            t
+            for t in tasks
+            if t.status
+            in (
+                TaskStatus.CLAIMED,
+                TaskStatus.PLANNING,
+                TaskStatus.IMPLEMENTING,
+                TaskStatus.TESTING,
+                TaskStatus.REPAIRING,
+                TaskStatus.REVIEWING,
+            )
+            and t.id is not None
+        ]
+        active_task_ids = [t.id for t in active_tasks if t.id is not None]
+        runs_by_task = await uow.tasks.list_runs_for_tasks(active_task_ids)
+        for t in active_tasks:
+            assert t.id is not None
+            for r in runs_by_task.get(t.id, []):
+                if r.run_id == self.run_id and r.status == TaskRunStatus.RUNNING:
+                    # For watchdog check, we compare against task run started_at.
+                    elapsed = (datetime.now(UTC) - _as_utc(r.started_at)).total_seconds()
+                    if elapsed > task_timeout:
+                        logger.warning(
+                            f"Task run {r.id} for task {t.key} is unresponsive "
+                            f"(stuck for {elapsed}s). Watchdog aborting."
+                        )
+                        r.status = TaskRunStatus.FAILED
+                        r.final_summary = (
+                            f"Watchdog terminated unresponsive task after {elapsed}s."
+                        )
+                        r.ended_at = datetime.now(UTC)
+                        await uow.tasks.update_task_run(r)
+                        await uow.tasks.update_task_status(t.id, TaskStatus.FAILED_SAFE)
+
+                        runner = self.runner_pool.acquire(t)
+                        await runner.cleanup(r, uow=uow)

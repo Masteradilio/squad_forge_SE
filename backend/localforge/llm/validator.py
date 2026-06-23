@@ -73,7 +73,7 @@ async def chat_completion_validated(  # noqa: UP047
                 raise ValueError(f"{error_msg} Details: {details_str}") from e
 
             # Append the failed output and the repair instructions to the message history
-            local_messages.append({"role": "assistant", "content": raw_response})
+            local_messages.append({"role": "assistant", "content": raw_response[:4000]})
 
             is_json_err = isinstance(e, json.JSONDecodeError)
             error_type = "JSON formatting error" if is_json_err else "Schema validation error"

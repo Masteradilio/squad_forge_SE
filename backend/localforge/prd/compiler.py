@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 from localforge.llm.base import BaseLLMProvider
 from localforge.models import domain
 from localforge.models.enums import DocumentKind, TaskStatus
+from localforge.prd.contracts import build_architecture_contract
 from localforge.prd.extractor import DeterministicPRDExtractor
 from localforge.prd.loader import MarkdownDocumentLoader
 from localforge.prd.model_assisted import generate_model_assisted_plan
@@ -22,6 +23,7 @@ class ImportPRDResult(BaseModel):
     tasks_created: int
     epics: list[str] = Field(default_factory=list)
     tasks: list[str] = Field(default_factory=list)
+    architecture_contract_path: str | None = None
 
 
 async def import_prd(
@@ -54,6 +56,27 @@ async def import_prd(
             persist=True,
             parsed_summary=_summary(plan),
         )
+        project = await uow.projects.get_project(project_id)
+        if project is None:
+            raise ValueError("Project not found for PRD import.")
+        contract = build_architecture_contract(plan)
+        contract_rel_path = ".localforge/contracts/architecture_contract.json"
+        contract_path = Path(project.root_path) / contract_rel_path
+        contract_path.parent.mkdir(parents=True, exist_ok=True)
+        contract_path.write_text(
+            contract.model_dump_json(indent=2),
+            encoding="utf-8",
+        )
+        await loader.load(
+            project_id,
+            contract_path,
+            DocumentKind.ARCHITECTURE,
+            persist=True,
+            parsed_summary=(
+                f"{len(contract.module_map)} modules, "
+                f"{len(contract.task_contracts)} task contracts"
+            ),
+        )
         epic_by_title: dict[str, domain.Epic] = {}
         for index, epic in enumerate(plan.epics, start=1):
             created = await uow.tasks.create_epic(
@@ -81,6 +104,7 @@ async def import_prd(
             persisted_epic = epic_by_title.get(task.epic_title or "")
             created_key = f"LF-PRD-{next_number:03d}"
             next_number += 1
+            task_contract = contract.task_contracts.get(task.title)
             await uow.tasks.create_task(
                 domain.Task(
                     project_id=project_id,
@@ -94,13 +118,26 @@ async def import_prd(
                     metadata={
                         **task.metadata,
                         "source": "prd_compiler",
+                        "contract_id": contract.contract_id,
+                        "architecture_contract_path": contract_rel_path,
+                        "task_contract": (
+                            task_contract.model_dump(mode="json")
+                            if task_contract
+                            else {}
+                        ),
                         "sizing": sizing.model_dump(),
                         "source_document_id": persisted_doc.document.id,
                     },
                 )
             )
 
-        return _result(True, loaded.content_hash, loaded.changed, plan)
+        return _result(
+            True,
+            loaded.content_hash,
+            loaded.changed,
+            plan,
+            architecture_contract_path=contract_rel_path,
+        )
 
 
 def _result(
@@ -108,6 +145,7 @@ def _result(
     document_hash: str,
     changed: bool,
     plan: ExtractedPlan,
+    architecture_contract_path: str | None = None,
 ) -> ImportPRDResult:
     return ImportPRDResult(
         persisted=persisted,
@@ -117,6 +155,7 @@ def _result(
         tasks_created=len(plan.tasks),
         epics=[epic.title for epic in plan.epics],
         tasks=[task.title for task in plan.tasks],
+        architecture_contract_path=architecture_contract_path,
     )
 
 

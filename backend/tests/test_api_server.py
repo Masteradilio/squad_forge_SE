@@ -2,11 +2,13 @@ import asyncio
 
 from fastapi.testclient import TestClient
 from localforge.api.app import create_app
+from localforge.llm.fake import FakeLLMProvider
 from localforge.models import domain
 from localforge.models.enums import (
     ActionKind,
     AgentRole,
     ArtifactType,
+    DocumentKind,
     RunMode,
     RunStatus,
     TaskStatus,
@@ -31,7 +33,9 @@ def test_api_exposes_core_state_endpoints(tmp_path):
     manager = make_db_manager(tmp_path)
     try:
         ids = seed_api_state(manager, tmp_path)
-        client = TestClient(create_app(db_manager=manager))
+        client = TestClient(
+            create_app(db_manager=manager, llm_provider=FakeLLMProvider())
+        )
 
         assert client.get("/projects").json()[0]["id"] == ids["project_id"]
         assert client.get(f"/projects/{ids['project_id']}/tasks").json()[0]["key"] == "LF-1401"
@@ -42,8 +46,145 @@ def test_api_exposes_core_state_endpoints(tmp_path):
             client.get(f"/projects/{ids['project_id']}/policies/default").json()["name"]
             == "default"
         )
-        assert client.get("/models").json()["provider"] == "localforge"
+        assert client.get("/models").json()["provider"] == "ollama"
         assert client.get(f"/projects/{ids['project_id']}/prs").json()[0]["key"] == "LF-1401"
+    finally:
+        close_manager(manager)
+
+
+def test_api_comments_runtimes_and_task_ancestry(tmp_path):
+    manager = make_db_manager(tmp_path)
+    try:
+        ids = seed_api_state(manager, tmp_path)
+
+        async def seed_doc_epic_link() -> None:
+            async with UnitOfWork(manager) as uow:
+                assert uow.projects is not None
+                assert uow.tasks is not None
+                doc = await uow.projects.create_document(
+                    domain.ProductDocument(
+                        project_id=ids["project_id"],
+                        kind=DocumentKind.PRD,
+                        path="PRD.md",
+                        content_hash="prdhash",
+                    )
+                )
+                assert doc.id is not None
+                epic = await uow.tasks.create_epic(
+                    domain.Epic(
+                        project_id=ids["project_id"],
+                        title="Traceability",
+                        summary="Trace PRD to PR",
+                        source_document_id=doc.id,
+                    )
+                )
+                assert epic.id is not None
+                task = await uow.tasks.get_task(ids["task_id"])
+                assert task is not None
+                task.epic_id = epic.id
+                await uow.tasks.update_task(task)
+
+        asyncio.run(seed_doc_epic_link())
+        client = TestClient(create_app(db_manager=manager))
+
+        comment = client.post(
+            f"/tasks/{ids['task_id']}/comments",
+            json={"author": "reviewer", "body": "Check edge cases", "thread_id": "t1"},
+        )
+        assert comment.status_code == 200
+        assert comment.json()["body"] == "Check edge cases"
+        comments = client.get(f"/tasks/{ids['task_id']}/comments").json()
+        assert comments[0]["thread_id"] == "t1"
+
+        runtime = client.post(
+            f"/projects/{ids['project_id']}/runtimes",
+            json={
+                "runtime_id": "daemon-1",
+                "name": "Local Daemon",
+                "capabilities": ["scheduler", "sandbox"],
+            },
+        )
+        assert runtime.status_code == 200
+        assert runtime.json()["status"] == "ONLINE"
+        heartbeat = client.post(
+            "/runtimes/daemon-1/heartbeat",
+            json={"status": "DEGRADED", "metadata": {"reason": "ollama offline"}},
+        )
+        assert heartbeat.status_code == 200
+        assert heartbeat.json()["metadata"]["reason"] == "ollama offline"
+        assert client.get(f"/projects/{ids['project_id']}/runtimes").json()[0]["runtime_id"] == "daemon-1"
+
+        squad = client.post(
+            f"/projects/{ids['project_id']}/squads",
+            json={"name": "Review Squad", "purpose": "High risk review", "roles": ["Reviewer"]},
+        )
+        assert squad.status_code == 200
+        assert squad.json()["roles"] == ["Reviewer"]
+        assert client.get(f"/projects/{ids['project_id']}/squads").json()[0]["name"] == "Review Squad"
+
+        ancestry = client.get(f"/tasks/{ids['task_id']}/ancestry")
+        assert ancestry.status_code == 200
+        payload = ancestry.json()
+        assert payload["document"]["path"] == "PRD.md"
+        assert payload["epic"]["title"] == "Traceability"
+        assert payload["task"]["key"] == "LF-1401"
+        assert payload["task_runs"][0]["artifacts"][0]["type"] == "TestArtifact"
+    finally:
+        close_manager(manager)
+
+
+def test_api_dashboard_completion_endpoints(tmp_path):
+    manager = make_db_manager(tmp_path)
+    try:
+        ids = seed_api_state(manager, tmp_path)
+        worktree = tmp_path / ".localforge" / "worktrees" / "lf-1401"
+        worktree.mkdir(parents=True)
+
+        async def seed_worktree_path() -> None:
+            async with await manager.get_session() as session:
+                from localforge.storage.orm import TaskRunORM
+                result = await session.get(TaskRunORM, ids["task_run_id"])
+                assert result is not None
+                result.worktree_path = str(worktree)
+                result.branch_name = "localforge/lf-1401-api"
+                await session.commit()
+
+        asyncio.run(seed_worktree_path())
+        client = TestClient(create_app(db_manager=manager))
+
+        settings = client.get(f"/projects/{ids['project_id']}/settings")
+        assert settings.status_code == 200
+        assert settings.json()["project_path"] == str(tmp_path)
+        assert "resource_limits" in settings.json()
+
+        skill = client.put(
+            f"/projects/{ids['project_id']}/skills/custom-skill",
+            json={
+                "name": "ignored",
+                "purpose": "Custom local skill",
+                "triggers": ["custom"],
+                "allowed_actions": ["read"],
+                "expected_artifacts": ["review.md"],
+                "failure_modes": [],
+                "examples": [],
+                "enabled": False,
+            },
+        )
+        assert skill.status_code == 200
+        assert skill.json()["enabled"] is False
+        assert client.get(f"/projects/{ids['project_id']}/skills").json()[0]["name"]
+
+        metrics = client.get(f"/projects/{ids['project_id']}/models/metrics")
+        assert metrics.status_code == 200
+
+        worktrees = client.get(f"/projects/{ids['project_id']}/worktrees")
+        assert worktrees.status_code == 200
+        assert worktrees.json()[0]["task_key"] == "LF-1401"
+        assert worktrees.json()[0]["branch"] == "localforge/lf-1401-api"
+
+        export = client.get(f"/projects/{ids['project_id']}/audit-events/export")
+        assert export.status_code == 200
+        assert export.headers["content-type"].startswith("application/json")
     finally:
         close_manager(manager)
 
@@ -156,6 +297,7 @@ def seed_api_state(
                 "project_id": project.id,
                 "task_id": task.id,
                 "run_id": run.id,
+                "task_run_id": task_run.id,
                 "artifact_id": artifact.id,
             }
 
@@ -395,4 +537,3 @@ def test_api_pr_review_center_and_policy_updates(tmp_path):
 
     finally:
         close_manager(manager)
-

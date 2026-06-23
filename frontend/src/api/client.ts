@@ -133,6 +133,103 @@ export interface ModelsResponse {
   models: string[];
 }
 
+export interface ModelRoute {
+  id: number;
+  project_id: number;
+  role: string;
+  provider: string;
+  model_profile_id: string;
+  endpoint_url?: string;
+  fallback_model_profile_id?: string;
+  updated_at: string;
+}
+
+export interface MemoryFact {
+  id: number;
+  project_id: number;
+  kind: string;
+  fact: string;
+  source: string;
+  pinned: boolean;
+  status: string;
+  tags: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SkillDefinition {
+  name: string;
+  purpose: string;
+  triggers: string[];
+  allowed_actions: string[];
+  expected_artifacts: string[];
+  failure_modes: string[];
+  examples: string[];
+  source: string;
+  enabled?: boolean;
+  last_used_at?: string;
+  success_rate?: number;
+}
+
+export interface WorktreeInfo {
+  task_id: number;
+  task_key: string;
+  task_status: string;
+  branch?: string;
+  path: string;
+  dirty: boolean;
+  last_commit?: string;
+  pr_link?: string;
+  cleanup_eligible: boolean;
+}
+
+export interface ModelMetric {
+  role: string;
+  provider: string;
+  model_profile_id: string;
+  success_rate: number;
+  failure_rate: number;
+  last_used_at?: string;
+}
+
+export interface ChiefEngineerCall {
+  id: number;
+  run_id?: number;
+  task_id?: number;
+  provider: string;
+  model: string;
+  reason: string;
+  input_tokens: number;
+  output_tokens: number;
+  estimated_cost_usd: number;
+  status: string;
+  error_summary?: string;
+  duration_ms: number;
+  metadata: Record<string, any>;
+  created_at: string;
+}
+
+export interface ChiefEngineerUsage {
+  provider: string;
+  model: string;
+  enabled: boolean;
+  api_key_configured: boolean;
+  budget: Record<string, any>;
+  calls: ChiefEngineerCall[];
+}
+
+export interface ProjectSettings {
+  project_path: string;
+  default_branch: string;
+  git_provider: string;
+  pr_provider: string;
+  remote_url?: string;
+  model_endpoint: string;
+  sandbox_mode: string;
+  resource_limits: Record<string, any>;
+  ui_preferences: Record<string, any>;
+}
+
 export interface ArtifactContent {
   id: number;
   path: string;
@@ -235,6 +332,122 @@ export const apiClient = {
     return request<ModelsResponse>('/api/models');
   },
 
+  fetchSkills(projectId: number): Promise<SkillDefinition[]> {
+    return request<SkillDefinition[]>(`/api/projects/${projectId}/skills`);
+  },
+
+  createSkill(projectId: number, payload: Partial<SkillDefinition>): Promise<SkillDefinition> {
+    return request<SkillDefinition>(`/api/projects/${projectId}/skills`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  updateSkill(
+    projectId: number,
+    name: string,
+    payload: Partial<SkillDefinition>
+  ): Promise<SkillDefinition> {
+    return request<SkillDefinition>(`/api/projects/${projectId}/skills/${name}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  fetchWorktrees(projectId: number): Promise<WorktreeInfo[]> {
+    return request<WorktreeInfo[]>(`/api/projects/${projectId}/worktrees`);
+  },
+
+  cleanupWorktree(taskId: number): Promise<{ status: string }> {
+    return request<{ status: string }>(`/api/tasks/${taskId}/worktree/cleanup`, {
+      method: 'POST',
+    });
+  },
+
+  revertWorktree(taskId: number, checkpointHash: string): Promise<{ status: string }> {
+    return request<{ status: string }>(`/api/tasks/${taskId}/worktree/revert`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ checkpoint_hash: checkpointHash }),
+    });
+  },
+
+  fetchModelMetrics(projectId: number): Promise<ModelMetric[]> {
+    return request<ModelMetric[]>(`/api/projects/${projectId}/models/metrics`);
+  },
+
+  fetchChiefEngineerUsage(projectId: number): Promise<ChiefEngineerUsage> {
+    return request<ChiefEngineerUsage>(`/api/projects/${projectId}/chief-engineer/calls`);
+  },
+
+  fetchProjectSettings(projectId: number): Promise<ProjectSettings> {
+    return request<ProjectSettings>(`/api/projects/${projectId}/settings`);
+  },
+
+  exportAuditEvents(projectId: number): Promise<string> {
+    return fetch(`/api/projects/${projectId}/audit-events/export`).then((res) => {
+      if (!res.ok) throw new Error(`Request failed with status ${res.status}`);
+      return res.text();
+    });
+  },
+
+  lockProject(projectId: number): Promise<Policy> {
+    return request<Policy>(`/api/projects/${projectId}/lock`, { method: 'POST' });
+  },
+
+  fetchModelRoutes(projectId: number): Promise<ModelRoute[]> {
+    return request<ModelRoute[]>(`/api/projects/${projectId}/model-routes`);
+  },
+
+  saveModelRoute(projectId: number, payload: Partial<ModelRoute>): Promise<ModelRoute> {
+    return request<ModelRoute>(`/api/projects/${projectId}/model-routes`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  fetchMemoryFacts(projectId: number): Promise<MemoryFact[]> {
+    return request<MemoryFact[]>(`/api/projects/${projectId}/memory`);
+  },
+
+  createMemoryFact(projectId: number, payload: Partial<MemoryFact>): Promise<MemoryFact> {
+    return request<MemoryFact>(`/api/projects/${projectId}/memory`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  updateMemoryFact(factId: number, payload: Partial<MemoryFact>): Promise<MemoryFact> {
+    return request<MemoryFact>(`/api/memory/${factId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  deleteMemoryFact(factId: number): Promise<{ status: string }> {
+    return request<{ status: string }>(`/api/memory/${factId}`, { method: 'DELETE' });
+  },
+
+  exportMemory(projectId: number, format: 'json' | 'yaml'): Promise<string> {
+    return fetch(`/api/projects/${projectId}/memory/export?format=${format}`).then((res) => {
+      if (!res.ok) throw new Error(`Request failed with status ${res.status}`);
+      return res.text();
+    });
+  },
+
+  importMemory(projectId: number, format: 'json' | 'yaml', payload: string): Promise<MemoryFact[]> {
+    return request<MemoryFact[]>(`/api/projects/${projectId}/memory/import`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ format, payload }),
+    });
+  },
+
   fetchPRs(projectId: number): Promise<Task[]> {
     return request<Task[]>(`/api/projects/${projectId}/prs`);
   },
@@ -314,4 +527,3 @@ export const apiClient = {
     );
   },
 };
-

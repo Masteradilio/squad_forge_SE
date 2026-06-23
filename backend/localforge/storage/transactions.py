@@ -4,8 +4,12 @@ from typing import Self
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from localforge.services.audit import AuditService
+from localforge.services.coordination import CoordinationService
 from localforge.services.execution import ExecutionService
+from localforge.services.memory import MemoryService
+from localforge.services.model_calls import ModelCallLedgerService
 from localforge.services.project import ProjectService
+from localforge.services.routing import ModelRoutingService
 from localforge.services.safety import SafetyService
 from localforge.services.task import TaskService
 from localforge.storage.database import DatabaseManager, db_manager
@@ -27,6 +31,10 @@ class UnitOfWork:
         self.executions: ExecutionService | None = None
         self.audits: AuditService | None = None
         self.safety: SafetyService | None = None
+        self.routing: ModelRoutingService | None = None
+        self.memory: MemoryService | None = None
+        self.model_calls: ModelCallLedgerService | None = None
+        self.coordination: CoordinationService | None = None
 
     async def __aenter__(self) -> Self:
         self.session = await self.db_manager.get_session()
@@ -35,6 +43,10 @@ class UnitOfWork:
         self.executions = ExecutionService(self.session)
         self.audits = AuditService(self.session)
         self.safety = SafetyService(self.session)
+        self.routing = ModelRoutingService(self.session)
+        self.memory = MemoryService(self.session)
+        self.model_calls = ModelCallLedgerService(self.session)
+        self.coordination = CoordinationService(self.session)
         return self
 
     async def __aexit__(

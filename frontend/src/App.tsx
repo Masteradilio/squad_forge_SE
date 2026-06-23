@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   apiClient,
   type Project,
@@ -12,6 +12,13 @@ import {
   type ImportPRDResult,
   type PRDetails,
   type AgentDetails,
+  type MemoryFact,
+  type ModelRoute,
+  type ModelMetric,
+  type ChiefEngineerUsage,
+  type ProjectSettings,
+  type SkillDefinition,
+  type WorktreeInfo,
 } from './api/client';
 import { useProjectEvents, type LifecycleEventPayload } from './api/events';
 import { Card } from './components/Card';
@@ -28,6 +35,7 @@ const wouldCreateCycle = (
   newDeps: number[],
   allTasks: Task[]
 ): boolean => {
+  const tasksById = new Map(allTasks.map((task) => [task.id, task]));
   const visited = new Set<number>();
   const queue = [...newDeps];
   while (queue.length > 0) {
@@ -35,7 +43,7 @@ const wouldCreateCycle = (
     if (current === taskId) return true;
     if (!visited.has(current)) {
       visited.add(current);
-      const task = allTasks.find((t) => t.id === current);
+      const task = tasksById.get(current);
       if (task && task.dependency_task_ids) {
         queue.push(...task.dependency_task_ids);
       }
@@ -43,6 +51,20 @@ const wouldCreateCycle = (
   }
   return false;
 };
+
+const PIPELINE_ROLES = [
+  'Planner',
+  'Specifier',
+  'Coder',
+  'Cleaner',
+  'Tester',
+  'Fixer',
+  'Reviewer',
+  'Architect',
+  'Hardener',
+  'QA',
+  'PRWriter',
+];
 
 
 type Tab =
@@ -69,6 +91,11 @@ export default function App() {
   const [runs, setRuns] = useState<Run[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [models, setModels] = useState<string[]>([]);
+  const [worktrees, setWorktrees] = useState<WorktreeInfo[]>([]);
+  const [modelMetrics, setModelMetrics] = useState<ModelMetric[]>([]);
+  const [chiefEngineerUsage, setChiefEngineerUsage] = useState<ChiefEngineerUsage | null>(null);
+  const [projectSettings, setProjectSettings] = useState<ProjectSettings | null>(null);
+  const [auditExport, setAuditExport] = useState('');
   const [policy, setPolicy] = useState<Policy | null>(null);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [taskArtifacts, setTaskArtifacts] = useState<Artifact[]>([]);
@@ -115,105 +142,119 @@ export default function App() {
   const [agentDetailTab, setAgentDetailTab] = useState<'context' | 'logs' | 'handoffs'>('context');
 
   // Skills and Memory states
-  const [projectMemory, setProjectMemory] = useState([
-    {
-      id: 1,
-      fact: 'Project database is SQLite stored locally at backend/dev.db',
-      pinned: true,
-      status: 'active'
-    },
-    {
-      id: 2,
-      fact: 'Frontend SPA is written in React + TypeScript using Vite building tool',
-      pinned: false,
-      status: 'active'
-    },
-    {
-      id: 3,
-      fact: 'FastAPI backend executes on port 8000 and exposes CORS/Gzip handlers',
-      pinned: false,
-      status: 'stale'
-    },
-    {
-      id: 4,
-      fact: 'Security Policy default name is unattended_conservative ruleset',
-      pinned: true,
-      status: 'active'
-    }
-  ]);
+  const [projectMemory, setProjectMemory] = useState<MemoryFact[]>([]);
+  const [modelRoutes, setModelRoutes] = useState<ModelRoute[]>([]);
+  const [routeDrafts, setRouteDrafts] = useState<Record<string, Partial<ModelRoute>>>({});
+  const [memoryExport, setMemoryExport] = useState('');
+  const [memoryImport, setMemoryImport] = useState('');
+  const [memoryFormat, setMemoryFormat] = useState<'json' | 'yaml'>('json');
 
-  const [skills, setSkills] = useState([
-    {
-      name: 'localforge-os',
-      trigger: 'When implementing structural codebase/PRD changes',
-      status: 'Active'
-    },
-    {
-      name: 'android-cli',
-      trigger: 'On android CLI building, toolchain orchestration commands',
-      status: 'Active'
-    },
-    {
-      name: 'alphafold-database',
-      trigger: 'When resolving UniProt IDs for protein structure query',
-      status: 'Cached'
-    },
-    {
-      name: 'chembl-database',
-      trigger: 'When querying bioactive molecules bioactivity profiles',
-      status: 'Disabled'
-    },
-    {
-      name: 'pubmed-database',
-      trigger: 'On literary citation and scientific abstracts retrieval',
-      status: 'Active'
-    }
-  ]);
+  const [skills, setSkills] = useState<SkillDefinition[]>([]);
 
   const [newMemoryFact, setNewMemoryFact] = useState('');
+  const [newMemoryKind, setNewMemoryKind] = useState('stack_fact');
   const [newSkillName, setNewSkillName] = useState('');
   const [newSkillTrigger, setNewSkillTrigger] = useState('');
 
-  const handleAddMemoryFact = () => {
-    if (!newMemoryFact.trim()) return;
-    const newFact = {
-      id: Date.now(),
+  const handleToggleSkill = async (skill: SkillDefinition) => {
+    if (!activeProject) return;
+    const updated = await apiClient.updateSkill(activeProject.id, skill.name, {
+      ...skill,
+      enabled: !(skill.enabled ?? true),
+    });
+    setSkills((prev) => prev.map((item) => (item.name === skill.name ? updated : item)));
+  };
+
+  const handleAddMemoryFact = async () => {
+    if (!activeProject || !newMemoryFact.trim()) return;
+    const newFact = await apiClient.createMemoryFact(activeProject.id, {
       fact: newMemoryFact.trim(),
+      kind: newMemoryKind,
       pinned: false,
-      status: 'active'
-    };
+      status: 'active',
+      source: 'manual',
+      tags: [],
+    });
     setProjectMemory((prev) => [newFact, ...prev]);
     setNewMemoryFact('');
   };
 
-  const handlePinMemory = (id: number) => {
-    setProjectMemory((prev) =>
-      prev.map((m) => (m.id === id ? { ...m, pinned: !m.pinned } : m))
-    );
+  const handlePinMemory = async (item: MemoryFact) => {
+    const updated = await apiClient.updateMemoryFact(item.id, { pinned: !item.pinned });
+    setProjectMemory((prev) => prev.map((m) => (m.id === item.id ? updated : m)));
   };
 
-  const handleStaleMemory = (id: number) => {
-    setProjectMemory((prev) =>
-      prev.map((m) =>
-        m.id === id
-          ? { ...m, status: m.status === 'stale' ? 'active' : 'stale' }
-          : m
-      )
-    );
+  const handleStaleMemory = async (item: MemoryFact) => {
+    const status = item.status === 'stale' ? 'active' : 'stale';
+    const updated = await apiClient.updateMemoryFact(item.id, { status });
+    setProjectMemory((prev) => prev.map((m) => (m.id === item.id ? updated : m)));
   };
 
-  const handleDeleteMemory = (id: number) => {
+  const handleDeleteMemory = async (id: number) => {
+    await apiClient.deleteMemoryFact(id);
     setProjectMemory((prev) => prev.filter((m) => m.id !== id));
   };
 
-  const handleAddSkill = () => {
-    if (!newSkillName.trim() || !newSkillTrigger.trim()) return;
-    const newSkill = {
+  const handleRouteDraftChange = (
+    role: string,
+    field: 'provider' | 'model_profile_id' | 'endpoint_url' | 'fallback_model_profile_id',
+    value: string
+  ) => {
+    setRouteDrafts((prev) => ({
+      ...prev,
+      [role]: {
+        ...prev[role],
+        role,
+        [field]: value,
+      },
+    }));
+  };
+
+  const handleSaveRoute = async (role: string) => {
+    if (!activeProject) return;
+    const draft = routeDrafts[role];
+    const model = draft?.model_profile_id || `${role.toLowerCase()}-local`;
+    const saved = await apiClient.saveModelRoute(activeProject.id, {
+      role,
+      provider: draft?.provider || 'localforge',
+      model_profile_id: model,
+      endpoint_url: draft?.endpoint_url || undefined,
+      fallback_model_profile_id: draft?.fallback_model_profile_id || undefined,
+    });
+    setModelRoutes((prev) => {
+      const rest = prev.filter((route) => route.role !== role);
+      return [...rest, saved].sort((a, b) => a.role.localeCompare(b.role));
+    });
+    setRouteDrafts((prev) => ({ ...prev, [role]: saved }));
+  };
+
+  const handleExportMemory = async () => {
+    if (!activeProject) return;
+    setMemoryExport(await apiClient.exportMemory(activeProject.id, memoryFormat));
+  };
+
+  const handleImportMemory = async () => {
+    if (!activeProject || !memoryImport.trim()) return;
+    const imported = await apiClient.importMemory(activeProject.id, memoryFormat, memoryImport);
+    setProjectMemory((prev) => [...imported, ...prev]);
+    setMemoryImport('');
+  };
+
+  const handleAddSkill = async () => {
+    if (!activeProject || !newSkillName.trim() || !newSkillTrigger.trim()) return;
+    const newSkill = await apiClient.createSkill(activeProject.id, {
       name: newSkillName.trim(),
-      trigger: newSkillTrigger.trim(),
-      status: 'Active'
-    };
-    setSkills((prev) => [newSkill, ...prev]);
+      purpose: newSkillTrigger.trim(),
+      triggers: newSkillTrigger
+        .split(',')
+        .map((part) => part.trim())
+        .filter(Boolean),
+      allowed_actions: ['read project context'],
+      expected_artifacts: ['review.md'],
+      failure_modes: ['trigger mismatch'],
+      examples: [newSkillTrigger.trim()],
+    });
+    setSkills((prev) => [newSkill, ...prev.filter((skill) => skill.name !== newSkill.name)]);
     setNewSkillName('');
     setNewSkillTrigger('');
   };
@@ -552,8 +593,30 @@ export default function App() {
       apiClient.fetchPolicy(activeProject.id, 'default').catch(() => null),
       apiClient.fetchPendingApprovals(activeProject.id).catch(() => []),
       apiClient.fetchEpics(activeProject.id).catch(() => []),
+      apiClient.fetchModelRoutes(activeProject.id).catch(() => []),
+      apiClient.fetchMemoryFacts(activeProject.id).catch(() => []),
+      apiClient.fetchSkills(activeProject.id).catch(() => []),
+      apiClient.fetchWorktrees(activeProject.id).catch(() => []),
+      apiClient.fetchModelMetrics(activeProject.id).catch(() => []),
+      apiClient.fetchChiefEngineerUsage(activeProject.id).catch(() => null),
+      apiClient.fetchProjectSettings(activeProject.id).catch(() => null),
     ])
-      .then(([tData, rData, aData, mData, pData, paData, eData]) => {
+      .then(([
+        tData,
+        rData,
+        aData,
+        mData,
+        pData,
+        paData,
+        eData,
+        mrData,
+        memData,
+        skillsData,
+        worktreeData,
+        modelMetricData,
+        chiefEngineerData,
+        settingsData,
+      ]) => {
         setTasks(tData);
         setRuns(rData);
         setAgents(aData);
@@ -561,6 +624,16 @@ export default function App() {
         setPolicy(pData);
         setPendingApprovals(paData);
         setEpics(eData);
+        setModelRoutes(mrData);
+        setRouteDrafts(
+          Object.fromEntries(mrData.map((route) => [route.role, route]))
+        );
+        setProjectMemory(memData);
+        setSkills(skillsData);
+        setWorktrees(worktreeData);
+        setModelMetrics(modelMetricData);
+        setChiefEngineerUsage(chiefEngineerData);
+        setProjectSettings(settingsData);
         setError(null);
       })
       .catch((err) => {
@@ -2702,10 +2775,73 @@ export default function App() {
       case 'worktrees':
         return (
           <Card title="Git Worktree Manager">
-            <EmptyState
-              title="Filesystem Sandboxes"
-              message="View active git task branches and clean up orphan directories."
-            />
+            {worktrees.length === 0 ? (
+              <EmptyState
+                title="No task worktrees"
+                message="Task worktrees appear here after scheduler setup."
+              />
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {worktrees.map((item) => (
+                  <div
+                    key={`${item.task_id}-${item.path}`}
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: '110px 1fr 120px 90px 160px',
+                      gap: '12px',
+                      alignItems: 'center',
+                      padding: '12px',
+                      border: '1px solid var(--border-color)',
+                      borderRadius: '8px',
+                    }}
+                  >
+                    <strong>{item.task_key}</strong>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontFamily: 'monospace', fontSize: '12px' }}>
+                        {item.branch || 'no branch'}
+                      </div>
+                      <div style={{
+                        color: 'var(--text-muted)',
+                        fontFamily: 'monospace',
+                        fontSize: '11px',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}>
+                        {item.path}
+                      </div>
+                    </div>
+                    <StatusBadge status={item.task_status} />
+                    <span style={{ color: item.dirty ? 'var(--color-warning)' : 'var(--color-success)' }}>
+                      {item.dirty ? 'dirty' : 'clean'}
+                    </span>
+                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                      <Button
+                        variant="secondary"
+                        disabled={!item.cleanup_eligible}
+                        onClick={async () => {
+                          await apiClient.cleanupWorktree(item.task_id);
+                          loadProjectData();
+                        }}
+                      >
+                        Cleanup
+                      </Button>
+                      <Button
+                        variant="warning"
+                        disabled={!item.last_commit}
+                        onClick={async () => {
+                          if (!item.last_commit) return;
+                          await apiClient.revertWorktree(item.task_id, item.last_commit);
+                          loadProjectData();
+                        }}
+                      >
+                        Revert
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </Card>
         );
 
@@ -2801,7 +2937,137 @@ export default function App() {
                   </div>
                 </Card>
               </div>
+
+              <div style={{ flex: 1, minWidth: '280px' }}>
+                <Card title="Chief Engineer Usage">
+                  {!chiefEngineerUsage ? (
+                    <EmptyState
+                      title="Usage unavailable"
+                      message="Paid model usage could not be loaded."
+                    />
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '10px' }}>
+                        {[
+                          ['Provider', chiefEngineerUsage.provider],
+                          ['Model', chiefEngineerUsage.model],
+                          ['API key', chiefEngineerUsage.api_key_configured ? 'configured' : 'missing'],
+                          ['Calls', String(chiefEngineerUsage.calls.length)],
+                          [
+                            'Input tokens',
+                            String(chiefEngineerUsage.calls.reduce((sum, call) => sum + call.input_tokens, 0)),
+                          ],
+                          [
+                            'Output tokens',
+                            String(chiefEngineerUsage.calls.reduce((sum, call) => sum + call.output_tokens, 0)),
+                          ],
+                          [
+                            'Estimated cost',
+                            `$${chiefEngineerUsage.calls
+                              .reduce((sum, call) => sum + call.estimated_cost_usd, 0)
+                              .toFixed(6)}`,
+                          ],
+                          ['Enabled', chiefEngineerUsage.enabled ? 'yes' : 'no'],
+                        ].map(([label, value]) => (
+                          <div
+                            key={label}
+                            style={{
+                              padding: '10px',
+                              border: '1px solid var(--border-color)',
+                              borderRadius: '8px',
+                              backgroundColor: 'rgba(255,255,255,0.01)',
+                              minWidth: 0,
+                            }}
+                          >
+                            <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                              {label}
+                            </div>
+                            <div style={{ fontSize: '12px', fontFamily: 'monospace', overflowWrap: 'anywhere' }}>
+                              {value || 'n/a'}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <CodeBlock
+                        code={JSON.stringify(chiefEngineerUsage.budget || {}, null, 2)}
+                      />
+                    </div>
+                  )}
+                </Card>
+              </div>
             </div>
+
+            <Card title="Visual Routing Editor">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {PIPELINE_ROLES.map((role) => {
+                  const draft: Partial<ModelRoute> =
+                    routeDrafts[role] || modelRoutes.find((r) => r.role === role) || {};
+                  return (
+                    <div
+                      key={role}
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: '120px 1fr 1fr 1fr auto',
+                        gap: '10px',
+                        alignItems: 'center',
+                        padding: '10px',
+                        border: '1px solid var(--border-color)',
+                        borderRadius: '8px',
+                        backgroundColor: 'rgba(255,255,255,0.01)'
+                      }}
+                    >
+                      <strong style={{ fontSize: '13px' }}>{role}</strong>
+                      <input
+                        value={draft.provider || 'localforge'}
+                        onChange={(e) => handleRouteDraftChange(role, 'provider', e.target.value)}
+                        style={{
+                          padding: '8px',
+                          borderRadius: '6px',
+                          border: '1px solid var(--border-color)',
+                          backgroundColor: 'var(--bg-input)',
+                          color: 'var(--text-primary)'
+                        }}
+                      />
+                      <input
+                        value={draft.model_profile_id || ''}
+                        placeholder={`${role.toLowerCase()}-local`}
+                        onChange={(e) =>
+                          handleRouteDraftChange(role, 'model_profile_id', e.target.value)
+                        }
+                        style={{
+                          padding: '8px',
+                          borderRadius: '6px',
+                          border: '1px solid var(--border-color)',
+                          backgroundColor: 'var(--bg-input)',
+                          color: 'var(--text-primary)'
+                        }}
+                      />
+                      <input
+                        value={draft.endpoint_url || ''}
+                        placeholder="endpoint optional"
+                        onChange={(e) =>
+                          handleRouteDraftChange(role, 'endpoint_url', e.target.value)
+                        }
+                        style={{
+                          padding: '8px',
+                          borderRadius: '6px',
+                          border: '1px solid var(--border-color)',
+                          backgroundColor: 'var(--bg-input)',
+                          color: 'var(--text-primary)'
+                        }}
+                      />
+                      <Button
+                        variant="secondary"
+                        onClick={() => handleSaveRoute(role)}
+                        style={{ padding: '8px 12px' }}
+                      >
+                        Save
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
 
             <Card title="Agent Role Mappings (Routing Model configuration)">
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -2860,6 +3126,36 @@ export default function App() {
                 )}
               </div>
             </Card>
+
+            <Card title="Model Performance Metrics">
+              {modelMetrics.length === 0 ? (
+                <EmptyState
+                  title="No model metrics"
+                  message="Metrics appear after role routes or model usage are recorded."
+                />
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
+                  {modelMetrics.map((metric) => (
+                    <div
+                      key={`${metric.role}-${metric.model_profile_id}`}
+                      style={{
+                        padding: '12px',
+                        border: '1px solid var(--border-color)',
+                        borderRadius: '8px',
+                      }}
+                    >
+                      <strong>{metric.role}</strong>
+                      <div style={{ fontFamily: 'monospace', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                        {metric.model_profile_id}
+                      </div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '8px' }}>
+                        Success {(metric.success_rate * 100).toFixed(0)}% · Failure {(metric.failure_rate * 100).toFixed(0)}%
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Card>
           </div>
         );
 
@@ -2898,6 +3194,27 @@ export default function App() {
           } catch (err: any) {
             alert(err.message || 'Failed to submit decision.');
           }
+        };
+
+        const handleLockProject = async () => {
+          if (!activeProject) return;
+          await apiClient.lockProject(activeProject.id);
+          loadProjectData();
+        };
+
+        const handleExportAudit = async () => {
+          if (!activeProject) return;
+          setAuditExport(await apiClient.exportAuditEvents(activeProject.id));
+        };
+
+        const handleRevertUnsafeWorktree = async () => {
+          const target = worktrees.find((item) => item.dirty && item.last_commit);
+          if (!target || !target.last_commit) {
+            alert('No dirty worktree with a checkpoint commit was found.');
+            return;
+          }
+          await apiClient.revertWorktree(target.task_id, target.last_commit);
+          loadProjectData();
         };
 
         // Extract policy fields
@@ -3016,6 +3333,39 @@ export default function App() {
                       }}>
                         Halts the active run executor immediately by canceling the task scheduler.
                       </p>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '12px' }}>
+                        <Button variant="warning" onClick={handleLockProject}>
+                          Lock Project
+                        </Button>
+                        <Button variant="secondary" onClick={handleRevertUnsafeWorktree}>
+                          Revert Unsafe Worktree
+                        </Button>
+                      </div>
+                      <Button
+                        variant="secondary"
+                        onClick={handleExportAudit}
+                        style={{ width: '100%', marginTop: '8px' }}
+                      >
+                        Export Audit Log
+                      </Button>
+                      {auditExport && (
+                        <textarea
+                          value={auditExport}
+                          readOnly
+                          rows={5}
+                          style={{
+                            width: '100%',
+                            marginTop: '8px',
+                            padding: '8px',
+                            borderRadius: '6px',
+                            border: '1px solid var(--border-color)',
+                            backgroundColor: 'var(--bg-input)',
+                            color: 'var(--text-secondary)',
+                            fontFamily: 'monospace',
+                            fontSize: '11px',
+                          }}
+                        />
+                      )}
                     </div>
                   </div>
                 </Card>
@@ -3510,30 +3860,42 @@ export default function App() {
                               padding: '2px 6px',
                               borderRadius: '4px',
                               backgroundColor:
-                                skill.status === 'Active'
+                                skill.source === 'builtin'
                                   ? 'rgba(76, 175, 80, 0.08)'
-                                  : skill.status === 'Cached'
-                                  ? 'rgba(33, 150, 243, 0.08)'
-                                  : 'rgba(239, 83, 80, 0.08)',
+                                  : 'rgba(33, 150, 243, 0.08)',
                               border:
-                                skill.status === 'Active'
+                                skill.source === 'builtin'
                                   ? '1px solid rgba(76, 175, 80, 0.2)'
-                                  : skill.status === 'Cached'
-                                  ? '1px solid rgba(33, 150, 243, 0.2)'
-                                  : '1px solid rgba(239, 83, 80, 0.2)',
+                                  : '1px solid rgba(33, 150, 243, 0.2)',
                               color:
-                                skill.status === 'Active'
+                                skill.source === 'builtin'
                                   ? 'var(--color-success)'
-                                  : skill.status === 'Cached'
-                                  ? 'var(--color-primary)'
-                                  : 'var(--color-danger)'
+                                  : 'var(--color-primary)'
                             }}>
-                              {skill.status}
+                              {skill.source}
                             </span>
                           </div>
                           <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                            <strong>Trigger rule:</strong> {skill.trigger}
+                            <strong>Purpose:</strong> {skill.purpose}
                           </span>
+                          <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                            <strong>Triggers:</strong> {skill.triggers.join(', ') || 'none'}
+                          </span>
+                          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                            <strong>Status:</strong> {(skill.enabled ?? true) ? 'enabled' : 'disabled'} ·{' '}
+                            <strong>Success:</strong>{' '}
+                            {skill.success_rate == null ? 'n/a' : `${Math.round(skill.success_rate * 100)}%`} ·{' '}
+                            <strong>Last used:</strong> {skill.last_used_at || 'never'}
+                          </span>
+                        </div>
+                        <div>
+                          <Button
+                            variant={(skill.enabled ?? true) ? 'warning' : 'success'}
+                            onClick={() => handleToggleSkill(skill)}
+                            style={{ padding: '6px 10px', fontSize: '12px' }}
+                          >
+                            {(skill.enabled ?? true) ? 'Disable' : 'Enable'}
+                          </Button>
                         </div>
                       </div>
                     ))}
@@ -3542,7 +3904,7 @@ export default function App() {
               </div>
 
               {/* Right Column: Register a New Skill Form */}
-              <div style={{ flex: 1, minWidth: '280px' }}>
+              <div style={{ flex: 1, minWidth: '280px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 <Card title="Register New Workspace Skill">
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                     <div>
@@ -3608,7 +3970,7 @@ export default function App() {
                         paddingBottom: '10px'
                       }}
                     >
-                      🚀 Register Skill
+                      Register Skill
                     </Button>
                   </div>
                 </Card>
@@ -3668,9 +4030,16 @@ export default function App() {
                               {item.fact}
                             </p>
                             <div style={{ display: 'flex', gap: '8px', fontSize: '10px' }}>
+                              <span style={{
+                                color: 'var(--text-muted)',
+                                fontWeight: 600,
+                                textTransform: 'uppercase'
+                              }}>
+                                {item.kind.replace('_', ' ')}
+                              </span>
                               {item.pinned && (
                                 <span style={{ color: 'var(--color-warning)', fontWeight: 600 }}>
-                                  📌 PINNED
+                                  PINNED
                                 </span>
                               )}
                               <span style={{
@@ -3688,14 +4057,14 @@ export default function App() {
                           <div style={{ display: 'flex', gap: '8px' }}>
                             <Button
                               variant="ghost"
-                              onClick={() => handlePinMemory(item.id)}
+                              onClick={() => handlePinMemory(item)}
                               style={{ padding: '4px 8px', fontSize: '12px' }}
                             >
-                              {item.pinned ? '📌 Unpin' : '📌 Pin'}
+                              {item.pinned ? 'Unpin' : 'Pin'}
                             </Button>
                             <Button
                               variant="secondary"
-                              onClick={() => handleStaleMemory(item.id)}
+                              onClick={() => handleStaleMemory(item)}
                               style={{ padding: '4px 8px', fontSize: '12px' }}
                             >
                               {item.status === 'stale' ? 'Activate' : 'Mark Stale'}
@@ -3705,7 +4074,7 @@ export default function App() {
                               onClick={() => handleDeleteMemory(item.id)}
                               style={{ padding: '4px 8px', fontSize: '12px' }}
                             >
-                              🗑️ Delete
+                              Delete
                             </Button>
                           </div>
                         </div>
@@ -3716,9 +4085,40 @@ export default function App() {
               </div>
 
               {/* Right Column: Register a New Fact Form */}
-              <div style={{ flex: 1, minWidth: '280px' }}>
+              <div style={{ flex: 1, minWidth: '280px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 <Card title="Add Project Fact">
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    <div>
+                      <label style={{
+                        display: 'block',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        color: 'var(--text-muted)',
+                        marginBottom: '6px'
+                      }}>
+                        MEMORY TYPE
+                      </label>
+                      <select
+                        value={newMemoryKind}
+                        onChange={(e) => setNewMemoryKind(e.target.value)}
+                        style={{
+                          width: '100%',
+                          padding: '10px',
+                          borderRadius: '6px',
+                          border: '1px solid var(--border-color)',
+                          backgroundColor: 'var(--bg-input)',
+                          color: 'var(--text-primary)',
+                          fontSize: '13px'
+                        }}
+                      >
+                        <option value="stack_fact">Stack fact</option>
+                        <option value="test_command">Test command</option>
+                        <option value="user_preference">User preference</option>
+                        <option value="known_pitfall">Known pitfall</option>
+                        <option value="resolved_blocker">Resolved blocker</option>
+                        <option value="model_performance_note">Model performance note</option>
+                      </select>
+                    </div>
                     <div>
                       <label style={{
                         display: 'block',
@@ -3755,7 +4155,63 @@ export default function App() {
                         paddingBottom: '10px'
                       }}
                     >
-                      ➕ Add Fact
+                      Add Fact
+                    </Button>
+                  </div>
+                </Card>
+
+                <Card title="Memory Backup">
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <select
+                      value={memoryFormat}
+                      onChange={(e) => setMemoryFormat(e.target.value as 'json' | 'yaml')}
+                      style={{
+                        padding: '8px',
+                        borderRadius: '6px',
+                        border: '1px solid var(--border-color)',
+                        backgroundColor: 'var(--bg-input)',
+                        color: 'var(--text-primary)'
+                      }}
+                    >
+                      <option value="json">JSON</option>
+                      <option value="yaml">YAML</option>
+                    </select>
+                    <Button variant="secondary" onClick={handleExportMemory}>
+                      Export
+                    </Button>
+                    <textarea
+                      value={memoryExport}
+                      readOnly
+                      rows={5}
+                      style={{
+                        width: '100%',
+                        padding: '10px',
+                        borderRadius: '6px',
+                        border: '1px solid var(--border-color)',
+                        backgroundColor: 'var(--bg-input)',
+                        color: 'var(--text-secondary)',
+                        fontFamily: 'monospace',
+                        fontSize: '12px'
+                      }}
+                    />
+                    <textarea
+                      value={memoryImport}
+                      onChange={(e) => setMemoryImport(e.target.value)}
+                      placeholder="Paste backup payload"
+                      rows={5}
+                      style={{
+                        width: '100%',
+                        padding: '10px',
+                        borderRadius: '6px',
+                        border: '1px solid var(--border-color)',
+                        backgroundColor: 'var(--bg-input)',
+                        color: 'var(--text-primary)',
+                        fontFamily: 'monospace',
+                        fontSize: '12px'
+                      }}
+                    />
+                    <Button variant="primary" onClick={handleImportMemory}>
+                      Import
                     </Button>
                   </div>
                 </Card>
@@ -3764,16 +4220,57 @@ export default function App() {
           </div>
         );
 
+      case 'settings':
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <Card title="Project Settings">
+              {!projectSettings ? (
+                <EmptyState title="Settings unavailable" message="Project settings could not be loaded." />
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px' }}>
+                  {[
+                    ['Project path', projectSettings.project_path],
+                    ['Default branch', projectSettings.default_branch],
+                    ['Git provider', projectSettings.git_provider],
+                    ['PR provider', projectSettings.pr_provider],
+                    ['Model endpoint', projectSettings.model_endpoint],
+                    ['Sandbox mode', projectSettings.sandbox_mode],
+                  ].map(([label, value]) => (
+                    <div key={label} style={{ padding: '12px', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                        {label}
+                      </div>
+                      <div style={{ fontFamily: 'monospace', fontSize: '12px', overflowWrap: 'anywhere' }}>
+                        {value || 'not configured'}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Card>
+            <Card title="Resource Limits">
+              <CodeBlock
+                code={JSON.stringify(projectSettings?.resource_limits || {}, null, 2)}
+              />
+            </Card>
+            <Card title="UI Preferences">
+              <CodeBlock
+                code={JSON.stringify(projectSettings?.ui_preferences || {}, null, 2)}
+              />
+            </Card>
+          </div>
+        );
+
       default:
         return (
-          <Card title={currentTab.toUpperCase().replace('-', ' ')}>
+          <Card title="View">
             <EmptyState title="Tab View under construction" message="Phase updates will deploy view states here." />
           </Card>
         );
     }
   };
 
-  const timelineItems: TimelineItem[] = events.map((ev) => {
+  const timelineItems: TimelineItem[] = useMemo(() => events.map((ev) => {
     let type: TimelineItem['type'] = 'info';
     if (ev.event_type.includes('succeeded') || ev.event_type.includes('allowed')) {
       type = 'success';
@@ -3788,7 +4285,7 @@ export default function App() {
       content: <pre style={{ fontSize: '11px' }}>{JSON.stringify(ev.payload, null, 2)}</pre>,
       type,
     };
-  });
+  }), [events]);
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: 'var(--bg-app)' }}>

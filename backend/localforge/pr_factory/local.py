@@ -41,7 +41,10 @@ class LocalPRFactory:
 
         artifacts = await self.uow.audits.list_artifacts_for_task_run(task_run_id)
         artifact_paths = {artifact.path for artifact in artifacts}
-        reasons = self._readiness_reasons(task_run.branch_name, artifact_paths)
+        changed_files = task.metadata.get("changed_files", [])
+        if not isinstance(changed_files, list):
+            changed_files = []
+        reasons = self._readiness_reasons(task_run.branch_name, artifact_paths, changed_files)
         pr_body = self._render_pr_body(task, task_run, sorted(artifact_paths), reasons)
 
         pr_artifact = await ArtifactStore(self.uow).write_artifact(
@@ -87,10 +90,17 @@ class LocalPRFactory:
             reasons=reasons,
         )
 
-    def _readiness_reasons(self, branch_name: str | None, artifact_paths: set[str]) -> list[str]:
+    def _readiness_reasons(
+        self,
+        branch_name: str | None,
+        artifact_paths: set[str],
+        changed_files: list[object],
+    ) -> list[str]:
         reasons: list[str] = []
         if not branch_name:
             reasons.append("branch missing")
+        if not any(isinstance(path, str) and path.strip() for path in changed_files):
+            reasons.append("changed files missing")
         required_suffixes = ("diff.patch", "tests.md", "risk.md")
         for suffix in required_suffixes:
             if not any(path.endswith(suffix) for path in artifact_paths):
@@ -142,6 +152,11 @@ class LocalPRFactory:
                 f"- [{'x' if has_diff else ' '}] Diff artifact exists",
                 f"- [{'x' if has_tests else ' '}] Test artifact exists",
                 f"- [{'x' if not reasons else ' '}] Local PR-ready gates pass",
+                "",
+                "## Branch Protection",
+                "- Target branch: main",
+                "- Required before merge: one PR review, green CI, no direct pushes",
+                "- LocalForge PR Factory status: ready for protected-branch review flow",
                 "",
             ]
         )

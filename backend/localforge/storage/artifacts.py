@@ -55,7 +55,7 @@ class ArtifactStore:
 
         Disk path: .localforge/artifacts/runs/<run-id>/tasks/<task-key>/<filename>
         """
-        if filename not in ALLOWED_FILENAMES:
+        if not _is_allowed_filename(filename):
             raise ArtifactStoreError(
                 f"Filename '{filename}' is not in the allowed list: {ALLOWED_FILENAMES}"
             )
@@ -99,7 +99,7 @@ class ArtifactStore:
 
         # 4. Save metadata to database
         assert self.uow.audits is not None
-        art_type = FILENAME_TO_TYPE[filename]
+        art_type = _artifact_type_for(filename)
         artifact_data = domain.Artifact(
             task_run_id=task_run_id,
             type=art_type,
@@ -118,7 +118,7 @@ class ArtifactStore:
         filename: str,
     ) -> str:
         """Read artifact content from disk."""
-        if filename not in ALLOWED_FILENAMES:
+        if not _is_allowed_filename(filename):
             raise ArtifactStoreError(
                 f"Filename '{filename}' is not in the allowed list: {ALLOWED_FILENAMES}"
             )
@@ -143,3 +143,15 @@ class ArtifactStore:
 
         with open(target_path, encoding="utf-8") as f:
             return f.read()
+
+
+def _is_allowed_filename(filename: str) -> bool:
+    return filename in ALLOWED_FILENAMES or (
+        filename.startswith("role-") and filename.endswith(".md") and "/" not in filename
+    )
+
+
+def _artifact_type_for(filename: str) -> ArtifactType:
+    if filename.startswith("role-") and filename.endswith(".md"):
+        return ArtifactType.ROLE
+    return FILENAME_TO_TYPE[filename]

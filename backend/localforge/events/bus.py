@@ -1,6 +1,6 @@
 import asyncio
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from localforge.models import domain
@@ -18,7 +18,7 @@ class LifecycleEvent:
     id: int | None = None
     run_id: int | None = None
     task_id: int | None = None
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     def compact(self) -> "LifecycleEvent":
         payload: dict[str, Any] = {}

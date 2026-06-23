@@ -1,4 +1,6 @@
 from dataclasses import dataclass
+import os
+import re
 
 from localforge.models.enums import ActionApprovalStatus, TaskStatus
 from localforge.storage import UnitOfWork
@@ -36,6 +38,8 @@ class QualityGateEvaluator:
             reasons.append("missing tests")
         if await self._has_unapproved_protected_changes(task.metadata):
             reasons.append("protected file approval required")
+        if await self._has_likely_secret_changes(task_run_id, task.metadata):
+            reasons.append("likely secret detected")
 
         allowed = not reasons
         if allowed:
@@ -61,6 +65,40 @@ class QualityGateEvaluator:
             and approval.payload.get("path") in protected
             for approval in approvals
         )
+
+    async def _has_likely_secret_changes(
+        self, task_run_id: int, metadata: dict[str, object]
+    ) -> bool:
+        changed_files = metadata.get("changed_files", [])
+        if not isinstance(changed_files, list):
+            return False
+        assert self.uow.tasks is not None
+        task_run = await self.uow.tasks.get_task_run(task_run_id)
+        if not task_run or not task_run.worktree_path:
+            return False
+        patterns = [
+            re.compile(r"(?i)(api[_-]?key|secret|token|password)\s*[:=]\s*['\"]?[A-Za-z0-9_\-]{12,}"),
+            re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH |)PRIVATE KEY-----"),
+        ]
+        for rel_path in changed_files:
+            if not isinstance(rel_path, str):
+                continue
+            target = os.path.realpath(os.path.abspath(os.path.join(task_run.worktree_path, rel_path)))
+            root = os.path.realpath(os.path.abspath(task_run.worktree_path))
+            try:
+                if os.path.commonpath([root, target]) != root:
+                    continue
+            except ValueError:
+                continue
+            if not os.path.isfile(target):
+                continue
+            try:
+                content = open(target, encoding="utf-8").read(64_000)
+            except OSError:
+                continue
+            if any(pattern.search(content) for pattern in patterns):
+                return True
+        return False
 
     async def _move_to_review(self, task_id: int) -> None:
         task = await self.uow.tasks.get_task(task_id)  # type: ignore[union-attr]

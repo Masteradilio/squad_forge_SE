@@ -36,6 +36,7 @@ export function useProjectEvents(
 
     let active = true;
     let eventSource: EventSource | null = null;
+    let reconnectTimer: number | null = null;
 
     const connect = () => {
       if (!active) return;
@@ -52,7 +53,7 @@ export function useProjectEvents(
           setConnected(false);
           eventSource?.close();
           // Reconnect with delay
-          setTimeout(connect, 3000);
+          reconnectTimer = window.setTimeout(connect, 3000);
         }
       };
 
@@ -84,6 +85,9 @@ export function useProjectEvents(
       active = false;
       if (eventSource) {
         eventSource.close();
+      }
+      if (reconnectTimer !== null) {
+        window.clearTimeout(reconnectTimer);
       }
     };
   }, [projectId, onEvent]);

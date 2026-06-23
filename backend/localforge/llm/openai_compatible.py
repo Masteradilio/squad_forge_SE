@@ -54,6 +54,24 @@ class OpenAICompatibleProvider(BaseLLMProvider):
         model: str | None = None,
     ) -> str | AsyncIterator[str]:
         """Execute chat completion request against POST /v1/chat/completions."""
+        from localforge.llm.context import (
+            check_and_increment_llm_calls,
+            get_active_task_run_id,
+            get_llm_limit,
+        )
+
+        task_run_id = get_active_task_run_id()
+        if task_run_id is not None:
+            from localforge.core.config import load_config
+
+            try:
+                config = load_config()
+                default_limit = config.budgets.max_active_model_calls
+            except Exception:
+                default_limit = 50
+            limit = get_llm_limit(task_run_id, default_limit)
+            await check_and_increment_llm_calls(task_run_id, limit)
+
         model_name = model or self.default_model
         if not model_name:
             raise LLMError("No model name configured or supplied in request.")

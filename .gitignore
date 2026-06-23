@@ -24,6 +24,7 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.pip-audit-cache/
 .coverage
 coverage.xml
 htmlcov/
@@ -32,6 +33,7 @@ build/
 *.egg-info/
 .eggs/
 .venv/
+.codex_venv/
 venv/
 ENV/
 env/

@@ -72,12 +72,17 @@ async def run_safe_command(
             if active_run.worktree_path:
                 project_root = active_run.worktree_path
 
-    # 2. Fetch task risk level
+    # 2. Fetch task risk level & sandbox overrides
     risk_level = "low"
+    sandbox_image = None
+    network_enabled = None
     if task_id:
         task = await uow.tasks.get_task(task_id)
         if task:
             risk_level = task.risk_level
+            if task.metadata:
+                sandbox_image = task.metadata.get("sandbox_image")
+                network_enabled = task.metadata.get("network_enabled")
 
     # 3. Create ActionRequest
     request = ActionRequest(
@@ -206,22 +211,24 @@ async def run_safe_command(
 
     # 5. Execute allowed/approved command
     try:
-        proc = await asyncio.create_subprocess_shell(
-            command,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            cwd=project_root,
+        from localforge.core.config import load_config
+        from localforge.sandbox.factory import create_sandbox
+
+        config = load_config()
+        sandbox = create_sandbox(
+            config,
+            project_root,
+            image_override=sandbox_image,
+            network_override=network_enabled,
         )
 
+        await sandbox.create()
         try:
-            stdout_bytes, stderr_bytes = await asyncio.wait_for(proc.communicate(), timeout=timeout)
-        except TimeoutError as e:
-            proc.kill()
-            await proc.wait()
-            raise TimeoutError(f"Command execution timed out after {timeout} seconds.") from e
-
-        stdout_str = stdout_bytes.decode(errors="replace")
-        stderr_str = stderr_bytes.decode(errors="replace")
+            exit_code, stdout_str, stderr_str = await sandbox.execute(
+                command, timeout=timeout
+            )
+        finally:
+            await sandbox.destroy()
 
         # Redact secrets
         redacted_out = redact_secrets(stdout_str)
@@ -239,12 +246,12 @@ async def run_safe_command(
                 "action": "run_command",
                 "command": command,
                 "decision": "ALLOW",
-                "exit_code": proc.returncode,
+                "exit_code": exit_code,
             },
         )
         await uow.audits.append_audit_event(audit)
 
-        return proc.returncode if proc.returncode is not None else -1, redacted_out, redacted_err
+        return exit_code, redacted_out, redacted_err
 
     except Exception as e:
         if isinstance(e, SafetyViolationError) or isinstance(e, asyncio.TimeoutError):

@@ -101,3 +101,18 @@ def test_validate_command_allowed_list():
     safe, reason = validate_command("git status && git commit -m 'done'", policy)
     assert safe is False
     assert "not in the allowed commands" in reason
+
+
+def test_validate_command_absolute_python_executable_matches_policy_prefix():
+    """Verify venv-managed Python executables match the logical python allowlist."""
+    policy = PolicyRules(
+        blocked_commands=[],
+        allowed_commands=["python -m pytest"],
+        protected_paths=[],
+    )
+
+    command = r'"E:\Projetos\local_forge_os\.codex_venv\Scripts\python.exe" -m pytest -q'
+    safe, reason = validate_command(command, policy)
+
+    assert safe is True
+    assert reason == ""

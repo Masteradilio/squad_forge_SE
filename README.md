@@ -1,116 +1,200 @@
-# LocalForge OS — Local-First Autonomous Software Engineering OS
+# LocalForge OS
 
-O **LocalForge OS** é um sistema operacional de engenharia de software autônomo e focado em privacidade (local-first). Ele é projetado para transformar requisitos brutos descritos em um arquivo `PRD.md` (Product Requirement Document) em tarefas de engenharia testáveis, instanciar agentes de IA locais especializados (Planner, Coder, Tester, Reviewer), executar código e testes dentro de sandboxes isolados, aplicar autocorreção de bugs (self-healing) e estruturar propostas de Pull Requests prontas para revisão humana.
+LocalForge OS is an API-led, economy-first AI software engineering harness. It
+turns a PRD into a sprint backlog, routes work across an agent squad, executes
+tasks in isolated worktrees, validates outputs with deterministic gates, attempts
+bounded self-healing, and prepares pull requests for human review.
 
-> [!IMPORTANT]
-> **Privacidade Garantida**: O LocalForge OS foi construído para rodar 100% offline. Ele não possui dependências em tempo de execução com agentes de nuvem ou serviços externos proprietários, assegurando total proteção à propriedade intelectual do seu código fonte.
+The current V3 product direction is documented in
+`docs/MASTER_BACKLOG_V3.md`.
 
----
+## Product Thesis
 
-## 🛠️ Guia Rápido de Instalação e Setup
+LocalForge is no longer designed as a purely local-first autonomous coder. The
+HP 12C validation showed that local models are useful for scoped, cheap,
+verifiable work, but they are not reliable as the primary engine for large UI
+rewrites, architecture decisions, cross-file semantic consistency, and hard
+recovery loops.
 
-O desenvolvimento do LocalForge OS é simplificado através de um utilitário central unificado em Python, compatível com Windows, macOS e Linux.
+The V3 architecture is:
 
-### Pré-requisitos
-- **Python 3.11 ou 3.12+**
-- **Node.js LTS**
-- **Git**
+```text
+API-led, economy-first AI Software Engineering Squad.
+```
 
-### Passo 1: Configuração do Backend
-Execute o script de setup para criar o ambiente virtual, instalar as dependências necessárias e inicializar a pasta de workspace do LocalForge:
-- **Windows (PowerShell)**:
-  ```powershell
-  ./scripts/setup_backend.ps1
-  ```
-- **Linux / macOS / Git Bash**:
-  ```bash
-  ./scripts/setup_backend.sh
-  ```
+The user acts as Product Owner. A large API model acts as Chief Engineer and
+Scrum Master for complex work. Local models remain part of the squad, but only
+for bounded work that the harness can verify cheaply and deterministically.
 
-### Passo 2: Configuração do Frontend (Painel Visual)
-Instale as dependências da aplicação React SPA:
-- **Windows (PowerShell)**:
-  ```powershell
-  ./scripts/setup_frontend.ps1
-  ```
-- **Linux / macOS / Git Bash**:
-  ```bash
-  ./scripts/setup_frontend.sh
-  ```
+## Squad Roles
 
----
+| Squad role | LocalForge role | Default model tier | Responsibility |
+| --- | --- | --- | --- |
+| Product Owner | Human user | Human | Provides PRD, reviews pull requests, accepts product outcomes |
+| Scrum Master + Staff Engineer | Chief Engineer | API large model | Plans work, freezes contracts, handles hard implementation, triages failures |
+| Senior Developer | High-risk Coder | API large/medium model | Complex UI, architecture, large rewrites, multi-file changes |
+| Developer | Bounded Coder | Local medium model | Narrow implementation under frozen contracts |
+| QA Engineer | Tester | Local/deterministic | Focused tests and validation artifacts |
+| Bug Fixer | Fixer | Local first, API when needed | Syntax/import/simple repair locally; semantic or repeated failures escalate |
+| Reviewer | Reviewer | API for final review | Contract-aware PR readiness review |
+| PR Writer | PR artifact agent | Local small model | Summaries, changelog drafts, PR body text |
+| Safety Auditor | Safety Kernel | Deterministic/local | File, command, dependency, budget, and policy enforcement |
 
-## 🚀 Executando o LocalForge OS
+## Economy-First Routing
 
-### 1. Iniciar o Servidor de API (Backend)
-Inicia o servidor local FastAPI na porta `8000`:
+LocalForge routes each task to the cheapest tier that is empirically capable of
+doing it correctly. The router considers task complexity, file size, visual or
+semantic fidelity requirements, previous failures, truncation, timeout history,
+and deterministic validation results.
+
+Typical routing:
+
+- Chief-only: architecture, contract design, hard debugging, large UI rewrites,
+  repeated self-healing failures.
+- Chief-led: planning and review by the Chief Engineer, narrow implementation by
+  local agents.
+- Local-assisted: small isolated changes with strong tests and strict file
+  contracts.
+- Local-only: summaries, simple scaffolds, small test edits, deterministic
+  transformations.
+- Deterministic-only: validation, diff checks, command safety, cost accounting,
+  visual comparison, artifact generation.
+
+## Cost Benchmarking
+
+Every paid model call should be recorded in a cost ledger. Every generated pull
+request should include a benchmark table comparing LocalForge actual cost with
+hypothetical API-only baselines.
+
+The permanent benchmark sources are:
+
+- OpenAI API pricing: <https://openai.com/api/pricing/>
+- Anthropic Claude pricing: <https://platform.claude.com/docs/en/about-claude/pricing>
+- Google Gemini API pricing: <https://ai.google.dev/gemini-api/docs/pricing>
+
+The benchmark is not a claim about the internal billing of Codex, Antigravity,
+Claude Code, Cursor, or any proprietary IDE agent. It is an API-token cost model
+using public pricing pages as refreshable references.
+
+Each PR should eventually report:
+
+| Metric | LocalForge actual | OpenAI API-only | Google API-only | Anthropic API-only |
+| --- | --- | --- | --- | --- |
+| Paid input tokens | | | | |
+| Paid output tokens | | | | |
+| Local estimated tokens | | | | |
+| Large-tier equivalent cost | | | | |
+| Medium-tier equivalent cost | | | | |
+| Small-tier equivalent cost | | | | |
+| Estimated savings | | | | |
+
+At project completion, LocalForge should consolidate all PR-level measurements
+into a final cost rollup showing total API spend, local work handled without API
+cost, cost by role, cost by task, cost by PR, retry/failure costs, and estimated
+savings against the API-only baselines.
+
+## Safety Model
+
+LocalForge keeps the original safety goals:
+
+- isolated worktrees per task;
+- strict file contracts;
+- command validation before execution;
+- bounded repair loops;
+- budget limits for time, tokens, retries, files, and diff size;
+- fail-safe states instead of uncontrolled autonomy;
+- human review before merge.
+
+The V3 change is not weaker safety. It is more realistic routing: expensive
+model intelligence is used where it is needed, while deterministic gates and
+local agents keep cost under control.
+
+## Quick Setup
+
+### Prerequisites
+
+- Python 3.11 or 3.12+
+- Node.js LTS
+- Git
+- Optional: Ollama for local model lanes
+- Optional: OpenRouter-compatible credentials for Chief Engineer API lanes
+
+### Backend
+
+```powershell
+./scripts/setup_backend.ps1
+```
+
+or:
+
 ```bash
-# Via scripts de atalho
-./scripts/run_backend.sh  # ou .ps1 no Windows
+./scripts/setup_backend.sh
+```
 
-# Alternativa direta via utilitário Python
+### Frontend
+
+```powershell
+./scripts/setup_frontend.ps1
+```
+
+or:
+
+```bash
+./scripts/setup_frontend.sh
+```
+
+## Running LocalForge
+
+Start the backend:
+
+```bash
 python manage.py run-backend
 ```
 
-### 2. Iniciar o Painel de Controle Visual (Frontend)
-Inicia o servidor de desenvolvimento React Vite:
-```bash
-# Via scripts de atalho
-./scripts/run_frontend.sh  # ou .ps1 no Windows
+Start the frontend:
 
-# Alternativa direta via utilitário Python
+```bash
 python manage.py run-frontend
 ```
-Abra o navegador em `http://localhost:5173` para acompanhar execuções de agentes em tempo real, gerenciar o backlog e auditar solicitações de segurança do kernel.
 
-### 3. Executar Testes e Linting
-```bash
-# Executar a suíte de testes unitários e de integração
-python manage.py run-tests
+Open the frontend at:
 
-# Executar análises estáticas (Ruff no backend, Eslint no frontend)
-python manage.py lint
+```text
+http://localhost:5173
 ```
 
----
+## Validation
 
-## 🤖 Configurando Modelos de Linguagem Locais
+Use targeted validation while developing:
 
-O LocalForge OS utiliza o **Ollama** para rodar modelos de inteligência artificial de forma local e privada.
+```bash
+python -m pytest backend/tests/<target_test_file>.py -q
+mypy backend
+npm run build --prefix frontend
+```
 
-1. **Instale o Ollama**: Baixe e instale em [ollama.com](https://ollama.com).
-2. **Baixe o Modelo Recomendado**: Recomendamos o uso de modelos da família `Qwen` especializados em código para as tarefas de programação:
-   ```bash
-   ollama run qwen2.5-coder:7b
-   ```
-3. **Mapeamento de Perfis**: Configure seus modelos preferidos no painel de controle (aba **Models**) ou ajustando o arquivo de configuração gerado em `.localforge/config.yaml`.
+Run broader suites only when a phase is ready for regression validation.
 
----
+## Key Documents
 
-## 🛡️ Modelo de Segurança e Execução Autônoma
+- `docs/LocalForge_OS_PRD.md` - product requirements
+- `docs/MASTER_BACKLOG.md` - V1 implementation phases
+- `docs/MASTER_BACKLOG_V2.md` - hybrid Chief Engineer lessons and phases
+- `docs/MASTER_BACKLOG_V3.md` - API-led, economy-first architecture backlog
+- `docs/e2e/HP12C_PRODUCT_VALIDATION_REPORT.md` - HP 12C validation evidence
+- `CHANGELOG.md` - implementation history
 
-Para permitir execuções de longa duração de forma autônoma sem riscos ao sistema hospedeiro, o LocalForge OS implementa um **Safety Kernel** rígido:
+## Current Direction
 
-1. **Filesystem Lock & Isolation**: Quando uma tarefa do backlog é executada por um agente, todas as operações de escrita são restritas à pasta de `worktree` isolada daquela tarefa. Escritas no repositório principal ou em arquivos protegidos (como `.env`) são bloqueadas.
-2. **Command AST Validation**: Subprocessos executados pelos agentes passam por um analisador sintático (AST) que bloqueia encadeamentos de shell (como `&&`, `;`, `|`) e comandos destrutivos (como `rm -rf`).
-3. **Sandboxing (Docker / Local)**: É possível rodar os comandos em contêineres Docker isolados ou em worktrees com fallback seguro para execução local.
-4. **Orçamento de Recursos (Budgets)**: Caso um agente consuma muitas chamadas LLM, altere arquivos demais, crie um diff gigante ou ultrapasse o tempo limite configurado da tarefa, a execução é abortada de forma segura para o estado `FAILED_SAFE`.
+The next strategic work is to implement V3 phases 46-63:
 
-> [!WARNING]
-> **Aviso de Execução Autônoma (Unattended Mode)**: Certifique-se de configurar limites de budget realistas em `.localforge/config.yaml` sob a seção `budgets` para evitar custos excessivos de chamadas e consumo excessivo de recursos do host durante execuções automáticas de longa duração.
-
----
-
-## 📂 Projeto de Amostra (Sample Project)
-
-Fornecemos um projeto de demonstração pré-configurado na pasta `samples/demo-project/`.
-Este subdiretório simula um repositório real contendo:
-- Um arquivo `PRD.md` especificando uma nova funcionalidade simples (Health-check API).
-- Um repositório Git local inicializado.
-
-Você pode usá-lo para testar a pipeline de ponta a ponta e observar a geração automática de tarefas e propostas de Pull Requests prontas para envio.
-
----
-
-## ❓ Resolução de Problemas
-Para problemas relacionados a Ollama indisponível, Docker inativo, erros de arquivos modificados ou chaves do GitHub, consulte o guia completo de [Resolução de Problemas (Troubleshooting)](file:///E:/Projetos/local_forge_os/docs/TROUBLESHOOTING.md).
+- product reframe and squad workflow;
+- seniority-based routing;
+- Chief Engineer execution lane;
+- permanent pricing source registry;
+- token and cost ledger;
+- per-PR cost benchmark artifact;
+- project-level cost rollup;
+- API-only simulation mode;
+- HP 12C recovery trial under V3 routing;
+- medium PRD pilot only after credible HP 12C evidence.

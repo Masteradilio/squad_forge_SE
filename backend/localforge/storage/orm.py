@@ -750,3 +750,107 @@ class SquadORM(Base):
             created_at=d.created_at,
             updated_at=d.updated_at,
         )
+
+
+class PricingSourceORM(Base):
+    __tablename__ = "pricing_sources"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    provider: Mapped[str] = mapped_column(String(100), nullable=False)
+    url: Mapped[str] = mapped_column(String(1024), nullable=False)
+    retrieved_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    notes: Mapped[str] = mapped_column(Text, default="", nullable=False)
+
+    def to_domain(self) -> domain.PricingSource:
+        return domain.PricingSource(
+            id=self.id,
+            provider=self.provider,
+            url=self.url,
+            retrieved_at=self.retrieved_at,
+            notes=self.notes,
+        )
+
+    @classmethod
+    def from_domain(cls, d: domain.PricingSource) -> "PricingSourceORM":
+        return cls(
+            id=d.id,
+            provider=d.provider,
+            url=d.url,
+            retrieved_at=d.retrieved_at,
+            notes=d.notes,
+        )
+
+
+class ModelPricingSnapshotORM(Base):
+    __tablename__ = "model_pricing_snapshots"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    pricing_source_id: Mapped[int] = mapped_column(
+        ForeignKey("pricing_sources.id", ondelete="CASCADE"), nullable=False
+    )
+    model_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    input_price_per_million: Mapped[float] = mapped_column(Float, nullable=False)
+    output_price_per_million: Mapped[float] = mapped_column(Float, nullable=False)
+    cached_input_price_per_million: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    is_manual: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+
+    def to_domain(self) -> domain.ModelPricingSnapshot:
+        return domain.ModelPricingSnapshot(
+            id=self.id,
+            pricing_source_id=self.pricing_source_id,
+            model_name=self.model_name,
+            input_price_per_million=self.input_price_per_million,
+            output_price_per_million=self.output_price_per_million,
+            cached_input_price_per_million=self.cached_input_price_per_million,
+            is_manual=self.is_manual,
+            created_at=self.created_at,
+        )
+
+    @classmethod
+    def from_domain(cls, d: domain.ModelPricingSnapshot) -> "ModelPricingSnapshotORM":
+        return cls(
+            id=d.id,
+            pricing_source_id=d.pricing_source_id,
+            model_name=d.model_name,
+            input_price_per_million=d.input_price_per_million,
+            output_price_per_million=d.output_price_per_million,
+            cached_input_price_per_million=d.cached_input_price_per_million,
+            is_manual=d.is_manual,
+            created_at=d.created_at,
+        )
+
+
+class ModelCapabilityORM(Base):
+    __tablename__ = "model_capabilities"
+
+    model_name: Mapped[str] = mapped_column(String(255), primary_key=True)
+    task_class: Mapped[str] = mapped_column(String(100), primary_key=True)
+    success_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    failure_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    disqualified_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    disqualification_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+
+    def to_domain(self) -> domain.ModelCapability:
+        return domain.ModelCapability(
+            model_name=self.model_name,
+            task_class=self.task_class,
+            success_count=self.success_count,
+            failure_count=self.failure_count,
+            disqualified_until=self.disqualified_until,
+            disqualification_reason=self.disqualification_reason,
+            metadata=self.metadata_json,
+        )
+
+    @classmethod
+    def from_domain(cls, d: domain.ModelCapability) -> "ModelCapabilityORM":
+        return cls(
+            model_name=d.model_name,
+            task_class=d.task_class,
+            success_count=d.success_count,
+            failure_count=d.failure_count,
+            disqualified_until=d.disqualified_until,
+            disqualification_reason=d.disqualification_reason,
+            metadata_json=d.metadata,
+        )

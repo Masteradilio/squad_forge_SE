@@ -29,6 +29,8 @@ import { Alert } from './components/Alert';
 import { Timeline, type TimelineItem } from './components/Timeline';
 import { EmptyState } from './components/EmptyState';
 import { CodeBlock } from './components/CodeBlock';
+import { V3Dashboard } from './components/V3Dashboard';
+
 
 const wouldCreateCycle = (
   taskId: number,
@@ -78,6 +80,7 @@ type Tab =
   | 'skills'
   | 'memory'
   | 'safety'
+  | 'v3-dashboard'
   | 'settings';
 
 export default function App() {
@@ -4220,6 +4223,13 @@ export default function App() {
           </div>
         );
 
+      case 'v3-dashboard':
+        return activeProject ? (
+          <V3Dashboard projectId={activeProject.id} />
+        ) : (
+          <EmptyState title="No Project Selected" message="Please select a project first." />
+        );
+
       case 'settings':
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -4361,6 +4371,7 @@ export default function App() {
               'skills',
               'memory',
               'safety',
+              'v3-dashboard',
               'settings',
             ] as Tab[]
           ).map((tab) => {

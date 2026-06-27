@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 async def test_bootstrap_initialization(db_session: AsyncSession):
     # Verify that schema version table was created and has current version
     version = await get_current_schema_version(db_session)
-    assert version == 5
+    assert version == 6
 
     # Verify that tables like projects, tasks, epics exist by running a simple query
     result = await db_session.execute(text("SELECT COUNT(*) FROM projects"))

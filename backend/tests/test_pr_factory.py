@@ -4,6 +4,7 @@ from localforge.models.enums import RunMode, TaskStatus
 from localforge.pr_factory.github import GitHubPRAdapter
 from localforge.pr_factory.local import LocalPRFactory
 from localforge.services.audit import AuditService
+from localforge.services.cost_benchmark import CostBenchmarkService
 from localforge.services.execution import ExecutionService
 from localforge.services.project import ProjectService
 from localforge.services.task import TaskService
@@ -93,6 +94,7 @@ async def seed_pr_task(db_session, tmp_path):
     uow.tasks = TaskService(db_session)
     uow.executions = ExecutionService(db_session)
     uow.audits = AuditService(db_session)
+    uow.cost_benchmark = CostBenchmarkService(db_session)
     project = await uow.projects.create_project(
         domain.Project(name="PR", root_path=str(tmp_path), default_branch="main")
     )

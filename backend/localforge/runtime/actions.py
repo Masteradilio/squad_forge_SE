@@ -64,6 +64,16 @@ def parse_action_proposals(raw: object) -> list[RuntimeActionProposal]:
 
     proposals: list[RuntimeActionProposal] = []
     for item in raw:
+        if isinstance(item, str):
+            try:
+                decoded = json.loads(item)
+                if isinstance(decoded, dict):
+                    item = decoded
+            except Exception:
+                pass
+        if not isinstance(item, dict):
+            continue
+
         try:
             proposal = RuntimeActionProposal.model_validate(item)
         except ValidationError as exc:
@@ -74,6 +84,7 @@ def parse_action_proposals(raw: object) -> list[RuntimeActionProposal]:
             raise ValueError("run_command action requires command.")
         proposals.append(proposal)
     return proposals
+
 
 
 def _loads_action_payload(raw: str) -> object:
@@ -102,4 +113,9 @@ def normalize_runtime_command(command: str) -> str:
         return f'"{sys.executable}" -m pytest'
     if stripped.startswith("pytest "):
         return f'"{sys.executable}" -m {stripped}'
+    for prefix in ("python -m pytest", "python3 -m pytest"):
+        if stripped == prefix:
+            return f'"{sys.executable}" -m pytest'
+        if stripped.startswith(prefix + " "):
+            return f'"{sys.executable}" -m pytest{stripped[len(prefix):]}'
     return command

@@ -1,0 +1,57 @@
+{
+  "benchmark_name": "SprintBoard Lite V2 vs V3 Comparative Benchmark",
+  "date": "2026-06-27",
+  "prd_file": "docs/PRD_SPRINTBOARD_LITE.md",
+  "status": "BLOCKED",
+  "blockers": [
+    "Committed HEAD is not an executable V2 baseline: backend/localforge/models is absent from the tracked tree."
+  ],
+  "v2_baseline_notice": "Git branch/tag 'v2' or 'v2-baseline' not found. A baseline V2 execution needs to be created before running a comparative benchmark. Using committed HEAD as provisional V2 baseline source. Committed HEAD is not an executable V2 baseline: backend/localforge/models is absent from the tracked tree.",
+  "preflight_checklist": {
+    "docker_or_dev_passed": true,
+    "llm_installed_passed": true,
+    "v2_baseline_ref_passed": true,
+    "task_count_match_passed": true
+  },
+  "runs": [
+    {
+      "run_id": "V2-Run-Real-Blocked",
+      "variant": "V2 Baseline",
+      "database_file": "benchmarks/workspaces/sprintboard-v2/.localforge/localforge.db",
+      "tasks_planned": 18,
+      "tasks_imported": 18,
+      "pr_ready": 0,
+      "failed_safe": 0,
+      "blocked": 18,
+      "human_interventions": 0,
+      "local_model_attempts": 0,
+      "chief_engineer_attempts": 0,
+      "actual_api_cost_usd": 0.0,
+      "run_status": "BLOCKED",
+      "pr_artifacts_paths": []
+    },
+    {
+      "run_id": "V3-Run-Real-Blocked",
+      "variant": "V3 Candidate",
+      "database_file": "benchmarks/workspaces/sprintboard-v3/.localforge/localforge.db",
+      "tasks_planned": 18,
+      "tasks_imported": 18,
+      "pr_ready": 0,
+      "failed_safe": 0,
+      "blocked": 18,
+      "human_interventions": 0,
+      "local_model_attempts": 0,
+      "chief_engineer_attempts": 0,
+      "actual_api_cost_usd": 0.0,
+      "run_status": "BLOCKED",
+      "pr_artifacts_paths": []
+    }
+  ],
+  "conclusions": {
+    "v3_victory_score": "0/6 criteria achieved (BLOCKED)",
+    "quality_win": false,
+    "cost_efficiency_win": false,
+    "autonomy_win": false,
+    "pr_ready_win": false
+  }
+}

@@ -23,6 +23,9 @@ def estimate_paid_call_cost_usd(
 
 
 class ModelCallLedgerService:
+    # Class-level buffer to preserve calls across transaction rollbacks
+    _pending_calls: list[domain.ModelCallLedger] = []
+
     def __init__(self, session: AsyncSession):
         self.session = session
 
@@ -30,7 +33,10 @@ class ModelCallLedgerService:
         orm_obj = ModelCallLedgerORM.from_domain(call)
         self.session.add(orm_obj)
         await self.session.flush()
+        self._pending_calls.append(call)
         return orm_obj.to_domain()
+
+
 
     async def list_calls(
         self, *, project_id: int, run_id: int | None = None
@@ -95,3 +101,53 @@ class ModelCallLedgerService:
             "output_tokens": float(output_tokens),
             "estimated_cost_usd": float(estimated_cost_usd),
         }
+
+    async def list_pricing_sources(self) -> list[domain.PricingSource]:
+        from localforge.storage.orm import PricingSourceORM
+        result = await self.session.execute(select(PricingSourceORM).order_by(PricingSourceORM.provider))
+        return [orm_obj.to_domain() for orm_obj in result.scalars().all()]
+
+    async def list_pricing_snapshots(self) -> list[domain.ModelPricingSnapshot]:
+        from localforge.storage.orm import ModelPricingSnapshotORM
+        result = await self.session.execute(select(ModelPricingSnapshotORM).order_by(ModelPricingSnapshotORM.model_name))
+        return [orm_obj.to_domain() for orm_obj in result.scalars().all()]
+
+    async def update_pricing_snapshot(
+        self,
+        pricing_source_id: int,
+        model_name: str,
+        input_price_per_million: float,
+        output_price_per_million: float,
+        cached_input_price_per_million: float = 0.0,
+    ) -> domain.ModelPricingSnapshot:
+        from localforge.storage.orm import ModelPricingSnapshotORM
+        result = await self.session.execute(
+            select(ModelPricingSnapshotORM).where(ModelPricingSnapshotORM.model_name == model_name)
+        )
+        existing = result.scalar_one_or_none()
+        if existing:
+            existing.pricing_source_id = pricing_source_id
+            existing.input_price_per_million = input_price_per_million
+            existing.output_price_per_million = output_price_per_million
+            existing.cached_input_price_per_million = cached_input_price_per_million
+            await self.session.flush()
+            return existing.to_domain()
+        else:
+            new_snap = ModelPricingSnapshotORM(
+                pricing_source_id=pricing_source_id,
+                model_name=model_name,
+                input_price_per_million=input_price_per_million,
+                output_price_per_million=output_price_per_million,
+                cached_input_price_per_million=cached_input_price_per_million,
+                is_manual=True,
+            )
+            self.session.add(new_snap)
+            await self.session.flush()
+            return new_snap.to_domain()
+
+    async def create_pricing_source(self, source: domain.PricingSource) -> domain.PricingSource:
+        from localforge.storage.orm import PricingSourceORM
+        orm_obj = PricingSourceORM.from_domain(source)
+        self.session.add(orm_obj)
+        await self.session.flush()
+        return orm_obj.to_domain()

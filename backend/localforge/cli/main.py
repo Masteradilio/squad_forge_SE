@@ -20,6 +20,11 @@ from localforge.cli.prs import prs_cmd
 from localforge.cli.run import run_cmd
 from localforge.cli.status import status_cmd
 
+from localforge.cli.costs import costs_app
+from localforge.cli.benchmark import benchmark_app
+from localforge.cli.squad import squad_app
+
+
 app = typer.Typer(
     name="localforge",
     help="LocalForge OS — Local-first autonomous software engineering operating system CLI.",
@@ -55,6 +60,10 @@ app.add_typer(models_app, name="models")
 app.add_typer(chief_engineer_app, name="chief-engineer")
 app.add_typer(skills_app, name="skills")
 app.add_typer(safety_app, name="safety")
+app.add_typer(costs_app, name="costs")
+app.add_typer(benchmark_app, name="benchmark")
+app.add_typer(squad_app, name="squad")
+
 
 
 if __name__ == "__main__":

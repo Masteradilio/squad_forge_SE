@@ -12,6 +12,8 @@ from localforge.services.project import ProjectService
 from localforge.services.routing import ModelRoutingService
 from localforge.services.safety import SafetyService
 from localforge.services.task import TaskService
+from localforge.services.cost_benchmark import CostBenchmarkService
+from localforge.services.simulation import APISimulationService
 from localforge.storage.database import DatabaseManager, db_manager
 
 
@@ -35,6 +37,8 @@ class UnitOfWork:
         self.memory: MemoryService | None = None
         self.model_calls: ModelCallLedgerService | None = None
         self.coordination: CoordinationService | None = None
+        self.cost_benchmark: CostBenchmarkService | None = None
+        self.simulation: APISimulationService | None = None
 
     async def __aenter__(self) -> Self:
         self.session = await self.db_manager.get_session()
@@ -47,6 +51,8 @@ class UnitOfWork:
         self.memory = MemoryService(self.session)
         self.model_calls = ModelCallLedgerService(self.session)
         self.coordination = CoordinationService(self.session)
+        self.cost_benchmark = CostBenchmarkService(self.session)
+        self.simulation = APISimulationService(self.session)
         return self
 
     async def __aexit__(
@@ -60,8 +66,28 @@ class UnitOfWork:
                 if exc_type is not None:
                     # Rollback changes if an exception occurs
                     await self.session.rollback()
+                    # Persist buffered calls in a clean independent transaction post-rollback
+                    await self._persist_pending_model_calls()
                 else:
                     # Commit changes on success
                     await self.session.commit()
             finally:
+                from localforge.services.model_calls import ModelCallLedgerService
+                ModelCallLedgerService._pending_calls.clear()
                 await self.session.close()
+
+    async def _persist_pending_model_calls(self) -> None:
+        from localforge.services.model_calls import ModelCallLedgerService
+        if not ModelCallLedgerService._pending_calls:
+            return
+        try:
+            from localforge.storage.orm import ModelCallLedgerORM
+            async with self.db_manager.session_factory() as session:
+                for call in ModelCallLedgerService._pending_calls:
+                    orm_obj = ModelCallLedgerORM.from_domain(call)
+                    session.add(orm_obj)
+                await session.commit()
+        except Exception as e:
+            import logging
+            logging.getLogger("localforge").error(f"Failed to persist pending model calls post-rollback: {e}")
+

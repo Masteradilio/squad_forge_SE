@@ -1,3 +1,4 @@
+import os
 from dataclasses import dataclass
 
 from localforge.models import domain
@@ -5,6 +6,9 @@ from localforge.models.enums import AuditEventActorType, AuditEventType, TaskSta
 from localforge.pr_factory.github import GitHubPRAdapter
 from localforge.storage import UnitOfWork
 from localforge.storage.artifacts import ArtifactStore
+from localforge.contracts.verifier import ContractVerifier
+from localforge.visual.gate import VisualFidelityGate
+from localforge.visual.screenshot import capture_html_screenshot
 
 
 @dataclass(frozen=True)
@@ -45,7 +49,118 @@ class LocalPRFactory:
         if not isinstance(changed_files, list):
             changed_files = []
         reasons = self._readiness_reasons(task_run.branch_name, artifact_paths, changed_files)
-        pr_body = self._render_pr_body(task, task_run, sorted(artifact_paths), reasons)
+
+        # 1. Run ContractVerifier if task contract exists
+        contract = task.metadata.get("task_contract")
+        worktree_path = task_run.worktree_path or project.root_path
+        if isinstance(contract, dict) and worktree_path:
+            verifier_res = ContractVerifier().verify(
+                worktree_path=worktree_path,
+                task_contract=contract,
+                changed_files=[str(f) for f in changed_files if isinstance(f, str)],
+            )
+            if not verifier_res.passed:
+                for finding in verifier_res.findings:
+                    reasons.append(f"Contract violation: {finding.message}")
+
+        # 2. Run VisualFidelityGate only when visual_required is declared by task contract or metadata
+        visual_required = False
+        visual_ref_rel = None
+        visual_actual_rel = None
+        visual_threshold = 0.90
+        visual_viewport = "1280,720"
+
+        if isinstance(contract, dict):
+            visual_required = bool(contract.get("visual_required", False))
+            visual_ref_rel = contract.get("visual_reference_image")
+            visual_actual_rel = contract.get("visual_actual_output")
+            visual_threshold = float(contract.get("visual_similarity_threshold", 0.90))
+            visual_viewport = str(contract.get("visual_viewport", "1280,720"))
+
+        if not visual_required:
+            visual_required = bool(task.metadata.get("visual_required", False))
+        if not visual_ref_rel:
+            visual_ref_rel = task.metadata.get("visual_reference_image")
+        if not visual_actual_rel:
+            visual_actual_rel = task.metadata.get("visual_actual_output")
+        if "visual_similarity_threshold" in task.metadata:
+            visual_threshold = float(task.metadata["visual_similarity_threshold"])
+        if "visual_viewport" in task.metadata:
+            visual_viewport = str(task.metadata["visual_viewport"])
+
+        if visual_required and worktree_path:
+            ref_image_path = None
+            if visual_ref_rel:
+                # 1. Try relative to worktree
+                p1 = os.path.normpath(os.path.join(worktree_path, visual_ref_rel))
+                if os.path.isfile(p1):
+                    ref_image_path = p1
+                else:
+                    # 2. Try relative to parent repo root
+                    backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+                    p2 = os.path.normpath(os.path.join(backend_dir, "..", visual_ref_rel))
+                    if os.path.isfile(p2):
+                        ref_image_path = p2
+                    else:
+                        # 3. Try direct absolute path
+                        if os.path.isfile(visual_ref_rel):
+                            ref_image_path = os.path.abspath(visual_ref_rel)
+
+            html_abs_path = None
+            if visual_actual_rel:
+                p_html = os.path.normpath(os.path.join(worktree_path, visual_actual_rel))
+                if os.path.isfile(p_html):
+                    html_abs_path = p_html
+            else:
+                # Fallback to walk worktree for html files
+                html_files = []
+                for root, _, files in os.walk(worktree_path):
+                    for file in files:
+                        if file.endswith(".html"):
+                            html_files.append(os.path.join(root, file))
+                if html_files:
+                    html_abs_path = html_files[0]
+
+            if not ref_image_path:
+                reasons.append(f"Visual mismatch: Reference image not found for path '{visual_ref_rel}'.")
+            elif not html_abs_path:
+                reasons.append(f"Visual mismatch: Actual HTML output not found for path '{visual_actual_rel}'.")
+            else:
+                actual_image_path = os.path.join(worktree_path, "actual_layout.png")
+                captured = capture_html_screenshot(html_abs_path, actual_image_path)
+                if captured:
+                    visual_result = VisualFidelityGate().evaluate(
+                        reference_image_path=ref_image_path,
+                        actual_image_path=actual_image_path,
+                        task_is_visual=True,
+                        min_similarity=visual_threshold,
+                    )
+                    if not visual_result.passed:
+                        reasons.append(f"Visual mismatch: {visual_result.summary}")
+                else:
+                    reasons.append("Visual mismatch: Headless screenshot capture failed.")
+
+        # Generate cost benchmark report
+        cost_report_md = ""
+        try:
+            assert self.uow.cost_benchmark is not None
+            cost_report_md = await self.uow.cost_benchmark.generate_markdown_report(self.project_id, self.run_id)
+            cost_artifact = await ArtifactStore(self.uow).write_artifact(
+                project_root=project.root_path,
+                task_run_id=task_run_id,
+                task_key=task.key,
+                run_id=self.run_id,
+                filename="cost_benchmark.md",
+                content=cost_report_md,
+                summary=f"Cost benchmark artifact for {task.key}",
+            )
+            artifact_paths.add(cost_artifact.path)
+        except Exception:
+            pass
+        if not any(path.endswith("cost_benchmark.md") for path in artifact_paths):
+            reasons.append("cost_benchmark.md missing")
+
+        pr_body = self._render_pr_body(task, task_run, sorted(artifact_paths), reasons, cost_report_md=cost_report_md)
 
         pr_artifact = await ArtifactStore(self.uow).write_artifact(
             project_root=project.root_path,
@@ -113,6 +228,7 @@ class LocalPRFactory:
         task_run: domain.TaskRun,
         artifact_paths: list[str],
         reasons: list[str],
+        cost_report_md: str = "",
     ) -> str:
         changed_files = task.metadata.get("changed_files", [])
         if not isinstance(changed_files, list):
@@ -152,6 +268,8 @@ class LocalPRFactory:
                 f"- [{'x' if has_diff else ' '}] Diff artifact exists",
                 f"- [{'x' if has_tests else ' '}] Test artifact exists",
                 f"- [{'x' if not reasons else ' '}] Local PR-ready gates pass",
+                "",
+                cost_report_md,
                 "",
                 "## Branch Protection",
                 "- Target branch: main",

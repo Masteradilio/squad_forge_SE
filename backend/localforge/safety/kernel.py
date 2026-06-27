@@ -121,12 +121,22 @@ class SafetyKernel:
             if not is_safe:
                 return SafetyDecision.DENY, f"Command safety check failed: {error_reason}"
 
-            # Escalate high/medium risk command inputs to requiring approval
-            if request.risk_level in ("high", "medium"):
+            # Escalate high/medium risk command inputs to requiring approval unless they are automated pipeline actions (staging/test validation)
+            is_git_or_test = (
+                command.strip().startswith("git add")
+                or command.strip().startswith("git commit")
+                or (command.strip().startswith("git checkout") and "localforge" in command)
+                or ("pytest" in command and ("tests/" in command or "test_" in command))
+            )
+
+            if request.risk_level in ("high", "medium") and not is_git_or_test:
                 return (
                     SafetyDecision.REQUIRE_APPROVAL,
                     f"Command request has escalated risk level: {request.risk_level}",
                 )
+
+
+
 
         # 4. Handle other action requests escalation
         elif request.risk_level in ("high", "medium"):

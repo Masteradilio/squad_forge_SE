@@ -38,11 +38,23 @@ class FinalReviewService:
     ) -> FinalPRReview:
         uow = self.chief_engineer.uow
         assert uow.model_calls is not None
+        bundler = self.chief_engineer.bundler
+
+        redacted_diff = bundler.redact_sensitive_info(diff_summary[:8000])
+        redacted_test_output = bundler.redact_sensitive_info(
+            bundler.compress_diff_and_errors(test_output_summary, max_chars=4000)
+        )
+        clean_contract = {}
+        if isinstance(task_contract, dict):
+            for k, v in task_contract.items():
+                if k not in ("api_key", "secret", "token", "password"):
+                    clean_contract[k] = v
+
         bundle = {
-            "task_contract": task_contract,
-            "diff_summary": diff_summary[:8000],
+            "task_contract": clean_contract,
+            "diff_summary": redacted_diff,
             "verifier_results": verifier_results,
-            "test_output_summary": test_output_summary[:6000],
+            "test_output_summary": redacted_test_output,
             "risk_notes": risk_notes[:10],
         }
         messages = [
@@ -56,7 +68,10 @@ class FinalReviewService:
             },
             {"role": "user", "content": json.dumps(bundle, sort_keys=True)},
         ]
+
+        # Budget preview print/log
         estimated_input = _estimate_tokens(json.dumps(messages))
+        print(f"[Economy Bundler] Previewing API call: reason=FINAL_PR_REVIEW, estimated_input_tokens={estimated_input}")
         estimated_output = 512
         await uow.model_calls.ensure_budget(
             project_id=project_id,

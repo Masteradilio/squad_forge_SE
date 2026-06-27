@@ -537,3 +537,132 @@ def test_api_pr_review_center_and_policy_updates(tmp_path):
 
     finally:
         close_manager(manager)
+
+
+def test_api_v3_endpoints(tmp_path):
+    manager = make_db_manager(tmp_path)
+    try:
+        ids = seed_api_state(manager, tmp_path)
+
+        async def seed_v3_data() -> None:
+            async with UnitOfWork(manager) as uow:
+                assert uow.session is not None
+                from localforge.storage.orm import PricingSourceORM, ModelPricingSnapshotORM, ModelCallLedgerORM
+                from localforge.models.enums import ChiefEngineerCallReason
+
+                # Pricing Source
+                source = PricingSourceORM(
+                    provider="OpenAI",
+                    url="https://openai.com/api/pricing/",
+                    notes="Test notes"
+                )
+                uow.session.add(source)
+                await uow.session.flush()
+
+                # Snapshots
+                uow.session.add(ModelPricingSnapshotORM(
+                    pricing_source_id=source.id,
+                    model_name="gpt-5.5-large",
+                    input_price_per_million=5.0,
+                    output_price_per_million=30.0,
+                    cached_input_price_per_million=2.5,
+                ))
+                uow.session.add(ModelPricingSnapshotORM(
+                    pricing_source_id=source.id,
+                    model_name="gpt-5.4-medium",
+                    input_price_per_million=2.5,
+                    output_price_per_million=15.0,
+                    cached_input_price_per_million=1.25,
+                ))
+                uow.session.add(ModelPricingSnapshotORM(
+                    pricing_source_id=source.id,
+                    model_name="gpt-5.4-mini",
+                    input_price_per_million=0.75,
+                    output_price_per_million=4.5,
+                ))
+
+                # Model Call Ledger (to populate reports)
+                uow.session.add(ModelCallLedgerORM(
+                    project_id=ids["project_id"],
+                    run_id=ids["run_id"],
+                    task_id=ids["task_id"],
+                    provider="openrouter",
+                    model="gpt-5.5-large",
+                    reason=ChiefEngineerCallReason.SEMANTIC_REPAIR_PLAN.value,
+                    input_tokens=1000,
+                    output_tokens=500,
+                    estimated_cost_usd=0.02,
+                    status="success"
+                ))
+                await uow.session.commit()
+
+        asyncio.run(seed_v3_data())
+
+        client = TestClient(create_app(db_manager=manager))
+
+        # 1. Test GET /projects/{project_id}/squad-composition
+        squad_res = client.get(f"/projects/{ids['project_id']}/squad-composition")
+        assert squad_res.status_code == 200
+        squad = squad_res.json()
+        assert len(squad) > 0
+        assert squad[0]["role"] is not None
+        assert squad[0]["seniority_class"] is not None
+
+        # 2. Test GET /projects/{project_id}/costs/report
+        report_res = client.get(f"/projects/{ids['project_id']}/costs/report")
+        assert report_res.status_code == 200
+        report = report_res.json()
+        assert "benchmarks" in report
+        assert "by_role" in report
+        assert "by_task" in report
+        assert "snapshots" in report
+        assert report["benchmarks"]["actual_paid_usd"] > 0.0
+
+        # 3. Test GET /projects/{project_id}/costs/simulate
+        sim_res = client.get(f"/projects/{ids['project_id']}/costs/simulate")
+        assert sim_res.status_code == 200
+        sim = sim_res.json()
+        assert "openai_simulated_usd" in sim
+        assert "anthropic_simulated_usd" in sim
+        assert "google_simulated_usd" in sim
+
+        # 4. Test GET /projects/{project_id}/costs/sources
+        sources_res = client.get(f"/projects/{ids['project_id']}/costs/sources")
+        assert sources_res.status_code == 200
+        sources = sources_res.json()
+        assert len(sources) > 0
+        assert any(s["provider"] == "OpenAI" for s in sources)
+
+        # 5. Test GET /projects/{project_id}/benchmark/rollup
+        rollup_res = client.get(f"/projects/{ids['project_id']}/benchmark/rollup")
+        assert rollup_res.status_code == 200
+        rollup = rollup_res.json()
+        assert rollup["actual_paid_usd"] > 0.0
+
+        # 6. Test POST /projects/{project_id}/costs/sources
+        new_source_res = client.post(
+            f"/projects/{ids['project_id']}/costs/sources",
+            json={"provider": "Anthropic", "url": "https://anthropic.com/pricing", "notes": "notes"}
+        )
+        assert new_source_res.status_code == 200
+        new_source = new_source_res.json()
+        assert new_source["provider"] == "Anthropic"
+        assert new_source["id"] is not None
+
+        # 7. Test PUT /projects/{project_id}/costs/snapshots
+        new_snap_res = client.put(
+            f"/projects/{ids['project_id']}/costs/snapshots",
+            json={
+                "pricing_source_id": new_source["id"],
+                "model_name": "claude-opus-4.8",
+                "input_price_per_million": 15.0,
+                "output_price_per_million": 75.0,
+            }
+        )
+        assert new_snap_res.status_code == 200
+        new_snap = new_snap_res.json()
+        assert new_snap["model_name"] == "claude-opus-4.8"
+        assert new_snap["input_price_per_million"] == 15.0
+
+    finally:
+        close_manager(manager)

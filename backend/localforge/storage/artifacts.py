@@ -15,6 +15,7 @@ ALLOWED_FILENAMES = {
     "repair.md",
     "pr.md",
     "blocker.md",
+    "cost_benchmark.md",
 }
 
 FILENAME_TO_TYPE = {
@@ -26,6 +27,7 @@ FILENAME_TO_TYPE = {
     "repair.md": ArtifactType.REPAIR,
     "pr.md": ArtifactType.PR,
     "blocker.md": ArtifactType.BLOCKER,
+    "cost_benchmark.md": ArtifactType.PR,
 }
 
 

@@ -1,3 +1,4 @@
+import os
 import json
 from collections.abc import AsyncIterator
 from typing import Any
@@ -20,7 +21,7 @@ class OpenAICompatibleProvider(BaseLLMProvider):
         default_model: str | None = None,
     ):
         self.base_url = base_url.rstrip("/")
-        self.api_key = api_key or "no-key"
+        self.api_key = api_key or os.getenv("OPENROUTER_API_KEY") or os.getenv("LOCALFORGE_MODEL_API_KEY") or "no-key"
         self.default_model = default_model
 
     async def list_models(self) -> list[str]:

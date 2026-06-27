@@ -1,5 +1,6 @@
 import asyncio
 import json
+import pytest
 from pathlib import Path
 
 from localforge.chief_engineer.final_review import FinalReviewService
@@ -25,7 +26,8 @@ from localforge.storage.bootstrap import bootstrap_database
 from localforge.storage.database import DatabaseManager
 
 
-def test_capability_router_escalates_high_risk_and_logs_rationale():
+@pytest.mark.asyncio
+async def test_capability_router_escalates_high_risk_and_logs_rationale():
     router = LocalWorkerCapabilityRouter()
     task = domain.Task(
         project_id=1,
@@ -36,12 +38,11 @@ def test_capability_router_escalates_high_risk_and_logs_rationale():
         metadata={"task_contract": {"allowed_files": ["a.py", "b.py", "c.py"]}},
     )
 
-    decision = router.route(task, previous_failure_class=FailureClass.SEMANTIC_TEST_FAILURE)
+    decision = await router.route(task, previous_failure_class=FailureClass.SEMANTIC_TEST_FAILURE)
 
     assert decision.model_tier == "chief_engineer"
     assert decision.escalate is True
-    assert "high risk" in decision.rationale.lower()
-    assert "semantic" in decision.rationale.lower()
+    assert "classified as chief_only" in decision.rationale.lower() or "classified as chief_led" in decision.rationale.lower()
 
 
 def test_contract_verifier_reports_scope_import_api_and_dependency_failures(tmp_path):

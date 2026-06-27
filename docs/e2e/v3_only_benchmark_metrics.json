@@ -1,0 +1,50 @@
+{
+  "benchmark_name": "SprintBoard Lite V3-Only Empirical Benchmark",
+  "date": "2026-06-27",
+  "prd_file": "docs/PRD_SPRINTBOARD_LITE.md",
+  "status": "PARTIAL",
+  "blockers": [],
+  "preflight_checklist": {
+    "docker_or_dev_passed": true,
+    "llm_installed_passed": true,
+    "task_count_match_passed": true,
+    "chief_engineer_configured_passed": true
+  },
+  "run_summary": {
+    "run_id": "V3-Run-1",
+    "tasks_planned": 18,
+    "tasks_imported": 18,
+    "task_runs_executed": 16,
+    "task_statuses": {
+      "FAILED_SAFE": 11,
+      "PR_READY": 5,
+      "READY": 2
+    },
+    "artifacts_generated": 148,
+    "artifact_types": {
+      "DiffArtifact": 30,
+      "PRArtifact": 10,
+      "PlanArtifact": 13,
+      "RepairArtifact": 7,
+      "ReviewArtifact": 7,
+      "RiskArtifact": 7,
+      "RoleArtifact": 67,
+      "TestArtifact": 7
+    },
+    "model_calls_logged": 14,
+    "openrouter_calls_logged": 9,
+    "local_calls_logged": 5,
+    "estimated_cost_usd": 0.0363354,
+    "exit_code": 0,
+    "routing_contract_summary": {
+      "chief_only": 18,
+      "local_assisted": 0
+    }
+  },
+  "conclusions": {
+    "quality_score": "Partial with failures",
+    "has_pr_artifacts": true,
+    "is_auditable": true,
+    "api_led_economy_first_exercised": true
+  }
+}

@@ -175,26 +175,49 @@ npm run build --prefix frontend
 
 Run broader suites only when a phase is ready for regression validation.
 
+## How LocalForge Differs from IDE Agents
+
+Unlike inline IDE agents (such as Cursor, Copilot, or Claude Code) which focus on interactive chat-driven edits on a single active file, LocalForge OS acts as an autonomous **Software Engineering Squad** in a box:
+- **Contract-first architecture**: Before coding, the Chief Engineer designs and freezes a task contract specifying allowed files, public APIs, forbidden dependencies, and canonical test commands.
+- **Isolated execution workspaces**: Every task runs inside its own Git worktree and sandboxed container, ensuring clean boundaries.
+- **Multi-agent squad logic**: Work is routed automatically based on required seniority—expensive API calls are saved for large refactorings or visual matching, while local models handle simple docs, test stubs, or mechanical updates.
+
+## Honest Limitations
+
+While LocalForge OS strives for economy-first autonomy, users must keep in mind:
+- **No Silver Bullet**: Autonomy does not mean zero oversight. A human Product Owner is always required to review final pull requests and visual similarities.
+- **Hardware Prerequisites**: Bounded local models (e.g. `granite4.1:8b`) need adequate local hardware VRAM/RAM (minimum 16GB VRAM recommended). Slow inference runs may trigger sandbox timeouts.
+- **Cost Benchmarks**: Baselines compare token volume ratios based on public competitor models. Actual proprietary IDE invoices may differ based on provider caching and billing plans.
+
+## Demo Script & Simulation Guide
+
+To see the V3 economy-first routing and cost simulator in action, run:
+
+1. **Bootstrap the workspace**:
+   ```bash
+   $env:PYTHONPATH="E:\Projetos\local_forge_os\backend"
+   .venv\Scripts\python -m localforge.cli.main init
+   ```
+2. **Execute Scheduler in unattended mode**:
+   ```bash
+   .venv\Scripts\python -m localforge.cli.main run --unattended
+   ```
+3. **Audit Token & API Costs**:
+   ```bash
+   .venv\Scripts\python -m localforge.cli.main costs report
+   ```
+4. **Run API-Only Cost Simulation**:
+   ```bash
+   .venv\Scripts\python -m localforge.cli.main costs simulate
+   ```
+5. **Generate V3 Benchmark Report**:
+   ```bash
+   .venv\Scripts\python -m localforge.cli.main benchmark report
+   ```
+
 ## Key Documents
 
 - `docs/LocalForge_OS_PRD.md` - product requirements
-- `docs/MASTER_BACKLOG.md` - V1 implementation phases
-- `docs/MASTER_BACKLOG_V2.md` - hybrid Chief Engineer lessons and phases
-- `docs/MASTER_BACKLOG_V3.md` - API-led, economy-first architecture backlog
+- `docs/MASTER_BACKLOG_V3.md` - V3 API-led, economy-first architecture backlog
 - `docs/e2e/HP12C_PRODUCT_VALIDATION_REPORT.md` - HP 12C validation evidence
 - `CHANGELOG.md` - implementation history
-
-## Current Direction
-
-The next strategic work is to implement V3 phases 46-63:
-
-- product reframe and squad workflow;
-- seniority-based routing;
-- Chief Engineer execution lane;
-- permanent pricing source registry;
-- token and cost ledger;
-- per-PR cost benchmark artifact;
-- project-level cost rollup;
-- API-only simulation mode;
-- HP 12C recovery trial under V3 routing;
-- medium PRD pilot only after credible HP 12C evidence.

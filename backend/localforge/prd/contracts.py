@@ -12,6 +12,8 @@ class TaskContract(BaseModel):
     forbidden_dependencies: list[str] = Field(default_factory=lambda: ["scipy", "numpy"])
     canonical_test_command: str = "python -m pytest -q"
     risk_level: str = "low"
+    seniority_class: str = "local_assisted"
+    visual_required: bool = False
     implementation_notes: list[str] = Field(default_factory=list)
 
 
@@ -56,6 +58,8 @@ def _task_contract(task: ExtractedTask) -> TaskContract:
         forbidden_dependencies=_forbidden_dependencies(task.title),
         canonical_test_command=_test_command_for(allowed_files),
         risk_level=_risk_for_task(task.title, task.risk_level),
+        seniority_class=_seniority_for_task(task.title, allowed_files, task.risk_level),
+        visual_required=_visual_required_for_task(task.title, allowed_files),
         implementation_notes=_implementation_notes(task.title),
     )
 
@@ -66,13 +70,13 @@ def _infer_allowed_files(title: str) -> list[str]:
     if "initialize calculator" in text or "calculator app structure" in text:
         return ["calculator/__init__.py", "calculator/core.py", "tests/test_calculator.py"]
     if "outer casing" in text:
-        return ["calculator/ui/casing.py", "tests/test_ui_casing.py"]
+        return ["calculator/ui/casing.py", "tests/test_ui_casing.py", "app/hp12c_platinum.html", "dist/HP12C_Platinum.html"]
     if "lcd display" in text:
-        return ["calculator/ui/display.py", "tests/test_ui_display.py"]
+        return ["calculator/ui/display.py", "tests/test_ui_display.py", "app/hp12c_platinum.html", "dist/HP12C_Platinum.html"]
     if "button grid" in text:
-        return ["calculator/ui/buttons.py", "tests/test_ui_buttons.py"]
+        return ["calculator/ui/buttons.py", "tests/test_ui_buttons.py", "app/hp12c_platinum.html", "dist/HP12C_Platinum.html"]
     if "visual regression" in text:
-        return ["calculator/ui/visual_reference.py", "tests/test_visual_reference.py"]
+        return ["calculator/ui/visual_reference.py", "tests/test_visual_reference.py", "app/hp12c_platinum.html", "dist/HP12C_Platinum.html"]
     if "numeric" in text:
         return ["calculator/input.py", "tests/test_numeric_entry.py"]
     if "rpn stack" in text:
@@ -192,7 +196,11 @@ def _package_for_task(task: ExtractedTask) -> str:
 
 
 def _slug(value: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "_", value.lower()).strip("_") or "task"
+    import unicodedata
+    val_clean = unicodedata.normalize('NFD', value.lower())
+    val_ascii = "".join(c for c in val_clean if not unicodedata.combining(c))
+    return re.sub(r"[^a-z0-9]+", "_", val_ascii).strip("_") or "task"
+
 
 
 def _test_command_for(allowed_files: list[str]) -> str:
@@ -227,6 +235,49 @@ def _risk_for_task(title: str, declared_risk: str) -> str:
     if any(term in text for term in medium_terms):
         return "medium"
     return declared_risk
+
+
+def _visual_required_for_task(title: str, allowed_files: list[str]) -> bool:
+    text = title.lower()
+    return any(
+        term in text
+        for term in ("visual", "frontend", "ui", "outer casing", "lcd", "button grid")
+    ) or any(path.endswith((".html", ".css", ".tsx", ".jsx")) for path in allowed_files)
+
+
+def _seniority_for_task(title: str, allowed_files: list[str], declared_risk: str) -> str:
+    text = title.lower()
+    if _visual_required_for_task(title, allowed_files):
+        return "chief_only"
+    if len(allowed_files) > 5:
+        return "chief_only"
+    if len(allowed_files) > 2:
+        return "chief_led"
+    if any(
+        term in text
+        for term in (
+            "architecture",
+            "public api",
+            "cross-module",
+            "breaking change",
+            "contract",
+            "export",
+            "json",
+            "backend",
+            "frontend",
+            "crud",
+            "test",
+            "validation",
+            "state machine",
+            "machine",
+        )
+    ):
+        return "chief_led"
+    if declared_risk == "high":
+        return "chief_led"
+    if any(term in text for term in ("documentation", "changelog", "readme", "summary")):
+        return "local_only"
+    return "local_assisted"
 
 
 def _dependencies_for_task(

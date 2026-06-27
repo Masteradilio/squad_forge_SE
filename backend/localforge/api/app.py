@@ -140,6 +140,20 @@ class WorktreeRevertRequest(BaseModel):
     checkpoint_hash: str
 
 
+class PricingSourceCreateRequest(BaseModel):
+    provider: str
+    url: str
+    notes: str = ""
+
+
+class PricingSnapshotUpdateRequest(BaseModel):
+    pricing_source_id: int
+    model_name: str
+    input_price_per_million: float
+    output_price_per_million: float
+    cached_input_price_per_million: float = 0.0
+
+
 def create_app(
     db_manager: DatabaseManager | None = None,
     llm_provider: BaseLLMProvider | None = None,
@@ -577,6 +591,143 @@ def create_app(
                 )
             )
             return _dump(squad)
+
+    @app.get("/projects/{project_id}/squad-composition")
+    async def get_squad_composition(project_id: int) -> list[dict[str, Any]]:
+        async with UnitOfWork(manager) as uow:
+            assert uow.routing is not None
+            composition = []
+            for role, meta in domain.SQUAD_ROLE_METADATA.items():
+                model_profile_id = None
+                provider = "localforge"
+
+                if meta.seniority_class == domain.SeniorityClass.HUMAN:
+                    model_profile_id = "Human"
+                    provider = "human"
+                elif meta.seniority_class == domain.SeniorityClass.DETERMINISTIC_ONLY:
+                    model_profile_id = "Deterministic Gate"
+                    provider = "harness"
+                else:
+                    route_val = await uow.routing.get_model_for_role(project_id, meta.default_agent_role)
+                    if route_val:
+                        model_profile_id = route_val
+                        routes = await uow.routing.list_routes(project_id)
+                        for r in routes:
+                            if r.role == meta.default_agent_role:
+                                provider = r.provider
+                                break
+                    else:
+                        if meta.seniority_class in (domain.SeniorityClass.CHIEF_ONLY, domain.SeniorityClass.CHIEF_LED):
+                            model_profile_id = "gpt-5.5-large"
+                            provider = "openrouter"
+                        elif meta.seniority_class == domain.SeniorityClass.LOCAL_ASSISTED:
+                            model_profile_id = "granite4.1:8b"
+                            provider = "ollama"
+                        else:
+                            model_profile_id = "local_small"
+                            provider = "ollama"
+
+                composition.append({
+                    "role": role.value,
+                    "seniority_class": meta.seniority_class.value,
+                    "responsibility": meta.responsibility,
+                    "model_profile_id": model_profile_id,
+                    "provider": provider
+                })
+            return composition
+
+
+    @app.get("/projects/{project_id}/costs/report")
+    async def get_project_costs_report(project_id: int) -> dict[str, Any]:
+        async with UnitOfWork(manager) as uow:
+            assert uow.cost_benchmark is not None
+            assert uow.simulation is not None
+            assert uow.model_calls is not None
+
+            benchmarks = await uow.cost_benchmark.calculate_benchmarks(project_id)
+
+            assert uow.session is not None
+            from sqlalchemy import select
+            from localforge.storage.orm import ModelCallLedgerORM
+            res = await uow.session.execute(
+                select(ModelCallLedgerORM).where(ModelCallLedgerORM.project_id == project_id)
+            )
+            calls = res.scalars().all()
+
+            by_role: dict[str, float] = {}
+            by_task: dict[str, float] = {}
+
+            for call in calls:
+                cost = call.estimated_cost_usd if call.provider == "openrouter" else 0.0
+
+                is_chief = call.provider == "openrouter" or "chief" in call.reason.lower() or "contract" in call.reason.lower() or "repair" in call.reason.lower() or "review" in call.reason.lower()
+                is_small = "pr" in call.reason.lower() or "summary" in call.reason.lower() or "changelog" in call.reason.lower()
+                role_name = "Chief Engineer" if is_chief else ("Release Writer" if is_small else "Developer")
+
+                by_role[role_name] = by_role.get(role_name, 0.0) + cost
+
+                if call.task_id:
+                    task_key = f"Task #{call.task_id}"
+                    by_task[task_key] = by_task.get(task_key, 0.0) + cost
+
+            from localforge.storage.orm import ModelPricingSnapshotORM
+            snap_res = await uow.session.execute(select(ModelPricingSnapshotORM))
+            snapshots = [_dump(s.to_domain()) for s in snap_res.scalars().all()]
+
+            return {
+                "benchmarks": benchmarks,
+                "by_role": by_role,
+                "by_task": by_task,
+                "snapshots": snapshots
+            }
+
+    @app.get("/projects/{project_id}/costs/simulate")
+    async def get_project_costs_simulation(project_id: int) -> dict[str, Any]:
+        async with UnitOfWork(manager) as uow:
+            assert uow.simulation is not None
+            return await uow.simulation.simulate_api_only_costs(project_id)
+
+    @app.get("/projects/{project_id}/costs/sources")
+    async def get_project_pricing_sources(project_id: int) -> list[dict[str, Any]]:
+        async with UnitOfWork(manager) as uow:
+            assert uow.model_calls is not None
+            sources = await uow.model_calls.list_pricing_sources()
+            return [_dump(s) for s in sources]
+
+    @app.get("/projects/{project_id}/benchmark/rollup")
+    async def get_project_benchmark_rollup(project_id: int) -> dict[str, Any]:
+        async with UnitOfWork(manager) as uow:
+            assert uow.cost_benchmark is not None
+            return await uow.cost_benchmark.calculate_benchmarks(project_id)
+
+    @app.post("/projects/{project_id}/costs/sources")
+    async def create_pricing_source(project_id: int, req: PricingSourceCreateRequest) -> dict[str, Any]:
+        async with UnitOfWork(manager) as uow:
+            assert uow.model_calls is not None
+            source = await uow.model_calls.create_pricing_source(
+                domain.PricingSource(
+                    provider=req.provider,
+                    url=req.url,
+                    notes=req.notes
+                )
+            )
+            return _dump(source)
+
+    @app.put("/projects/{project_id}/costs/snapshots")
+    async def update_pricing_snapshot(project_id: int, req: PricingSnapshotUpdateRequest) -> dict[str, Any]:
+        async with UnitOfWork(manager) as uow:
+            assert uow.model_calls is not None
+            snapshot = await uow.model_calls.update_pricing_snapshot(
+                pricing_source_id=req.pricing_source_id,
+                model_name=req.model_name,
+                input_price_per_million=req.input_price_per_million,
+                output_price_per_million=req.output_price_per_million,
+                cached_input_price_per_million=req.cached_input_price_per_million,
+            )
+            return _dump(snapshot)
+
+
+
 
     @app.post("/tasks/{task_id}/pipeline")
     async def run_role_pipeline(task_id: int, req: PipelineRunRequest) -> dict[str, Any]:

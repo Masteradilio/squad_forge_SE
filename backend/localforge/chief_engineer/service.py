@@ -103,6 +103,8 @@ class ChiefEngineerRepairPlan(BaseModel):
 class ChiefEngineerService:
     def __init__(self, uow: UnitOfWork):
         self.uow = uow
+        from localforge.chief_engineer.bundler import EconomyPromptBundler
+        self.bundler = EconomyPromptBundler()
 
     async def review_contract(
         self,
@@ -114,7 +116,7 @@ class ChiefEngineerService:
         model: str,
     ) -> ChiefEngineerContractReview:
         assert self.uow.model_calls is not None
-        contract_json = contract.model_dump_json()
+        contract_json = self.bundler.redact_sensitive_info(contract.model_dump_json())
         messages = [
             {
                 "role": "system",
@@ -207,11 +209,12 @@ class ChiefEngineerService:
         model: str,
     ) -> ChiefEngineerRepairPlan:
         assert self.uow.model_calls is not None
-        bundle = {
-            "task_contract": task_contract,
-            "changed_files_context": changed_files_context[:12000],
-            "validation_output": validation_output[:8000],
-        }
+        bundle = self.bundler.build_bundle(
+            reason=ChiefEngineerCallReason.SEMANTIC_REPAIR_PLAN,
+            task_contract=task_contract,
+            changed_files_context=changed_files_context,
+            validation_output=validation_output,
+        )
         messages = [
             {
                 "role": "system",
@@ -223,6 +226,9 @@ class ChiefEngineerService:
                     "Actions must use only write_file or append_content. "
                     "Write only paths allowed by task_contract.allowed_files. "
                     "Do not edit tests unless the contract explicitly allows that test file. "
+                    "For HTML/CSS visual repairs, return the complete target file content; "
+                    "never omit repeated keys, labels, styles, or markup for brevity. "
+                    "Do not use placeholders such as 'remaining keys omitted'. "
                     "Fix production code, imports, exports, syntax, and semantics needed for "
                     "the canonical task test to pass."
                 ),
@@ -230,7 +236,7 @@ class ChiefEngineerService:
             {"role": "user", "content": json.dumps(bundle, sort_keys=True)},
         ]
         estimated_input = _estimate_tokens(json.dumps(messages))
-        estimated_output = 1800
+        estimated_output = 8000 if task_contract.get("visual_required") else 1800
         await self.uow.model_calls.ensure_budget(
             project_id=project_id,
             run_id=run_id,
@@ -243,7 +249,7 @@ class ChiefEngineerService:
                 messages=messages,
                 schema_model=ChiefEngineerRepairPlan,
                 model=model,
-                timeout=120.0,
+                timeout=300.0,
                 max_retries=2,
             )
             status = "success"

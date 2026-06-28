@@ -68,13 +68,9 @@ async def run_cli_command(cwd: str, args: list[str]) -> tuple[int, str, str]:
         value = root_env_values().get(key)
         if value and not env.get(key):
             env[key] = value
-    
-    python_exe = os.path.join(ROOT_DIR, ".codex_venv", "Scripts", "python.exe")
-    if not os.path.exists(python_exe):
-        python_exe = sys.executable # fallback to system python
-        
+    python_exe = sys.executable
     cmd_args = [python_exe, "-m", "localforge.cli.main"] + args
-    
+
     try:
         proc = await asyncio.create_subprocess_exec(
             *cmd_args,
@@ -187,7 +183,7 @@ def apply_api_led_task_contracts(db_path: str) -> dict[str, int]:
     UI, test and reporting work is chief-led; simple state-transition clauses stay
     local-assisted with small bounded file contracts.
     """
-    summary = {"chief_only": 0, "local_assisted": 0}
+    summary = {"chief_only": 0, "chief_led": 0, "local_assisted": 0}
     if not os.path.exists(db_path):
         return summary
     conn = sqlite3.connect(db_path)
@@ -202,9 +198,12 @@ def apply_api_led_task_contracts(db_path: str) -> dict[str, int]:
         if not isinstance(metadata, dict):
             metadata = {}
 
+        orig_contract = metadata.get("task_contract", {}) if isinstance(metadata.get("task_contract"), dict) else {}
+        canonical_test = orig_contract.get("canonical_test_command")
+
         if _task_requires_chief(title, description):
-            seniority = "chief_only"
-            risk_level = "high"
+            seniority = "chief_led"
+            risk_level = "medium"
             allowed_files = [
                 "app/sprintboard.html",
                 "tests/test_board_rules.py",
@@ -214,13 +213,24 @@ def apply_api_led_task_contracts(db_path: str) -> dict[str, int]:
                 "docs/risk.md",
             ]
             visual_required = "frontend" in f"{title} {description}".lower() or "visualiza" in f"{title} {description}".lower()
-            summary["chief_only"] += 1
+            if visual_required:
+                seniority = "chief_only"
+                risk_level = "high"
+            summary[seniority] += 1
         else:
             seniority = "local_assisted"
             risk_level = "low"
             allowed_files = ["tests/test_board_rules.py"]
             visual_required = False
             summary["local_assisted"] += 1
+
+        if canonical_test:
+            import re
+            match = re.search(r"tests/[a-zA-Z0-9_]+\.py", canonical_test)
+            if match:
+                test_file = match.group(0)
+                if test_file not in allowed_files:
+                    allowed_files.append(test_file)
 
         metadata["task_contract"] = {
             **(metadata.get("task_contract") if isinstance(metadata.get("task_contract"), dict) else {}),

@@ -111,11 +111,17 @@ class Scheduler:
 
     async def _cleanup_orphans(self) -> None:
         """Call WorktreeManager to clean up orphan directories."""
-        async with UnitOfWork(self.db_manager) as uow:
-            manager = WorktreeManager(project_id=self.project_id, uow=uow)
-            cleaned = await manager.cleanup_orphan_worktrees()
-            if cleaned:
-                logger.info(f"Cleaned up {len(cleaned)} orphan worktrees in background")
+        try:
+            async with UnitOfWork(self.db_manager) as uow:
+                manager = WorktreeManager(project_id=self.project_id, uow=uow)
+                cleaned = await asyncio.wait_for(
+                    manager.cleanup_orphan_worktrees(), timeout=10.0
+                )
+                if cleaned:
+                    logger.info(f"Cleaned up {len(cleaned)} orphan worktrees in background")
+        except Exception as e:
+            logger.warning(f"Orphan worktrees cleanup failed or timed out: {e}")
+
 
     async def _process_iteration(self) -> None:
         async with UnitOfWork(self.db_manager) as uow:
@@ -326,7 +332,10 @@ class Scheduler:
 
                     runner = self.runner_pool.acquire(t)
                     try:
-                        runner_context = await runner.setup(t, run_id=self.run_id, uow=uow)
+                        runner_context = await asyncio.wait_for(
+                            runner.setup(t, run_id=self.run_id, uow=uow),
+                            timeout=45.0
+                        )
                     except Exception as e:
                         logger.error(
                             f"Task {t.key} failed during runner setup: {e}",
@@ -338,6 +347,7 @@ class Scheduler:
                         await uow.tasks.update_task_run(task_run)
                         await uow.tasks.update_task_status(t.id, TaskStatus.FAILED_SAFE)
                         continue
+
 
                     # Update task run with runner details
                     task_run.worktree_path = runner_context.worktree_path

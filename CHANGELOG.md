@@ -4,6 +4,18 @@ All notable changes to LocalForge OS will be documented in this file.
 
 ## [Unreleased]
 
+### V3 Hybrid Benchmark Enforcement - 2026-06-28
+
+#### Fixed
+- Restaurado o roteamento hibrido do benchmark V3-only para que tarefas simples permanecam `local_assisted` e tarefas visuais/complexas sejam escaladas para `chief_only`/`chief_led`, evitando uma execucao API-only disfarcada.
+- Removida a dependencia sequencial artificial entre tarefas importadas de PRDs genericos, permitindo que falhas pontuais nao bloqueiem todo o lote do SprintBoard Lite.
+- Reforcado o pipeline para impedir fallback local silencioso em tarefas `chief_only`, preservando a arquitetura API-led/economy-first.
+- Ajustado o script do benchmark para usar o Python do ambiente virtual ativo (`sys.executable`) nos subprocessos da CLI.
+
+#### Tests
+- `.\.codex_venv\Scripts\python.exe -m pytest backend\tests\test_v3_phases.py backend\tests\test_pr_factory.py backend\tests\test_prd_compiler.py -q`
+- `.\.codex_venv\Scripts\python.exe -m mypy backend\localforge\prd\contracts.py backend\localforge\prd\compiler.py backend\localforge\pipeline\engine.py backend\localforge\services\scheduler.py backend\localforge\llm\openrouter.py backend\localforge\llm\openai_compatible.py backend\localforge\storage\database.py backend\tests\test_v3_phases.py backend\tests\test_pr_factory.py`
+
 ### Hardening & Resiliência V3 - 2026-06-27
 
 #### Added

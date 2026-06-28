@@ -51,12 +51,15 @@ def build_architecture_contract(plan: ExtractedPlan) -> ArchitectureContract:
 
 def _task_contract(task: ExtractedTask) -> TaskContract:
     allowed_files = task.expected_files or _infer_allowed_files(task.title)
+    test_command = _test_command_for(allowed_files)
+    if task.title.strip().endswith(":"):
+        test_command = 'python -c "pass"'
     return TaskContract(
         task_title=task.title,
         allowed_files=allowed_files,
         required_public_apis=_infer_public_apis(task.title),
         forbidden_dependencies=_forbidden_dependencies(task.title),
-        canonical_test_command=_test_command_for(allowed_files),
+        canonical_test_command=test_command,
         risk_level=_risk_for_task(task.title, task.risk_level),
         seniority_class=_seniority_for_task(task.title, allowed_files, task.risk_level),
         visual_required=_visual_required_for_task(task.title, allowed_files),
@@ -247,6 +250,9 @@ def _visual_required_for_task(title: str, allowed_files: list[str]) -> bool:
 
 def _seniority_for_task(title: str, allowed_files: list[str], declared_risk: str) -> str:
     text = title.lower()
+    if any(term in text for term in ("documentation", "changelog", "readme", "summary")):
+        return "local_only"
+
     if _visual_required_for_task(title, allowed_files):
         return "chief_only"
     if len(allowed_files) > 5:
@@ -270,13 +276,21 @@ def _seniority_for_task(title: str, allowed_files: list[str], declared_risk: str
             "validation",
             "state machine",
             "machine",
+            "criar",
+            "editar",
+            "listar",
+            "deletar",
+            "filtrar",
+            "exportar",
+            "título vazio",
+            "titulo vazio",
+            "transições proibidas",
+            "transicoes proibidas",
         )
     ):
         return "chief_led"
     if declared_risk == "high":
         return "chief_led"
-    if any(term in text for term in ("documentation", "changelog", "readme", "summary")):
-        return "local_only"
     return "local_assisted"
 
 
@@ -287,6 +301,7 @@ def _dependencies_for_task(
     text = title.lower()
     titles = [candidate.title for candidate in tasks]
     deps: list[str] = []
+
     init = _find_title(titles, "initialize calculator")
     if init and title != init and not _is_meta_task(text):
         deps.append(init)

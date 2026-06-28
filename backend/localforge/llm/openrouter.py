@@ -32,7 +32,7 @@ class OpenRouterProvider(OpenAICompatibleProvider):
         messages: list[dict[str, str]],
         response_schema: dict[str, Any] | None = None,
         stream: bool = False,
-        timeout: float = 30.0,
+        timeout: float = 240.0,
         model: str | None = None,
     ) -> str | AsyncIterator[str]:
         model_name = model or self.default_model

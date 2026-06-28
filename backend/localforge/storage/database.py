@@ -1,5 +1,6 @@
 import os
 from collections.abc import AsyncGenerator
+from typing import Any
 
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -22,11 +23,13 @@ class DatabaseManager:
         # Check if we are using SQLite and setup appropriate connection options
         is_sqlite = db_url.startswith("sqlite")
         connect_args: dict[str, object] = {}
-        kwargs = {}
+        kwargs: dict[str, Any] = {}
         if is_sqlite:
             # check_same_thread=False is required for sqlite+aiosqlite in async mode
             connect_args["check_same_thread"] = False
             connect_args["timeout"] = 30
+            from sqlalchemy.pool import NullPool
+            kwargs["poolclass"] = NullPool
             if ":memory:" in db_url:
                 from sqlalchemy.pool import StaticPool
                 kwargs["poolclass"] = StaticPool
@@ -37,6 +40,21 @@ class DatabaseManager:
             connect_args=connect_args,
             **kwargs,
         )
+
+        if is_sqlite:
+            from sqlalchemy import event
+
+            @event.listens_for(self.engine.sync_engine, "connect")
+            def set_sqlite_pragma(dbapi_connection: Any, connection_record: Any) -> None:
+                cursor = dbapi_connection.cursor()
+                try:
+                    cursor.execute("PRAGMA journal_mode=WAL")
+                    cursor.execute("PRAGMA synchronous=NORMAL")
+                except Exception:
+                    pass
+                finally:
+                    cursor.close()
+
         self.session_factory = async_sessionmaker(
             self.engine,
             class_=AsyncSession,

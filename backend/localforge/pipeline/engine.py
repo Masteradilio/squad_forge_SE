@@ -2412,10 +2412,12 @@ class RolePipelineEngine:
             f"{context.rendered}\n\n"
             "Create the minimal implementation files needed to satisfy this task's acceptance criteria."
         )
+        task_class = task.metadata.get("task_contract", {}).get("seniority_class", "local_assisted")
         response, model_used = await self._chat_completion_with_local_fallback(
             prompt=prompt,
             preferred_model=context.model_profile_id,
             timeout=180.0,
+            task_class=task_class,
         )
         await self._record_local_model_call(
             task=task,
@@ -2461,10 +2463,12 @@ class RolePipelineEngine:
             "Validation failure output:\n"
             f"{compress_tool_output(validation_output, max_chars=8000)}"
         )
+        task_class = task.metadata.get("task_contract", {}).get("seniority_class", "local_assisted")
         response, model_used = await self._chat_completion_with_local_fallback(
             prompt=prompt,
-            preferred_model=repair_model,
-            timeout=240.0,
+            preferred_model=context.model_profile_id,
+            timeout=120.0,
+            task_class=task_class,
         )
         await self._record_local_model_call(
             task=task,
@@ -2502,7 +2506,7 @@ class RolePipelineEngine:
             )
         )
 
-    def _local_model_candidates(self, preferred_model: str | None) -> list[str]:
+    async def _local_model_candidates(self, preferred_model: str | None, task_class: str | None = None) -> list[str]:
         config = load_config()
         candidates = [
             preferred_model,
@@ -2513,6 +2517,21 @@ class RolePipelineEngine:
         for candidate in candidates:
             if candidate and candidate not in ordered:
                 ordered.append(candidate)
+        
+        if task_class:
+            from localforge.services.routing import ModelRoutingService
+            from datetime import UTC, datetime
+            assert self.uow.session is not None
+            routing_svc = ModelRoutingService(self.uow.session)
+            
+            filtered = []
+            for candidate in ordered:
+                cap = await routing_svc.get_model_capability(candidate, task_class)
+                if cap and cap.disqualified_until and cap.disqualified_until > datetime.now(UTC):
+                    continue
+                filtered.append(candidate)
+            ordered = filtered
+
         return ordered
 
     async def _chat_completion_with_local_fallback(
@@ -2521,10 +2540,12 @@ class RolePipelineEngine:
         prompt: str,
         preferred_model: str | None,
         timeout: float,
+        task_class: str | None = None,
     ) -> tuple[str, str]:
         config = load_config()
         failures: list[str] = []
-        for model in self._local_model_candidates(preferred_model):
+        candidates = await self._local_model_candidates(preferred_model, task_class)
+        for model in candidates:
             provider = OpenAICompatibleProvider(
                 base_url=config.models.base_url,
                 default_model=model,
@@ -2947,10 +2968,12 @@ class ButtonGrid:
             "Invalid payload:\n"
             f"{compress_tool_output(invalid_payload, max_chars=4000)}"
         )
+        task_class = task.metadata.get("task_contract", {}).get("seniority_class", "local_assisted")
         response, model_used = await self._chat_completion_with_local_fallback(
             prompt=prompt,
             preferred_model=repair_model,
             timeout=180.0,
+            task_class=task_class,
         )
         await self._record_local_model_call(
             task=task,

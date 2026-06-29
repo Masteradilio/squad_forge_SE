@@ -6,21 +6,32 @@ from localforge.models.enums import AgentRole
 from localforge.skills import SkillRegistry
 from localforge.storage import UnitOfWork
 
-ROLE_RESPONSIBILITIES: dict[AgentRole, str] = {
-    AgentRole.PLANNER: "Define execution plan and sequencing.",
-    AgentRole.SPECIFIER: "Clarify acceptance criteria and edge cases.",
-    AgentRole.CODER: "Produce implementation evidence and changed-file summary.",
-    AgentRole.CLEANER: "Reduce unnecessary churn and verify maintainability.",
-    AgentRole.TESTER: "Define targeted verification and test evidence.",
-    AgentRole.FIXER: "Summarize repair decisions after test feedback.",
-    AgentRole.REVIEWER: "Review risks, regressions, and readiness.",
-    AgentRole.ARCHITECT: "Check architectural fit and dependency boundaries.",
-    AgentRole.HARDENER: "Check security and operational hardening.",
-    AgentRole.QA: "Confirm release-quality acceptance evidence.",
-    AgentRole.PR_WRITER: "Prepare PR-ready summary and checklist.",
-    AgentRole.SAFETY_AUDITOR: "Validate sensitive actions and policy compliance.",
-}
+from pathlib import Path
 
+def _read_role_skill(project_root: str, role: AgentRole) -> str:
+    mapping = {
+        AgentRole.CHIEF_ENGINEER: "chief-engineer",
+        AgentRole.SCRUM_MASTER: "scrum-master",
+        AgentRole.PLANNER: "scrum-master",
+        AgentRole.SPECIFIER: "chief-engineer",
+        AgentRole.CODER: "developer",
+        AgentRole.CLEANER: "developer",
+        AgentRole.TESTER: "qa-engineer",
+        AgentRole.QA: "qa-engineer",
+        AgentRole.FIXER: "bug-fixer",
+        AgentRole.REVIEWER: "reviewer",
+        AgentRole.PR_WRITER: "pr-writer",
+        AgentRole.ARCHITECT: "chief-engineer",
+        AgentRole.HARDENER: "chief-engineer",
+    }
+    skill_dir = mapping.get(role)
+    if not skill_dir:
+        return f"Execute assigned role: {role.value}"
+        
+    skill_path = Path(project_root) / ".agents" / "skills" / skill_dir / "SKILL.md"
+    if skill_path.exists():
+        return skill_path.read_text(encoding="utf-8")
+    return f"Execute assigned role: {role.value}"
 
 @dataclass(frozen=True)
 class RoleContext:
@@ -75,7 +86,7 @@ class RoleContextBuilder:
             [
                 f"Role: {role.value}",
                 f"Model: {model_profile_id}",
-                f"Responsibility: {ROLE_RESPONSIBILITIES.get(role, 'Execute assigned role.')}",
+                f"Role Instructions:\n{_read_role_skill(project.root_path, role)}",
                 f"Task: {task.key} {task.title}",
                 f"Description: {task.description}",
                 f"Acceptance: {'; '.join(task.acceptance_criteria) or 'not specified'}",

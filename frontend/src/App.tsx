@@ -30,6 +30,7 @@ import { Timeline, type TimelineItem } from './components/Timeline';
 import { EmptyState } from './components/EmptyState';
 import { CodeBlock } from './components/CodeBlock';
 import { V3Dashboard } from './components/V3Dashboard';
+import { KanbanBoard } from './components/KanbanBoard';
 
 
 const wouldCreateCycle = (
@@ -81,6 +82,7 @@ type Tab =
   | 'memory'
   | 'safety'
   | 'v3-dashboard'
+  | 'kanban'
   | 'settings';
 
 export default function App() {
@@ -4230,6 +4232,13 @@ export default function App() {
           <EmptyState title="No Project Selected" message="Please select a project first." />
         );
 
+      case 'kanban':
+        return activeProject ? (
+          <KanbanBoard tasks={tasks} onTaskClick={setSelectedTask} />
+        ) : (
+          <EmptyState title="No Project Selected" message="Please select a project first." />
+        );
+
       case 'settings':
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -4372,6 +4381,7 @@ export default function App() {
               'memory',
               'safety',
               'v3-dashboard',
+              'kanban',
               'settings',
             ] as Tab[]
           ).map((tab) => {

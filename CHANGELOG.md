@@ -4,6 +4,19 @@ All notable changes to LocalForge OS will be documented in this file.
 
 ## [Unreleased]
 
+### V4 API-led & Economy-First Architecture E2E - 2026-06-29
+
+#### Added
+- Added scripts/run_benchmark_v4_only.py to exercise the complete Phase V4 empirical end-to-end (E2E) workflow and evaluate the V4 mapping architecture on the Sprintboard Lite project.
+- Enhanced squad orchestrate command to serve as the unified API for mapping, planning, and executing backlogs using ScrumMaster logic.
+
+#### Fixed
+- Fixed an issue where Docker checks in the backend engine localforge execute-task failed in sandbox mode because the benchmark mocked the check locally. The benchmark now enforces sandbox_type=local if Docker is inactive in the test environment, ensuring local models run successfully.
+- Fixed a Git worktree collision (atal: ... is already used by worktree) that blocked V4 task runner initialization by ensuring that left-over worktrees from previous iterations (V3) are properly pruned and removed from the host repository prior to spinning up isolated branches.
+
+#### Tests
+- Successfully ran the V4 empirical benchmark validating the new skill-based routing strategy and verifying proper API-led fallback execution with OpenRouter and local Ollama.
+
 ### V3 Pomodoro Stabilization & 100% PR_READY Handoff - 2026-06-29
 
 #### Fixed
@@ -1179,3 +1192,4 @@ All notable changes to LocalForge OS will be documented in this file.
 ### Deferred
 - CLI setup deferred to Phase 2.
 - Local model routing deferred to Phase 4.
+

@@ -37,8 +37,6 @@ class LocalWorkDelegationContract:
         seniority_class = contract.get("seniority_class") if isinstance(contract, dict) else None
         if seniority_class == TaskSeniorityClass.CHIEF_ONLY.value:
             return False, "Task contract requires Chief Engineer execution."
-        if seniority_class == TaskSeniorityClass.CHIEF_LED.value:
-            return False, "Task contract requires Chief-led execution before local delegation."
 
         # 1. Check file size of allowed files in the worktree
         if task_run.worktree_path:

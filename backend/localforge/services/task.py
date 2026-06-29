@@ -199,7 +199,7 @@ class TaskService:
         result = await self.session.execute(
             select(TaskRunORM)
             .where(TaskRunORM.task_id == task_id)
-            .order_by(TaskRunORM.started_at.desc())
+            .order_by(TaskRunORM.id.desc())
         )
         return [orm_obj.to_domain() for orm_obj in result.scalars().all()]
 
@@ -210,7 +210,7 @@ class TaskService:
         result = await self.session.execute(
             select(TaskRunORM)
             .where(TaskRunORM.task_id.in_(task_ids))
-            .order_by(TaskRunORM.task_id, TaskRunORM.started_at.desc())
+            .order_by(TaskRunORM.task_id, TaskRunORM.id.desc())
         )
         runs_by_task: dict[int, list[domain.TaskRun]] = {}
         for orm_obj in result.scalars().all():

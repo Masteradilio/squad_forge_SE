@@ -59,6 +59,58 @@ def test_deterministic_extractor_reads_headings_bullets_checkboxes_and_tables():
     assert all(task.acceptance_criteria for task in plan.tasks)
 
 
+def test_deterministic_extractor_groups_numbered_prd_sections():
+    markdown = """# Product
+
+## Requisitos Funcionais
+
+1. **Gestão de Itens de Trabalho**:
+   - Criar, editar, listar e deletar itens.
+   - Cada item possui: `id`, `title`, `status`.
+
+2. **Máquina de Estados Determinística**:
+   - Transições válidas de status:
+     - `backlog` -> `in_progress`
+   - Transições proibidas:
+     - `done` não pode retornar a `backlog`.
+"""
+    plan = DeterministicPRDExtractor().extract(markdown)
+
+    assert [task.title for task in plan.tasks] == [
+        "Gestão de Itens de Trabalho",
+        "Máquina de Estados Determinística",
+    ]
+    assert all(not task.title.endswith(":") for task in plan.tasks)
+    assert any("Criar, editar" in item for item in plan.tasks[0].acceptance_criteria)
+    assert any("done" in item for item in plan.tasks[1].acceptance_criteria)
+
+
+def test_deterministic_extractor_does_not_turn_acceptance_bullets_into_tasks():
+    markdown = """# Product
+
+## Functional Requirements
+
+1. **Work Item Management**:
+   - Create and edit work items.
+
+2. **State Machine**:
+   - Legal status transitions are enforced.
+
+## Criterios de Aceitacao
+- Empty titles are rejected.
+- Illegal transitions are blocked.
+- JSON export includes active items.
+"""
+    plan = DeterministicPRDExtractor().extract(markdown)
+
+    assert [task.title for task in plan.tasks] == [
+        "Work Item Management",
+        "State Machine",
+    ]
+    assert any("Empty titles" in item for item in plan.tasks[0].acceptance_criteria)
+    assert any("Illegal transitions" in item for item in plan.tasks[1].acceptance_criteria)
+
+
 @pytest.mark.anyio
 async def test_model_assisted_generation_uses_fake_llm_and_validates_json():
     payload = {
@@ -220,6 +272,7 @@ def test_architecture_contract_uses_bounded_calculator_task_packets():
     )
     assert "Implement TVM register model" in contract.dependency_graph["Implement TVM solving"]
     assert contract.task_contracts["Implement NPV and IRR"].risk_level == "high"
-    assert "docs/pr_ready_summary.md" in (
+    assert (
         contract.task_contracts["Prepare PR-ready summary"].canonical_test_command
+        == "python -m pytest -q"
     )

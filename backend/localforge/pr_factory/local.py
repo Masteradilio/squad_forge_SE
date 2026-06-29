@@ -121,14 +121,14 @@ class LocalPRFactory:
                 if html_files:
                     html_abs_path = html_files[0]
 
-            if not ref_image_path:
+            if visual_ref_rel and not ref_image_path:
                 reasons.append(f"Visual mismatch: Reference image not found for path '{visual_ref_rel}'.")
             elif not html_abs_path:
                 reasons.append(f"Visual mismatch: Actual HTML output not found for path '{visual_actual_rel}'.")
             else:
                 actual_image_path = os.path.join(worktree_path, "actual_layout.png")
                 captured = capture_html_screenshot(html_abs_path, actual_image_path)
-                if captured:
+                if captured and ref_image_path:
                     visual_result = VisualFidelityGate().evaluate(
                         reference_image_path=ref_image_path,
                         actual_image_path=actual_image_path,
@@ -137,7 +137,7 @@ class LocalPRFactory:
                     )
                     if not visual_result.passed:
                         reasons.append(f"Visual mismatch: {visual_result.summary}")
-                else:
+                elif not captured:
                     reasons.append("Visual mismatch: Headless screenshot capture failed.")
 
         # Generate cost benchmark report

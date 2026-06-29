@@ -4,6 +4,57 @@ All notable changes to LocalForge OS will be documented in this file.
 
 ## [Unreleased]
 
+### V3 Pomodoro Stabilization & 100% PR_READY Handoff - 2026-06-29
+
+#### Fixed
+- Implementado mecanismo de busca recursiva direcionada (lookwards/parentwards) para carregamento do arquivo `.env` (`_find_env_file` em `config.py`), garantindo que execuções de comandos CLI em subdiretórios de workspaces isolados herdem de forma transparente as chaves de API globais (como `OPENROUTER_API_KEY`) do repositório raiz.
+- Restringida a regra de segurança de proteção contra loops de truncamento (`Anti-loop block` em `engine.py`) para validar exclusivamente arquivos de código de produção, evitando que relatórios markdown temporários do sistema contendo tracebacks (como `REPAIR_REQUEST.md`) disparem exceções de omissão de código.
+- Corrigida a tipagem estrita de retorno de planos do Chief Engineer em `ChiefEngineerRepairPlan` para prevenir exceções `TypeError: object of type 'NoneType' has no len()` em modelos que retornam blocos de ação nulos ou no-op.
+- Atingida conformidade perfeita de 100% de sucesso com todas as 5 tarefas consolidadas em `PR_READY` no benchmark do Pomodoro Tracker sob a arquitetura V3.
+
+#### Tests
+- Executados testes de regressão de todo o backend do LocalForge (`pytest backend/tests` - 185 passed).
+- Execução limpa do scheduler no workspace `pomodoro-v3` atingindo o fechamento total da run.
+
+### V3 Goal-Keeper Remediation - 2026-06-28
+
+#### Fixed
+- Added the `ScrumMaster` squad role to the scheduler loop so recoverable `FAILED_SAFE` tasks are reopened, audited, escalated to `chief_only`, and delegated back to the Chief Engineer before the run is allowed to settle as partial.
+- Added Scrum Master conformity records on completed tasks: `passed` for `PR_READY` and `blocked` with the exact blocker for `FAILED_SAFE`, stored in task metadata and audit events.
+- Increased Scrum Master recovery attempts and made timeout/truncated-JSON blockers strengthen the Chief Engineer handoff with explicit unblock instructions.
+- Fixed blocker detection to use the latest `TaskRun` by id, preventing old timeout summaries from hiding newer failures such as truncated action JSON.
+- Made task-level `max_task_duration`/`max_diff_growth` overrides effective in the pipeline so Scrum Master recovery can expand task limits instead of replaying the same failure.
+- Changed the local model execution path to try `gemma4:12b` first, then `granite4.1:8b`, then `nemotron-3-nano:4b` for generation, repair, and invalid JSON repair.
+- Made action JSON parsing repair all parser/validation failures and ignore no-op actions returned by models.
+- Increased the V3-only benchmark diff growth budget to avoid false failures on small frontend tasks that legitimately generate complete HTML, CSS, and tests.
+- Hardened pipeline and PR-factory visual validation so visual tasks without a declared reference image pass when the target HTML can be captured; explicitly declared missing references still fail.
+- Improved scheduler failure summaries with `repr()` so empty exception messages no longer hide the actual blocker from benchmark reports and Scrum Master recovery.
+- Preserved existing pipeline failure summaries when the scheduler catches an exception, preventing clear timeout diagnostics from being overwritten by blank wrapper errors.
+
+#### Tests
+- `.\.codex_venv\Scripts\python.exe -m pytest backend\tests\test_agent_runtime.py::test_runtime_action_parser_ignores_noop_actions backend\tests\test_agent_runtime.py::test_runtime_action_parser_normalizes_command_kind_aliases backend\tests\test_scheduler.py::test_scrum_master_records_blocker_and_reopens_for_chief -q`
+- `.\.codex_venv\Scripts\python.exe -m mypy backend\localforge\services\scheduler.py backend\localforge\services\task.py backend\localforge\pipeline\engine.py backend\localforge\runtime\actions.py backend\tests\test_agent_runtime.py backend\tests\test_scheduler.py`
+- `.\.codex_venv\Scripts\python.exe -m pytest backend\tests\test_agent_runtime.py::test_runtime_action_parser_normalizes_command_kind_aliases backend\tests\test_prd_compiler.py backend\tests\test_v3_phases.py::test_local_work_delegation_limits -q`
+- `.\.codex_venv\Scripts\python.exe -m mypy backend\localforge\services\scheduler.py backend\localforge\models\enums.py backend\localforge\core\config.py backend\localforge\core\templates.py backend\localforge\pr_factory\local.py backend\localforge\pipeline\engine.py backend\localforge\runtime\actions.py backend\localforge\prd\extractor.py backend\localforge\prd\contracts.py backend\localforge\routing\delegation.py`
+- `.\.codex_venv\Scripts\python.exe -m py_compile scripts\run_benchmark_v3_only.py`
+
+### V3 Benchmark Partial Remediation - 2026-06-28
+
+#### Fixed
+- Ajustada a validacao visual para aceitar tarefas visuais sem imagem de referencia configurada quando o HTML alvo existe e a captura headless e gerada com sucesso; referencias declaradas continuam obrigatorias quando informadas.
+- Corrigido o contrato do benchmark SprintBoard Lite para usar sempre `tests/test_board_rules.py` como teste canonico, impedindo que testes inferidos por slug (`tests/test_engenharia_e_validacao.py`) introduzam requisitos fora do PRD como WIP limits.
+- Normalizado o alias de ação `kind: "command"`/`"shell"` para `run_command` no parser de ações de runtime, evitando falha `FAILED_SAFE` quando o Chief Engineer usa nomenclatura comum fora do schema estrito.
+- Corrigido o extrator deterministico de PRD para tratar secoes numeradas como tarefas agregadas e bullets aninhados como criterios de aceitacao, evitando que cabecalhos como `Transicoes validas:` sejam executados como tarefas isoladas.
+- Removida a geracao de `python -c "pass"` como comando canonico de validacao, mantendo os contratos dentro dos comandos permitidos pelo Safety Kernel.
+- Ajustado o `LocalWorkDelegationContract` para permitir rascunhos locais limitados em tarefas `chief_led`, preservando a diferenca semantica entre `chief_led` e `chief_only`.
+- Atualizado o benchmark V3-only do SprintBoard Lite para esperar a granularidade correta do PRD agregado e reconhecer titulos agregados em portugues no roteamento API-led/economy-first.
+
+#### Tests
+- `.\.codex_venv\Scripts\python.exe -m mypy backend\localforge\pipeline\engine.py backend\localforge\runtime\actions.py backend\localforge\prd\extractor.py backend\localforge\prd\contracts.py backend\localforge\routing\delegation.py backend\tests\test_agent_runtime.py backend\tests\test_prd_compiler.py backend\tests\test_v3_phases.py`
+- `.\.codex_venv\Scripts\python.exe -m pytest backend\tests\test_agent_runtime.py::test_runtime_action_parser_normalizes_command_kind_aliases -q`
+- `.\.codex_venv\Scripts\python.exe -m pytest backend\tests\test_prd_compiler.py backend\tests\test_v3_phases.py::test_local_work_delegation_limits -q`
+- `.\.codex_venv\Scripts\python.exe -m mypy backend\localforge\prd\extractor.py backend\localforge\prd\contracts.py backend\localforge\routing\delegation.py backend\tests\test_prd_compiler.py backend\tests\test_v3_phases.py`
+
 ### V3 Hybrid Benchmark Enforcement - 2026-06-28
 
 #### Fixed

@@ -75,6 +75,29 @@ def test_runtime_action_parser_normalizes_common_model_aliases():
     assert single[0].path == "calculator/date.py"
 
 
+def test_runtime_action_parser_normalizes_command_kind_aliases():
+    proposals = parse_action_proposals(
+        {"actions": [{"kind": "command", "cmd": "python -m pytest -q"}]}
+    )
+
+    assert proposals[0].kind == "run_command"
+    assert proposals[0].command == "python -m pytest -q"
+
+
+def test_runtime_action_parser_ignores_noop_actions():
+    proposals = parse_action_proposals(
+        {
+            "actions": [
+                {"kind": "noop"},
+                {"kind": "write_file", "path": "NOTE.md", "content": "ok"},
+            ]
+        }
+    )
+
+    assert len(proposals) == 1
+    assert proposals[0].path == "NOTE.md"
+
+
 @pytest.mark.anyio
 async def test_task_context_builder_bounds_large_files_and_includes_policy_and_worktree(
     db_session, tmp_path

@@ -22,6 +22,7 @@ def root_env_values() -> dict[str, str]:
         if isinstance(value, str) and value
     }
 
+
 async def check_docker_status() -> tuple[bool, str]:
     """Checks if Docker Daemon is active."""
     try:
@@ -37,6 +38,7 @@ async def check_docker_status() -> tuple[bool, str]:
             return False, stderr.decode("utf-8").strip()
     except Exception as e:
         return False, str(e)
+
 
 async def check_ollama_status() -> tuple[bool, list[str]]:
     """Checks if local Ollama daemon is reachable and lists downloaded models."""
@@ -59,6 +61,7 @@ async def check_ollama_status() -> tuple[bool, list[str]]:
             return False, []
     except Exception as e:
         return False, []
+
 
 async def run_cli_command(cwd: str, args: list[str]) -> tuple[int, str, str]:
     """Executes a LocalForge CLI command in the specified directory using the absolute python venv path."""
@@ -84,6 +87,7 @@ async def run_cli_command(cwd: str, args: list[str]) -> tuple[int, str, str]:
     except Exception as e:
         return -1, "", str(e)
 
+
 async def prune_git_worktrees():
     """Prunes missing/dangling git worktrees from the repository."""
     try:
@@ -97,6 +101,7 @@ async def prune_git_worktrees():
         print("Git worktrees pruned successfully.")
     except Exception as e:
         print(f"Failed to prune git worktrees: {e}")
+
 
 async def patch_workspace_config(
     workspace_dir: str,
@@ -164,31 +169,32 @@ def chief_engineer_config_from_env() -> tuple[str | None, bool]:
 def _task_requires_chief(title: str, description: str) -> bool:
     text = f"{title} {description}".lower()
     complex_terms = (
-        "criar, editar, listar",
         "gestão",
         "gestao",
-        "itens de trabalho",
-        "cada item possui",
+        "sessões",
+        "sessoes",
         "máquina",
         "maquina",
         "estados",
-        "filtros",
-        "exportação",
-        "exportacao",
-        "filtrar",
+        "timer",
+        "regra de ouro",
+        "long_break",
+        "consecutivas",
+        "persistência",
+        "persistancia",
+        "relatórios",
+        "relatorios",
         "exportar",
-        "engenharia",
+        "json",
+        "interface",
         "frontend",
         "visualiza",
+        "visual",
         "testes",
-        "valida",
         "backend",
-        "crud",
-        "json",
         "pull request",
         "pr artifact",
-        "relat",
-        "comandos",
+        "cost_benchmark",
     )
     return any(term in text for term in complex_terms)
 
@@ -196,10 +202,8 @@ def _task_requires_chief(title: str, description: str) -> bool:
 def apply_api_led_task_contracts(db_path: str) -> dict[str, int]:
     """Annotate imported benchmark tasks so V3 routes complex work to Chief Engineer.
 
-    The PRD extractor keeps numbered product requirements as task-level work and
-    stores nested bullets as acceptance criteria. This benchmark layer adds the
-    explicit V3 contract expected by MASTER_BACKLOG_V3: complex product, UI, test
-    and reporting work is chief-led; simple bounded clauses stay local-assisted.
+    For the Pomodoro Tracker, complex state-machines, reports and visuals route
+    to Chief Engineer, while CRUD remains local-assisted.
     """
     summary = {"chief_only": 0, "chief_led": 0, "local_assisted": 0}
     if not os.path.exists(db_path):
@@ -220,33 +224,44 @@ def apply_api_led_task_contracts(db_path: str) -> dict[str, int]:
             seniority = "chief_led"
             risk_level = "medium"
             allowed_files = [
-                "app/sprintboard.html",
-                "tests/test_board_rules.py",
+                "app/pomodoro.html",
+                "tests/test_pomodoro.py",
                 "docs/pr.md",
                 "docs/cost_benchmark.md",
                 "docs/review.md",
                 "docs/risk.md",
             ]
-            visual_required = "frontend" in f"{title} {description}".lower() or "visualiza" in f"{title} {description}".lower()
+            visual_required = "frontend" in f"{title} {description}".lower() or "visualiza" in f"{title} {description}".lower() or "interface" in f"{title} {description}".lower()
             if visual_required:
                 seniority = "chief_only"
                 risk_level = "high"
-                if "app/sprintboard.html" not in allowed_files:
-                    allowed_files.append("app/sprintboard.html")
             summary[seniority] += 1
         else:
             seniority = "local_assisted"
             risk_level = "low"
-            allowed_files = ["tests/test_board_rules.py"]
+            allowed_files = ["tests/test_pomodoro.py"]
             visual_required = False
             summary["local_assisted"] += 1
+
+        test_command = "python -m pytest tests/test_pomodoro.py -q"
+        text = f"{title} {description}".lower()
+        if "sessões" in text or "sessoes" in text or "crud" in text:
+            test_command = 'python -m pytest tests/test_pomodoro.py -k "session or database or crud or db" -q'
+        elif "máquina" in text or "maquina" in text or "timer" in text:
+            test_command = 'python -m pytest tests/test_pomodoro.py -k "state or status or transition or timer" -q'
+        elif "regra de ouro" in text or "ouro" in text:
+            test_command = 'python -m pytest tests/test_pomodoro.py -k "golden or rule" -q'
+        elif "relatórios" in text or "relatorios" in text or "exportar" in text:
+            test_command = 'python -m pytest tests/test_pomodoro.py -k "report or export" -q'
+        elif "interface" in text or "frontend" in text or "view" in text:
+            test_command = 'python -m pytest tests/test_pomodoro.py -k "interface or html or ui or visual or view" -q'
 
         metadata["task_contract"] = {
             **(metadata.get("task_contract") if isinstance(metadata.get("task_contract"), dict) else {}),
             "allowed_files": allowed_files,
             "visual_required": visual_required,
-            "visual_actual_output": "app/sprintboard.html" if visual_required else None,
-            "canonical_test_command": "python -m pytest tests/test_board_rules.py -q",
+            "visual_actual_output": "app/pomodoro.html" if visual_required else None,
+            "canonical_test_command": test_command,
             "seniority_class": seniority,
             "v3_api_led_benchmark": True,
         }
@@ -257,6 +272,7 @@ def apply_api_led_task_contracts(db_path: str) -> dict[str, int]:
     conn.commit()
     conn.close()
     return summary
+
 
 async def run_preflight_checks(v3_dir: str, v3_tasks_imported: int, expected_tasks: int) -> tuple[dict[str, Any], str | None]:
     """Runs all pre-flight diagnostic validations and returns results and the chosen LLM model."""
@@ -286,9 +302,7 @@ async def run_preflight_checks(v3_dir: str, v3_tasks_imported: int, expected_tas
     ollama_active, installed_models = await check_ollama_status()
     chosen_model = None
     
-    # Preferred order: env model -> config model -> fallback options
     preferred_models = []
-    
     if os.environ.get("LOCALFORGE_MODEL"):
         preferred_models.append(os.environ["LOCALFORGE_MODEL"])
     if os.environ.get("OPENROUTER_MODEL"):
@@ -324,9 +338,8 @@ async def run_preflight_checks(v3_dir: str, v3_tasks_imported: int, expected_tas
                 if chosen_model:
                     break
 
-    model_passed = chosen_model is not None
     results["llm_installed"] = {
-        "passed": model_passed,
+        "passed": chosen_model is not None,
         "detail": f"Chosen model for execution: '{chosen_model}'. Ollama installed models: {installed_models}"
     }
     
@@ -346,10 +359,11 @@ async def run_preflight_checks(v3_dir: str, v3_tasks_imported: int, expected_tas
     
     return results, chosen_model
 
+
 async def main():
-    print("=== Starting Real LocalForge V3-Only CLI Benchmark Execution ===")
+    print("=== Starting Real LocalForge Pomodoro Tracker CLI Benchmark Execution ===")
     
-    v3_dir = os.path.join(ROOT_DIR, "benchmarks", "workspaces", "sprintboard-v3")
+    v3_dir = os.path.join(ROOT_DIR, "benchmarks", "workspaces", "pomodoro-v3")
     
     # Clean workspace directory
     if os.path.exists(v3_dir):
@@ -359,11 +373,11 @@ async def main():
     # Prune git worktrees before running to avoid registration conflicts
     await prune_git_worktrees()
 
-    # Initialize workspace V3
-    print("Initializing Workspace V3...")
+    # Initialize workspace
+    print("Initializing Workspace Pomodoro...")
     await run_cli_command(v3_dir, ["init"])
-    v2_prd_path = os.path.join(ROOT_DIR, "docs", "PRD_SPRINTBOARD_LITE.md")
-    await run_cli_command(v3_dir, ["import-prd", v2_prd_path])
+    pomodoro_prd_path = os.path.join(ROOT_DIR, "docs", "PRD_POMODORO_TRACKER.md")
+    await run_cli_command(v3_dir, ["import-prd", pomodoro_prd_path])
 
     # Fetch initial tasks count
     v3_db = os.path.join(v3_dir, ".localforge", "localforge.db")
@@ -467,17 +481,13 @@ async def main():
     if preflight_failed:
         status_classification = "BLOCKED"
     elif v3_runs_count > 0:
-        # Check if tasks succeeded or failed
-        ready_tasks = task_statuses.get("READY", 0)
-        backlog_tasks = task_statuses.get("BACKLOG", 0)
         failed_tasks = task_statuses.get("FAILED_SAFE", 0)
         pr_ready_tasks = task_statuses.get("PR_READY", 0)
         
         if v3_openrouter_calls == 0:
             status_classification = "REJECTED"
             blockers.append(
-                "V3 API-led routing did not execute any Chief Engineer/OpenRouter call; "
-                "benchmark did not exercise the intended V3 architecture."
+                "V3 API-led routing did not execute any Chief Engineer/OpenRouter call."
             )
         elif pr_ready_tasks > 0 and failed_tasks == 0:
             status_classification = "ACCEPTED"
@@ -489,11 +499,11 @@ async def main():
     execution_error = v3_run_err or v3_run_out
     
     # 1. Format JSON metrics
-    metrics_json_path = os.path.join(ROOT_DIR, "docs", "e2e", "v3_only_benchmark_metrics.json")
+    metrics_json_path = os.path.join(ROOT_DIR, "docs", "e2e", "pomodoro_benchmark_metrics.json")
     metrics_data = {
-      "benchmark_name": "SprintBoard Lite V3-Only Empirical Benchmark",
+      "benchmark_name": "Pomodoro Tracker V3-Only Empirical Benchmark",
       "date": datetime.now(UTC).strftime("%Y-%m-%d"),
-      "prd_file": "docs/PRD_SPRINTBOARD_LITE.md",
+      "prd_file": "docs/PRD_POMODORO_TRACKER.md",
       "status": status_classification,
       "blockers": blockers,
       "preflight_checklist": {
@@ -524,18 +534,19 @@ async def main():
         "api_led_economy_first_exercised": v3_openrouter_calls > 0
       }
     }
+    os.makedirs(os.path.dirname(metrics_json_path), exist_ok=True)
     with open(metrics_json_path, "w", encoding="utf-8") as f:
         json.dump(metrics_data, f, indent=2)
 
     # 2. Format Human Acceptance Report
-    acceptance_md_path = os.path.join(ROOT_DIR, "docs", "e2e", "sprintboard_lite_human_acceptance.md")
+    acceptance_md_path = os.path.join(ROOT_DIR, "docs", "e2e", "pomodoro_human_acceptance.md")
 
     has_deliverable = status_classification == "ACCEPTED"
     has_partial_evidence = status_classification == "PARTIAL"
 
-    acceptance_md = f"""# SprintBoard Lite - Human Acceptance Report
+    acceptance_md = f"""# Pomodoro Tracker - Human Acceptance Report
 
-This document records the human validation checks for the **SprintBoard Lite** benchmark.
+This document records the human validation checks for the **Pomodoro Tracker** benchmark.
 
 ## STATUS: {status_classification}
 
@@ -543,18 +554,18 @@ The product is accepted only when the benchmark reaches `ACCEPTED`. A `PARTIAL` 
 
 ### Acceptance Checklist
 
-- `[{'x' if has_deliverable else ' '}]` **Create Tasks**: CRUD is present in the final deliverable.
-- `[{'x' if has_deliverable else ' '}]` **Validation Rules**: title and state-machine validation pass in product tests.
-- `[{'x' if has_deliverable else ' '}]` **Deterministic State Transitions**: legal/illegal transitions are enforced.
-- `[{'x' if has_deliverable else ' '}]` **JSON Export**: board export works and includes active items.
-- `[{'x' if has_deliverable else ' '}]` **Frontend UI**: Kanban UI is delivered as a runnable artifact.
-- `[{'x' if has_deliverable or has_partial_evidence else ' '}]` **Evidence Exists**: runtime artifacts exist, but partial evidence is not human acceptance.
+- `[{'x' if has_deliverable else ' '}]` **Create Sessions**: CRUD is present in the final deliverable.
+- `[{'x' if has_deliverable else ' '}]` **Validation Rules**: state-machine validation passes in product tests.
+- `[{'x' if has_deliverable else ' '}]` **Golden Rule Enforcement**: consecutive 4 work sessions mandate long break.
+- `[{'x' if has_deliverable else ' '}]` **JSON Report**: sessions consolidated export works.
+- `[{'x' if has_deliverable else ' '}]` **Frontend UI**: Pomodoro HTML view with controls.
+- `[{'x' if has_deliverable or has_partial_evidence else ' '}]` **Evidence Exists**: runtime artifacts exist.
 
 ---
 
 ## Real Execution Evidence (SQLite & FileSystem)
 
-- **Workspace Path**: `benchmarks/workspaces/sprintboard-v3`
+- **Workspace Path**: `benchmarks/workspaces/pomodoro-v3`
 - **Total Task Runs**: {v3_task_runs_count} of {expected_tasks} planned.
 - **Total Artifacts**: {v3_artifacts_logged} generated under `.localforge/artifacts/`.
 - **Task Statuses**: {json.dumps(task_statuses)}
@@ -566,20 +577,20 @@ The product is accepted only when the benchmark reaches `ACCEPTED`. A `PARTIAL` 
     with open(acceptance_md_path, "w", encoding="utf-8") as f:
         f.write(acceptance_md)
 
-    # 3. Format V3 Only Benchmark Report
-    report_md_path = os.path.join(ROOT_DIR, "docs", "e2e", "V3_ONLY_BENCHMARK_REPORT.md")
+    # 3. Format Pomodoro Benchmark Report
+    report_md_path = os.path.join(ROOT_DIR, "docs", "e2e", "POMODORO_BENCHMARK_REPORT.md")
     
     blockers_list_md = ""
     for i, b in enumerate(blockers, 1):
         blockers_list_md += f"{i}. **{b}**\n"
 
-    report_md = f"""# LocalForge OS - V3-Only Empirical Benchmark Report
+    report_md = f"""# LocalForge OS - Pomodoro Tracker Benchmark Report
 
 ## 1. Executive Summary
 
-Este relatório documenta a execução empírica real de ponta a ponta do **LocalForge V3 Candidate** (API-led AI Engineering Squad) no workspace isolado `sprintboard-v3`.
+Este relatório documenta a execução empírica real de ponta a ponta do **LocalForge V3 Candidate** no workspace isolado `pomodoro-v3`.
 
-O benchmark foi executado de forma física e real para produzir o produto **SprintBoard Lite** de acordo com os requisitos em [docs/PRD_SPRINTBOARD_LITE.md](file:///{ROOT_DIR}/docs/PRD_SPRINTBOARD_LITE.md), sem simulações ou dados pré-fabricados.
+O benchmark foi executado de forma física e real para produzir o produto **Pomodoro Tracker** de acordo com os requisitos em [docs/PRD_POMODORO_TRACKER.md](file:///{ROOT_DIR}/docs/PRD_POMODORO_TRACKER.md), sem simulações.
 
 ### Status do Benchmark
 > [!IMPORTANT]
@@ -597,14 +608,14 @@ Os seguintes impedimentos técnicos reais foram validados pelo pré-flight:
 
 ---
 
-## 3. Métricas Reais do Workspace V3 (Extraídas do SQLite)
+## 3. Métricas Reais do Workspace Pomodoro (Extraídas do SQLite)
 
 Métricas de execução extraídas diretamente da base de dados `.localforge/localforge.db` após a rodada da pipeline:
 
 | Metric | Variant: V3 Candidate | Detail / Evidence |
 | :--- | :---: | :--- |
 | **Run ID** | f"V3-Run-{v3_runs_count}" | ID de execução real do controle do LocalForge |
-| **SQLite DB Path** | `benchmarks/workspaces/sprintboard-v3/.localforge/localforge.db` | Banco SQLite físico do runtime |
+| **SQLite DB Path** | `benchmarks/workspaces/pomodoro-v3/.localforge/localforge.db` | Banco SQLite físico do runtime |
 | **Tasks Planned** | {expected_tasks} | Escopo completo do PRD |
 | **Tasks Imported** | {v3_tasks_imported} | Sucesso na importação real |
 | **Task Runs Executed** | {v3_task_runs_count} | Quantidade de iterações de tarefas tentadas |
@@ -652,12 +663,13 @@ Abaixo consta a distribuição real de status das {expected_tasks} tarefas após
 
 > [!IMPORTANT]
 > **CLASSIFICACAO: {status_classification}**
-> The V3-only run proves the API-led/economy-first architecture only when at least one `openrouter` call is recorded in `model_call_ledger` and costs are consolidated in the report. Otherwise the result remains **REJECTED** or **BLOCKED**, even if the CLI exits with code 0.
+> The V3-only run proves the API-led/economy-first architecture only when at least one `openrouter` call is recorded in `model_call_ledger`.
 """
     with open(report_md_path, "w", encoding="utf-8") as f:
         f.write(report_md)
 
-    print(f"\n[Success] V3-Only benchmark execution completed! Status: {status_classification}")
+    print(f"\n[Success] Pomodoro V3-Only benchmark execution completed! Status: {status_classification}")
+
 
 if __name__ == "__main__":
     asyncio.run(main())

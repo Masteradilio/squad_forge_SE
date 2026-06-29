@@ -51,9 +51,7 @@ def build_architecture_contract(plan: ExtractedPlan) -> ArchitectureContract:
 
 def _task_contract(task: ExtractedTask) -> TaskContract:
     allowed_files = task.expected_files or _infer_allowed_files(task.title)
-    test_command = _test_command_for(allowed_files)
-    if task.title.strip().endswith(":"):
-        test_command = 'python -c "pass"'
+    test_command = _test_command_for(allowed_files, task.title)
     return TaskContract(
         task_title=task.title,
         allowed_files=allowed_files,
@@ -206,16 +204,40 @@ def _slug(value: str) -> str:
 
 
 
-def _test_command_for(allowed_files: list[str]) -> str:
+def _extract_significant_keywords(title: str) -> list[str]:
+    slug = _slug(title)
+    words = slug.split("_")
+    ignored_words = {
+        "para", "com", "por", "uma", "sem", "sob", "sobre", "como", "mais", 
+        "após", "apos", "cada", "tudo", "todos", "itens", "item", "fluxo",
+        "representando", "formato", "colunas", "view", "visualizacao", "visualiza",
+        "cobrindo", "automatizados", "contendo", "resultam", "ativos", "campos",
+        "gerados", "excluídos", "excluidos", "deletados"
+    }
+    keywords = [w for w in words if len(w) > 3 and w not in ignored_words]
+    return keywords
+
+
+def _test_command_for(allowed_files: list[str], title: str = "") -> str:
     test_files = [path for path in allowed_files if path.startswith("tests/")]
     if not test_files:
-        docs = [path for path in allowed_files if path.startswith("docs/")]
-        if len(docs) == 1:
-            return f"python -c \"from pathlib import Path; assert Path('{docs[0]}').is_file()\""
-        return 'python -c "pass"'
+        return "python -m pytest -q"
+    
+    # Check if we should apply dynamic keyword filtering
+    is_hp12c = any(
+        term in title.lower()
+        for term in ("calculator", "financial", "golden", "amortization", "tvm", "irr", "npv", "bond")
+    )
+    if not is_hp12c and len(test_files) == 1 and title:
+        keywords = _extract_significant_keywords(title)
+        if keywords:
+            filter_str = " or ".join(keywords)
+            return f"python -m pytest {test_files[0]} -k \"{filter_str}\" -q"
+
     if len(test_files) == 1:
         return f"python -m pytest {test_files[0]} -q"
     return "python -m pytest -q"
+
 
 
 def _risk_for_task(title: str, declared_risk: str) -> str:

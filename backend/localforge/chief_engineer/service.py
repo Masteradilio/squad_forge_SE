@@ -83,6 +83,13 @@ class ChiefEngineerRepairPlan(BaseModel):
     actions: list[ChiefEngineerRepairAction] = Field(default_factory=list)
     risk_notes: list[str] = Field(default_factory=list)
 
+    @field_validator("actions", mode="before")
+    @classmethod
+    def _normalize_actions(cls, value: object) -> object:
+        if value is None:
+            return []
+        return value
+
     @field_validator("risk_notes", mode="before")
     @classmethod
     def _normalize_risk_notes(cls, value: object) -> object:
@@ -292,7 +299,7 @@ class ChiefEngineerService:
                 ),
                 status=status,
                 error_summary=error_summary,
-                metadata={"failure_class": plan.failure_class, "actions": len(plan.actions)},
+                metadata={"failure_class": plan.failure_class, "actions": len(plan.actions or [])},
             )
         )
         return plan

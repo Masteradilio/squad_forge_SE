@@ -13,7 +13,8 @@ DEFAULT_CONFIG_TEMPLATE: dict[str, Any] = {
     "models": {
         "provider": "ollama",
         "base_url": "http://localhost:11434/v1",
-        "default_model": "llama3",
+        "default_model": "gemma4:12b",
+        "fallback_models": ["granite4.1:8b", "nemotron-3-nano:4b"],
     },
 }
 

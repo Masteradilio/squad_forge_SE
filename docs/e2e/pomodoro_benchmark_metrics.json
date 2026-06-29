@@ -1,7 +1,7 @@
 {
-  "benchmark_name": "SprintBoard Lite V3-Only Empirical Benchmark",
-  "date": "2026-06-28",
-  "prd_file": "docs/PRD_SPRINTBOARD_LITE.md",
+  "benchmark_name": "Pomodoro Tracker V3-Only Empirical Benchmark",
+  "date": "2026-06-29",
+  "prd_file": "docs/PRD_POMODORO_TRACKER.md",
   "status": "ACCEPTED",
   "blockers": [],
   "preflight_checklist": {
@@ -14,26 +14,27 @@
     "run_id": "V3-Run-1",
     "tasks_planned": 5,
     "tasks_imported": 5,
-    "task_runs_executed": 7,
+    "task_runs_executed": 11,
     "task_statuses": {
-      "PR_READY": 5
+      "PR_READY": 5,
+      "READY": 0
     },
-    "artifacts_generated": 84,
+    "artifacts_generated": 48,
     "artifact_types": {
-      "DiffArtifact": 14,
-      "PRArtifact": 10,
-      "PlanArtifact": 5,
-      "RepairArtifact": 5,
-      "ReviewArtifact": 5,
-      "RiskArtifact": 5,
-      "RoleArtifact": 35,
-      "TestArtifact": 5
+      "DiffArtifact": 6,
+      "PRArtifact": 6,
+      "PlanArtifact": 3,
+      "RepairArtifact": 3,
+      "ReviewArtifact": 3,
+      "RiskArtifact": 3,
+      "RoleArtifact": 21,
+      "TestArtifact": 3
     },
-    "model_calls_logged": 16,
-    "openrouter_calls_logged": 7,
-    "local_calls_logged": 9,
-    "estimated_cost_usd": 0.0307395,
-    "exit_code": 0,
+    "model_calls_logged": 3,
+    "openrouter_calls_logged": 3,
+    "local_calls_logged": 0,
+    "estimated_cost_usd": 0.0231711,
+    "exit_code": 1,
     "routing_contract_summary": {
       "chief_only": 1,
       "chief_led": 4,

@@ -11,7 +11,7 @@ def test_config_pydantic_defaults():
     assert config.git.default_branch == "main"
     assert config.models.provider == "ollama"
     assert config.models.base_url == "http://localhost:11434/v1"
-    assert config.models.default_model == "llama3"
+    assert config.models.default_model == "gemma4:12b"
 
 
 def test_load_config_precedence(tmp_path, monkeypatch):
@@ -36,7 +36,7 @@ def test_load_config_precedence(tmp_path, monkeypatch):
     config = load_config()
     assert config.project.name == "File Project"
     assert config.git.default_branch == "develop"
-    assert config.models.default_model == "llama3"
+    assert config.models.default_model == "gemma4:12b"
 
     # 3. Verification of Env override
     monkeypatch.setenv("LOCALFORGE_PROJECT_NAME", "Env Project")

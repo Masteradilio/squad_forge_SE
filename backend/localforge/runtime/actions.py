@@ -33,6 +33,13 @@ class RuntimeActionProposal(BaseModel):
             "edit",
         }:
             normalized["kind"] = "write_file"
+        if normalized.get("kind") in {"command", "shell", "exec", "execute"}:
+            normalized["kind"] = "run_command"
+        if normalized.get("kind") == "run_command" and "command" not in normalized:
+            for alias in ("cmd", "shell_command"):
+                if alias in normalized:
+                    normalized["command"] = normalized[alias]
+                    break
         if "path" not in normalized:
             for alias in ("file", "filename", "file_path"):
                 if alias in normalized:
@@ -73,6 +80,12 @@ def parse_action_proposals(raw: object) -> list[RuntimeActionProposal]:
                 pass
         if not isinstance(item, dict):
             continue
+        if str(item.get("kind") or item.get("action") or item.get("type") or "").lower() in {
+            "noop",
+            "no_op",
+            "none",
+        }:
+            continue
 
         try:
             proposal = RuntimeActionProposal.model_validate(item)
@@ -88,6 +101,92 @@ def parse_action_proposals(raw: object) -> list[RuntimeActionProposal]:
 
 
 def _loads_action_payload(raw: str) -> object:
+    import re
+    # Clean the raw string first
+    cleaned = raw.strip()
+    # Strip markdown code fences if present
+    match = re.search(r"```(?:json)?\s*([\s\S]+?)\s*```", cleaned)
+    if match:
+        cleaned = match.group(1).strip()
+    
+    # Fix trailing commas in objects and arrays
+    cleaned = re.sub(r",(\s*[}\]])", r"\1", cleaned)
+    
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        # Try to balance and close truncated JSON
+        try:
+            open_braces = 0
+            open_brackets = 0
+            in_string = False
+            escape = False
+            clean_chars = []
+            for char in cleaned:
+                if escape:
+                    clean_chars.append(char)
+                    escape = False
+                    continue
+                if char == '\\':
+                    clean_chars.append(char)
+                    escape = True
+                    continue
+                if char == '"':
+                    in_string = not in_string
+                    clean_chars.append(char)
+                    continue
+                if not in_string:
+                    if char == '{':
+                        open_braces += 1
+                    elif char == '}':
+                        if open_braces > 0:
+                            open_braces -= 1
+                        else:
+                            continue
+                    elif char == '[':
+                        open_brackets += 1
+                    elif char == ']':
+                        if open_brackets > 0:
+                            open_brackets -= 1
+                        else:
+                            continue
+                clean_chars.append(char)
+                
+            reconstructed = "".join(clean_chars)
+            if in_string:
+                reconstructed += '"'
+                
+            nesting_stack = []
+            in_string = False
+            escape = False
+            for char in reconstructed:
+                if escape:
+                    escape = False
+                    continue
+                if char == '\\':
+                    escape = True
+                    continue
+                if char == '"':
+                    in_string = not in_string
+                    continue
+                if not in_string:
+                    if char in "{[":
+                        nesting_stack.append(char)
+                    elif char in "}]":
+                        matching = "{" if char == "}" else "["
+                        if nesting_stack and nesting_stack[-1] == matching:
+                            nesting_stack.pop()
+                            
+            for op in reversed(nesting_stack):
+                if op == "{":
+                    reconstructed += "}"
+                elif op == "[":
+                    reconstructed += "]"
+            return json.loads(reconstructed)
+        except Exception:
+            pass
+
+    # Fallback to the original raw decode logic
     try:
         return json.loads(raw)
     except json.JSONDecodeError as original_error:
@@ -101,6 +200,7 @@ def _loads_action_payload(raw: str) -> object:
             if isinstance(payload, (dict, list)):
                 return payload
         raise original_error
+
 
 
 def proposals_to_metadata(proposals: list[RuntimeActionProposal]) -> list[dict[str, Any]]:

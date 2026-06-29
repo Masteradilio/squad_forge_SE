@@ -8,6 +8,7 @@ from localforge.models.enums import (
     AuditEventType,
     RunMode,
     RunStatus,
+    TaskRunStatus,
     TaskStatus,
 )
 from localforge.services.audit import AuditService
@@ -147,6 +148,66 @@ async def test_dependency_resolution_blocks_task(db_manager, db_session: AsyncSe
     refreshed_b = await uow.tasks.get_task(task_b.id)
     assert refreshed_b is not None
     assert refreshed_b.status == TaskStatus.BLOCKED
+
+
+@pytest.mark.anyio
+async def test_scrum_master_records_blocker_and_reopens_for_chief(
+    db_manager, db_session: AsyncSession
+):
+    uow = UnitOfWork(db_manager)
+    uow.session = db_session
+    uow.projects = ProjectService(db_session)
+    uow.executions = ExecutionService(db_session)
+    uow.tasks = TaskService(db_session)
+    uow.audits = AuditService(db_session)
+
+    project = await uow.projects.create_project(
+        domain.Project(name="Scrum", root_path="/p", default_branch="main")
+    )
+    assert project.id is not None
+    run = await uow.executions.create_run(
+        domain.Run(project_id=project.id, mode=RunMode.UNATTENDED, initiated_by="test")
+    )
+    assert run.id is not None
+    task = await uow.tasks.create_task(
+        domain.Task(
+            project_id=project.id,
+            key="LF-30",
+            title="Blocked task",
+            description="",
+            metadata={"task_contract": {"seniority_class": "chief_led"}},
+        )
+    )
+    assert task.id is not None
+    await uow.tasks.update_task_status(task.id, TaskStatus.READY)
+    await uow.tasks.update_task_status(task.id, TaskStatus.CLAIMED)
+    await uow.tasks.update_task_status(task.id, TaskStatus.PLANNING)
+    await uow.tasks.update_task_status(task.id, TaskStatus.IMPLEMENTING)
+    await uow.tasks.update_task_status(task.id, TaskStatus.FAILED_SAFE)
+    await uow.tasks.create_task_run(
+        domain.TaskRun(
+            run_id=run.id,
+            task_id=task.id,
+            status=TaskRunStatus.FAILED,
+            final_summary="Pipeline execution failed: JSONDecodeError('bad')",
+        )
+    )
+
+    scheduler = Scheduler(project_id=project.id, run_id=run.id, db_manager=db_manager)
+    failed_task = await uow.tasks.get_task(task.id)
+    assert failed_task is not None
+    await scheduler._scrum_master_record_conformity(uow, [failed_task])
+    failed_task = await uow.tasks.get_task(task.id)
+    assert failed_task is not None
+    reopened = await scheduler._scrum_master_unblock_failed_tasks(uow, [failed_task])
+
+    refreshed = await uow.tasks.get_task(task.id)
+    assert reopened == 1
+    assert refreshed is not None
+    assert refreshed.status == TaskStatus.READY
+    assert refreshed.metadata["scrum_master_conformity"]["status"] == "blocked"
+    assert refreshed.metadata["task_contract"]["seniority_class"] == "chief_only"
+    assert refreshed.metadata["task_contract"]["chief_engineer_unblock_required"] is True
 
 
 @pytest.mark.anyio

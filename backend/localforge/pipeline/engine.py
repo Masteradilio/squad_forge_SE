@@ -106,6 +106,12 @@ class RolePipelineEngine:
             max_llm_calls = run.resource_limits.get(
                 "max_active_model_calls", max_llm_calls
             )
+        if isinstance(task.metadata, dict):
+            task_duration_limit = float(
+                task.metadata.get("max_task_duration", task_duration_limit)
+                or task_duration_limit
+            )
+            max_diff = int(task.metadata.get("max_diff_growth", max_diff) or max_diff)
 
         # Configure LLM context variables
         from localforge.llm.context import (
@@ -911,7 +917,11 @@ class RolePipelineEngine:
                     continue
 
                 # Check for truncation/omission markers
-                truncation_marker = self._detect_truncation(action.content)
+                is_code_file = any(
+                    action.path.endswith(ext)
+                    for ext in (".py", ".js", ".ts", ".html", ".css", ".go", ".c", ".cpp", ".java")
+                )
+                truncation_marker = self._detect_truncation(action.content) if is_code_file else None
                 if truncation_marker:
                     raise ValueError(
                         f"Anti-loop block: Generated file content for '{action.path}' "
@@ -1074,6 +1084,16 @@ class RolePipelineEngine:
                     stderr = "Visual validation failed: Failed to capture HTML screenshot."
                     command_summaries.append(f"Visual validation: {stderr}")
                     return code, stdout, stderr
+                if visual_ref_rel and not ref_image_path:
+                    code = 1
+                    stderr = f"Visual validation failed: Reference image not found for path '{visual_ref_rel}'."
+                    command_summaries.append(f"Visual validation: {stderr}")
+                    return code, stdout, stderr
+                if not ref_image_path:
+                    command_summaries.append(
+                        "Visual validation passed: HTML screenshot captured; no reference image configured."
+                    )
+                    return code, stdout, stderr
                 gate_res = VisualFidelityGate().evaluate(
                     reference_image_path=ref_image_path,
                     actual_image_path=actual_image_path,
@@ -1099,16 +1119,28 @@ class RolePipelineEngine:
     ) -> list[RuntimeActionProposal]:
         try:
             return parse_action_proposals(raw_actions)
-        except ValueError:
+        except Exception as exc:
             if os.getenv("PYTEST_CURRENT_TEST"):
                 raise
+            invalid_payload = (
+                "The previous action payload could not be parsed or validated.\n"
+                f"Error: {exc!r}\n"
+                "Payload:\n"
+                f"{str(raw_actions)}"
+            )
             repaired = await self._request_action_json_repair(
                 task=task,
                 context=context,
-                invalid_payload=str(raw_actions),
+                invalid_payload=invalid_payload,
                 purpose=purpose,
             )
-            return parse_action_proposals(repaired)
+            try:
+                return parse_action_proposals(repaired)
+            except Exception as repair_exc:
+                raise ValueError(
+                    "Action JSON remained invalid after repair: "
+                    f"{repair_exc!r}"
+                ) from repair_exc
 
     def _should_run_pytest(self, worktree_path: str, changed_files: list[str]) -> bool:
         if any(path.startswith("tests/") or path.startswith("test_") for path in changed_files):
@@ -1209,6 +1241,7 @@ class RolePipelineEngine:
                 model=config.chief_engineer.model,
             )
         except Exception as exc:
+            logger.error("Chief Engineer semantic repair call failed", exc_info=True)
             command_summaries.append(
                 "Chief Engineer repair unavailable: "
                 + compress_tool_output(str(exc), max_chars=800)
@@ -2359,11 +2392,6 @@ class RolePipelineEngine:
         ]
 
     async def _request_model_actions(self, task: domain.Task, context: RoleContext) -> str:
-        config = load_config()
-        provider = OpenAICompatibleProvider(
-            base_url=config.models.base_url,
-            default_model=context.model_profile_id or config.models.default_model,
-        )
         prompt = (
             "You are the Coder role in LocalForge OS. Return only valid JSON with this "
             "shape: {\"actions\":[{\"kind\":\"write_file\",\"path\":\"relative/path\","
@@ -2384,17 +2412,14 @@ class RolePipelineEngine:
             f"{context.rendered}\n\n"
             "Create the minimal implementation files needed to satisfy this task's acceptance criteria."
         )
-        response = await provider.chat_completion(
-            [{"role": "user", "content": prompt}],
-            response_schema={"type": "object"},
+        response, model_used = await self._chat_completion_with_local_fallback(
+            prompt=prompt,
+            preferred_model=context.model_profile_id,
             timeout=180.0,
-            model=context.model_profile_id,
         )
-        if not isinstance(response, str):
-            raise ValueError("Streaming model responses are not supported for runtime actions.")
         await self._record_local_model_call(
             task=task,
-            model=context.model_profile_id or config.models.default_model,
+            model=model_used,
             reason=ChiefEngineerCallReason.TASK_RISK_CLASSIFICATION,
             prompt=prompt,
             response=response,
@@ -2413,10 +2438,6 @@ class RolePipelineEngine:
     ) -> str:
         config = load_config()
         repair_model = config.models.roles.get(AgentRole.FIXER.value, context.model_profile_id)
-        provider = OpenAICompatibleProvider(
-            base_url=config.models.base_url,
-            default_model=repair_model or config.models.default_model,
-        )
         prompt = (
             "You are repairing a LocalForge task after validation failed. Return only valid JSON "
             "with actions using this shape: {\"actions\":[{\"kind\":\"write_file\","
@@ -2440,17 +2461,14 @@ class RolePipelineEngine:
             "Validation failure output:\n"
             f"{compress_tool_output(validation_output, max_chars=8000)}"
         )
-        response = await provider.chat_completion(
-            [{"role": "user", "content": prompt}],
-            response_schema={"type": "object"},
+        response, model_used = await self._chat_completion_with_local_fallback(
+            prompt=prompt,
+            preferred_model=repair_model,
             timeout=240.0,
-            model=repair_model,
         )
-        if not isinstance(response, str):
-            raise ValueError("Streaming model responses are not supported for repair actions.")
         await self._record_local_model_call(
             task=task,
-            model=repair_model or config.models.default_model,
+            model=model_used,
             reason=ChiefEngineerCallReason.SEMANTIC_REPAIR_PLAN,
             prompt=prompt,
             response=response,
@@ -2482,6 +2500,52 @@ class RolePipelineEngine:
                 status="success",
                 metadata={"tier": "local", "v3_economy_first": True},
             )
+        )
+
+    def _local_model_candidates(self, preferred_model: str | None) -> list[str]:
+        config = load_config()
+        candidates = [
+            preferred_model,
+            config.models.default_model,
+            *config.models.fallback_models,
+        ]
+        ordered: list[str] = []
+        for candidate in candidates:
+            if candidate and candidate not in ordered:
+                ordered.append(candidate)
+        return ordered
+
+    async def _chat_completion_with_local_fallback(
+        self,
+        *,
+        prompt: str,
+        preferred_model: str | None,
+        timeout: float,
+    ) -> tuple[str, str]:
+        config = load_config()
+        failures: list[str] = []
+        for model in self._local_model_candidates(preferred_model):
+            provider = OpenAICompatibleProvider(
+                base_url=config.models.base_url,
+                default_model=model,
+            )
+            try:
+                response = await provider.chat_completion(
+                    [{"role": "user", "content": prompt}],
+                    response_schema={"type": "object"},
+                    timeout=timeout,
+                    model=model,
+                )
+            except Exception as exc:
+                failures.append(f"{model}: {exc!r}")
+                logger.warning("Local model %s failed; trying fallback when available.", model)
+                continue
+            if not isinstance(response, str):
+                failures.append(f"{model}: streaming response is not supported")
+                continue
+            return response, model
+        raise RuntimeError(
+            "All local model candidates failed: " + "; ".join(failures)
         )
 
     def _render_changed_file_context(
@@ -2871,10 +2935,6 @@ class ButtonGrid:
     ) -> str:
         config = load_config()
         repair_model = config.models.roles.get(AgentRole.FIXER.value, context.model_profile_id)
-        provider = OpenAICompatibleProvider(
-            base_url=config.models.base_url,
-            default_model=repair_model or config.models.default_model,
-        )
         prompt = (
             "The previous LocalForge action response was invalid. Return only corrected JSON "
             "with shape {\"actions\":[{\"kind\":\"write_file\",\"path\":\"relative/path\","
@@ -2887,17 +2947,14 @@ class ButtonGrid:
             "Invalid payload:\n"
             f"{compress_tool_output(invalid_payload, max_chars=4000)}"
         )
-        response = await provider.chat_completion(
-            [{"role": "user", "content": prompt}],
-            response_schema={"type": "object"},
+        response, model_used = await self._chat_completion_with_local_fallback(
+            prompt=prompt,
+            preferred_model=repair_model,
             timeout=180.0,
-            model=repair_model,
         )
-        if not isinstance(response, str):
-            raise ValueError("Streaming model responses are not supported for JSON repair.")
         await self._record_local_model_call(
             task=task,
-            model=repair_model or config.models.default_model,
+            model=model_used,
             reason=ChiefEngineerCallReason.SEMANTIC_REPAIR_PLAN,
             prompt=prompt,
             response=response,

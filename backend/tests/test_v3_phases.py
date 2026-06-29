@@ -70,6 +70,17 @@ def test_local_work_delegation_limits():
     assert is_allowed is False
     assert "Chief Engineer" in rationale
 
+    chief_led_task = domain.Task(
+        project_id=1,
+        key="LF-102",
+        title="Chief-led task",
+        description="Chief Engineer should guide, but bounded local draft is allowed.",
+        metadata={"task_contract": {"seniority_class": "chief_led"}},
+        risk_level="medium",
+    )
+    is_allowed, rationale = delegation.evaluate_delegation(chief_led_task, task_run)
+    assert is_allowed is True
+
 
 @pytest.mark.asyncio
 async def test_api_simulation_service(db_session):

@@ -4,14 +4,40 @@ import os
 from datetime import UTC, datetime
 from typing import Any
 
+from localforge.core.config import load_config
 from localforge.gitops.manager import WorktreeManager
 from localforge.models import domain
-from localforge.models.enums import AuditEventType, RunStatus, TaskRunStatus, TaskStatus
+from localforge.models.enums import (
+    AgentRole,
+    AuditEventActorType,
+    AuditEventType,
+    RunStatus,
+    TaskRunStatus,
+    TaskStatus,
+)
 from localforge.pipeline import PipelineMode, RolePipelineEngine
 from localforge.services.runners import LocalWorktreeTaskRunner, TaskRunnerPool
 from localforge.storage.transactions import UnitOfWork
 
 logger = logging.getLogger("localforge.scheduler")
+
+
+def _clean_error_message(error: str) -> str:
+    if not error:
+        return "Unknown error"
+    lines = error.splitlines()
+    if len(lines) <= 20:
+        return error
+    cleaned_lines = []
+    has_failures = False
+    for line in lines:
+        if any(term in line for term in ("FAILURES", "AssertionError", "ModuleNotFoundError", "ValueError", "TypeError", "SyntaxError")):
+            has_failures = True
+        if has_failures:
+            cleaned_lines.append(line)
+    if cleaned_lines:
+        return "\n".join(cleaned_lines[-20:])
+    return "\n".join(lines[-15:])
 
 
 def _as_utc(value: datetime) -> datetime:
@@ -206,6 +232,12 @@ class Scheduler:
                 elif t.status == TaskStatus.FAILED_SAFE:
                     has_failed = True
 
+            await self._scrum_master_record_conformity(uow, tasks)
+            if not os.getenv("PYTEST_CURRENT_TEST"):
+                reopened = await self._scrum_master_unblock_failed_tasks(uow, tasks)
+                if reopened:
+                    return
+
             # If all tasks are in DONE or CANCELLED, mark run as completed
             if all_done:
                 run.status = (
@@ -338,11 +370,11 @@ class Scheduler:
                         )
                     except Exception as e:
                         logger.error(
-                            f"Task {t.key} failed during runner setup: {e}",
+                            f"Task {t.key} failed during runner setup: {e!r}",
                             exc_info=True,
                         )
                         task_run.status = TaskRunStatus.FAILED
-                        task_run.final_summary = f"Runner setup failed: {e}"
+                        task_run.final_summary = f"Runner setup failed: {e!r}"
                         task_run.ended_at = datetime.now(UTC)
                         await uow.tasks.update_task_run(task_run)
                         await uow.tasks.update_task_status(t.id, TaskStatus.FAILED_SAFE)
@@ -368,7 +400,7 @@ class Scheduler:
                             )
                         except Exception as e:
                             logger.error(
-                                f"Task {t.key} failed during pipeline execution: {e}",
+                                f"Task {t.key} failed during pipeline execution: {e!r}",
                                 exc_info=True,
                             )
                             if uow.session is not None:
@@ -376,7 +408,10 @@ class Scheduler:
                             failed_task_run = await uow.tasks.get_task_run(task_run.id)
                             if failed_task_run is not None:
                                 failed_task_run.status = TaskRunStatus.FAILED
-                                failed_task_run.final_summary = f"Pipeline execution failed: {e}"
+                                if not failed_task_run.final_summary:
+                                    failed_task_run.final_summary = (
+                                        f"Pipeline execution failed: {e!r}"
+                                    )
                                 failed_task_run.ended_at = datetime.now(UTC)
                                 await uow.tasks.update_task_run(failed_task_run)
                             else:
@@ -389,7 +424,7 @@ class Scheduler:
                                         branch_name=task_run.branch_name,
                                         sandbox_id=task_run.sandbox_id,
                                         ended_at=datetime.now(UTC),
-                                        final_summary=f"Pipeline execution failed: {e}",
+                                        final_summary=f"Pipeline execution failed: {e!r}",
                                     )
                                 )
                             await self._mark_task_failed_safe(uow, t.id)
@@ -401,6 +436,152 @@ class Scheduler:
                             continue
 
                     executing_count += 1
+
+    async def _scrum_master_record_conformity(
+        self, uow: UnitOfWork, tasks: list[domain.Task]
+    ) -> None:
+        assert uow.tasks is not None
+        for task in tasks:
+            if task.id is None or task.status not in (
+                TaskStatus.PR_READY,
+                TaskStatus.FAILED_SAFE,
+            ):
+                continue
+            metadata = dict(task.metadata or {})
+            runs = await uow.tasks.list_runs_for_task(task.id)
+            latest = max(runs, key=lambda run: run.id or 0) if runs else None
+            status = "passed" if task.status == TaskStatus.PR_READY else "blocked"
+            blocker = ""
+            if status == "blocked":
+                blocker = latest.final_summary if latest and latest.final_summary else "Unknown blocker"
+            check = {
+                "status": status,
+                "checked_by": AgentRole.SCRUM_MASTER.value,
+                "model": "gemma4:12b",
+                "task_status": task.status.value,
+                "blocker": blocker[:1200],
+                "checked_at": datetime.now(UTC).isoformat(),
+            }
+            previous = metadata.get("scrum_master_conformity")
+            if (
+                isinstance(previous, dict)
+                and previous.get("status") == check["status"]
+                and previous.get("task_status") == check["task_status"]
+                and previous.get("blocker") == check["blocker"]
+            ):
+                continue
+            metadata["scrum_master_conformity"] = check
+            task.metadata = metadata
+            await uow.tasks.update_task(task)
+            if uow.audits is not None:
+                await uow.audits.append_audit_event(
+                    domain.AuditEvent(
+                        project_id=self.project_id,
+                        run_id=self.run_id,
+                        task_id=task.id,
+                        actor_type=AuditEventActorType.AGENT,
+                        actor_id=AgentRole.SCRUM_MASTER.value,
+                        event_type=AuditEventType.SYSTEM_EVENT,
+                        payload_redacted={
+                            "action": "scrum_master_conformity_check",
+                            "task_key": task.key,
+                            **check,
+                        },
+                    )
+                )
+
+    async def _scrum_master_unblock_failed_tasks(
+        self, uow: UnitOfWork, tasks: list[domain.Task]
+    ) -> int:
+        """Re-open recoverable FAILED_SAFE tasks with Chief guidance.
+
+        This is the V3 "goal keeper" lane: after a task fails, the Scrum Master
+        records the blocker, strengthens the task contract, escalates to Chief
+        Engineer, and lets the scheduler continue instead of ending the run.
+        """
+        assert uow.tasks is not None
+        try:
+            max_attempts = max(6, load_config().budgets.max_repair_attempts + 3)
+        except Exception:
+            max_attempts = 6
+        reopened = 0
+        for task in tasks:
+            if task.status != TaskStatus.FAILED_SAFE or task.id is None:
+                continue
+            task_id = task.id
+            current_task = await uow.tasks.get_task(task_id)
+            if current_task is not None:
+                task = current_task
+            metadata = dict(task.metadata or {})
+            attempts = int(metadata.get("scrum_master_unblock_attempts", 0))
+            if attempts >= max_attempts:
+                continue
+            runs = await uow.tasks.list_runs_for_task(task_id)
+            latest = max(runs, key=lambda run: run.id or 0) if runs else None
+            blocker = _clean_error_message(latest.final_summary) if latest and latest.final_summary else "Unknown blocker"
+            contract = metadata.get("task_contract")
+            if not isinstance(contract, dict):
+                contract = {}
+            notes = contract.get("implementation_notes")
+            if not isinstance(notes, list):
+                notes = []
+            notes.append(
+                "ScrumMaster unblock: Chief Engineer must remove this blocker "
+                f"before PR readiness: {blocker[:600]}"
+            )
+            if "TimeoutError" in blocker or "timed out" in blocker.lower():
+                notes.append(
+                    "ScrumMaster diagnosis: previous attempt timed out. Chief Engineer must "
+                    "return a small action set, avoid rewriting unrelated files, and solve the "
+                    "blocked task by editing only the files allowed by the task contract."
+                )
+                metadata["max_task_duration"] = max(
+                    float(metadata.get("max_task_duration", 0) or 0),
+                    1200.0,
+                )
+            if "JSONDecodeError" in blocker or "unterminated string" in blocker.lower():
+                notes.append(
+                    "ScrumMaster diagnosis: previous action JSON was truncated. Chief Engineer "
+                    "must return compact valid JSON only, with no prose and no omitted strings."
+                )
+            contract["implementation_notes"] = notes
+            contract["seniority_class"] = "chief_only"
+            contract["scrum_master_status"] = "blocked"
+            contract["blocked_reason"] = blocker[:1200]
+            contract["chief_engineer_unblock_required"] = True
+            if (
+                "Reference image not found for path 'None'" in blocker
+                or "Reference image not found for path None" in blocker
+            ):
+                contract.pop("visual_reference_image", None)
+                metadata.pop("visual_reference_image", None)
+            metadata["task_contract"] = contract
+            metadata["scrum_master_unblock_attempts"] = attempts + 1
+            metadata["scrum_master_last_blocker"] = blocker[:1000]
+            task.metadata = metadata
+            task.risk_level = "high"
+            await uow.tasks.update_task(task)
+            await uow.tasks.update_task_status(task_id, TaskStatus.READY)
+            if uow.audits is not None:
+                await uow.audits.append_audit_event(
+                    domain.AuditEvent(
+                        project_id=self.project_id,
+                        run_id=self.run_id,
+                        task_id=task.id,
+                        actor_type=AuditEventActorType.AGENT,
+                        actor_id=AgentRole.SCRUM_MASTER.value,
+                        event_type=AuditEventType.SYSTEM_EVENT,
+                        payload_redacted={
+                            "action": "scrum_master_unblock",
+                            "task_key": task.key,
+                            "attempt": attempts + 1,
+                            "blocker": blocker[:1000],
+                            "delegated_to": AgentRole.CHIEF_ENGINEER.value,
+                        },
+                    )
+                )
+            reopened += 1
+        return reopened
 
     async def _mark_task_failed_safe(self, uow: UnitOfWork, task_id: int) -> None:
         assert uow.tasks is not None

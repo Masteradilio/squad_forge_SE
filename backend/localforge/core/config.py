@@ -18,7 +18,8 @@ DEFAULT_CONFIG = {
     "models": {
         "provider": "ollama",
         "base_url": "http://localhost:11434/v1",
-        "default_model": "llama3",
+        "default_model": "gemma4:12b",
+        "fallback_models": ["granite4.1:8b", "nemotron-3-nano:4b"],
         "roles": {},
     },
     "chief_engineer": {
@@ -64,7 +65,10 @@ class GitConfig(BaseModel):
 class ModelsConfig(BaseModel):
     provider: str = Field(default="ollama")
     base_url: str = Field(default="http://localhost:11434/v1")
-    default_model: str = Field(default="llama3")
+    default_model: str = Field(default="gemma4:12b")
+    fallback_models: list[str] = Field(
+        default_factory=lambda: ["granite4.1:8b", "nemotron-3-nano:4b"]
+    )
     roles: dict[str, str] = Field(default_factory=dict)
 
 
@@ -109,6 +113,19 @@ class LocalForgeConfig(BaseModel):
     budgets: BudgetsConfig = Field(default_factory=BudgetsConfig)
 
 
+def _find_env_file(start_dir: str) -> str | None:
+    curr = start_dir
+    while True:
+        candidate = os.path.join(curr, ".env")
+        if os.path.exists(candidate):
+            return candidate
+        parent = os.path.dirname(curr)
+        if parent == curr:
+            break
+        curr = parent
+    return None
+
+
 def load_config(cli_args: dict[str, Any] | None = None) -> LocalForgeConfig:
     """Load configuration with the following precedence order:
 
@@ -133,8 +150,8 @@ def load_config(cli_args: dict[str, Any] | None = None) -> LocalForgeConfig:
             raise ValueError(f"Failed to parse workspace config file at {config_path}: {e}") from e
 
     # 2. Load from .env without mutating process environment or logging secrets.
-    env_file_path = os.path.join(cwd, ".env")
-    if os.path.exists(env_file_path):
+    env_file_path = _find_env_file(cwd)
+    if env_file_path and os.path.exists(env_file_path):
         env_file_values = dotenv_values(env_file_path)
         if env_file_values.get("OPENROUTER_MODEL"):
             config_dict["chief_engineer"]["model"] = env_file_values["OPENROUTER_MODEL"]

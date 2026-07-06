@@ -100,6 +100,8 @@ class SafeFileEditor:
                 cwd=worktree_root,
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 check=True,
             )
             toplevel = os.path.realpath(toplevel_res.stdout.strip())
@@ -112,11 +114,13 @@ class SafeFileEditor:
                 cwd=worktree_root,
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 check=True,
             )
             modified_files = [
                 line[3:].strip()
-                for line in status_res.stdout.splitlines()
+                for line in (status_res.stdout or "").splitlines()
                 if line.strip()
             ]
             if len(modified_files) > max_files:
@@ -131,9 +135,11 @@ class SafeFileEditor:
                 cwd=worktree_root,
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 check=True,
             )
-            diff_len = len(diff_res.stdout)
+            diff_len = len(diff_res.stdout or "")
             if diff_len > max_diff:
                 raise ValueError(
                     f"Workspace diff growth budget exceeded: {diff_len} "

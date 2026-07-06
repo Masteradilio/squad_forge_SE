@@ -1,6 +1,6 @@
 {
   "benchmark_name": "SprintBoard Lite V4-Only Empirical Benchmark",
-  "date": "2026-06-29",
+  "date": "2026-07-06",
   "prd_file": "docs/PRD_SPRINTBOARD_LITE.md",
   "status": "ACCEPTED",
   "blockers": [],
@@ -14,26 +14,32 @@
     "run_id": "V4-Run-1",
     "tasks_planned": 5,
     "tasks_imported": 5,
-    "task_runs_executed": 8,
+    "task_runs_executed": 6,
     "task_statuses": {
-      "PR_READY": 2,
-      "FAILED_SAFE": 3
+      "PR_READY": 5
     },
-    "artifacts_generated": 0,
-    "artifact_types": {},
-    "model_calls_logged": 3,
-    "openrouter_calls_logged": 3,
-    "local_calls_logged": 0,
-    "estimated_cost_usd": 0.05,
+    "artifacts_generated": 97,
+    "artifact_types": {
+      "DiffArtifact": 14,
+      "PRArtifact": 12,
+      "PlanArtifact": 6,
+      "RepairArtifact": 6,
+      "ReviewArtifact": 5,
+      "RiskArtifact": 6,
+      "RoleArtifact": 42,
+      "TestArtifact": 6
+    },
+    "model_calls_logged": 6,
+    "nvidia_calls_logged": 0,
+    "openrouter_calls_logged": 5,
+    "paid_chief_calls_logged": 5,
+    "local_calls_logged": 1,
+    "estimated_cost_usd": 0.021363299999999998,
     "exit_code": 0,
-    "routing_contract_summary": {
-      "chief_only": 1,
-      "chief_led": 3,
-      "local_assisted": 1
-    }
+    "routing_contract_summary": {}
   },
   "conclusions": {
-    "quality_score": "Passed - Architecture V4 works",
+    "quality_score": "Deliverable",
     "has_pr_artifacts": true,
     "is_auditable": true,
     "api_led_economy_first_exercised": true

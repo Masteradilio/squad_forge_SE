@@ -4,6 +4,24 @@ All notable changes to LocalForge OS will be documented in this file.
 
 ## [Unreleased]
 
+### V4 Chief Provider Priority & 100% PR_READY Benchmark - 2026-07-06
+
+#### Added
+- Added NVIDIA NIM OpenAI-compatible Chief Engineer support through `NVIDIA_API_KEY` and `NVIDIA_LLM_MODEL`, with OpenRouter retained as paid fallback.
+- Added a Chief Engineer fallback provider wrapper that gives the NVIDIA primary provider a 30 second response window before falling back to OpenRouter.
+- Added strict V4 benchmark classification tests so `ACCEPTED` requires all planned tasks to reach `PR_READY`, at least one paid Chief call, and real PR artifacts.
+
+#### Fixed
+- Fixed Chief Engineer configuration precedence so NVIDIA credentials from `.env` become the primary paid provider when present.
+- Fixed Chief Engineer ledger provider attribution so paid calls are recorded under the effective provider instead of always `openrouter`.
+- Fixed V4 benchmark acceptance logic that previously accepted partial runs when some tasks remained non-PR-ready.
+- Fixed Windows subprocess decoding and `stdout=None` handling in runtime Git diff checks, preventing `TypeError: object of type 'NoneType' has no len()` from blocking the SprintBoard Lite validation task.
+
+#### Tests
+- `.\.codex_venv\Scripts\python.exe -m pytest backend/tests/test_phase27_unattended.py::test_safe_file_editor_tolerates_missing_git_stdout backend/tests/test_phase31_32_chief_engineer.py::test_config_prefers_nvidia_chief_engineer_from_env_file backend/tests/test_v3_phases.py::test_v4_benchmark_requires_all_tasks_pr_ready_for_acceptance -q`
+- `.\.codex_venv\Scripts\python.exe -m pytest backend/tests/test_phase31_32_chief_engineer.py backend/tests/test_v3_phases.py -q`
+- `$env:PYTHONPATH='backend'; .\.codex_venv\Scripts\python.exe scripts\run_benchmark_v4_only.py` -> `ACCEPTED`, 5/5 tasks `PR_READY`.
+
 ### V4 API-led & Economy-First Architecture E2E - 2026-06-29
 
 #### Added

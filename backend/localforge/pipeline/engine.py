@@ -10,7 +10,9 @@ logger = logging.getLogger("localforge.pipeline")
 from dataclasses import dataclass
 
 from localforge.chief_engineer.service import ChiefEngineerService
-from localforge.core.config import load_config
+from localforge.core.config import LocalForgeConfig, load_config
+from localforge.llm.fallback import FallbackLLMProvider
+from localforge.llm.nvidia import NvidiaProvider
 from localforge.llm.openai_compatible import OpenAICompatibleProvider
 from localforge.llm.openrouter import OpenRouterProvider
 from localforge.gitops.adapter import GitAdapter
@@ -356,6 +358,8 @@ class RolePipelineEngine:
                 cwd=worktree_path,
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 check=True,
             )
             toplevel = os.path.realpath(toplevel_res.stdout.strip())
@@ -367,11 +371,13 @@ class RolePipelineEngine:
                 cwd=worktree_path,
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 check=True,
             )
             modified_files = [
                 line[3:].strip()
-                for line in status_res.stdout.splitlines()
+                for line in (status_res.stdout or "").splitlines()
                 if line.strip()
             ]
             if len(modified_files) > max_files:
@@ -385,9 +391,11 @@ class RolePipelineEngine:
                 cwd=worktree_path,
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 check=True,
             )
-            diff_len = len(diff_res.stdout)
+            diff_len = len(diff_res.stdout or "")
             if diff_len > max_diff:
                 raise ValueError(
                     f"Workspace diff growth budget exceeded: {diff_len} "
@@ -1220,11 +1228,7 @@ class RolePipelineEngine:
         if not config.chief_engineer.enabled or not config.chief_engineer.model:
             return False
         try:
-            provider = OpenRouterProvider(
-                api_key=config.chief_engineer.api_key,
-                base_url=config.chief_engineer.base_url,
-                default_model=config.chief_engineer.model,
-            )
+            provider = self._build_chief_engineer_provider(config)
             plan = await ChiefEngineerService(self.uow).plan_semantic_repair(
                 project_id=self.project_id,
                 run_id=self.run_id,
@@ -1267,6 +1271,37 @@ class RolePipelineEngine:
         )
         command_summaries.append(f"Chief Engineer repair applied: {plan.summary}")
         return True
+
+    def _build_chief_engineer_provider(self, config: LocalForgeConfig):
+        primary_provider = config.chief_engineer.provider.lower()
+        if primary_provider == "nvidia":
+            primary = NvidiaProvider(
+                api_key=config.chief_engineer.api_key,
+                base_url=config.chief_engineer.base_url,
+                default_model=config.chief_engineer.model,
+            )
+            if (
+                config.chief_engineer.fallback_provider == "openrouter"
+                and config.chief_engineer.fallback_model
+                and config.chief_engineer.fallback_api_key
+            ):
+                fallback = OpenRouterProvider(
+                    api_key=config.chief_engineer.fallback_api_key,
+                    base_url=config.chief_engineer.fallback_base_url
+                    or "https://openrouter.ai/api/v1",
+                    default_model=config.chief_engineer.fallback_model,
+                )
+                return FallbackLLMProvider(
+                    primary=primary,
+                    fallback=fallback,
+                    primary_timeout=config.chief_engineer.fallback_after_seconds,
+                )
+            return primary
+        return OpenRouterProvider(
+            api_key=config.chief_engineer.api_key,
+            base_url=config.chief_engineer.base_url,
+            default_model=config.chief_engineer.model,
+        )
 
     async def _run_chief_engineer_repair_rounds(
         self,

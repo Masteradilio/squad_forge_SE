@@ -12,6 +12,13 @@ from dotenv import dotenv_values
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
+def write_markdown_clean(path: str, content: str) -> None:
+    normalized = content.replace("\r\n", "\n").replace("\r", "\n")
+    cleaned = "\n".join(line.rstrip() for line in normalized.split("\n"))
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
+        f.write(cleaned)
+
+
 def root_env_values() -> dict[str, str]:
     env_path = os.path.join(ROOT_DIR, ".env")
     if not os.path.exists(env_path):
@@ -32,7 +39,13 @@ async def run_cli_command(cwd: str, args: list[str]) -> tuple[int, str, str]:
     """Executes a LocalForge CLI command in the specified directory using the absolute python venv path."""
     env = os.environ.copy()
     env["PYTHONPATH"] = os.path.join(ROOT_DIR, "backend")
-    for key in ("OPENROUTER_MODEL", "OPENROUTER_API_KEY", "LOCALFORGE_MODEL_API_KEY"):
+    for key in (
+        "NVIDIA_LLM_MODEL",
+        "NVIDIA_API_KEY",
+        "OPENROUTER_MODEL",
+        "OPENROUTER_API_KEY",
+        "LOCALFORGE_MODEL_API_KEY",
+    ):
         value = root_env_values().get(key)
         if value and not env.get(key):
             env[key] = value
@@ -48,7 +61,11 @@ async def run_cli_command(cwd: str, args: list[str]) -> tuple[int, str, str]:
             stderr=asyncio.subprocess.PIPE
         )
         stdout, stderr = await proc.communicate()
-        return proc.returncode, stdout.decode("utf-8").strip(), stderr.decode("utf-8").strip()
+        return (
+            proc.returncode or 0,
+            stdout.decode("utf-8", errors="replace").strip(),
+            stderr.decode("utf-8", errors="replace").strip(),
+        )
     except Exception as e:
         return -1, "", str(e)
 
@@ -70,7 +87,7 @@ async def patch_workspace_config(
     workspace_dir: str,
     default_model: str,
     docker_active: bool,
-    chief_model: str | None,
+    chief_config: dict[str, Any],
 ):
     """Updates config.yaml for V4 API-led/economy-first routing."""
     config_path = os.path.join(workspace_dir, ".localforge", "config.yaml")
@@ -99,10 +116,16 @@ async def patch_workspace_config(
 
             if "chief_engineer" not in cfg:
                 cfg["chief_engineer"] = {}
-            cfg["chief_engineer"]["enabled"] = bool(chief_model)
-            cfg["chief_engineer"]["provider"] = "openrouter"
-            cfg["chief_engineer"]["base_url"] = "https://openrouter.ai/api/v1"
-            cfg["chief_engineer"]["model"] = chief_model
+            cfg["chief_engineer"]["enabled"] = bool(chief_config.get("model"))
+            cfg["chief_engineer"]["provider"] = chief_config.get("provider", "openrouter")
+            cfg["chief_engineer"]["base_url"] = chief_config.get(
+                "base_url", "https://openrouter.ai/api/v1"
+            )
+            cfg["chief_engineer"]["model"] = chief_config.get("model")
+            cfg["chief_engineer"]["fallback_provider"] = chief_config.get("fallback_provider")
+            cfg["chief_engineer"]["fallback_base_url"] = chief_config.get("fallback_base_url")
+            cfg["chief_engineer"]["fallback_model"] = chief_config.get("fallback_model")
+            cfg["chief_engineer"]["fallback_after_seconds"] = 30.0
             cfg["chief_engineer"]["timeout"] = 240.0
 
             if "budgets" not in cfg:
@@ -117,16 +140,80 @@ async def patch_workspace_config(
                 yaml.safe_dump(cfg, f, default_flow_style=False)
             print(
                 f"Patched config at {config_path}: default_model={default_model}, "
-                f"chief_model_configured={bool(chief_model)}, sandbox_type={cfg['sandbox']['type']}"
+                f"chief_model_configured={bool(chief_config.get('model'))}, "
+                f"chief_provider={cfg['chief_engineer']['provider']}, "
+                f"sandbox_type={cfg['sandbox']['type']}"
             )
         except Exception as e:
             print(f"Failed to patch config at {config_path}: {e}")
 
 
-def chief_engineer_config_from_env() -> tuple[str | None, bool]:
+def chief_engineer_config_from_env() -> dict[str, Any]:
     env = os.environ.copy()
     env.update({k: v for k, v in root_env_values().items() if k not in env})
-    return env.get("OPENROUTER_MODEL"), bool(env.get("OPENROUTER_API_KEY"))
+    if env.get("NVIDIA_LLM_MODEL") and env.get("NVIDIA_API_KEY"):
+        return {
+            "provider": "nvidia",
+            "base_url": "https://integrate.api.nvidia.com/v1",
+            "model": env["NVIDIA_LLM_MODEL"],
+            "api_key_configured": True,
+            "fallback_provider": "openrouter" if env.get("OPENROUTER_API_KEY") else None,
+            "fallback_base_url": "https://openrouter.ai/api/v1"
+            if env.get("OPENROUTER_API_KEY")
+            else None,
+            "fallback_model": env.get("OPENROUTER_MODEL"),
+            "fallback_api_key_configured": bool(env.get("OPENROUTER_API_KEY")),
+        }
+    return {
+        "provider": "openrouter",
+        "base_url": "https://openrouter.ai/api/v1",
+        "model": env.get("OPENROUTER_MODEL"),
+        "api_key_configured": bool(env.get("OPENROUTER_API_KEY")),
+        "fallback_provider": None,
+        "fallback_model": None,
+        "fallback_api_key_configured": False,
+    }
+
+
+def classify_benchmark_status(
+    *,
+    preflight_failed: bool,
+    task_statuses: dict[str, int],
+    expected_tasks: int,
+    runs_count: int,
+    paid_chief_calls: int,
+    pr_artifacts_logged: int,
+    run_exit_code: int,
+) -> tuple[str, list[str]]:
+    blockers: list[str] = []
+    imported_tasks = sum(task_statuses.values())
+    pr_ready_tasks = task_statuses.get("PR_READY", 0)
+
+    if preflight_failed:
+        return "BLOCKED", blockers
+    if runs_count <= 0:
+        return "REJECTED", ["No LocalForge run was recorded in SQLite."]
+    if run_exit_code != 0:
+        blockers.append(f"LocalForge CLI exited with code {run_exit_code}.")
+    if imported_tasks != expected_tasks:
+        blockers.append(f"Imported {imported_tasks} tasks, expected {expected_tasks}.")
+    if pr_ready_tasks != expected_tasks:
+        blockers.append(
+            f"{expected_tasks - pr_ready_tasks} task(s) are not PR_READY: {task_statuses}."
+        )
+    if paid_chief_calls <= 0:
+        blockers.append(
+            "V4 API-led routing did not execute any paid Chief Engineer call "
+            "(NVIDIA primary or OpenRouter fallback)."
+        )
+    if pr_artifacts_logged <= 0:
+        blockers.append("No PRArtifact was recorded for the benchmark run.")
+
+    if not blockers:
+        return "ACCEPTED", []
+    if pr_ready_tasks > 0:
+        return "PARTIAL", blockers
+    return "REJECTED", blockers
 
 
 def _task_requires_chief(title: str, description: str) -> bool:
@@ -209,8 +296,11 @@ def apply_api_led_task_contracts(db_path: str) -> dict[str, int]:
             visual_required = False
             summary["local_assisted"] += 1
 
+        existing_contract = metadata.get("task_contract")
+        if not isinstance(existing_contract, dict):
+            existing_contract = {}
         metadata["task_contract"] = {
-            **(metadata.get("task_contract") if isinstance(metadata.get("task_contract"), dict) else {}),
+            **existing_contract,
             "allowed_files": allowed_files,
             "visual_required": visual_required,
             "visual_actual_output": "app/sprintboard.html" if visual_required else None,
@@ -303,12 +393,14 @@ async def run_preflight_checks(v4_dir: str, v4_tasks_imported: int, expected_tas
         "detail": f"Tasks imported: {v4_tasks_imported}, Expected count: {expected_tasks}"
     }
 
-    chief_model, chief_key_configured = chief_engineer_config_from_env()
+    chief_config = chief_engineer_config_from_env()
     results["chief_engineer_configured"] = {
-        "passed": bool(chief_model and chief_key_configured),
+        "passed": bool(chief_config.get("model") and chief_config.get("api_key_configured")),
         "detail": (
-            f"OPENROUTER_MODEL configured: {bool(chief_model)}, "
-            f"OPENROUTER_API_KEY configured: {chief_key_configured}"
+            f"provider={chief_config.get('provider')}, "
+            f"model configured: {bool(chief_config.get('model'))}, "
+            f"api key configured: {chief_config.get('api_key_configured')}, "
+            f"fallback={chief_config.get('fallback_provider')}"
         ),
     }
     
@@ -364,9 +456,9 @@ async def main():
 
     # Patch config in workspace V4
     docker_active, _ = await check_docker_status()
-    chief_model, _chief_key_configured = chief_engineer_config_from_env()
+    chief_config = chief_engineer_config_from_env()
     if chosen_model:
-        await patch_workspace_config(v4_dir, chosen_model, docker_active, chief_model)
+        await patch_workspace_config(v4_dir, chosen_model, docker_active, chief_config)
 
     v4_run_code, v4_run_out, v4_run_err = -1, "", ""
     
@@ -385,8 +477,10 @@ async def main():
     v4_task_runs_count = 0
     v4_calls_logged = 0
     v4_openrouter_calls = 0
+    v4_nvidia_calls = 0
     v4_local_calls = 0
     v4_artifacts_logged = 0
+    v4_pr_artifacts_logged = 0
     v4_cost_usd = 0.0
     
     task_statuses = {}
@@ -409,6 +503,8 @@ async def main():
             for provider, count in c.fetchall():
                 if provider == "openrouter":
                     v4_openrouter_calls = count
+                elif provider == "nvidia":
+                    v4_nvidia_calls = count
                 else:
                     v4_local_calls += count
             
@@ -418,11 +514,14 @@ async def main():
             
             c.execute("SELECT COUNT(*) FROM artifacts")
             v4_artifacts_logged = c.fetchone()[0]
+            c.execute("SELECT COUNT(*) FROM artifacts WHERE type = 'PRArtifact'")
+            v4_pr_artifacts_logged = c.fetchone()[0]
             
             # Fetch task statuses count
             c.execute("SELECT status, COUNT(*) FROM tasks GROUP BY status")
             for status, count in c.fetchall():
                 task_statuses[status] = count
+            v4_tasks_imported = sum(task_statuses.values())
                 
             # Fetch artifact types count
             c.execute("SELECT type, COUNT(*) FROM artifacts GROUP BY type")
@@ -434,28 +533,16 @@ async def main():
             print(f"Failed to query SQLite DB metrics: {e}")
 
     # Determine status based on actual execution results
-    status_classification = "REJECTED"
-    if preflight_failed:
-        status_classification = "BLOCKED"
-    elif v4_runs_count > 0:
-        # Check if tasks succeeded or failed
-        ready_tasks = task_statuses.get("READY", 0)
-        backlog_tasks = task_statuses.get("BACKLOG", 0)
-        failed_tasks = task_statuses.get("FAILED_SAFE", 0)
-        pr_ready_tasks = task_statuses.get("PR_READY", 0)
-        
-        if v4_openrouter_calls == 0:
-            status_classification = "REJECTED"
-            blockers.append(
-                "V4 API-led routing did not execute any Chief Engineer/OpenRouter call; "
-                "benchmark did not exercise the intended V4 architecture."
-            )
-        elif pr_ready_tasks > 0 and failed_tasks == 0:
-            status_classification = "ACCEPTED"
-        elif pr_ready_tasks > 0 or failed_tasks > 0:
-            status_classification = "PARTIAL"
-        else:
-            status_classification = "REJECTED"
+    status_classification, status_blockers = classify_benchmark_status(
+        preflight_failed=preflight_failed,
+        task_statuses=task_statuses,
+        expected_tasks=expected_tasks,
+        runs_count=v4_runs_count,
+        paid_chief_calls=v4_openrouter_calls + v4_nvidia_calls,
+        pr_artifacts_logged=v4_pr_artifacts_logged,
+        run_exit_code=v4_run_code,
+    )
+    blockers.extend(status_blockers)
 
     execution_error = v4_run_err or v4_run_out
     
@@ -482,7 +569,9 @@ async def main():
           "artifacts_generated": v4_artifacts_logged,
           "artifact_types": artifact_types,
           "model_calls_logged": v4_calls_logged,
+          "nvidia_calls_logged": v4_nvidia_calls,
           "openrouter_calls_logged": v4_openrouter_calls,
+          "paid_chief_calls_logged": v4_nvidia_calls + v4_openrouter_calls,
           "local_calls_logged": v4_local_calls,
           "estimated_cost_usd": v4_cost_usd,
           "exit_code": v4_run_code,
@@ -490,9 +579,9 @@ async def main():
       },
       "conclusions": {
         "quality_score": "Deliverable" if status_classification == "ACCEPTED" else ("Partial with failures" if status_classification == "PARTIAL" else "Failed/Blocked"),
-        "has_pr_artifacts": v4_artifacts_logged > 0,
+        "has_pr_artifacts": v4_pr_artifacts_logged > 0,
         "is_auditable": v4_runs_count > 0,
-        "api_led_economy_first_exercised": v4_openrouter_calls > 0
+        "api_led_economy_first_exercised": (v4_nvidia_calls + v4_openrouter_calls) > 0
       }
     }
     with open(metrics_json_path, "w", encoding="utf-8") as f:
@@ -531,11 +620,12 @@ The product is accepted only when the benchmark reaches `ACCEPTED`. A `PARTIAL` 
 - **Task Statuses**: {json.dumps(task_statuses)}
 - **Artifact Types**: {json.dumps(artifact_types)}
 - **V4 Routing Contracts**: {json.dumps(routing_contract_summary)}
-- **Chief Engineer/OpenRouter Calls**: {v4_openrouter_calls}
+- **Chief Engineer/NVIDIA Calls**: {v4_nvidia_calls}
+- **Chief Engineer/OpenRouter Fallback Calls**: {v4_openrouter_calls}
+- **Paid Chief Calls**: {v4_nvidia_calls + v4_openrouter_calls}
 - **Local Calls Logged**: {v4_local_calls}
 """
-    with open(acceptance_md_path, "w", encoding="utf-8") as f:
-        f.write(acceptance_md)
+    write_markdown_clean(acceptance_md_path, acceptance_md)
 
     # 3. Format V4 Only Benchmark Report
     report_md_path = os.path.join(ROOT_DIR, "docs", "e2e", "V4_ONLY_BENCHMARK_REPORT.md")
@@ -583,7 +673,9 @@ Métricas de execução extraídas diretamente da base de dados `.localforge/loc
 | **FAILED_SAFE Count** | {task_statuses.get("FAILED_SAFE", 0)} | Falhas seguras capturadas de forma robusta |
 | **Actual API Cost (USD)** | ${v4_cost_usd:.4f} | Custos reais de chamadas aos modelos |
 | **Actual Model Calls Logged** | {v4_calls_logged} | Quantidade de chamadas aos modelos registradas |
-| **OpenRouter Chief Calls Logged** | {v4_openrouter_calls} | Deve ser maior que zero para validar a V4 API-led |
+| **NVIDIA Chief Calls Logged** | {v4_nvidia_calls} | Provider primário para validar a V4 API-led |
+| **OpenRouter Fallback Calls Logged** | {v4_openrouter_calls} | Fallback pago quando NVIDIA não responde |
+| **Paid Chief Calls Logged** | {v4_nvidia_calls + v4_openrouter_calls} | Deve ser maior que zero para validar a V4 API-led |
 | **Local Calls Logged** | {v4_local_calls} | Evidencia a parte local/economy da arquitetura |
 | **API-led Routing Contracts** | {json.dumps(routing_contract_summary)} | Tarefas complexas para Chief; tarefas simples para local |
 | **Artifacts Generated** | {v4_artifacts_logged} | Artefatos gravados no disco pelo pipeline |
@@ -623,10 +715,9 @@ Abaixo consta a distribuição real de status das {expected_tasks} tarefas após
 
 > [!IMPORTANT]
 > **CLASSIFICACAO: {status_classification}**
-> The V4-only run proves the API-led/economy-first architecture only when at least one `openrouter` call is recorded in `model_call_ledger` and costs are consolidated in the report. Otherwise the result remains **REJECTED** or **BLOCKED**, even if the CLI exits with code 0.
+> The V4-only run proves the API-led/economy-first architecture only when at least one paid Chief Engineer call (`nvidia` primary or `openrouter` fallback) is recorded in `model_call_ledger` and costs are consolidated in the report. Otherwise the result remains **REJECTED** or **BLOCKED**, even if the CLI exits with code 0.
 """
-    with open(report_md_path, "w", encoding="utf-8") as f:
-        f.write(report_md)
+    write_markdown_clean(report_md_path, report_md)
 
     print(f"\n[Success] V4-Only benchmark execution completed! Status: {status_classification}")
 

@@ -27,6 +27,11 @@ DEFAULT_CONFIG = {
         "base_url": "https://openrouter.ai/api/v1",
         "model": None,
         "api_key": None,
+        "fallback_provider": None,
+        "fallback_base_url": None,
+        "fallback_model": None,
+        "fallback_api_key": None,
+        "fallback_after_seconds": 30.0,
         "enabled": True,
         "timeout": 240.0,
         "max_input_tokens_per_call": 12000,
@@ -77,6 +82,11 @@ class ChiefEngineerConfig(BaseModel):
     base_url: str = Field(default="https://openrouter.ai/api/v1")
     model: str | None = Field(default=None)
     api_key: str | None = Field(default=None)
+    fallback_provider: str | None = Field(default=None)
+    fallback_base_url: str | None = Field(default=None)
+    fallback_model: str | None = Field(default=None)
+    fallback_api_key: str | None = Field(default=None)
+    fallback_after_seconds: float = Field(default=30.0)
     enabled: bool = Field(default=True)
     timeout: float = Field(default=240.0)
     max_input_tokens_per_call: int = Field(default=12000)
@@ -153,10 +163,21 @@ def load_config(cli_args: dict[str, Any] | None = None) -> LocalForgeConfig:
     env_file_path = _find_env_file(cwd)
     if env_file_path and os.path.exists(env_file_path):
         env_file_values = dotenv_values(env_file_path)
-        if env_file_values.get("OPENROUTER_MODEL"):
-            config_dict["chief_engineer"]["model"] = env_file_values["OPENROUTER_MODEL"]
-        if env_file_values.get("OPENROUTER_API_KEY"):
-            config_dict["chief_engineer"]["api_key"] = env_file_values["OPENROUTER_API_KEY"]
+        if env_file_values.get("NVIDIA_LLM_MODEL") and env_file_values.get("NVIDIA_API_KEY"):
+            config_dict["chief_engineer"]["provider"] = "nvidia"
+            config_dict["chief_engineer"]["base_url"] = "https://integrate.api.nvidia.com/v1"
+            config_dict["chief_engineer"]["model"] = env_file_values["NVIDIA_LLM_MODEL"]
+            config_dict["chief_engineer"]["api_key"] = env_file_values["NVIDIA_API_KEY"]
+            if env_file_values.get("OPENROUTER_MODEL") and env_file_values.get("OPENROUTER_API_KEY"):
+                config_dict["chief_engineer"]["fallback_provider"] = "openrouter"
+                config_dict["chief_engineer"]["fallback_base_url"] = "https://openrouter.ai/api/v1"
+                config_dict["chief_engineer"]["fallback_model"] = env_file_values["OPENROUTER_MODEL"]
+                config_dict["chief_engineer"]["fallback_api_key"] = env_file_values["OPENROUTER_API_KEY"]
+        else:
+            if env_file_values.get("OPENROUTER_MODEL"):
+                config_dict["chief_engineer"]["model"] = env_file_values["OPENROUTER_MODEL"]
+            if env_file_values.get("OPENROUTER_API_KEY"):
+                config_dict["chief_engineer"]["api_key"] = env_file_values["OPENROUTER_API_KEY"]
 
     # 3. Load from Environment Variables
     env_mappings = {
@@ -166,6 +187,8 @@ def load_config(cli_args: dict[str, Any] | None = None) -> LocalForgeConfig:
         "LOCALFORGE_MODEL_PROVIDER": ("models", "provider"),
         "LOCALFORGE_MODEL_BASE_URL": ("models", "base_url"),
         "LOCALFORGE_DEFAULT_MODEL": ("models", "default_model"),
+        "NVIDIA_LLM_MODEL": ("chief_engineer", "model"),
+        "NVIDIA_API_KEY": ("chief_engineer", "api_key"),
         "OPENROUTER_MODEL": ("chief_engineer", "model"),
         "OPENROUTER_API_KEY": ("chief_engineer", "api_key"),
     }
@@ -173,7 +196,22 @@ def load_config(cli_args: dict[str, Any] | None = None) -> LocalForgeConfig:
         val = os.getenv(env_var)
         if val is not None:
             section, key = path
+            if env_var.startswith("NVIDIA_"):
+                config_dict["chief_engineer"]["provider"] = "nvidia"
+                config_dict["chief_engineer"]["base_url"] = "https://integrate.api.nvidia.com/v1"
             config_dict[section][key] = val
+    nvidia_model = os.getenv("NVIDIA_LLM_MODEL")
+    nvidia_key = os.getenv("NVIDIA_API_KEY")
+    if nvidia_model and nvidia_key:
+        config_dict["chief_engineer"]["provider"] = "nvidia"
+        config_dict["chief_engineer"]["base_url"] = "https://integrate.api.nvidia.com/v1"
+        config_dict["chief_engineer"]["model"] = nvidia_model
+        config_dict["chief_engineer"]["api_key"] = nvidia_key
+        if os.getenv("OPENROUTER_MODEL") and os.getenv("OPENROUTER_API_KEY"):
+            config_dict["chief_engineer"]["fallback_provider"] = "openrouter"
+            config_dict["chief_engineer"]["fallback_base_url"] = "https://openrouter.ai/api/v1"
+            config_dict["chief_engineer"]["fallback_model"] = os.environ["OPENROUTER_MODEL"]
+            config_dict["chief_engineer"]["fallback_api_key"] = os.environ["OPENROUTER_API_KEY"]
 
     # 4. Load from CLI arguments
     if cli_args:

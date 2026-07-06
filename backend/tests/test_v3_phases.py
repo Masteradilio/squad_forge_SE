@@ -274,3 +274,37 @@ async def test_local_model_call_is_recorded_in_ledger(db_session):
     assert calls[0].provider == "ollama"
     assert calls[0].estimated_cost_usd == 0.0
     assert calls[0].metadata["v3_economy_first"] is True
+
+
+def test_v4_benchmark_requires_all_tasks_pr_ready_for_acceptance():
+    from scripts.run_benchmark_v4_only import classify_benchmark_status
+
+    status, blockers = classify_benchmark_status(
+        preflight_failed=False,
+        task_statuses={"PR_READY": 2, "READY": 3},
+        expected_tasks=5,
+        runs_count=1,
+        paid_chief_calls=3,
+        pr_artifacts_logged=2,
+        run_exit_code=0,
+    )
+
+    assert status == "PARTIAL"
+    assert any("not PR_READY" in blocker for blocker in blockers)
+
+
+def test_v4_benchmark_accepts_only_complete_pr_ready_run():
+    from scripts.run_benchmark_v4_only import classify_benchmark_status
+
+    status, blockers = classify_benchmark_status(
+        preflight_failed=False,
+        task_statuses={"PR_READY": 5},
+        expected_tasks=5,
+        runs_count=1,
+        paid_chief_calls=3,
+        pr_artifacts_logged=5,
+        run_exit_code=0,
+    )
+
+    assert status == "ACCEPTED"
+    assert blockers == []

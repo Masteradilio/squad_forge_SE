@@ -32,6 +32,40 @@ def test_config_loads_openrouter_chief_engineer_from_env_file(tmp_path, monkeypa
     assert config.budgets.max_paid_calls == 20
 
 
+def test_config_prefers_nvidia_chief_engineer_from_env_file(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".env").write_text(
+        "NVIDIA_LLM_MODEL=minimax/minimax-m3\n"
+        "NVIDIA_API_KEY=nvapi-secret\n"
+        "OPENROUTER_MODEL=minimax/minimax-m3\n"
+        "OPENROUTER_API_KEY=sk-or-fallback\n",
+        encoding="utf-8",
+    )
+
+    config = load_config()
+
+    assert config.chief_engineer.provider == "nvidia"
+    assert config.chief_engineer.model == "minimax/minimax-m3"
+    assert config.chief_engineer.api_key == "nvapi-secret"
+    assert config.chief_engineer.fallback_provider == "openrouter"
+    assert config.chief_engineer.fallback_api_key == "sk-or-fallback"
+
+
+def test_chief_engineer_provider_metadata_records_fallback_use():
+    from localforge.chief_engineer.service import _provider_metadata
+
+    provider = MagicMock()
+    provider.primary_provider_name = "nvidia"
+    provider.fallback_provider_name = "openrouter"
+    provider.used_fallback = True
+
+    assert _provider_metadata(provider) == {
+        "primary_provider": "nvidia",
+        "fallback_provider": "openrouter",
+        "used_fallback": True,
+    }
+
+
 @pytest.mark.anyio
 async def test_openrouter_provider_redacts_api_key_on_http_error():
     provider = OpenRouterProvider(

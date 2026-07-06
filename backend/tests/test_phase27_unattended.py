@@ -452,3 +452,29 @@ async def test_scheduler_summary_generation(tmp_path, db_session, db_manager):
     content = summary_file.read_text(encoding="utf-8")
     assert "# LocalForge OS — Run Execution Summary" in content
     assert "**Run ID**: " in content
+
+
+@pytest.mark.anyio
+async def test_safe_file_editor_tolerates_missing_git_stdout(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    from localforge.runtime.file_tools import SafeFileEditor
+
+    editor = SafeFileEditor(UnitOfWork(), project_id=1, run_id=None, task_id=1)
+
+    async def allow(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(editor, "_evaluate", allow)
+    monkeypatch.setattr(editor, "_audit", allow)
+
+    def fake_run(args, **kwargs):
+        if args[:2] == ["git", "rev-parse"]:
+            return SimpleNamespace(stdout=str(tmp_path))
+        return SimpleNamespace(stdout=None)
+
+    monkeypatch.setattr("subprocess.run", fake_run)
+
+    result = await editor.write_text(str(tmp_path), "generated.py", "print('ok')\n")
+
+    assert result.path.endswith("generated.py")

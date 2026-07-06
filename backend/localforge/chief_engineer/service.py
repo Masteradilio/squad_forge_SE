@@ -170,7 +170,7 @@ class ChiefEngineerService:
                 domain.ModelCallLedger(
                     project_id=project_id,
                     run_id=run_id,
-                    provider="openrouter",
+                    provider=str(getattr(provider, "provider_name", "openrouter")),
                     model=model,
                     reason=ChiefEngineerCallReason.CONTRACT_FREEZE,
                     input_tokens=estimated_input,
@@ -180,6 +180,7 @@ class ChiefEngineerService:
                     ),
                     status=status,
                     error_summary=error_summary,
+                    metadata=_provider_metadata(provider),
                 )
             )
             raise LLMError(f"Chief Engineer contract review failed: {error_summary}") from exc
@@ -188,7 +189,7 @@ class ChiefEngineerService:
             domain.ModelCallLedger(
                 project_id=project_id,
                 run_id=run_id,
-                provider="openrouter",
+                provider=str(getattr(provider, "provider_name", "openrouter")),
                 model=model,
                 reason=ChiefEngineerCallReason.CONTRACT_FREEZE,
                 input_tokens=estimated_input,
@@ -198,7 +199,7 @@ class ChiefEngineerService:
                 ),
                 status=status,
                 error_summary=error_summary,
-                metadata={"approved": review.approved},
+                metadata={**_provider_metadata(provider), "approved": review.approved},
             )
         )
         return review
@@ -271,7 +272,7 @@ class ChiefEngineerService:
                     project_id=project_id,
                     run_id=run_id,
                     task_id=task_id,
-                    provider="openrouter",
+                    provider=str(getattr(provider, "provider_name", "openrouter")),
                     model=model,
                     reason=ChiefEngineerCallReason.SEMANTIC_REPAIR_PLAN,
                     input_tokens=estimated_input,
@@ -281,6 +282,7 @@ class ChiefEngineerService:
                     ),
                     status=status,
                     error_summary=error_summary,
+                    metadata=_provider_metadata(provider),
                 )
             )
             raise LLMError(f"Chief Engineer semantic repair failed: {error_summary}") from exc
@@ -289,7 +291,7 @@ class ChiefEngineerService:
                 project_id=project_id,
                 run_id=run_id,
                 task_id=task_id,
-                provider="openrouter",
+                provider=str(getattr(provider, "provider_name", "openrouter")),
                 model=model,
                 reason=ChiefEngineerCallReason.SEMANTIC_REPAIR_PLAN,
                 input_tokens=estimated_input,
@@ -299,7 +301,11 @@ class ChiefEngineerService:
                 ),
                 status=status,
                 error_summary=error_summary,
-                metadata={"failure_class": plan.failure_class, "actions": len(plan.actions or [])},
+                metadata={
+                    **_provider_metadata(provider),
+                    "failure_class": plan.failure_class,
+                    "actions": len(plan.actions or []),
+                },
             )
         )
         return plan
@@ -307,3 +313,12 @@ class ChiefEngineerService:
 
 def _estimate_tokens(text: str) -> int:
     return max(1, len(text) // 4)
+
+
+def _provider_metadata(provider: BaseLLMProvider) -> dict[str, object]:
+    metadata: dict[str, object] = {}
+    if hasattr(provider, "primary_provider_name"):
+        metadata["primary_provider"] = str(getattr(provider, "primary_provider_name"))
+        metadata["fallback_provider"] = str(getattr(provider, "fallback_provider_name", ""))
+        metadata["used_fallback"] = bool(getattr(provider, "used_fallback", False))
+    return metadata

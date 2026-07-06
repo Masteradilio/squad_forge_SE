@@ -19,10 +19,12 @@ class OpenAICompatibleProvider(BaseLLMProvider):
         base_url: str,
         api_key: str | None = None,
         default_model: str | None = None,
+        provider_name: str = "openai_compatible",
     ):
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key or os.getenv("OPENROUTER_API_KEY") or os.getenv("LOCALFORGE_MODEL_API_KEY") or "no-key"
         self.default_model = default_model
+        self.provider_name = provider_name
 
     async def list_models(self) -> list[str]:
         """Fetch active models using the GET /v1/models endpoint."""

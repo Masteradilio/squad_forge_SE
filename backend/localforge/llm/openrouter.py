@@ -25,6 +25,7 @@ class OpenRouterProvider(OpenAICompatibleProvider):
             base_url=base_url,
             api_key=api_key,
             default_model=default_model,
+            provider_name="openrouter",
         )
 
     async def chat_completion(

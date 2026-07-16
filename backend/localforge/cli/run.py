@@ -113,15 +113,29 @@ async def run_execution(unattended: bool) -> None:
                         RunStatus.COMPLETED,
                         RunStatus.FAILED,
                         RunStatus.CANCELLED,
+                        RunStatus.BLOCKED_NEEDS_HUMAN_REVIEW,
                     ):
-                        console.print(
-                            f"\n[bold green]Run finished with status: "
-                            f"{refreshed_run.status.value}[/bold green]"
-                        )
+                        if (
+                            refreshed_run.status
+                            == RunStatus.BLOCKED_NEEDS_HUMAN_REVIEW
+                        ):
+                            console.print(
+                                "[bold yellow]Run ended in "
+                                "BLOCKED_NEEDS_HUMAN_REVIEW.[/bold yellow]"
+                            )
+                            console.print(
+                                "Some tasks could not be recovered within "
+                                "the configured budget. Review run_summary.md "
+                                "and resume them manually."
+                            )
+                        else:
+                            console.print(
+                                f"\n[bold green]Run finished with status: "
+                                f"{refreshed_run.status.value}[/bold green]"
+                            )
                         if refreshed_run.summary:
                             console.print(f"[bold]Summary:[/bold] {refreshed_run.summary}")
                         break
-
                     # Display currently executing task runs
                     running_tasks = []
                     all_tasks = await uow.tasks.list_tasks_for_project(project_id)

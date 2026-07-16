@@ -7,6 +7,9 @@ from fastapi.testclient import TestClient
 from localforge.api.app import create_app
 from localforge.core.config import load_config
 from localforge.llm import LLMError
+from localforge.llm.base import LLMHTTPError, LLMTimeoutError
+from localforge.llm.fallback import FallbackLLMProvider
+from localforge.llm.factory import build_chief_engineer_provider
 from localforge.llm.openrouter import OpenRouterProvider
 from localforge.models import domain
 from localforge.models.enums import ChiefEngineerCallReason, RunMode, RunStatus
@@ -29,8 +32,7 @@ def test_config_loads_openrouter_chief_engineer_from_env_file(tmp_path, monkeypa
     assert config.chief_engineer.model == "minimax/minimax-m3"
     assert config.chief_engineer.api_key == "test-secret-key"
     assert config.chief_engineer.base_url == "https://openrouter.ai/api/v1"
-    assert config.budgets.max_paid_calls == 20
-
+    assert config.budgets.max_paid_calls == 30
 
 def test_config_prefers_nvidia_chief_engineer_from_env_file(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
@@ -49,6 +51,7 @@ def test_config_prefers_nvidia_chief_engineer_from_env_file(tmp_path, monkeypatc
     assert config.chief_engineer.api_key == "nvapi-secret"
     assert config.chief_engineer.fallback_provider == "openrouter"
     assert config.chief_engineer.fallback_api_key == "sk-or-fallback"
+    assert isinstance(build_chief_engineer_provider(config), FallbackLLMProvider)
 
 
 def test_chief_engineer_provider_metadata_records_fallback_use():
@@ -64,6 +67,46 @@ def test_chief_engineer_provider_metadata_records_fallback_use():
         "fallback_provider": "openrouter",
         "used_fallback": True,
     }
+
+
+@pytest.mark.anyio
+async def test_chief_engineer_falls_back_on_primary_timeout():
+    primary = MagicMock(provider_name="nvidia", default_model="primary-model")
+    primary.chat_completion = AsyncMock(side_effect=LLMTimeoutError("timeout"))
+    fallback = MagicMock(provider_name="openrouter", default_model="fallback-model")
+    fallback.chat_completion = AsyncMock(return_value="ok")
+    provider = FallbackLLMProvider(
+        primary=primary,
+        fallback=fallback,
+        primary_timeout=30.0,
+    )
+
+    result = await provider.chat_completion([{"role": "user", "content": "work"}])
+
+    assert result == "ok"
+    assert provider.used_fallback is True
+    fallback.chat_completion.assert_awaited_once()
+
+
+@pytest.mark.anyio
+async def test_chief_engineer_does_not_hide_primary_authentication_error():
+    primary = MagicMock(provider_name="nvidia", default_model="primary-model")
+    primary.chat_completion = AsyncMock(
+        side_effect=LLMHTTPError("unauthorized", status_code=401)
+    )
+    fallback = MagicMock(provider_name="openrouter", default_model="fallback-model")
+    fallback.chat_completion = AsyncMock(return_value="should not run")
+    provider = FallbackLLMProvider(
+        primary=primary,
+        fallback=fallback,
+        primary_timeout=30.0,
+    )
+
+    with pytest.raises(LLMHTTPError, match="unauthorized"):
+        await provider.chat_completion([{"role": "user", "content": "work"}])
+
+    assert provider.used_fallback is False
+    fallback.chat_completion.assert_not_awaited()
 
 
 @pytest.mark.anyio

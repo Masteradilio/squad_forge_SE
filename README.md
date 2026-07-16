@@ -1,30 +1,31 @@
 # LocalForge OS
 
-LocalForge OS is an API-led, economy-first AI software engineering harness. It
+LocalForge OS is an open-source, economy-aware AI software engineering control plane. It
 turns a PRD into a sprint backlog, routes work across an agent squad, executes
 tasks in isolated worktrees, validates outputs with deterministic gates, attempts
 bounded self-healing, and prepares pull requests for human review.
 
-The current V3 product direction is documented in
-`docs/MASTER_BACKLOG_V3.md`.
+The active open-source release contract is documented in
+`docs/MASTER_BACKLOG_V5.md`. Earlier V2–V4 backlogs remain as architectural history.
 
 ## Product Thesis
 
-LocalForge is no longer designed as a purely local-first autonomous coder. The
-HP 12C validation showed that local models are useful for scoped, cheap,
+LocalForge is not a general personal assistant or a purely local autonomous coder. Earlier
+validation showed that local models are useful for scoped, cheap,
 verifiable work, but they are not reliable as the primary engine for large UI
 rewrites, architecture decisions, cross-file semantic consistency, and hard
 recovery loops.
 
-The V3 architecture is:
+The current architecture is:
 
 ```text
-API-led, economy-first AI Software Engineering Squad.
+Contract-first, economy-aware AI software engineering control plane.
 ```
 
-The user acts as Product Owner. A large API model acts as Chief Engineer and
-Scrum Master for complex work. Local models remain part of the squad, but only
-for bounded work that the harness can verify cheaply and deterministically.
+The user acts as Product Owner. A deterministic orchestrator freezes scope and routes
+work. Local models handle bounded tasks when their results can be verified cheaply;
+larger API models handle architecture, semantic recovery, and high-risk review. API
+lanes receive scoped evidence bundles rather than unrestricted repository context.
 
 ## Squad Roles
 
@@ -105,9 +106,61 @@ LocalForge keeps the original safety goals:
 - fail-safe states instead of uncontrolled autonomy;
 - human review before merge.
 
-The V3 change is not weaker safety. It is more realistic routing: expensive
+This routing model is not weaker safety. It uses expensive
 model intelligence is used where it is needed, while deterministic gates and
 local agents keep cost under control.
+
+## Run Lifecycle and Self-Healing Promise
+
+The Product Owner hands a PRD to the Scrum Master and waits. The Squad
+promises to either deliver all tasks `PR_READY` for human review **or**
+escalate the remaining work honestly to `BLOCKED_NEEDS_HUMAN_REVIEW` with
+per-task blockers in `run_summary.md`. The runtime never closes a run
+silently in a half-finished state.
+
+Concretely, the scheduler runs a `recovery_cycle` whenever any task is in
+`FAILED_SAFE` or `BLOCKED`. Each cycle:
+
+1. **Budget check** — `_recovery_budget_remaining` reads the live paid-USD
+   ledger and the `recovery_cycles_used` counter. If the absolute USD
+   ceiling (`max_paid_usd_absolute = $6.0`) or the per-run cycle ceiling
+   (`max_run_recovery_cycles = 3`) is exhausted, the cycle does not run.
+2. **Scrum Master unblock** — reopens recoverable tasks with Chief
+   Engineer guidance attached to the task contract.
+3. **Repair** — the pipeline attempts up to
+   `max_repair_attempts = 5` fixer rounds per cycle. Exceeding that
+   surfaces a clear `FAILED_SAFE` rather than throwing.
+4. **Escalate or close** — when the budget is gone, every remaining
+   `FAILED_SAFE` is moved to `BLOCKED_NEEDS_HUMAN_REVIEW` and the run is
+   finalized with the per-task blocker detail. The PO can reopen these
+   tasks from `READY` later.
+
+Absolute ceilings (defaults; tune in `.localforge/config.yaml`):
+
+| Resource | Default ceiling | Field |
+| --- | --- | --- |
+| Run wall time | 5400 s (90 min) | `max_run_time` |
+| Per-task duration | 900 s | `max_task_duration` |
+| Repair rounds per cycle | 5 | `max_repair_attempts` |
+| Repair rounds absolute | 10 | `max_repair_attempts_absolute` |
+| Scheduler recovery cycles | 3 | `max_run_recovery_cycles` |
+| Paid USD per cycle | $4.0 | `max_paid_usd` |
+| Paid USD absolute per run | $6.0 | `max_paid_usd_absolute` |
+| Worked tree files | 12 | `max_file_count` |
+| Diff growth | 4000 chars | `max_diff_growth` |
+
+Even at the defaults the economy-first routing keeps paid spend tight:
+on the V4 pilot, ~70 % of model calls were executed on local Ollama
+models (`gemma4:12b` → `granite4.1:8b` → `nemotron-3-nano:4b`) and the
+remaining 30 % went through the Chief Engineer lane with NVIDIA NIM as
+primary and OpenRouter as fallback. See
+`scripts/run_benchmark_v4_only.py` for the reproducible harness.
+
+If the Squad cannot produce a fully green run, the resulting
+`BLOCKED_NEEDS_HUMAN_REVIEW` count appears in the V4 benchmark verdict
+and in any run's `run_summary.md`, so the closure is auditable rather
+than disguised.
+
 
 ## Quick Setup
 
@@ -119,17 +172,19 @@ local agents keep cost under control.
 - Optional: Ollama for local model lanes
 - Optional: OpenRouter-compatible credentials for Chief Engineer API lanes
 
-### Backend
-
-```powershell
-./scripts/setup_backend.ps1
-```
-
-or:
+### Install the backend and CLI
 
 ```bash
-./scripts/setup_backend.sh
+python -m venv .venv
+source .venv/bin/activate  # Windows PowerShell: .\.venv\Scripts\Activate.ps1
+python -m pip install -e ".[dev]"
+localforge doctor
 ```
+
+`localforge --version` is a non-destructive installation smoke check and requires no model
+or paid-provider credentials.
+
+PowerShell users can still use `./scripts/setup_backend.ps1` for the contributor setup.
 
 ### Frontend
 
@@ -188,36 +243,29 @@ While LocalForge OS strives for economy-first autonomy, users must keep in mind:
 - **No Silver Bullet**: Autonomy does not mean zero oversight. A human Product Owner is always required to review final pull requests and visual similarities.
 - **Hardware Prerequisites**: Bounded local models (e.g. `granite4.1:8b`) need adequate local hardware VRAM/RAM (minimum 16GB VRAM recommended). Slow inference runs may trigger sandbox timeouts.
 - **Cost Benchmarks**: Baselines compare token volume ratios based on public competitor models. Actual proprietary IDE invoices may differ based on provider caching and billing plans.
+- **Alpha Evidence**: Historical benchmark reports describe prior executions, but disposable workspaces and credentials are intentionally not committed. Treat a result as reproducible only when its manifest, hashes, commands, and acceptance tests are available.
+- **Hybrid Privacy**: Local lanes keep source on the machine. API lanes send scoped task context to the configured provider; users requiring zero source egress must disable API routing.
 
-## Demo Script & Simulation Guide
+## Benchmark and evaluation policy
 
-To see the V3 economy-first routing and cost simulator in action, run:
+LocalForge separates three kinds of evidence:
 
-1. **Bootstrap the workspace**:
-   ```bash
-   $env:PYTHONPATH="E:\Projetos\local_forge_os\backend"
-   .venv\Scripts\python -m localforge.cli.main init
-   ```
-2. **Execute Scheduler in unattended mode**:
-   ```bash
-   .venv\Scripts\python -m localforge.cli.main run --unattended
-   ```
-3. **Audit Token & API Costs**:
-   ```bash
-   .venv\Scripts\python -m localforge.cli.main costs report
-   ```
-4. **Run API-Only Cost Simulation**:
-   ```bash
-   .venv\Scripts\python -m localforge.cli.main costs simulate
-   ```
-5. **Generate V3 Benchmark Report**:
-   ```bash
-   .venv\Scripts\python -m localforge.cli.main benchmark report
-   ```
+- **Verified current evidence**: reproducible from the current checkout.
+- **Historical evidence**: produced by a previous run but missing disposable runtime state.
+- **Targets**: intended gates that have not yet been demonstrated.
+
+A benchmark is accepted only when real preflight checks pass, every planned task reaches
+`PR_READY`, routing contracts and model calls are persisted, PR artifacts exist, and the
+product acceptance tests pass. Cost savings or quality parity require an identical-workload
+comparison against frontier-only, economy-API-only, local-only, and hybrid lanes.
 
 ## Key Documents
 
 - `docs/LocalForge_OS_PRD.md` - product requirements
-- `docs/MASTER_BACKLOG_V3.md` - V3 API-led, economy-first architecture backlog
-- `docs/e2e/HP12C_PRODUCT_VALIDATION_REPORT.md` - HP 12C validation evidence
+- `docs/MASTER_BACKLOG_V5.md` - active open-source readiness backlog
+- `docs/architecture/V5_ARCHITECTURE.md` - current boundaries and invariants
+- `docs/benchmarks/METHODOLOGY.md` - reproducible benchmark contract
+- `docs/e2e/README.md` - status of historical and current evaluation evidence
 - `CHANGELOG.md` - implementation history
+- `CONTRIBUTING.md` - contributor workflow and change contract
+- `SECURITY.md` - vulnerability reporting and runtime security boundaries

@@ -219,20 +219,23 @@ def test_task_contract_seniority_override_is_hard_rule():
     assert classifier.classify(task) == TaskSeniorityClass.CHIEF_ONLY
 
 
-def test_prd_contracts_infer_v3_seniority_and_visual_gate():
+def test_prd_contracts_classify_generic_visual_and_documentation_tasks():
     from localforge.prd.contracts import build_architecture_contract
     from localforge.prd.schemas import ExtractedPlan, ExtractedTask
 
     plan = ExtractedPlan(
-        title="SprintBoard",
+        title="Operations Console",
         summary="small app",
         epics=[],
         tasks=[
             ExtractedTask(
                 key="LF-1",
-                title="Frontend View",
-                description="Render a four-column Kanban UI.",
-                expected_files=["app/sprintboard.html", "tests/test_board_rules.py"],
+                title="Dashboard view",
+                description="Render a four-column dashboard UI.",
+                expected_files=[
+                    "frontend/src/components/dashboard_view.tsx",
+                    "frontend/src/components/dashboard_view.test.tsx",
+                ],
             ),
             ExtractedTask(
                 key="LF-2",
@@ -245,9 +248,9 @@ def test_prd_contracts_infer_v3_seniority_and_visual_gate():
 
     contract = build_architecture_contract(plan)
 
-    frontend = contract.task_contracts["Frontend View"]
+    frontend = contract.task_contracts["Dashboard view"]
     docs = contract.task_contracts["Documentation summary"]
-    assert frontend.seniority_class == "chief_only"
+    assert frontend.seniority_class == "chief_led"
     assert frontend.visual_required is True
     assert docs.seniority_class == "local_only"
 
@@ -285,8 +288,10 @@ def test_v4_benchmark_requires_all_tasks_pr_ready_for_acceptance():
         expected_tasks=5,
         runs_count=1,
         paid_chief_calls=3,
+        local_model_calls=2,
         pr_artifacts_logged=2,
         run_exit_code=0,
+        routing_contract_summary={"chief_led": 3, "local_assisted": 2},
     )
 
     assert status == "PARTIAL"
@@ -302,8 +307,96 @@ def test_v4_benchmark_accepts_only_complete_pr_ready_run():
         expected_tasks=5,
         runs_count=1,
         paid_chief_calls=3,
+        local_model_calls=2,
         pr_artifacts_logged=5,
         run_exit_code=0,
+        routing_contract_summary={"chief_led": 3, "local_assisted": 2},
+    )
+
+    assert status == "ACCEPTED"
+    assert blockers == []
+
+
+def test_v4_benchmark_requires_persisted_routing_contracts():
+    from scripts.run_benchmark_v4_only import classify_benchmark_status
+
+    status, blockers = classify_benchmark_status(
+        preflight_failed=False,
+        task_statuses={"PR_READY": 5},
+        expected_tasks=5,
+        runs_count=1,
+        paid_chief_calls=3,
+        local_model_calls=2,
+        pr_artifacts_logged=5,
+        run_exit_code=0,
+        routing_contract_summary={},
+    )
+
+    assert status == "PARTIAL"
+    assert any("routing contracts" in blocker for blocker in blockers)
+
+
+def test_v4_routing_summary_ignores_invalid_metadata():
+    from scripts.run_benchmark_v4_only import summarize_routing_contracts
+
+    assert summarize_routing_contracts(
+        [
+            '{"task_contract":{"seniority_class":"chief_led"}}',
+            {"task_contract": {"seniority_class": "chief_led"}},
+            {"task_contract": {"seniority_class": "local_assisted"}},
+            "not-json",
+            None,
+        ]
+    ) == {"chief_led": 2, "local_assisted": 1}
+
+
+def test_v4_benchmark_marks_blocked_needs_human_review_as_partial():
+    """A run that escalates tasks to BLOCKED_NEEDS_HUMAN_REVIEW after the
+    recovery budget is exhausted should be classified as PARTIAL rather
+    than ACCEPTED, with an explicit blocker explaining which tasks were
+    abandoned for human review."""
+    from scripts.run_benchmark_v4_only import classify_benchmark_status
+
+    status, blockers = classify_benchmark_status(
+        preflight_failed=False,
+        task_statuses={
+            "PR_READY": 4,
+            "BLOCKED_NEEDS_HUMAN_REVIEW": 1,
+        },
+        expected_tasks=5,
+        runs_count=1,
+        paid_chief_calls=3,
+        local_model_calls=2,
+        pr_artifacts_logged=4,
+        run_exit_code=0,
+        routing_contract_summary={"chief_led": 3, "local_assisted": 2},
+    )
+
+    assert status == "PARTIAL"
+    assert any(
+        "BLOCKED_NEEDS_HUMAN_REVIEW" in blocker for blocker in blockers
+    )
+
+
+def test_v4_benchmark_full_pr_ready_unaffected_by_recovery_loop():
+    """Even when the scheduler's recovery loop has spare cycles left, a
+    clean 100% PR_READY run still produces ACCEPTED."""
+    from scripts.run_benchmark_v4_only import classify_benchmark_status
+
+    status, blockers = classify_benchmark_status(
+        preflight_failed=False,
+        task_statuses={"PR_READY": 5},
+        expected_tasks=5,
+        runs_count=1,
+        paid_chief_calls=3,
+        local_model_calls=2,
+        pr_artifacts_logged=5,
+        run_exit_code=0,
+        routing_contract_summary={
+            "chief_led": 2,
+            "local_assisted": 2,
+            "chief_only": 1,
+        },
     )
 
     assert status == "ACCEPTED"

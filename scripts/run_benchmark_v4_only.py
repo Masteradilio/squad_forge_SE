@@ -1,12 +1,16 @@
-import os
-import sys
-import json
 import asyncio
+import hashlib
+import json
+import os
+import platform
 import shutil
 import sqlite3
-import yaml
-from datetime import datetime, UTC
+import subprocess
+import sys
+from datetime import UTC, datetime
 from typing import Any
+
+import yaml
 from dotenv import dotenv_values
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -17,6 +21,36 @@ def write_markdown_clean(path: str, content: str) -> None:
     cleaned = "\n".join(line.rstrip() for line in normalized.split("\n"))
     with open(path, "w", encoding="utf-8", newline="\n") as f:
         f.write(cleaned)
+
+
+def sha256_file(path: str) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(64 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def git_source_state() -> dict[str, Any]:
+    def git(*args: str) -> str:
+        result = subprocess.run(
+            ["git", *args],
+            cwd=ROOT_DIR,
+            check=True,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+        return result.stdout.strip()
+
+    try:
+        return {
+            "commit": git("rev-parse", "HEAD"),
+            "dirty": bool(git("status", "--short")),
+        }
+    except (OSError, subprocess.CalledProcessError):
+        return {"commit": None, "dirty": None}
 
 
 def root_env_values() -> dict[str, str]:
@@ -30,10 +64,41 @@ def root_env_values() -> dict[str, str]:
     }
 
 async def check_docker_status() -> tuple[bool, str]:
-    return False, "Docker is mocked as inactive"
+    """Return the real Docker daemon status without altering local state."""
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "docker",
+            "ps",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await proc.communicate()
+        output = (stdout if proc.returncode == 0 else stderr).decode(
+            "utf-8", errors="replace"
+        ).strip()
+        return proc.returncode == 0, output
+    except (FileNotFoundError, OSError) as exc:
+        return False, str(exc)
 
 async def check_ollama_status() -> tuple[bool, list[str]]:
-    return True, ["gemma4:12b", "granite4.1:8b", "nemotron-3-nano:4b"]
+    """Query the configured local Ollama daemon instead of fabricating models."""
+    import urllib.error
+    import urllib.request
+
+    def fetch_models() -> list[str]:
+        with urllib.request.urlopen("http://localhost:11434/api/tags", timeout=3) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        return [
+            model["name"]
+            for model in payload.get("models", [])
+            if isinstance(model, dict) and isinstance(model.get("name"), str)
+        ]
+
+    try:
+        models = await asyncio.to_thread(fetch_models)
+        return True, models
+    except (OSError, ValueError, urllib.error.URLError):
+        return False, []
 
 async def run_cli_command(cwd: str, args: list[str]) -> tuple[int, str, str]:
     """Executes a LocalForge CLI command in the specified directory using the absolute python venv path."""
@@ -134,7 +199,7 @@ async def patch_workspace_config(
             cfg["budgets"]["max_paid_usd"] = 2.0
             cfg["budgets"]["max_task_duration"] = 1200.0
             cfg["budgets"]["max_run_time"] = 3600.0
-            cfg["budgets"]["max_diff_growth"] = 80000
+            cfg["budgets"]["max_diff_growth"] = 5000
                 
             with open(config_path, "w", encoding="utf-8") as f:
                 yaml.safe_dump(cfg, f, default_flow_style=False)
@@ -182,12 +247,17 @@ def classify_benchmark_status(
     expected_tasks: int,
     runs_count: int,
     paid_chief_calls: int,
+    local_model_calls: int,
     pr_artifacts_logged: int,
     run_exit_code: int,
+    routing_contract_summary: dict[str, int],
 ) -> tuple[str, list[str]]:
     blockers: list[str] = []
     imported_tasks = sum(task_statuses.values())
     pr_ready_tasks = task_statuses.get("PR_READY", 0)
+    blocked_human_count = task_statuses.get(
+        "BLOCKED_NEEDS_HUMAN_REVIEW", 0
+    )
 
     if preflight_failed:
         return "BLOCKED", blockers
@@ -196,24 +266,61 @@ def classify_benchmark_status(
     if run_exit_code != 0:
         blockers.append(f"LocalForge CLI exited with code {run_exit_code}.")
     if imported_tasks != expected_tasks:
-        blockers.append(f"Imported {imported_tasks} tasks, expected {expected_tasks}.")
+        blockers.append(
+            f"Imported {imported_tasks} tasks, expected {expected_tasks}."
+        )
+    if blocked_human_count > 0:
+        blockers.append(
+            f"{blocked_human_count} task(s) are in BLOCKED_NEEDS_HUMAN_REVIEW "
+            f"after the recovery budget was exhausted."
+        )
     if pr_ready_tasks != expected_tasks:
         blockers.append(
-            f"{expected_tasks - pr_ready_tasks} task(s) are not PR_READY: {task_statuses}."
+            f"{expected_tasks - pr_ready_tasks} task(s) are not PR_READY: "
+            f"{task_statuses}."
         )
     if paid_chief_calls <= 0:
         blockers.append(
             "V4 API-led routing did not execute any paid Chief Engineer call "
             "(NVIDIA primary or OpenRouter fallback)."
         )
+    if local_model_calls <= 0:
+        blockers.append(
+            "V4 economy routing did not execute any local-model call."
+        )
     if pr_artifacts_logged <= 0:
-        blockers.append("No PRArtifact was recorded for the benchmark run.")
+        blockers.append(
+            "No PRArtifact was recorded for the benchmark run."
+        )
+    if not routing_contract_summary:
+        blockers.append(
+            "No task routing contracts were persisted for the V4 run."
+        )
 
     if not blockers:
         return "ACCEPTED", []
-    if pr_ready_tasks > 0:
+    if pr_ready_tasks > 0 or blocked_human_count > 0:
         return "PARTIAL", blockers
     return "REJECTED", blockers
+
+
+def summarize_routing_contracts(metadata_rows: list[object]) -> dict[str, int]:
+    """Count persisted seniority classes from task metadata rows."""
+    summary: dict[str, int] = {}
+    for raw in metadata_rows:
+        try:
+            metadata = json.loads(raw) if isinstance(raw, str) else raw
+        except (TypeError, json.JSONDecodeError):
+            continue
+        if not isinstance(metadata, dict):
+            continue
+        contract = metadata.get("task_contract")
+        if not isinstance(contract, dict):
+            continue
+        seniority = contract.get("seniority_class")
+        if isinstance(seniority, str) and seniority:
+            summary[seniority] = summary.get(seniority, 0) + 1
+    return summary
 
 
 def _task_requires_chief(title: str, description: str) -> bool:
@@ -316,7 +423,7 @@ def apply_api_led_task_contracts(db_path: str) -> dict[str, int]:
     conn.close()
     return summary
 
-async def run_preflight_checks(v4_dir: str, v4_tasks_imported: int, expected_tasks: int) -> tuple[dict[str, Any], str | None]:
+async def run_preflight_checks(v4_dir: str) -> tuple[dict[str, Any], str | None]:
     """Runs all pre-flight diagnostic validations and returns results and the chosen LLM model."""
     results = {}
     
@@ -388,11 +495,6 @@ async def run_preflight_checks(v4_dir: str, v4_tasks_imported: int, expected_tas
         "detail": f"Chosen model for execution: '{chosen_model}'. Ollama installed models: {installed_models}"
     }
     
-    results["task_count_match"] = {
-        "passed": v4_tasks_imported == expected_tasks,
-        "detail": f"Tasks imported: {v4_tasks_imported}, Expected count: {expected_tasks}"
-    }
-
     chief_config = chief_engineer_config_from_env()
     results["chief_engineer_configured"] = {
         "passed": bool(chief_config.get("model") and chief_config.get("api_key_configured")),
@@ -407,6 +509,7 @@ async def run_preflight_checks(v4_dir: str, v4_tasks_imported: int, expected_tas
     return results, chosen_model
 
 async def main():
+    source_state = git_source_state()
     print("=== Starting Real LocalForge V4-Only CLI Benchmark Execution ===")
     
     v4_dir = os.path.join(ROOT_DIR, "benchmarks", "workspaces", "sprintboard-v4")
@@ -439,12 +542,11 @@ async def main():
         except Exception:
             pass
 
-    routing_contract_summary = {} # Managed by squad.py
+    routing_contract_summary: dict[str, int] = {}
 
     # Run Pre-flight Checks
     expected_tasks = 5
-    # Since import is now handled by squad orchestrate, we bypass the imported count check here
-    preflight, chosen_model = await run_preflight_checks(v4_dir, expected_tasks, expected_tasks)
+    preflight, chosen_model = await run_preflight_checks(v4_dir)
     
     preflight_failed = False
     blockers = []
@@ -462,7 +564,7 @@ async def main():
 
     v4_run_code, v4_run_out, v4_run_err = -1, "", ""
     
-    if not any(not data["passed"] for check, data in preflight.items() if check not in ["task_count_match", "docker_or_dev"]):
+    if all(data["passed"] for data in preflight.values()):
         print("\nPre-flight validation passed! Executing squad orchestrate...")
         v4_run_code, v4_run_out, v4_run_err = await run_cli_command(v4_dir, ["squad", "orchestrate", v2_prd_path])
         print(f"V4 Candidate Run pipeline exit code: {v4_run_code}")
@@ -523,6 +625,12 @@ async def main():
                 task_statuses[status] = count
             v4_tasks_imported = sum(task_statuses.values())
                 
+            # Fetch task contract seniority classes
+            c.execute("SELECT metadata_json FROM tasks")
+            routing_contract_summary = summarize_routing_contracts(
+                [metadata_json for (metadata_json,) in c.fetchall()]
+            )
+
             # Fetch artifact types count
             c.execute("SELECT type, COUNT(*) FROM artifacts GROUP BY type")
             for type_name, count in c.fetchall():
@@ -539,8 +647,10 @@ async def main():
         expected_tasks=expected_tasks,
         runs_count=v4_runs_count,
         paid_chief_calls=v4_openrouter_calls + v4_nvidia_calls,
+        local_model_calls=v4_local_calls,
         pr_artifacts_logged=v4_pr_artifacts_logged,
         run_exit_code=v4_run_code,
+        routing_contract_summary=routing_contract_summary,
     )
     blockers.extend(status_blockers)
 
@@ -557,7 +667,6 @@ async def main():
       "preflight_checklist": {
           "docker_or_dev_passed": preflight["docker_or_dev"]["passed"],
           "llm_installed_passed": preflight["llm_installed"]["passed"],
-          "task_count_match_passed": preflight["task_count_match"]["passed"],
           "chief_engineer_configured_passed": preflight["chief_engineer_configured"]["passed"]
       },
       "run_summary": {
@@ -578,10 +687,15 @@ async def main():
           "routing_contract_summary": routing_contract_summary
       },
       "conclusions": {
-        "quality_score": "Deliverable" if status_classification == "ACCEPTED" else ("Partial with failures" if status_classification == "PARTIAL" else "Failed/Blocked"),
+        "quality_score": "Automated gates passed; human review pending" if status_classification == "ACCEPTED" else ("Partial with failures" if status_classification == "PARTIAL" else "Failed/Blocked"),
         "has_pr_artifacts": v4_pr_artifacts_logged > 0,
         "is_auditable": v4_runs_count > 0,
-        "api_led_economy_first_exercised": (v4_nvidia_calls + v4_openrouter_calls) > 0
+        "human_acceptance": False,
+        "api_led_economy_first_exercised": (
+          (v4_nvidia_calls + v4_openrouter_calls) > 0
+          and v4_local_calls > 0
+          and bool(routing_contract_summary)
+        )
       }
     }
     with open(metrics_json_path, "w", encoding="utf-8") as f:
@@ -590,25 +704,28 @@ async def main():
     # 2. Format Human Acceptance Report
     acceptance_md_path = os.path.join(ROOT_DIR, "docs", "e2e", "sprintboard_lite_human_acceptance.md")
 
-    has_deliverable = status_classification == "ACCEPTED"
     has_partial_evidence = status_classification == "PARTIAL"
 
     acceptance_md = f"""# SprintBoard Lite - Human Acceptance Report
 
 This document records the human validation checks for the **SprintBoard Lite** benchmark.
 
-## STATUS: {status_classification}
+## PIPELINE STATUS: {status_classification}
 
-The product is accepted only when the benchmark reaches `ACCEPTED`. A `PARTIAL` result means LocalForge generated some PR artifacts but did not complete the product end-to-end.
+## HUMAN STATUS: PENDING REVIEW
+
+Pipeline acceptance means the automated gates completed. It does not mark the generated
+product as human-accepted. A reviewer must inspect the runnable deliverable and record their
+name/date or review reference separately.
 
 ### Acceptance Checklist
 
-- `[{'x' if has_deliverable else ' '}]` **Create Tasks**: CRUD is present in the final deliverable.
-- `[{'x' if has_deliverable else ' '}]` **Validation Rules**: title and state-machine validation pass in product tests.
-- `[{'x' if has_deliverable else ' '}]` **Deterministic State Transitions**: legal/illegal transitions are enforced.
-- `[{'x' if has_deliverable else ' '}]` **JSON Export**: board export works and includes active items.
-- `[{'x' if has_deliverable else ' '}]` **Frontend UI**: Kanban UI is delivered as a runnable artifact.
-- `[{'x' if has_deliverable or has_partial_evidence else ' '}]` **Evidence Exists**: runtime artifacts exist, but partial evidence is not human acceptance.
+- `[ ]` **Create Tasks**: reviewer confirms CRUD in the runnable deliverable.
+- `[ ]` **Validation Rules**: reviewer confirms invalid input behavior.
+- `[ ]` **Deterministic State Transitions**: reviewer confirms legal and illegal transitions.
+- `[ ]` **JSON Export**: reviewer validates exported content.
+- `[ ]` **Frontend UI**: reviewer inspects the runnable Kanban UI.
+- `[{'x' if status_classification in {'ACCEPTED', 'PARTIAL'} or has_partial_evidence else ' '}]` **Automated Evidence Exists**: runtime artifacts were recorded; this is not human acceptance.
 
 ---
 
@@ -673,10 +790,11 @@ Métricas de execução extraídas diretamente da base de dados `.localforge/loc
 | **FAILED_SAFE Count** | {task_statuses.get("FAILED_SAFE", 0)} | Falhas seguras capturadas de forma robusta |
 | **Actual API Cost (USD)** | ${v4_cost_usd:.4f} | Custos reais de chamadas aos modelos |
 | **Actual Model Calls Logged** | {v4_calls_logged} | Quantidade de chamadas aos modelos registradas |
-| **NVIDIA Chief Calls Logged** | {v4_nvidia_calls} | Provider primário para validar a V4 API-led |
-| **OpenRouter Fallback Calls Logged** | {v4_openrouter_calls} | Fallback pago quando NVIDIA não responde |
-| **Paid Chief Calls Logged** | {v4_nvidia_calls + v4_openrouter_calls} | Deve ser maior que zero para validar a V4 API-led |
-| **Local Calls Logged** | {v4_local_calls} | Evidencia a parte local/economy da arquitetura |
+- **PR_READY**: {task_statuses.get("PR_READY", 0)}
+- **FAILED_SAFE**: {task_statuses.get("FAILED_SAFE", 0)}
+- **BLOCKED_NEEDS_HUMAN_REVIEW**: {task_statuses.get(
+    "BLOCKED_NEEDS_HUMAN_REVIEW", 0
+)}
 | **API-led Routing Contracts** | {json.dumps(routing_contract_summary)} | Tarefas complexas para Chief; tarefas simples para local |
 | **Artifacts Generated** | {v4_artifacts_logged} | Artefatos gravados no disco pelo pipeline |
 
@@ -701,7 +819,6 @@ Abaixo consta a distribuição real de status das {expected_tasks} tarefas após
 ### Resultados do Pré-flight
 - **docker_or_dev**: {"PASSED" if preflight["docker_or_dev"]["passed"] else "FAILED"} - {preflight["docker_or_dev"]["detail"]}
 - **llm_installed**: {"PASSED" if preflight["llm_installed"]["passed"] else "FAILED"} - {preflight["llm_installed"]["detail"]}
-- **task_count_match**: {"PASSED" if preflight["task_count_match"]["passed"] else "FAILED"} - {preflight["task_count_match"]["detail"]}
 - **chief_engineer_configured**: {"PASSED" if preflight["chief_engineer_configured"]["passed"] else "FAILED"} - {preflight["chief_engineer_configured"]["detail"]}
 
 ### Logs de Execução / Erros da CLI
@@ -718,6 +835,38 @@ Abaixo consta a distribuição real de status das {expected_tasks} tarefas após
 > The V4-only run proves the API-led/economy-first architecture only when at least one paid Chief Engineer call (`nvidia` primary or `openrouter` fallback) is recorded in `model_call_ledger` and costs are consolidated in the report. Otherwise the result remains **REJECTED** or **BLOCKED**, even if the CLI exits with code 0.
 """
     write_markdown_clean(report_md_path, report_md)
+
+    evidence_paths = [
+        v2_prd_path,
+        metrics_json_path,
+        acceptance_md_path,
+        report_md_path,
+    ]
+    evidence_manifest = {
+        "schema_version": 1,
+        "benchmark": "sprintboard-lite-v4",
+        "status": status_classification,
+        "command": [sys.executable, "scripts/run_benchmark_v4_only.py"],
+        "source": source_state,
+        "environment": {
+            "platform": platform.platform(),
+            "python": sys.version.split()[0],
+        },
+        "evidence": {
+            os.path.relpath(path, ROOT_DIR).replace("\\", "/"): sha256_file(path)
+            for path in evidence_paths
+            if os.path.exists(path)
+        },
+        "disposable_workspace_committed": False,
+        "limitations": [
+            "The disposable runtime database and worktrees are intentionally not committed.",
+            "Independent human acceptance must be recorded separately from pipeline state.",
+        ],
+    }
+    manifest_path = os.path.join(ROOT_DIR, "docs", "e2e", "v4_evidence_manifest.json")
+    with open(manifest_path, "w", encoding="utf-8", newline="\n") as handle:
+        json.dump(evidence_manifest, handle, indent=2)
+        handle.write("\n")
 
     print(f"\n[Success] V4-Only benchmark execution completed! Status: {status_classification}")
 

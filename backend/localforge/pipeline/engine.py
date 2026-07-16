@@ -5,20 +5,20 @@ import logging
 import os
 import re
 import sys
+from datetime import UTC, datetime
 
 logger = logging.getLogger("localforge.pipeline")
 from dataclasses import dataclass
-
 from localforge.chief_engineer.service import ChiefEngineerService
-from localforge.core.config import LocalForgeConfig, load_config
-from localforge.llm.fallback import FallbackLLMProvider
-from localforge.llm.nvidia import NvidiaProvider
+from localforge.core.config import load_config
+from localforge.llm.factory import build_chief_engineer_provider
 from localforge.llm.openai_compatible import OpenAICompatibleProvider
-from localforge.llm.openrouter import OpenRouterProvider
 from localforge.gitops.adapter import GitAdapter
 from localforge.models import domain
 from localforge.models.enums import (
     AgentRole,
+    AuditEventActorType,
+    AuditEventType,
     ChiefEngineerCallReason,
     HandoffKind,
     RunMode,
@@ -90,9 +90,9 @@ class RolePipelineEngine:
         except Exception:
             task_duration_limit = 600.0
             max_repair_limit = 3
-            max_files = 20
-            max_diff = 50000
-            max_llm_calls = 50
+            max_files = 10
+            max_diff = 2000
+            max_llm_calls = 4
 
         # Load overrides from run limits
         run = await self.uow.executions.get_run(self.run_id)
@@ -196,8 +196,46 @@ class RolePipelineEngine:
             if role == AgentRole.FIXER:
                 repair_attempts += 1
                 if repair_attempts > max_repair:
-                    raise ValueError(
-                        f"Task run exceeded maximum repair attempts budget of {max_repair}."
+                    # The scheduler decides whether to recover this run via
+                    # its budget-aware recovery loop. We surface a clear
+                    # FAILED_SAFE marker and an audit event so the Scrum
+                    # Master can attach guidance and the scheduler can
+                    # escalate after the absolute cycle ceiling.
+                    reason = (
+                        f"Task run exhausted the per-cycle repair budget "
+                        f"({max_repair}). Awaiting scheduler recovery."
+                    )
+                    if self.uow.audits is not None:
+                        await self.uow.audits.append_audit_event(
+                            domain.AuditEvent(
+                                project_id=project.id if project.id is not None else 0,
+                                run_id=self.run_id,
+                                task_id=task.id or 0,
+                                actor_type=AuditEventActorType.SYSTEM,
+                                actor_id="pipeline-engine",
+                                event_type=AuditEventType.SYSTEM_EVENT,
+                                payload_redacted={
+                                    "action": "repair_budget_exhausted",
+                                    "task_key": task.key,
+                                    "max_repair": max_repair,
+                                    "reason": reason,
+                                },
+                            )
+                        )
+                    if task.id is not None:
+                        await self.uow.tasks.update_task_status(
+                            task.id, TaskStatus.FAILED_SAFE
+                        )
+                    task_run.final_summary = reason
+                    task_run.status = TaskRunStatus.FAILED
+                    task_run.ended_at = datetime.now(UTC)
+                    await self.uow.tasks.update_task_run(task_run)
+                    return RolePipelineResult(
+                        mode=mode,
+                        roles=list(roles),
+                        artifact_paths=artifact_paths,
+                        consumed_handoff_ids=consumed_ids,
+                        pr_artifact_path=None,
                     )
                 task_run.attempt_count = repair_attempts
                 await self.uow.tasks.update_task_run(task_run)
@@ -544,34 +582,19 @@ class RolePipelineEngine:
             visual_target = self._visual_actual_output_path(task)
             if visual_target and visual_target not in changed_files:
                 changed_files.append(visual_target)
-            visual_scaffold = self._hp12c_visual_scaffold_proposals(task, task_run)
-            if visual_scaffold:
-                await self._apply_action_proposals(
-                    visual_scaffold,
-                    editor=editor,
-                    task=task,
-                    task_run=task_run,
-                    changed_files=changed_files,
-                    command_summaries=command_summaries,
-                )
-                used_chief_engineer_initial = True
-                command_summaries.append(
-                    "Applied deterministic HP 12C visual scaffold before validation."
-                )
-            else:
-                used_chief_engineer_initial = await self._try_chief_engineer_repair(
-                    task=task,
-                    task_run=task_run,
-                    context=context,
-                    editor=editor,
-                    changed_files=changed_files,
-                    command_summaries=command_summaries,
-                    validation_output=(
-                        f"Initial implementation requires high-capacity Chief Engineer execution. "
-                        f"Reason: {decision.rationale}. "
-                        "Rewrite the complete target file without omissions or brevity placeholders."
-                    ),
-                )
+            used_chief_engineer_initial = await self._try_chief_engineer_repair(
+                task=task,
+                task_run=task_run,
+                context=context,
+                editor=editor,
+                changed_files=changed_files,
+                command_summaries=command_summaries,
+                validation_output=(
+                    f"Initial implementation requires high-capacity Chief Engineer execution. "
+                    f"Reason: {decision.rationale}. "
+                    "Rewrite the complete target file without omissions or brevity placeholders."
+                ),
+            )
         if not used_chief_engineer_initial:
             if raw_actions is None:
                 if (
@@ -629,34 +652,12 @@ class RolePipelineEngine:
                     )
                 else:
                     raise e
-        if not changed_files and self._should_apply_initial_scaffold(task):
-            await self._apply_action_proposals(
-                self._initial_scaffold_proposals(task),
-                editor=editor,
-                task=task,
-                task_run=task_run,
-                changed_files=changed_files,
-                command_summaries=command_summaries,
-            )
         await self._sanitize_generated_python_files(
             editor=editor,
             task=task,
             task_run=task_run,
             changed_files=changed_files,
         )
-        if not self._has_task_contract(task):
-            await self._ensure_calculator_base_compatibility(
-                editor=editor,
-                task=task,
-                task_run=task_run,
-                changed_files=changed_files,
-            )
-            await self._ensure_hp12c_common_module_compatibility(
-                editor=editor,
-                task=task,
-                task_run=task_run,
-                changed_files=changed_files,
-            )
         if changed_files:
             task.metadata["changed_files"] = list(dict.fromkeys(changed_files))
             await self.uow.tasks.update_task(task)
@@ -678,18 +679,6 @@ class RolePipelineEngine:
                         )
                     if code == 0:
                         break
-                    if attempt == 0 and self._should_apply_initial_scaffold(task):
-                        await self._apply_action_proposals(
-                            self._initial_scaffold_proposals(task),
-                            editor=editor,
-                            task=task,
-                            task_run=task_run,
-                            changed_files=changed_files,
-                            command_summaries=command_summaries,
-                        )
-                        task.metadata["changed_files"] = list(dict.fromkeys(changed_files))
-                        await self.uow.tasks.update_task(task)
-                        continue
                     if self._is_visual_task(task) and self._has_task_contract(task):
                         if not os.getenv("PYTEST_CURRENT_TEST"):
                             code, stdout, stderr = await self._run_chief_engineer_repair_rounds(
@@ -799,19 +788,6 @@ class RolePipelineEngine:
                         task_run=task_run,
                         changed_files=changed_files,
                     )
-                    if not self._has_task_contract(task):
-                        await self._ensure_calculator_base_compatibility(
-                            editor=editor,
-                            task=task,
-                            task_run=task_run,
-                            changed_files=changed_files,
-                        )
-                        await self._ensure_hp12c_common_module_compatibility(
-                            editor=editor,
-                            task=task,
-                            task_run=task_run,
-                            changed_files=changed_files,
-                        )
                     task.metadata["changed_files"] = list(dict.fromkeys(changed_files))
                     await self.uow.tasks.update_task(task)
         if (
@@ -1228,7 +1204,7 @@ class RolePipelineEngine:
         if not config.chief_engineer.enabled or not config.chief_engineer.model:
             return False
         try:
-            provider = self._build_chief_engineer_provider(config)
+            provider = build_chief_engineer_provider(config)
             plan = await ChiefEngineerService(self.uow).plan_semantic_repair(
                 project_id=self.project_id,
                 run_id=self.run_id,
@@ -1271,37 +1247,6 @@ class RolePipelineEngine:
         )
         command_summaries.append(f"Chief Engineer repair applied: {plan.summary}")
         return True
-
-    def _build_chief_engineer_provider(self, config: LocalForgeConfig):
-        primary_provider = config.chief_engineer.provider.lower()
-        if primary_provider == "nvidia":
-            primary = NvidiaProvider(
-                api_key=config.chief_engineer.api_key,
-                base_url=config.chief_engineer.base_url,
-                default_model=config.chief_engineer.model,
-            )
-            if (
-                config.chief_engineer.fallback_provider == "openrouter"
-                and config.chief_engineer.fallback_model
-                and config.chief_engineer.fallback_api_key
-            ):
-                fallback = OpenRouterProvider(
-                    api_key=config.chief_engineer.fallback_api_key,
-                    base_url=config.chief_engineer.fallback_base_url
-                    or "https://openrouter.ai/api/v1",
-                    default_model=config.chief_engineer.fallback_model,
-                )
-                return FallbackLLMProvider(
-                    primary=primary,
-                    fallback=fallback,
-                    primary_timeout=config.chief_engineer.fallback_after_seconds,
-                )
-            return primary
-        return OpenRouterProvider(
-            api_key=config.chief_engineer.api_key,
-            base_url=config.chief_engineer.base_url,
-            default_model=config.chief_engineer.model,
-        )
 
     async def _run_chief_engineer_repair_rounds(
         self,
@@ -1381,9 +1326,6 @@ class RolePipelineEngine:
                             os.path.relpath(abs_path, task_run.worktree_path).replace("\\", "/")
                         )
 
-        contract = task.metadata.get("task_contract")
-        is_visual = self._is_visual_task(task)
-
         for rel_path in sorted(python_paths):
             target = os.path.join(task_run.worktree_path, rel_path)
             if not os.path.isfile(target):
@@ -1393,33 +1335,6 @@ class RolePipelineEngine:
                     original = handle.read()
             except UnicodeDecodeError:
                 continue
-
-            # For visual tasks, replace broken production support modules with contract
-            # stubs so repair can focus on the HTML/CSS target. Tests remain
-            # authoritative and must not be hidden behind placeholder passes.
-            if is_visual:
-                import ast
-                try:
-                    ast.parse(original, filename=rel_path)
-                except SyntaxError:
-                    if rel_path.startswith("tests/") or os.path.basename(rel_path).startswith("test_"):
-                        continue
-                    else:
-                        required_apis = []
-                        if isinstance(contract, dict):
-                            required_apis = contract.get("required_public_apis", [])
-                        if required_apis:
-                            stub_lines = ["# Stub placeholder for visual task logic"]
-                            for api in required_apis:
-                                if api and api[0].isupper():
-                                    stub_lines.append(f"class {api}:\n    pass")
-                                else:
-                                    stub_lines.append(f"def {api}(*args, **kwargs):\n    pass")
-                            original = "\n".join(stub_lines) + "\n"
-                        else:
-                            original = "# Stub placeholder for visual task logic\npass\n"
-                    with open(target, "w", encoding="utf-8") as handle:
-                        handle.write(original)
 
             sanitized = self._sanitize_python_content(original)
             if sanitized != original:
@@ -1523,910 +1438,12 @@ class RolePipelineEngine:
             )
         ) or bool(re.match(r"[A-Za-z_][A-Za-z0-9_]*\s*=", line))
 
-    def _should_apply_initial_scaffold(self, task: domain.Task) -> bool:
-        if self._has_task_contract(task):
-            return False
-        text = f"{task.title} {task.description}".lower()
-        return "initialize" in text and (
-            "calculator" in text or "app structure" in text or "project" in text
-        )
-
     def _has_task_contract(self, task: domain.Task) -> bool:
         return isinstance(task.metadata.get("task_contract"), dict)
 
-    async def _ensure_calculator_base_compatibility(
-        self,
-        *,
-        editor: SafeFileEditor,
-        task: domain.Task,
-        task_run: domain.TaskRun,
-        changed_files: list[str],
-    ) -> None:
-        if not task_run.worktree_path:
-            return
-        text = f"{task.title} {task.description}".lower()
-        if "calculator" not in text and "hp 12c" not in text:
-            return
-
-        calculator_dir = os.path.join(task_run.worktree_path, "calculator")
-        tests_dir = os.path.join(task_run.worktree_path, "tests")
-        if not os.path.isdir(calculator_dir) or not os.path.isdir(tests_dir):
-            return
-
-        core_path = os.path.join(calculator_dir, "core.py")
-        if not os.path.exists(core_path):
-            result = await editor.write_text(
-                task_run.worktree_path,
-                "calculator/core.py",
-                (
-                    "class RPNStack:\n"
-                    "    pass\n\n"
-                    "class CalculatorState:\n"
-                    "    pass\n"
-                ),
-                task_run_id=task_run.id,
-                task_key=task.key,
-            )
-            changed_files.append(
-                os.path.relpath(result.path, task_run.worktree_path).replace("\\", "/")
-            )
-
-        init_path = os.path.join(calculator_dir, "__init__.py")
-        existing = ""
-        if os.path.exists(init_path):
-            existing = await editor.read_text(task_run.worktree_path, "calculator/__init__.py")
-        compatibility_block = (
-            "\n\n# LocalForge compatibility exports for stacked calculator tasks.\n"
-            "from .core import CalculatorState, RPNStack\n\n"
-            "class Calculator:\n"
-            "    def __init__(self):\n"
-            "        self.state = CalculatorState()\n"
-            "    def render(self):\n"
-            "        return 'silver dark gray black light gray HP 12C Platinum'\n\n"
-            "def add(a, b): return a + b\n"
-            "def subtract(a, b): return a - b\n"
-            "def multiply(a, b): return a * b\n"
-            "def divide(a, b):\n"
-            "    if b == 0:\n"
-            "        raise ValueError('division by zero')\n"
-            "    return a / b\n"
-        )
-        required_tokens = [
-            "CalculatorState",
-            "RPNStack",
-            "class Calculator",
-            "def add",
-            "def subtract",
-            "def multiply",
-            "def divide",
-        ]
-        if all(token in existing for token in required_tokens):
-            return
-        result = await editor.write_text(
-            task_run.worktree_path,
-            "calculator/__init__.py",
-            existing.rstrip() + compatibility_block,
-            task_run_id=task_run.id,
-            task_key=task.key,
-        )
-        changed_files.append(
-            os.path.relpath(result.path, task_run.worktree_path).replace("\\", "/")
-        )
-
-    async def _ensure_hp12c_common_module_compatibility(
-        self,
-        *,
-        editor: SafeFileEditor,
-        task: domain.Task,
-        task_run: domain.TaskRun,
-        changed_files: list[str],
-    ) -> None:
-        if not task_run.worktree_path:
-            return
-        text = f"{task.title} {task.description}".lower()
-        tests_dir = os.path.join(task_run.worktree_path, "tests")
-        calculator_dir = os.path.join(task_run.worktree_path, "calculator")
-        if not os.path.isdir(tests_dir) or (
-            "hp 12c" not in text
-            and "calculator" not in text
-            and not os.path.isdir(calculator_dir)
-        ):
-            return
-
-        for rel_path, content in self._hp12c_common_module_contents().items():
-            target = os.path.join(task_run.worktree_path, rel_path)
-            should_write = not os.path.exists(target)
-            existing = ""
-            if not should_write and rel_path.endswith(".py"):
-                try:
-                    with open(target, encoding="utf-8") as handle:
-                        existing = handle.read()
-                    ast.parse(existing)
-                except (SyntaxError, UnicodeDecodeError):
-                    should_write = True
-            if not should_write:
-                required_tokens = self._hp12c_common_module_required_tokens().get(rel_path, ())
-                if any(token not in existing for token in required_tokens):
-                    should_write = True
-            if not should_write and rel_path in {"financial/calculator.py"}:
-                if "import numpy" in existing or "from numpy" in existing:
-                    should_write = True
-            if not should_write:
-                continue
-            result = await editor.write_text(
-                task_run.worktree_path,
-                rel_path,
-                content,
-                task_run_id=task_run.id,
-                task_key=task.key,
-            )
-            changed_files.append(
-                os.path.relpath(result.path, task_run.worktree_path).replace("\\", "/")
-            )
-
-    def _hp12c_common_module_contents(self) -> dict[str, str]:
-        return {
-            "rpn_stack.py": (
-                "class FourLevelRPNStack:\n"
-                "    def __init__(self):\n"
-                "        self.x = self.y = self.z = self.t = 0.0\n"
-                "    def snapshot(self):\n"
-                "        return (self.x, self.y, self.z, self.t)\n"
-                "    def push(self, value):\n"
-                "        self.t, self.z, self.y, self.x = self.z, self.y, self.x, float(value)\n"
-                "    def enter(self):\n"
-                "        self.t, self.z, self.y = self.z, self.y, self.x\n"
-                "    def drop(self):\n"
-                "        self.x, self.y, self.z = self.y, self.z, self.t\n"
-                "    def roll_down(self):\n"
-                "        self.x, self.y, self.z, self.t = self.y, self.z, self.t, self.x\n"
-                "        return self.x\n"
-                "    def binary(self, op):\n"
-                "        if op == '+': result = self.y + self.x\n"
-                "        elif op == '-': result = self.y - self.x\n"
-                "        elif op == '*': result = self.y * self.x\n"
-                "        elif op == '/': result = self.y / self.x\n"
-                "        else: raise ValueError(op)\n"
-                "        self.x = result\n"
-                "        return result\n"
-            ),
-            "numeric_entry.py": (
-                "import sys\n\n"
-                "class NumericEntry:\n"
-                "    def __init__(self):\n"
-                "        self.text = ''\n"
-                "        self.entry = []\n"
-                "    def input_digit(self, digit):\n"
-                "        self.text += str(digit)\n"
-                "        self.entry = list(self.text)\n"
-                "        return self.text\n"
-                "    def input_decimal(self):\n"
-                "        if '.' not in self.text:\n"
-                "            self.text = self.text + '.' if self.text else '0.'\n"
-                "        self.entry = list(self.text)\n"
-                "        return self.text\n"
-                "    def press_digit(self, digit):\n"
-                "        return self.input_digit(digit)\n"
-                "    def press_decimal(self):\n"
-                "        return self.input_decimal()\n"
-                "    def value(self):\n"
-                "        return float(self.text or '0')\n"
-                "    def clear(self):\n"
-                "        self.text = ''\n"
-                "        self.entry = []\n"
-                "    def process_input(self, key):\n"
-                "        if str(key) == '.':\n"
-                "            return self.input_decimal()\n"
-                "        return self.input_digit(key)\n\n"
-                "__path__ = []\n"
-                "sys.modules.setdefault(__name__ + '.numeric_entry', sys.modules[__name__])\n"
-            ),
-            "numeric_entry/numeric_entry.py": (
-                "class NumericEntry:\n"
-                "    def __init__(self):\n"
-                "        self.text = ''\n"
-                "        self.entry = []\n"
-                "    def input_digit(self, digit):\n"
-                "        self.text += str(digit)\n"
-                "        self.entry = list(self.text)\n"
-                "        return self.text\n"
-                "    def input_decimal(self):\n"
-                "        if '.' not in self.text:\n"
-                "            self.text = self.text + '.' if self.text else '0.'\n"
-                "        self.entry = list(self.text)\n"
-                "        return self.text\n"
-                "    def press_digit(self, digit):\n"
-                "        return self.input_digit(digit)\n"
-                "    def press_decimal(self):\n"
-                "        return self.input_decimal()\n"
-                "    def value(self):\n"
-                "        return float(self.text or '0')\n"
-                "    def process_input(self, key):\n"
-                "        if str(key) == '.':\n"
-                "            return self.input_decimal()\n"
-                "        return self.input_digit(key)\n"
-            ),
-            "tvm/__init__.py": (
-                "from dataclasses import dataclass\n\n\n"
-                "@dataclass\n"
-                "class TVM:\n"
-                "    n: float = 0.0\n"
-                "    i: float = 0.0\n"
-                "    pv: float = 0.0\n"
-                "    pmt: float = 0.0\n"
-                "    fv: float = 0.0\n\n"
-                "    mode: str = 'end'\n"
-                "    frequency: int = 1\n"
-                "    def calculate_pv(self):\n"
-                "        return self.pv if self.pv else -(self.pmt * self.n + self.fv)\n"
-                "    def calculate_fv(self):\n"
-                "        return self.fv if self.fv else -(self.pv + self.pmt * self.n)\n\n"
-                "class TVMRegisterModel(TVM):\n"
-                "    def set(self, name, value):\n"
-                "        setattr(self, name.lower(), float(value))\n"
-                "    def get(self, name):\n"
-                "        return getattr(self, name.lower())\n\n"
-                "def solve_tvm(**kwargs):\n"
-                "    data = {'n': 0.0, 'i': 0.0, 'pv': 0.0, 'pmt': 0.0, 'fv': 0.0}\n"
-                "    for key, value in kwargs.items():\n"
-                "        lower = key.lower()\n"
-                "        if lower in data and value is not None:\n"
-                "            data[lower] = float(value)\n"
-                "    return TVM(**data)\n"
-            ),
-            "tvm/tvm_solver.py": (
-                "from . import TVM, solve_tvm\n\n\n"
-                "def solve(**kwargs):\n"
-                "    return solve_tvm(**kwargs)\n"
-            ),
-            "tvm/register_model.py": "from . import TVMRegisterModel\n",
-            "cash_flow_registers.py": (
-                "class CashFlowRegister:\n"
-                "    def __init__(self):\n"
-                "        self.cash_flows = []\n"
-                "    def add(self, amount, count=1):\n"
-                "        self.cash_flows.append((float(amount), int(count)))\n"
-                "    def clear(self):\n"
-                "        self.cash_flows.clear()\n"
-                "    def values(self):\n"
-                "        return [amount for amount, count in self.cash_flows for _ in range(count)]\n"
-            ),
-            "cash_flow.py": "from cash_flow_registers import CashFlowRegister\n",
-            "finance/__init__.py": "",
-            "finance/npv_irr.py": (
-                "def calculate_npv(rate, cash_flows):\n"
-                "    return sum(cf / ((1 + rate) ** index) for index, cf in enumerate(cash_flows))\n\n"
-                "def calculate_irr(cash_flows, guess=0.1):\n"
-                "    low, high = -0.9999, 10.0\n"
-                "    for _ in range(100):\n"
-                "        mid = (low + high) / 2\n"
-                "        value = calculate_npv(mid, cash_flows)\n"
-                "        if abs(value) < 1e-7:\n"
-                "            return mid\n"
-                "        if calculate_npv(low, cash_flows) * value <= 0:\n"
-                "            high = mid\n"
-                "        else:\n"
-                "            low = mid\n"
-                "    return (low + high) / 2\n"
-            ),
-            "finance/npv.py": "from .npv_irr import calculate_npv as npv\n",
-            "amortization.py": (
-                "def calculate_amortization(balance, rate=0.0, periods=1, payment=0.0):\n"
-                "    schedule = []\n"
-                "    current = float(balance)\n"
-                "    for period in range(1, int(periods) + 1):\n"
-                "        interest = current * rate\n"
-                "        principal = payment - interest\n"
-                "        current -= principal\n"
-                "        schedule.append({'period': period, 'payment': payment, 'principal': principal, 'interest': interest, 'balance': current})\n"
-                "    return schedule\n"
-            ),
-            "depreciation.py": (
-                "def straight_line(cost, salvage, life):\n"
-                "    return (cost - salvage) / life\n"
-                "def sum_of_years_digits(cost, salvage, life, year=1):\n"
-                "    denominator = life * (life + 1) / 2\n"
-                "    return (cost - salvage) * (life - year + 1) / denominator\n"
-                "def declining_balance(cost, rate, year=1):\n"
-                "    return cost * rate * ((1 - rate) ** (year - 1))\n"
-            ),
-            "statistics.py": (
-                "import math\n"
-                "import sys\n\n\n"
-                "class StatisticsRegister:\n"
-                "    def __init__(self):\n"
-                "        self.values = []\n"
-                "    def add(self, value):\n"
-                "        self.values.append(float(value))\n"
-                "    def mean(self):\n"
-                "        return sum(self.values) / len(self.values)\n"
-                "    def standard_deviation(self):\n"
-                "        mean = self.mean()\n"
-                "        return math.sqrt(sum((value - mean) ** 2 for value in self.values) / len(self.values))\n"
-                "\n\n__path__ = []\n"
-                "sys.modules.setdefault(__name__ + '.statistics', sys.modules[__name__])\n"
-            ),
-            "localforge/probability_helpers.py": (
-                "import builtins\n"
-                "import math\n"
-                "try:\n"
-                "    import pytest as _pytest\n"
-                "    builtins.pytest = _pytest\n"
-                "except Exception:\n"
-                "    pass\n\n\n"
-                "def factorial(value): return math.factorial(value)\n"
-                "def combinations(n, r): return math.comb(n, r)\n"
-            ),
-            "localforge/shift_state.py": (
-                "class ShiftState:\n"
-                "    def __init__(self):\n"
-                "        self.active = None\n"
-                "    def press(self, key):\n"
-                "        self.active = key\n"
-                "    def clear(self):\n"
-                "        self.active = None\n"
-            ),
-            "localforge/shift_states.py": "from .shift_state import ShiftState\n",
-            "localforge/display.py": (
-                "class ModeIndicators:\n"
-                "    def __init__(self):\n"
-                "        self.modes = []\n"
-                "    def set(self, mode):\n"
-                "        if mode not in self.modes:\n"
-                "            self.modes.append(mode)\n"
-                "    def render(self):\n"
-                "        return ' '.join(self.modes)\n"
-            ),
-            "localforge/memory.py": (
-                "class Memory:\n"
-                "    def __init__(self, size=20):\n"
-                "        self.registers = [0.0] * size\n"
-                "    def store(self, index, value):\n"
-                "        self.registers[index] = float(value)\n"
-                "    def recall(self, index):\n"
-                "        return self.registers[index]\n"
-                "    def clear(self):\n"
-                "        self.registers = [0.0] * len(self.registers)\n"
-            ),
-            "localforge/program_mode.py": (
-                "class ProgramMode:\n"
-                "    def __init__(self):\n"
-                "        self.steps = []\n"
-                "    def record(self, key):\n"
-                "        self.steps.append(key)\n"
-                "    def clear(self):\n"
-                "        self.steps.clear()\n"
-                "    def run(self):\n"
-                "        return list(self.steps)\n"
-            ),
-            "financial/__init__.py": "from . import calculator\n",
-            "financial/calculator.py": (
-                "def npv(rate, cash_flows):\n"
-                "    return sum(cf / ((1 + rate) ** index) for index, cf in enumerate(cash_flows))\n\n"
-                "def irr(cash_flows, guess=0.1):\n"
-                "    low, high = -0.9999, 10.0\n"
-                "    for _ in range(100):\n"
-                "        mid = (low + high) / 2\n"
-                "        value = npv(mid, cash_flows)\n"
-                "        if abs(value) < 1e-7:\n"
-                "            return mid\n"
-                "        if npv(low, cash_flows) * value <= 0:\n"
-                "            high = mid\n"
-                "        else:\n"
-                "            low = mid\n"
-                "    return (low + high) / 2\n"
-            ),
-            "src/__init__.py": "",
-            "src/casing.py": (
-                "class PlatinumCasing:\n"
-                "    def __init__(self):\n"
-                "        self.colors = ['silver', 'black', 'dark gray', 'orange', 'blue']\n"
-                "    def describe(self):\n"
-                "        return 'HP 12C Platinum reference-style casing'\n"
-            ),
-            "components/__init__.py": "",
-            "components/lcddisplay.py": (
-                "class LCDDisplay:\n"
-                "    def __init__(self, value='0'):\n"
-                "        self.value = value\n"
-                "    def render(self):\n"
-                "        return str(self.value)\n"
-            ),
-        }
-
-    def _hp12c_common_module_required_tokens(self) -> dict[str, tuple[str, ...]]:
-        return {
-            "numeric_entry.py": ("class NumericEntry",),
-            "numeric_entry/numeric_entry.py": ("class NumericEntry",),
-            "tvm/__init__.py": ("class TVM", "def solve_tvm", "TVMRegisterModel"),
-            "tvm/tvm_solver.py": ("def solve",),
-            "localforge/memory.py": ("class Memory",),
-            "localforge/shift_state.py": ("class ShiftState",),
-            "localforge/display.py": ("class ModeIndicators",),
-            "financial/calculator.py": ("def npv", "def irr"),
-            "src/casing.py": ("class PlatinumCasing",),
-            "components/lcddisplay.py": ("class LCDDisplay",),
-        }
-
-    def _initial_scaffold_proposals(self, task: domain.Task) -> list[RuntimeActionProposal]:
-        return [
-            RuntimeActionProposal(
-                kind="write_file",
-                path="calculator/__init__.py",
-                content=(
-                    "from .core import CalculatorState, RPNStack\n\n"
-                    "class Calculator:\n"
-                    "    def __init__(self):\n"
-                    "        self.state = CalculatorState()\n"
-                    "    def render(self):\n"
-                    "        return 'silver dark gray black light gray HP 12C Platinum'\n\n"
-                    "def add(a, b): return a + b\n"
-                    "def subtract(a, b): return a - b\n"
-                    "def multiply(a, b): return a * b\n"
-                    "def divide(a, b):\n"
-                    "    if b == 0:\n"
-                    "        raise ValueError('division by zero')\n"
-                    "    return a / b\n\n"
-                    "__all__ = [\n"
-                    "    \"Calculator\", \"CalculatorState\", \"RPNStack\", \"add\", \"subtract\", "
-                    "\"multiply\", \"divide\"\n"
-                    "]\n"
-                ),
-            ),
-            RuntimeActionProposal(
-                kind="write_file",
-                path="calculator/core.py",
-                content=(
-                    "from dataclasses import dataclass, field\n\n\n"
-                    "@dataclass\n"
-                    "class RPNStack:\n"
-                    "    x: float = 0.0\n"
-                    "    y: float = 0.0\n"
-                    "    z: float = 0.0\n"
-                    "    t: float = 0.0\n\n"
-                    "    def enter(self, value: float | None = None) -> None:\n"
-                    "        if value is not None:\n"
-                    "            self.x = float(value)\n"
-                    "        self.t, self.z, self.y = self.z, self.y, self.x\n\n"
-                    "    def push(self, value: float) -> None:\n"
-                    "        self.t, self.z, self.y, self.x = self.z, self.y, self.x, float(value)\n\n"
-                    "    def binary(self, op: str) -> float:\n"
-                    "        operations = {\n"
-                    "            '+': self.y + self.x,\n"
-                    "            '-': self.y - self.x,\n"
-                    "            '*': self.y * self.x,\n"
-                    "            '/': self.y / self.x,\n"
-                    "        }\n"
-                    "        if op not in operations:\n"
-                    "            raise ValueError(f'Unsupported operation: {op}')\n"
-                    "        result = operations[op]\n"
-                    "        self.x, self.y, self.z = result, self.z, self.t\n"
-                    "        return result\n\n\n"
-                    "@dataclass\n"
-                    "class CalculatorState:\n"
-                    "    stack: RPNStack = field(default_factory=RPNStack)\n"
-                    "    display: str = '0'\n\n"
-                    "    def input_number(self, value: float) -> None:\n"
-                    "        self.stack.push(value)\n"
-                    "        self.display = str(value)\n\n"
-                    "    def press(self, key: str) -> str:\n"
-                    "        if key in {'+', '-', '*', '/'}:\n"
-                    "            self.display = str(self.stack.binary(key))\n"
-                    "        return self.display\n"
-                ),
-            ),
-            RuntimeActionProposal(
-                kind="write_file",
-                path="calculator/app.py",
-                content=(
-                    "from .core import CalculatorState\n\n\n"
-                    "def create_app_state() -> CalculatorState:\n"
-                    "    return CalculatorState()\n"
-                ),
-            ),
-            RuntimeActionProposal(
-                kind="write_file",
-                path="calculator/casing.py",
-                content=(
-                    "from dataclasses import dataclass\n\n\n"
-                    "@dataclass\n"
-                    "class PlatinumCasing:\n"
-                    "    body_color: str = 'silver'\n"
-                    "    side_rails: str = 'dark'\n"
-                    "    keypad_area: str = 'black'\n"
-                    "    display_zone: str = 'top'\n\n"
-                    "    def palette(self) -> dict[str, str]:\n"
-                    "        return {\n"
-                    "            'body': self.body_color,\n"
-                    "            'rails': self.side_rails,\n"
-                    "            'keypad': self.keypad_area,\n"
-                    "            'display': self.display_zone,\n"
-                    "        }\n"
-                ),
-            ),
-            RuntimeActionProposal(
-                kind="write_file",
-                path="arithmetic.py",
-                content=(
-                    "import math\n\n\n"
-                    "def add(a, b): return a + b\n"
-                    "def subtract(a, b): return a - b\n"
-                    "def multiply(a, b): return a * b\n"
-                    "def divide(a, b):\n"
-                    "    if b == 0:\n"
-                    "        raise ValueError('division by zero')\n"
-                    "    return a / b\n"
-                    "def reciprocal(x): return divide(1, x)\n"
-                    "def square_root(x): return math.sqrt(x)\n"
-                    "def power(a, b): return a ** b\n"
-                    "def percent(a, b): return a * b / 100\n"
-                ),
-            ),
-            RuntimeActionProposal(
-                kind="write_file",
-                path="rpn_stack.py",
-                content=(
-                    "from calculator import RPNStack\n\n\n"
-                    "class FourLevelRPNStack(RPNStack):\n"
-                    "    def roll_down(self):\n"
-                    "        self.x, self.y, self.z, self.t = self.y, self.z, self.t, self.x\n"
-                    "        return self.x\n"
-                ),
-            ),
-            RuntimeActionProposal(
-                kind="write_file",
-                path="mem.py",
-                content=(
-                    "class MemoryRegisters:\n"
-                    "    def __init__(self, size=20):\n"
-                    "        self.registers = [0.0] * size\n"
-                    "    def sto(self, index, value): self.registers[index] = float(value)\n"
-                    "    def rcl(self, index): return self.registers[index]\n"
-                    "    def clear(self):\n"
-                    "        for index in range(len(self.registers)):\n"
-                    "            self.registers[index] = 0.0\n"
-                ),
-            ),
-            RuntimeActionProposal(
-                kind="write_file",
-                path="tvm/__init__.py",
-                content=(
-                    "from dataclasses import dataclass\n\n\n"
-                    "@dataclass\n"
-                    "class TVM:\n"
-                    "    n: float = 0.0\n"
-                    "    i: float = 0.0\n"
-                    "    pv: float = 0.0\n"
-                    "    pmt: float = 0.0\n"
-                    "    fv: float = 0.0\n\n"
-                    "def solve_tvm(**kwargs):\n"
-                    "    return TVM(**{k: float(v) for k, v in kwargs.items() if hasattr(TVM, k)})\n"
-                    "\n\n"
-                    "class TVMRegisterModel(TVM):\n"
-                    "    pass\n"
-                ),
-            ),
-            RuntimeActionProposal(
-                kind="write_file",
-                path="tvm/register_model.py",
-                content="from . import TVMRegisterModel\n",
-            ),
-            RuntimeActionProposal(
-                kind="write_file",
-                path="cash_flow_registers.py",
-                content=(
-                    "class CashFlowRegister:\n"
-                    "    def __init__(self): self.cash_flows = []\n"
-                    "    def add(self, amount, count=1): self.cash_flows.append((float(amount), int(count)))\n"
-                    "    def clear(self): self.cash_flows.clear()\n"
-                    "    def values(self):\n"
-                    "        return [amount for amount, count in self.cash_flows for _ in range(count)]\n"
-                ),
-            ),
-            RuntimeActionProposal(
-                kind="write_file",
-                path="cash_flow.py",
-                content="from cash_flow_registers import CashFlowRegister\n",
-            ),
-            RuntimeActionProposal(
-                kind="write_file",
-                path="finance/__init__.py",
-                content="",
-            ),
-            RuntimeActionProposal(
-                kind="write_file",
-                path="finance/npv_irr.py",
-                content=(
-                    "def calculate_npv(rate, cash_flows):\n"
-                    "    return sum(cf / ((1 + rate) ** index) for index, cf in enumerate(cash_flows))\n\n"
-                    "def calculate_irr(cash_flows, guess=0.1):\n"
-                    "    rate = guess\n"
-                    "    for _ in range(50):\n"
-                    "        value = calculate_npv(rate, cash_flows)\n"
-                    "        derivative = sum(\n"
-                    "            -index * cf / ((1 + rate) ** (index + 1))\n"
-                    "            for index, cf in enumerate(cash_flows) if index\n"
-                    "        )\n"
-                    "        if derivative == 0:\n"
-                    "            break\n"
-                    "        next_rate = rate - value / derivative\n"
-                    "        if abs(next_rate - rate) < 1e-7:\n"
-                    "            return next_rate\n"
-                    "        rate = next_rate\n"
-                    "    return rate\n"
-                ),
-            ),
-            RuntimeActionProposal(
-                kind="write_file",
-                path="finance/npv.py",
-                content="from .npv_irr import calculate_npv as npv\n",
-            ),
-            RuntimeActionProposal(
-                kind="write_file",
-                path="amortization.py",
-                content=(
-                    "def calculate_amortization(balance, rate=0.0, periods=1, payment=0.0):\n"
-                    "    interest = balance * rate\n"
-                    "    principal = payment - interest\n"
-                    "    return {'principal': principal, 'interest': interest, 'balance': balance - principal}\n"
-                ),
-            ),
-            RuntimeActionProposal(
-                kind="write_file",
-                path="bond.py",
-                content=(
-                    "def bond_price(*args, **kwargs): return None\n"
-                    "def bond_yield(*args, **kwargs): return None\n"
-                ),
-            ),
-            RuntimeActionProposal(
-                kind="write_file",
-                path="date_arithmetic.py",
-                content=(
-                    "from datetime import timedelta\n\n\n"
-                    "def days_between(start, end): return (end - start).days\n"
-                    "def future_date(start, days): return start + timedelta(days=days)\n"
-                    "def past_date(start, days): return start - timedelta(days=days)\n"
-                ),
-            ),
-            RuntimeActionProposal(
-                kind="write_file",
-                path="depreciation.py",
-                content=(
-                    "def straight_line(cost, salvage, life): return (cost - salvage) / life\n"
-                    "def sum_of_years_digits(cost, salvage, life, year=1):\n"
-                    "    return (cost - salvage) * (life - year + 1) / (life * (life + 1) / 2)\n"
-                    "def declining_balance(cost, rate, year=1): return cost * rate * ((1 - rate) ** (year - 1))\n"
-                ),
-            ),
-            RuntimeActionProposal(
-                kind="write_file",
-                path="statistics.py",
-                content=(
-                    "import math\n\n\n"
-                    "class StatisticsRegister:\n"
-                    "    def __init__(self): self.values = []\n"
-                    "    def add(self, value): self.values.append(float(value))\n"
-                    "    def mean(self): return sum(self.values) / len(self.values)\n"
-                    "    def standard_deviation(self):\n"
-                    "        mean = self.mean()\n"
-                    "        return math.sqrt(sum((value - mean) ** 2 for value in self.values) / len(self.values))\n"
-                ),
-            ),
-            RuntimeActionProposal(
-                kind="write_file",
-                path="factorial.py",
-                content=(
-                    "import math\n\n\n"
-                    "def calculate_factorial(value): return math.factorial(value)\n"
-                ),
-            ),
-            RuntimeActionProposal(
-                kind="write_file",
-                path="localforge/__init__.py",
-                content="",
-            ),
-            RuntimeActionProposal(
-                kind="write_file",
-                path="localforge/date_parser.py",
-                content=(
-                    "from datetime import datetime\n\n\n"
-                    "def parse_date(value, mode='M.DY'):\n"
-                    "    text = str(value).replace('/', '.')\n"
-                    "    fmt = '%m.%d.%Y' if mode.upper() == 'M.DY' else '%d.%m.%Y'\n"
-                    "    return datetime.strptime(text, fmt).date()\n"
-                ),
-            ),
-            RuntimeActionProposal(
-                kind="write_file",
-                path="localforge/probability_helpers.py",
-                content=(
-                    "import math\n\n\n"
-                    "def factorial(value): return math.factorial(value)\n"
-                    "def combinations(n, r): return math.comb(n, r)\n"
-                ),
-            ),
-            RuntimeActionProposal(
-                kind="write_file",
-                path="localforge/program_mode.py",
-                content=(
-                    "class ProgramMode:\n"
-                    "    def __init__(self): self.steps = []\n"
-                    "    def record(self, key): self.steps.append(key)\n"
-                    "    def clear(self): self.steps.clear()\n"
-                    "    def run(self): return list(self.steps)\n"
-                ),
-            ),
-            RuntimeActionProposal(
-                kind="write_file",
-                path="localforge/mode_program.py",
-                content="from .program_mode import ProgramMode\n",
-            ),
-            RuntimeActionProposal(
-                kind="write_file",
-                path="localforge/memory_registers.py",
-                content="from mem import MemoryRegisters\n",
-            ),
-            RuntimeActionProposal(
-                kind="write_file",
-                path="localforge/input_handling.py",
-                content=(
-                    "class KeyboardHandler:\n"
-                    "    def handle(self, key): return key\n"
-                    "def number_key_action(key): return key\n"
-                    "def arithmetic_key_action(key): return key\n"
-                    "def enter_key_action(): return 'ENTER'\n"
-                    "def clear_key_action(): return 'CLEAR'\n"
-                    "def shift_modifier_action(key): return key\n"
-                ),
-            ),
-            RuntimeActionProposal(
-                kind="write_file",
-                path="localforge/commands/__init__.py",
-                content="",
-            ),
-            RuntimeActionProposal(
-                kind="write_file",
-                path="localforge/commands/clear.py",
-                content=(
-                    "def clear_stack(stack=None): return []\n"
-                    "def clear_registers(registers=None): return {}\n"
-                    "def clear_financial_registers(registers=None): return {}\n"
-                ),
-            ),
-            RuntimeActionProposal(
-                kind="write_file",
-                path="localforge/components/__init__.py",
-                content="",
-            ),
-            RuntimeActionProposal(
-                kind="write_file",
-                path="localforge/components/button.py",
-                content=(
-                    "class Button:\n"
-                    "    def __init__(self, label, color='dark'):\n"
-                    "        self.label = label\n"
-                    "        self.color = color\n"
-                    "    def render(self): return self.label\n"
-                ),
-            ),
-            RuntimeActionProposal(
-                kind="write_file",
-                path="src/button_grid.py",
-                content=(
-                    "from dataclasses import dataclass\n\n\n"
-                    "@dataclass\n"
-                    "class Button:\n"
-                    "    label: str\n"
-                    "    color: str = 'dark'\n\n"
-                    "def create_button_grid():\n"
-                    "    labels = [\n"
-                    "        ['n', 'i', 'PV', 'PMT', 'FV'],\n"
-                    "        ['CHS', '7', '8', '9', '/'],\n"
-                    "        ['EEX', '4', '5', '6', '*'],\n"
-                    "        ['CLx', '1', '2', '3', '-'],\n"
-                    "        ['ENTER', '0', '.', '+', '='],\n"
-                    "    ]\n"
-                    "    return [[Button(label) for label in row] for row in labels]\n"
-                ),
-            ),
-            RuntimeActionProposal(
-                kind="write_file",
-                path="button_grid.py",
-                content=(
-                    "class ButtonGrid:\n"
-                    "    def __init__(self, columns=10):\n"
-                    "        self.columns = columns\n"
-                    "        self.buttons = []\n"
-                    "    def add_button(self, key, color='dark'):\n"
-                    "        self.buttons.append((key, color))\n"
-                    "    def render(self):\n"
-                    "        rows = []\n"
-                    "        for start in range(0, len(self.buttons), self.columns):\n"
-                    "            row = self.buttons[start:start + self.columns]\n"
-                    "            rows.append('|'.join(f'{key}  {color}' for key, color in row))\n"
-                    "        return '\\n'.join(rows) + ('\\n' if rows else '')\n"
-                ),
-            ),
-            RuntimeActionProposal(
-                kind="write_file",
-                path="numeric_entry.py",
-                content=(
-                    "class NumericEntry:\n"
-                    "    def __init__(self): self.text = ''\n"
-                    "    def input(self, char): self.text += str(char); return self.text\n"
-                    "    def clear(self): self.text = ''\n"
-                    "    def value(self): return float(self.text or 0)\n"
-                ),
-            ),
-            RuntimeActionProposal(
-                kind="write_file",
-                path="main_app/buttons.py",
-                content=(
-                    "class AccessibleButton:\n"
-                    "    def __init__(self, label, command=None):\n"
-                    "        self.label = label\n"
-                    "        self.command = command\n"
-                    "    def invoke(self):\n"
-                    "        if self.command:\n"
-                    "            return self.command()\n"
-                    "        return None\n"
-                ),
-            ),
-            RuntimeActionProposal(
-                kind="write_file",
-                path="package/__init__.py",
-                content="",
-            ),
-            RuntimeActionProposal(
-                kind="write_file",
-                path="package/module.py",
-                content=(
-                    "def function_a(): return True\n"
-                    "def function_b(): return True\n"
-                ),
-            ),
-            RuntimeActionProposal(
-                kind="write_file",
-                path="tests/test_scaffold.py",
-                content=(
-                    "from calculator import CalculatorState, RPNStack\n\n\n"
-                    "def test_rpn_addition_scaffold():\n"
-                    "    stack = RPNStack()\n"
-                    "    stack.push(2)\n"
-                    "    stack.push(3)\n"
-                    "    assert stack.binary('+') == 5\n\n\n"
-                    "def test_calculator_state_display():\n"
-                    "    state = CalculatorState()\n"
-                    "    state.input_number(12)\n"
-                    "    assert state.display == '12'\n"
-                ),
-            ),
-            RuntimeActionProposal(
-                kind="write_file",
-                path="tests/test_calculator.py",
-                content=(
-                    "from calculator import RPNStack\n\n\n"
-                    "def test_basic_rpn_calculator_addition():\n"
-                    "    stack = RPNStack()\n"
-                    "    stack.push(2)\n"
-                    "    stack.push(3)\n"
-                    "    assert stack.binary('+') == 5\n"
-                ),
-            ),
-            RuntimeActionProposal(
-                kind="write_file",
-                path="README.md",
-                content=(
-                    f"# {task.title}\n\n"
-                    "LocalForge-generated calculator scaffold. This internal E2E sample is not "
-                    "affiliated with HP.\n\n"
-                    "## Test\n\npython -m pytest -q\n"
-                ),
-            ),
-        ]
-
-    async def _request_model_actions(self, task: domain.Task, context: RoleContext) -> str:
+    async def _request_model_actions(
+        self, task: domain.Task, context: RoleContext
+    ) -> str:
         prompt = (
             "You are the Coder role in LocalForge OS. Return only valid JSON with this "
             "shape: {\"actions\":[{\"kind\":\"write_file\",\"path\":\"relative/path\","
@@ -2647,41 +1664,6 @@ class RolePipelineEngine:
                 return value
         value = task.metadata.get("visual_actual_output")
         return value if isinstance(value, str) and value else None
-
-    def _hp12c_visual_scaffold_proposals(
-        self, task: domain.Task, task_run: domain.TaskRun
-    ) -> list[RuntimeActionProposal]:
-        target = self._visual_actual_output_path(task)
-        if not target or "hp12c_platinum.html" not in target.lower():
-            return []
-        if not task_run.worktree_path:
-            return []
-        html_path = os.path.join(task_run.worktree_path, target)
-        if not os.path.isfile(html_path):
-            return []
-        with open(html_path, encoding="utf-8") as handle:
-            current_html = handle.read()
-        script_match = re.search(r"<script>.*?</script>", current_html, re.DOTALL)
-        script = script_match.group(0) if script_match else "<script></script>"
-        proposals = [
-            RuntimeActionProposal(
-                kind="write_file",
-                path=target,
-                content=self._render_hp12c_platinum_shell(script),
-            )
-        ]
-        contract = task.metadata.get("task_contract", {})
-        allowed = contract.get("allowed_files", []) if isinstance(contract, dict) else []
-        if "calculator/ui/buttons.py" in allowed:
-            proposals.append(
-                RuntimeActionProposal(
-                    kind="write_file",
-                    path="calculator/ui/buttons.py",
-                    content=self._render_hp12c_button_grid_module(),
-                )
-            )
-        return proposals
-
     def _detect_truncation(self, content: str) -> str | None:
         suspects = [
             "omitted for brevity",
@@ -2698,288 +1680,6 @@ class RolePipelineEngine:
             if s in lowered:
                 return s
         return None
-
-    def _render_hp12c_button_grid_module(self) -> str:
-        return '''"""HP 12C Platinum button grid metadata used by visual tasks."""
-
-
-class ButtonGrid:
-    """Describes the visible HP 12C Platinum key grid."""
-
-    columns = 10
-    rows = 4
-
-    def __init__(self) -> None:
-        self.keys = [
-            "n", "i", "PV", "PMT", "FV", "CHS", "7", "8", "9", "/",
-            "y^x", "1/x", "%T", "Delta%", "%", "EEX", "4", "5", "6", "*",
-            "R/S", "SST", "Rv", "x><y", "CLx", "ENTER", "1", "2", "3", "-",
-            "ON", "f", "g", "STO", "RCL", "0", ".", "Sigma+", "+",
-        ]
-
-    def as_rows(self) -> list[list[str]]:
-        return [
-            self.keys[0:10],
-            self.keys[10:20],
-            self.keys[20:30],
-            self.keys[30:39],
-        ]
-'''
-
-    def _render_hp12c_platinum_shell(self, script: str) -> str:
-        return """<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>HP 12C Platinum - LocalForge Validation</title>
-  <style>
-    :root {
-      --case-light: #f3f2ed;
-      --case-mid: #c7c7c0;
-      --case-dark: #1d2021;
-      --panel: #151719;
-      --panel-line: #3a3c3f;
-      --key: #303235;
-      --key-top: #5a5d60;
-      --key-blue: #0b8fc1;
-      --key-orange: #f06d28;
-      --legend-orange: #e95f35;
-      --legend-blue: #50a6bd;
-      --lcd: #9ca789;
-      --lcd-dark: #111714;
-    }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      min-height: 100vh;
-      display: grid;
-      place-items: center;
-      background: #f1f1f1;
-      color: #f5f5f5;
-      font-family: Arial, Helvetica, sans-serif;
-    }
-    .platinum-shell {
-      width: 100vw;
-      height: 100vh;
-      display: grid;
-      grid-template-columns: 25px 1fr 25px;
-      background: linear-gradient(90deg, #4a4d4d 0, #151718 19px, #b9bab6 21px, #f7f6f1 49%, #aaaba7 calc(100% - 21px), #151718 calc(100% - 19px), #4a4d4d 100%);
-      border: 2px solid #202223;
-      box-shadow: 0 12px 28px rgba(0,0,0,.35), inset 0 0 0 2px #6d6e6a;
-      overflow: hidden;
-    }
-    .dark-side-rail { background: linear-gradient(#5b5e5f, #101213 20%, #101213 80%, #555859); }
-    .calculator-face {
-      display: grid;
-      grid-template-rows: 31% 69%;
-      background: linear-gradient(#f8f7f2 0 30%, #0e1011 30% 100%);
-      border-left: 1px solid #61625f;
-      border-right: 1px solid #61625f;
-    }
-    .top-zone {
-      display: grid;
-      grid-template-columns: .75fr 3.4fr .8fr;
-      align-items: center;
-      gap: 12px;
-      padding: 16px 30px 10px;
-      border-bottom: 6px solid #101112;
-      color: #1d2021;
-    }
-    .brand {
-      align-self: start;
-      padding-top: 14px;
-      font-size: 21px;
-      line-height: 1.08;
-      font-weight: 500;
-    }
-    .brand strong { font-weight: 500; }
-    .brand span { display: block; font-size: 18px; }
-    .lcd-display {
-      height: 96px;
-      padding: 9px 16px;
-      background: #d9d9d2;
-      border: 2px solid #b9bab4;
-      border-radius: 10px;
-      box-shadow: inset 0 0 0 4px #f5f4ef;
-    }
-    .lcd-inner {
-      height: 100%;
-      background: linear-gradient(#aab596, var(--lcd));
-      border: 4px solid #252b27;
-      border-radius: 4px;
-      padding: 7px 13px;
-      color: var(--lcd-dark);
-      font-family: "Courier New", monospace;
-      box-shadow: inset 0 3px 8px rgba(0,0,0,.35);
-    }
-    .indicators { height: 18px; display: flex; gap: 18px; font-size: 12px; font-weight: 700; }
-    .display-value {
-      text-align: right;
-      font-size: 48px;
-      line-height: 1;
-      letter-spacing: .08em;
-      font-weight: 700;
-      font-variant-numeric: tabular-nums;
-    }
-    .hp-logo {
-      justify-self: end;
-      width: 90px;
-      height: 60px;
-      border-radius: 8px;
-      border: 3px solid #777a78;
-      display: grid;
-      place-items: center;
-      font-size: 34px;
-      font-style: italic;
-      font-weight: 800;
-      color: #eef0ea;
-      background: radial-gradient(circle at 35% 35%, #8d918d, #353837 65%);
-      box-shadow: inset 0 0 0 3px #c6c7c1;
-    }
-    .keypad-panel {
-      padding: 16px 31px 20px;
-      background: linear-gradient(#222426 0, #101213 16%, #101213 100%);
-    }
-    .ten-column-keypad {
-      height: 100%;
-      display: grid;
-      grid-template-columns: repeat(10, 1fr);
-      grid-template-rows: repeat(4, 1fr);
-      gap: 10px 12px;
-    }
-    button {
-      position: relative;
-      min-width: 0;
-      min-height: 0;
-      border: 0;
-      border-radius: 5px;
-      color: #f2f2f2;
-      background: linear-gradient(#5c6063 0, var(--key-top) 7px, var(--key) 8px, #202224 100%);
-      box-shadow: inset 0 1px 0 rgba(255,255,255,.32), inset 0 -4px 0 rgba(0,0,0,.45), 0 2px 0 #050606;
-      font-weight: 800;
-      font-size: 18px;
-      text-align: center;
-      cursor: pointer;
-    }
-    button::before {
-      content: attr(data-f);
-      position: absolute;
-      top: -14px;
-      left: 0;
-      right: 0;
-      color: var(--legend-orange);
-      font-size: 11px;
-      line-height: 1;
-      font-weight: 700;
-    }
-    button::after {
-      content: attr(data-g);
-      position: absolute;
-      left: 7px;
-      right: 7px;
-      bottom: 5px;
-      color: var(--legend-blue);
-      font-size: 10px;
-      line-height: 1;
-      font-weight: 700;
-    }
-    .shift-f { background: linear-gradient(#ff8d43, var(--key-orange)); color: #151515; }
-    .shift-g { background: linear-gradient(#19a6d8, var(--key-blue)); color: #061116; }
-    .enter {
-      grid-row: span 2;
-      writing-mode: vertical-rl;
-      letter-spacing: .1em;
-      font-size: 17px;
-    }
-    .divide, .multiply, .minus, .plus { font-size: 27px; }
-    .zero { grid-column: span 1; }
-    @media (max-width: 760px) {
-      .platinum-shell { width: 100vw; }
-      .top-zone { gap: 8px; padding: 10px 16px 7px; }
-      .brand { font-size: 13px; }
-      .brand span { font-size: 11px; }
-      .display-value { font-size: 30px; }
-      .keypad-panel { padding: 12px 16px 16px; }
-      .ten-column-keypad { gap: 7px 7px; }
-      button { font-size: 12px; }
-      button::before { top: -10px; font-size: 8px; }
-      button::after { font-size: 7px; }
-    }
-  </style>
-</head>
-<body>
-  <main class="platinum-shell" aria-label="HP 12C Platinum calculator">
-    <div class="dark-side-rail" aria-hidden="true"></div>
-    <section class="calculator-face">
-      <header class="top-zone">
-        <div class="brand"><strong>HP 12c</strong><span>Platinum</span></div>
-        <div class="lcd-display" aria-live="polite">
-          <div class="lcd-inner">
-            <div class="indicators">
-              <span id="shift-indicator">F</span>
-              <span>RPN</span>
-              <span id="begin-indicator">END</span>
-              <span id="date-indicator">M.DY</span>
-            </div>
-            <div id="display" class="display-value">0</div>
-          </div>
-        </div>
-        <div class="hp-logo">hp</div>
-      </header>
-      <div class="keypad-panel">
-        <div class="ten-column-keypad" role="group" aria-label="HP 12C Platinum keypad">
-          <button data-f="AMORT" data-g="12x" onclick="pressKey('n')">n</button>
-          <button data-f="INT" data-g="12/" onclick="pressKey('i')">i</button>
-          <button data-f="NPV" data-g="CFo" onclick="pressKey('PV')">PV</button>
-          <button data-f="RND" data-g="CFj" onclick="pressKey('PMT')">PMT</button>
-          <button data-f="IRR" data-g="Nj" onclick="pressKey('FV')">FV</button>
-          <button data-f="RPN" data-g="DATE" onclick="pressKey('CHS')">CHS</button>
-          <button data-g="BEG" onclick="pressKey('7')">7</button>
-          <button data-g="END" onclick="pressKey('8')">8</button>
-          <button data-g="MEM" onclick="pressKey('9')">9</button>
-          <button class="divide" onclick="pressKey('/')">/</button>
-
-          <button data-f="PRICE" data-g="sqrt" onclick="pressKey('POW')">y^x</button>
-          <button data-f="YTM" data-g="e^x" onclick="pressKey('1/x')">1/x</button>
-          <button data-f="SL" data-g="N" onclick="pressKey('%')">%</button>
-          <button data-f="SOYD" data-g="FRAC" onclick="pressKey('COMB')">Delta%</button>
-          <button data-f="DB" data-g="INTG" onclick="pressKey('%')">%</button>
-          <button data-f="ALG" data-g="DAYS" onclick="pressKey('DAYS')">EEX</button>
-          <button data-g="D.MY" onclick="pressKey('4')">4</button>
-          <button data-g="M.DY" onclick="pressKey('5')">5</button>
-          <button data-g="x w" onclick="pressKey('6')">6</button>
-          <button class="multiply" onclick="pressKey('*')">x</button>
-
-          <button data-f="P/R" data-g="PSE" onclick="pressKey('RUN')">R/S</button>
-          <button data-f="PRGM" data-g="SST" onclick="pressKey('PROG')">SST</button>
-          <button data-f="REG" data-g="GTO" onclick="pressKey('ROLL')">Rv</button>
-          <button data-f="PREFIX" data-g="x<=y" onclick="pressKey('ROLL')">x><y</button>
-          <button data-g="x=0" onclick="pressKey('CLX')">CLx</button>
-          <button class="enter" onclick="pressKey('ENTER')">ENTER</button>
-          <button data-g="R" onclick="pressKey('1')">1</button>
-          <button data-g="P" onclick="pressKey('2')">2</button>
-          <button data-g="n!" onclick="pressKey('3')">3</button>
-          <button class="minus" onclick="pressKey('-')">-</button>
-
-          <button data-f="OFF" onclick="pressKey('CA')">ON</button>
-          <button class="shift-f" onclick="pressKey('f')">f</button>
-          <button class="shift-g" onclick="pressKey('g')">g</button>
-          <button data-g="(" onclick="pressKey('STO')">STO</button>
-          <button data-g=")" onclick="pressKey('RCL')">RCL</button>
-          <button data-g="x" onclick="pressKey('0')">0</button>
-          <button data-g="S" onclick="pressKey('.')">.</button>
-          <button data-f="Sigma+" data-g="Sigma-" onclick="pressKey('STAT')">Sigma+</button>
-          <button class="plus" data-g="LST x" onclick="pressKey('+')">+</button>
-        </div>
-      </div>
-    </section>
-    <div class="dark-side-rail" aria-hidden="true"></div>
-  </main>
-""" + script + """
-</body>
-</html>
-"""
 
     async def _request_action_json_repair(
         self,

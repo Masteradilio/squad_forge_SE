@@ -43,20 +43,22 @@ DEFAULT_CONFIG = {
         "network_enabled": False,
     },
     "budgets": {
-        "max_run_time": 3600.0,
-        "max_task_duration": 600.0,
-        "max_repair_attempts": 3,
+        "max_run_time": 5400.0,
+        "max_task_duration": 900.0,
+        "max_repair_attempts": 5,
         "max_parallel_tasks": 2,
-        "max_active_model_calls": 50,
-        "max_diff_growth": 50000,
-        "max_file_count": 20,
-        "max_paid_calls": 20,
-        "max_paid_input_tokens": 250000,
-        "max_paid_output_tokens": 40000,
-        "max_paid_usd": 2.0,
+        "max_active_model_calls": 4,
+        "max_diff_growth": 4000,
+        "max_file_count": 12,
+        "max_paid_calls": 30,
+        "max_paid_input_tokens": 400000,
+        "max_paid_output_tokens": 60000,
+        "max_paid_usd": 4.0,
+        "max_repair_attempts_absolute": 10,
+        "max_run_recovery_cycles": 3,
+        "max_paid_usd_absolute": 6.0,
     },
 }
-
 
 class ProjectConfig(BaseModel):
     name: str = Field(default="Default Project")
@@ -100,17 +102,21 @@ class SandboxConfig(BaseModel):
 
 
 class BudgetsConfig(BaseModel):
-    max_run_time: float = Field(default=3600.0)
-    max_task_duration: float = Field(default=600.0)
-    max_repair_attempts: int = Field(default=3)
+    max_run_time: float = Field(default=5400.0)
+    max_task_duration: float = Field(default=900.0)
+    max_repair_attempts: int = Field(default=5)
     max_parallel_tasks: int = Field(default=2)
-    max_active_model_calls: int = Field(default=50)
-    max_diff_growth: int = Field(default=50000)
-    max_file_count: int = Field(default=20)
-    max_paid_calls: int = Field(default=20)
-    max_paid_input_tokens: int = Field(default=250000)
-    max_paid_output_tokens: int = Field(default=40000)
-    max_paid_usd: float = Field(default=2.0)
+    max_active_model_calls: int = Field(default=4)
+    max_diff_growth: int = Field(default=4000)
+    max_file_count: int = Field(default=12)
+    max_paid_calls: int = Field(default=30)
+    max_paid_input_tokens: int = Field(default=400000)
+    max_paid_output_tokens: int = Field(default=60000)
+    max_paid_usd: float = Field(default=4.0)
+    # Absolute ceilings enforced by the scheduler recovery loop:
+    max_repair_attempts_absolute: int = Field(default=10)
+    max_run_recovery_cycles: int = Field(default=3)
+    max_paid_usd_absolute: float = Field(default=6.0)
 
 
 class LocalForgeConfig(BaseModel):

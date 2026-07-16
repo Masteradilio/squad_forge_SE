@@ -2,7 +2,7 @@ import asyncio
 import logging
 import os
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 from localforge.core.config import load_config
 from localforge.gitops.manager import WorktreeManager
@@ -48,6 +48,55 @@ class Scheduler:
     """Orchestrates tasks execution loop, runs lifecycle transitions,
     resource limits, and background cleanup operations.
     """
+
+    # Resource-limit keys persisted on Run.resource_limits for the recovery loop:
+    RUN_RECOVERY_CYCLES_KEY = "recovery_cycles_used"
+    RUN_PAID_USD_SPENT_KEY = "paid_usd_spent_cached"
+
+    # Status buckets the scheduler considers "terminal-but-not-yet-pr-ready":
+    _RECOVERY_BLOCKING_STATES = (
+        TaskStatus.FAILED_SAFE,
+        TaskStatus.BLOCKED,
+    )
+    _EXECUTING_STATES = (
+        TaskStatus.CLAIMED,
+        TaskStatus.PLANNING,
+        TaskStatus.IMPLEMENTING,
+        TaskStatus.TESTING,
+        TaskStatus.REPAIRING,
+        TaskStatus.REVIEWING,
+    )
+    _TERMINAL_STATES = (
+        TaskStatus.PR_READY,
+        TaskStatus.DONE,
+        TaskStatus.CANCELLED,
+    )
+
+    @staticmethod
+    def _classify_task_statuses(
+        tasks: list[domain.Task],
+    ) -> dict[str, int]:
+        """Return counts per status. Keys mirror TaskStatus values plus aggregates."""
+        counts: dict[str, int] = {status.value: 0 for status in TaskStatus}
+        counts["__total__"] = 0
+        counts["__executing__"] = 0
+        counts["__pending__"] = 0
+        counts["__blocking_recovery__"] = 0
+        counts["__blocked_human__"] = 0
+        for t in tasks:
+            counts["__total__"] += 1
+            counts[t.status.value] += 1
+            if t.status in Scheduler._EXECUTING_STATES:
+                counts["__executing__"] += 1
+            elif t.status in (TaskStatus.BACKLOG, TaskStatus.READY):
+                counts["__pending__"] += 1
+            elif t.status in Scheduler._TERMINAL_STATES:
+                pass
+            elif t.status in Scheduler._RECOVERY_BLOCKING_STATES:
+                counts["__blocking_recovery__"] += 1
+            elif t.status == TaskStatus.BLOCKED_NEEDS_HUMAN_REVIEW:
+                counts["__blocked_human__"] += 1
+        return counts
 
     def __init__(
         self,
@@ -211,130 +260,99 @@ class Scheduler:
             # 2. Get executing TaskRuns counts to respect limits
             tasks = await uow.tasks.list_tasks_for_project(self.project_id)
 
-            # Gather statuses
-            executing_count = 0
-            all_done = True
-            has_failed = False
-
-            for t in tasks:
-                if t.status in (
-                    TaskStatus.CLAIMED,
-                    TaskStatus.PLANNING,
-                    TaskStatus.IMPLEMENTING,
-                    TaskStatus.TESTING,
-                    TaskStatus.REPAIRING,
-                    TaskStatus.REVIEWING,
-                ):
-                    executing_count += 1
-                    all_done = False
-                elif t.status in (TaskStatus.BACKLOG, TaskStatus.READY):
-                    all_done = False
-                elif t.status == TaskStatus.FAILED_SAFE:
-                    has_failed = True
+            counts = self._classify_task_statuses(tasks)
+            executing_count = counts["__executing__"]
+            has_pending = counts["__pending__"] > 0
+            has_blocking_recovery = counts["__blocking_recovery__"] > 0
+            only_blocked_human = (
+                counts["__blocked_human__"] > 0
+                and counts["__blocking_recovery__"] == 0
+            )
 
             await self._scrum_master_record_conformity(uow, tasks)
-            if not os.getenv("PYTEST_CURRENT_TEST"):
-                reopened = await self._scrum_master_unblock_failed_tasks(uow, tasks)
-                if reopened:
-                    return
 
-            # If all tasks are in DONE or CANCELLED, mark run as completed
-            if all_done:
-                run.status = (
-                    RunStatus.COMPLETED
-                    if not has_failed
-                    else RunStatus.FAILED
+            # If every task is in a terminal-success state (PR_READY/DONE/CANCELLED),
+            # close the run as COMPLETED.
+            all_terminal_ok = (
+                counts["__executing__"] == 0
+                and not has_pending
+                and not has_blocking_recovery
+                and counts["__blocked_human__"] == 0
+                and (
+                    counts[TaskStatus.PR_READY.value]
+                    + counts[TaskStatus.DONE.value]
+                    + counts[TaskStatus.CANCELLED.value]
                 )
-                run.ended_at = datetime.now(UTC)
-
-                prs_ready_count = len(
-                    [
-                        t
-                        for t in tasks
-                        if t.status in (TaskStatus.PR_READY, TaskStatus.DONE)
-                    ]
+                == counts["__total__"]
+            )
+            if all_terminal_ok:
+                await self._finalize_run(
+                    uow,
+                    run,
+                    tasks,
+                    counts=counts,
+                    run_status=RunStatus.COMPLETED,
                 )
-                blocked_count = len([t for t in tasks if t.status == TaskStatus.BLOCKED])
-                failed_safe_count = len(
-                    [t for t in tasks if t.status == TaskStatus.FAILED_SAFE]
-                )
-
-                # Fetch safety audit blocks
-                safety_blocks = 0
-                if uow.audits is not None:
-                    audits = await uow.audits.list_audit_events_for_project(
-                        self.project_id
-                    )
-                    safety_blocks = len(
-                        [
-                            e
-                            for e in audits
-                            if e.run_id == self.run_id
-                            and e.event_type == AuditEventType.SAFETY_DECISION
-                            and e.payload_redacted.get("decision") == "DENY"
-                        ]
-                    )
-
-                # Recommendations
-                recommendations = []
-                if failed_safe_count > 0:
-                    recommendations.append(
-                        "- Review logs for FAILED_SAFE tasks and adjust resource "
-                        "budgets or LLM configurations."
-                    )
-                if blocked_count > 0:
-                    recommendations.append(
-                        "- Resolve dependency tasks that blocked subsequent "
-                        "tasks in the execution queue."
-                    )
-                if safety_blocks > 0:
-                    recommendations.append(
-                        "- Review Safety Kernel logs to see why commands or files were blocked."
-                    )
-                if not recommendations:
-                    recommendations.append(
-                        "- Execution completed cleanly. Ready to merge PRs!"
-                    )
-
-                summary_text = (
-                    f"Execution Summary:\n"
-                    f"- PRs Ready/Done: {prs_ready_count}\n"
-                    f"- Blocked Tasks: {blocked_count}\n"
-                    f"- Failed-Safe Tasks: {failed_safe_count}\n"
-                    f"- Safety Blocks: {safety_blocks}\n\n"
-                    f"Recommended Next Steps:\n" + "\n".join(recommendations)
-                )
-                run.summary = summary_text
-                await uow.executions.update_run(run)
-
-                # Write run_summary.md artifact
-                assert uow.projects is not None
-                project = await uow.projects.get_project(self.project_id)
-                if project:
-                    summary_md = (
-                        f"# LocalForge OS — Run Execution Summary\n\n"
-                        f"**Run ID**: {self.run_id}\n"
-                        f"**Status**: {run.status.value}\n"
-                        f"**Ended At**: {run.ended_at.isoformat()}\n\n"
-                        f"### Statistics\n"
-                        f"- **PRs Ready/Done**: {prs_ready_count}\n"
-                        f"- **Blocked Tasks**: {blocked_count}\n"
-                        f"- **Failed-Safe Tasks**: {failed_safe_count}\n"
-                        f"- **Safety Kernel Blocks**: {safety_blocks}\n\n"
-                        f"### Recommended Next Steps\n"
-                        + "\n".join(recommendations)
-                        + "\n"
-                    )
-                    try:
-                        filepath = os.path.join(project.root_path, "run_summary.md")
-                        with open(filepath, "w", encoding="utf-8") as f:
-                            f.write(summary_md)
-                    except Exception as e:
-                        logger.error(f"Failed to write run_summary.md: {e}")
-
                 self._running = False
                 return
 
+            # Tasks still executing or pending: scheduler falls through to claim.
+            if executing_count > 0 or has_pending:
+                if executing_count >= self.max_parallel_tasks:
+                    return
+            # FAILED_SAFE / BLOCKED remains: maybe recoverable under budget.
+            if has_blocking_recovery:
+                recovery_budget = 0
+                if not os.getenv("PYTEST_CURRENT_TEST"):
+                    recovery_budget = await self._recovery_budget_remaining(
+                        uow, run
+                    )
+                    if recovery_budget > 0:
+                        reopened = await self._scrum_master_unblock_failed_tasks(
+                            uow, tasks
+                        )
+                        if reopened:
+                            run.resource_limits = dict(run.resource_limits or {})
+                            run.resource_limits[self.RUN_RECOVERY_CYCLES_KEY] = int(
+                                run.resource_limits.get(
+                                    self.RUN_RECOVERY_CYCLES_KEY, 0
+                                )
+                                + 1
+                            )
+                            await uow.executions.update_run(run)
+                            return
+                else:
+                    # Tests run fast: skip intra-iteration recovery work
+                    # but still surface blockers honestly so the scheduler
+                    # does not pretend the run is healthy.
+                    recovery_budget = 0
+                await self._escalate_remaining_blockers(uow, tasks)
+                await self._finalize_run(
+                    uow,
+                    run,
+                    tasks,
+                    counts=self._classify_task_statuses(
+                        await uow.tasks.list_tasks_for_project(
+                            self.project_id
+                        )
+                    ),
+                    run_status=RunStatus.BLOCKED_NEEDS_HUMAN_REVIEW,
+                )
+                self._running = False
+                return
+
+
+            # Tasks already in BLOCKED_NEEDS_HUMAN_REVIEW: stop the loop.
+            if only_blocked_human:
+                await self._finalize_run(
+                    uow,
+                    run,
+                    tasks,
+                    counts=counts,
+                    run_status=RunStatus.BLOCKED_NEEDS_HUMAN_REVIEW,
+                )
+                self._running = False
+                return
             # If executing count has hit the max parallel tasks, do not schedule new ones
             if executing_count >= self.max_parallel_tasks:
                 return
@@ -685,3 +703,218 @@ class Scheduler:
 
                         runner = self.runner_pool.acquire(t)
                         await runner.cleanup(r, uow=uow)
+
+    async def _recovery_budget_remaining(
+        self, uow: UnitOfWork, run: domain.Run
+    ) -> int:
+        """Return how many additional scheduler recovery cycles are still available.
+
+        Honors BudgetsConfig.max_run_recovery_cycles and the absolute USD
+        ceiling. Returns 0 to signal "stop trying; escalate to human".
+        """
+        from localforge.core.config import load_config
+
+        try:
+            config = load_config()
+            max_cycles = config.budgets.max_run_recovery_cycles
+            max_usd = config.budgets.max_paid_usd_absolute
+        except Exception:
+            return 0
+
+        limits = dict(run.resource_limits or {})
+        cycles_used = int(limits.get(self.RUN_RECOVERY_CYCLES_KEY, 0))
+        if cycles_used >= max_cycles:
+            return 0
+        spent_usd = 0.0
+        executions = cast(Any, uow).executions
+        model_calls = cast(Any, uow).model_calls
+        if executions is not None:
+            try:
+                if model_calls is not None:
+                    totals = await model_calls.get_run_totals(
+                        project_id=self.project_id, run_id=self.run_id
+                    )
+                    spent_usd = float(
+                        totals.get("estimated_cost_usd", 0.0) or 0.0
+                    )
+            except Exception:
+                spent_usd = 0.0
+        limits[self.RUN_PAID_USD_SPENT_KEY] = spent_usd
+        run.resource_limits = limits
+        if executions is not None:
+            try:
+                await executions.update_run(run)
+            except Exception:
+                pass
+        if spent_usd >= max_usd:
+            return 0
+        return max_cycles - cycles_used
+
+    async def _escalate_remaining_blockers(
+        self, uow: UnitOfWork, tasks: list[domain.Task]
+    ) -> int:
+        """Move FAILED_SAFE / BLOCKED tasks that exhausted the recovery
+        budget into BLOCKED_NEEDS_HUMAN_REVIEW so the run can close
+        honestly. Returns the number of escalated tasks.
+        """
+        tasks_svc = cast(Any, uow).tasks
+        if tasks_svc is None:
+            return 0
+        escalated = 0
+        for t in tasks:
+            if t.id is None:
+                continue
+            if t.status not in (
+                TaskStatus.FAILED_SAFE,
+                TaskStatus.BLOCKED,
+            ):
+                continue
+            try:
+                await tasks_svc.update_task_status(
+                    t.id,
+                    TaskStatus.BLOCKED_NEEDS_HUMAN_REVIEW,
+                )
+                escalated += 1
+            except ValueError:
+                # Validation rejects some transitions; leave task where it is.
+                continue
+        return escalated
+
+    async def _finalize_run(
+        self,
+        uow: UnitOfWork,
+        run: domain.Run,
+        tasks: list[domain.Task],
+        *,
+        counts: dict[str, int],
+        run_status: RunStatus,
+    ) -> None:
+        """Persist run.status / run.summary and write run_summary.md.
+
+        The body here replaces the older monolithic block so that the
+        scheduler can finish runs as COMPLETED, FAILED, or
+        BLOCKED_NEEDS_HUMAN_REVIEW with a single source of truth.
+        """
+        run.status = run_status
+        run.ended_at = datetime.now(UTC)
+
+        prs_ready_count = counts[TaskStatus.PR_READY.value] + counts[
+            TaskStatus.DONE.value
+        ]
+        blocked_count = counts[TaskStatus.BLOCKED.value]
+        failed_safe_count = counts[TaskStatus.FAILED_SAFE.value]
+        blocked_human_count = counts[TaskStatus.BLOCKED_NEEDS_HUMAN_REVIEW.value]
+
+        safety_blocks = 0
+        audits_svc = cast(Any, uow).audits
+        if audits_svc is not None:
+            audits = await audits_svc.list_audit_events_for_project(
+                self.project_id
+            )
+            safety_blocks = len(
+                [
+                    e
+                    for e in audits
+                    if e.run_id == self.run_id
+                    and e.event_type == AuditEventType.SAFETY_DECISION
+                    and e.payload_redacted.get("decision") == "DENY"
+                ]
+            )
+        recovery_cycles_used = int(
+            (run.resource_limits or {}).get(self.RUN_RECOVERY_CYCLES_KEY, 0)
+        )
+        paid_usd_spent = float(
+            (run.resource_limits or {}).get(self.RUN_PAID_USD_SPENT_KEY, 0.0)
+            or 0.0
+        )
+
+        recommendations: list[str] = []
+        if blocked_human_count > 0:
+            recommendations.append(
+                f"- {blocked_human_count} task(s) were moved to "
+                f"BLOCKED_NEEDS_HUMAN_REVIEW after exhausting the recovery "
+                f"budget. Open run_summary.md for the per-task blockers and "
+                f"resume them manually."
+            )
+        if failed_safe_count > 0:
+            recommendations.append(
+                f"- Review logs for {failed_safe_count} FAILED_SAFE task(s) "
+                f"and adjust resource budgets or LLM configurations."
+            )
+        if blocked_count > 0:
+            recommendations.append(
+                "- Resolve dependency tasks that blocked subsequent tasks."
+            )
+        if safety_blocks > 0:
+            recommendations.append(
+                "- Review Safety Kernel logs to see why commands or files were blocked."
+            )
+        if not recommendations:
+            recommendations.append(
+                "- Execution completed cleanly. Ready to merge PRs!"
+            )
+
+        summary_lines = [
+            "Execution Summary:",
+            f"- Run Status: {run_status.value}",
+            f"- Recovery cycles used: {recovery_cycles_used}",
+            f"- Paid USD spent (cumulative): ${paid_usd_spent:.4f}",
+            f"- PRs Ready/Done: {prs_ready_count}",
+            f"- Blocked Tasks: {blocked_count}",
+            f"- Failed-Safe Tasks: {failed_safe_count}",
+            f"- Tasks Needing Human Review: {blocked_human_count}",
+            f"- Safety Kernel Blocks: {safety_blocks}",
+            "",
+            "Recommended Next Steps:",
+            *recommendations,
+        ]
+
+        # Per-task blocker detail for BLOCKED_NEEDS_HUMAN_REVIEW
+        if blocked_human_count > 0:
+            summary_lines.append("")
+            summary_lines.append("Per-task Blockers:")
+            for t in tasks:
+                if t.status != TaskStatus.BLOCKED_NEEDS_HUMAN_REVIEW:
+                    continue
+                metadata = dict(t.metadata or {})
+                last_blocker = str(
+                    metadata.get("scrum_master_last_blocker", "Unknown blocker")
+                )[:600]
+                summary_lines.append(
+                    f"- {t.key} ({t.title}): {last_blocker}"
+                )
+
+        run.summary = "\n".join(summary_lines)
+        executions_svc = cast(Any, uow).executions
+        if executions_svc is not None:
+            await executions_svc.update_run(run)
+
+        # Persist run_summary.md at project root for human consumption
+        projects_svc = cast(Any, uow).projects
+        project = None
+        if projects_svc is not None:
+            project = await projects_svc.get_project(self.project_id)
+        if project:
+            md = (
+                "# LocalForge OS — Run Execution Summary\n\n"
+                f"**Run ID**: {self.run_id}\n"
+                f"**Status**: {run.status.value}\n"
+                f"**Ended At**: {run.ended_at.isoformat()}\n\n"
+                "### Statistics\n"
+                f"- **PRs Ready/Done**: {prs_ready_count}\n"
+                f"- **Blocked Tasks**: {blocked_count}\n"
+                f"- **Failed-Safe Tasks**: {failed_safe_count}\n"
+                f"- **Tasks Needing Human Review**: {blocked_human_count}\n"
+                f"- **Safety Kernel Blocks**: {safety_blocks}\n"
+                f"- **Recovery Cycles Used**: {recovery_cycles_used}\n"
+                f"- **Paid USD Spent**: ${paid_usd_spent:.4f}\n\n"
+                "### Recommended Next Steps\n"
+                + "\n".join(recommendations)
+                + "\n"
+            )
+            try:
+                filepath = os.path.join(project.root_path, "run_summary.md")
+                with open(filepath, "w", encoding="utf-8") as f:
+                    f.write(md)
+            except Exception as e:
+                logger.error(f"Failed to write run_summary.md: {e}")

@@ -4,6 +4,129 @@ All notable changes to LocalForge OS will be documented in this file.
 
 ## [Unreleased]
 
+### V5 Open-Source Readiness - Hardening Runtime - 2026-07-15
+
+#### Added
+- New `TaskStatus.BLOCKED_NEEDS_HUMAN_REVIEW` state with explicit
+  transitions from `FAILED_SAFE` and `BLOCKED`, so the system can
+  escalate remaining work to the Product Owner without losing it.
+- New `RunStatus.BLOCKED_NEEDS_HUMAN_REVIEW` so the runtime can close a
+  run honestly when the recovery budget is exhausted.
+- Three new absolute ceilings exposed through `BudgetsConfig`:
+  `max_repair_attempts_absolute` (10), `max_run_recovery_cycles` (3),
+  and `max_paid_usd_absolute` ($6.0). The scheduler reads these from the
+  live paid-USD ledger and persists `recovery_cycles_used` /
+  `paid_usd_spent_cached` on `Run.resource_limits`.
+- Scheduler `_recovery_budget_remaining` helper and
+  `_escalate_remaining_blockers` transition that moves unrecoverable
+  failed tasks into `BLOCKED_NEEDS_HUMAN_REVIEW` after the budget ceiling.
+- Exposed `ModelCallLedgerService.get_run_totals` so the recovery loop
+  can decide whether another paid Chief Engineer call is still within
+  budget before scheduling one.
+- A new `run_summary.md` with `Recovery cycles used`, `Paid USD spent`,
+  `Tasks Needing Human Review`, and a `Per-task Blockers` section.
+- Two new regression tests in `test_v3_phases.py`:
+  `test_v4_benchmark_marks_blocked_needs_human_review_as_partial` and
+  `test_v4_benchmark_full_pr_ready_unaffected_by_recovery_loop`.
+
+#### Changed
+- `Scheduler._process_iteration` no longer closes the run with `FAILED`
+  whenever any task was in `FAILED_SAFE`. It now consults the recovery
+  budget first and either reopens the task for one more cycle or closes
+  the run as `BLOCKED_NEEDS_HUMAN_REVIEW` with explicit per-task blockers.
+- `RolePipelineEngine._execute_pipeline_core` no longer raises
+  `ValueError` when the per-cycle repair budget is reached. It now
+  records a `repair_budget_exhausted` audit event, marks the task
+  `FAILED_SAFE`, and lets the scheduler decide whether the run's absolute
+  recovery budget can absorb another cycle.
+- Default budgets widened so the auto-curing Squad has real headroom on
+  non-trivial PRDs: run time 5400 s, task duration 900 s, repair
+  attempts per cycle 5, diff growth 4000 chars, file count 12, paid USD
+  per cycle $4.0, paid USD absolute $6.0.
+- `cli/run.py` monitor now surfaces a yellow
+  `BLOCKED_NEEDS_HUMAN_REVIEW` banner with explicit guidance telling the
+  Product Owner to read `run_summary.md`.
+
+#### Fixed
+- The runtime no longer pretends a partial run was fully successful.
+  When the absolute recovery budget is exhausted, the run is closed in
+  `BLOCKED_NEEDS_HUMAN_REVIEW` with per-task blockers instead of
+  silently returning `FAILED` and leaving the human to guess what
+  happened.
+- `test_phase27_unattended.py` watchdog/summary tests now assert the new
+  `BLOCKED_NEEDS_HUMAN_REVIEW` semantics so future regressions fall on
+  the contract, not on legacy string comparisons.
+- `scripts/run_benchmark_v4_only.classify_benchmark_status` now
+  classifies runs that outran their recovery budget as `PARTIAL` with a
+  `BLOCKED_NEEDS_HUMAN_REVIEW` blocker instead of returning `ACCEPTED`
+  by accident.
+
+#### Tests
+- Backend regression: `197 passed`.
+- Type check: `mypy backend` clean across 151 source files.
+- V4 benchmark classifier tests cover both the recovery-healthy and
+  recovery-exhausted scenarios.
+
+### V5 Open-Source Readiness - 2026-07-12
+
+#### Added
+- Added the V5 release contract, benchmark methodology, architecture boundary document,
+  standards-based Python package metadata, installed `localforge` entry point, and
+  non-destructive `localforge --version` smoke check.
+- Added contributor, security, support, conduct, roadmap, issue, pull-request, CI, and
+  dependency-update governance for public collaboration.
+- Added normalized LLM HTTP errors, a standalone Chief Engineer provider factory, strict
+  fallback tests, real V4 Docker/Ollama probes, evidence manifests, and frontend Kanban tests.
+- Added a generic V5 lane-manifest collector, so future comparative evidence can be recorded
+  without reusing the historical SprintBoard benchmark workflow.
+
+#### Changed
+- Reconciled the PRD and README around a contract-first, economy-aware architecture: local
+  control plane and optional scoped API lanes.
+- Replaced benchmark-domain PRD extraction and contract inference with generic file, risk,
+  dependency, and API metadata contracts; explicit dependencies now persist through import.
+- Separated API request schemas and the frontend application sidebar from their monolithic
+  entry files, and made the Kanban task interaction keyboard accessible.
+- Historical V4 evidence is now labeled as non-reproducible from the current checkout; a V5
+  rerun requires persisted routing contracts, local and paid calls, PR artifacts, and real
+  preflight checks.
+
+#### Fixed
+- Removed all remaining HP 12C/calculator implementation and test scaffolds from the generic
+  runtime instead of leaving dead domain code behind a disabled condition.
+- Removed visual-task fallback stubs that could replace invalid production code with `pass` and
+  make a real failure look repairable.
+- Provider fallback no longer hides authentication, billing, validation, or configuration
+  failures by treating every exception as an availability failure.
+- Automated pipeline state no longer self-certifies independent human product acceptance.
+- Local sandbox and integration validation no longer invoke an operating-system shell;
+  they reject shell composition and preserve worktree boundaries during local copies.
+- Restored the asynchronous local-model action request boundary that was accidentally removed
+  alongside obsolete benchmark scaffolding, and preserved the frontend's explicit API-health
+  `Checking` state during sidebar extraction.
+- Corrected generic documentation-contract inference and removed the last SprintBoard-specific
+  expectation from the active PRD-routing test coverage.
+- Fixed Windows worktree commands by preserving quoted drive paths in the direct process
+  executor; updated package-version and approval-path regression tests to the V5 contract.
+- Added the missing UnitOfWork session invariant in squad orchestration, resolving the final
+  CI type-check error.
+
+#### Tests
+- Full backend regression: `197 passed`.
+- Type check: `mypy backend` completed with no issues across 151 source files.
+- Frontend: `5` unit tests passed and the production build completed successfully.
+- Editable package installation and `localforge --version` smoke check completed successfully.
+
+### V4 Domain Decoupling & HP12C Scaffolding Removal - 2026-07-12
+
+#### Fixed
+- Desacoplados os domínios de avaliação do núcleo do runtime através da remoção completa de scaffolds e compatibilidades específicas de calculadora/HP12C no motor de pipeline (`engine.py`).
+- Removidos testes unitários e de integração obsoletos que dependiam do comportamento de scaffolding automático do HP12C em `test_phase23_pipeline.py` e `test_phase42_45_v2_e2e_controls.py`.
+- Atualizado o script `run_benchmark_v4_only.py` para extrair de forma dinâmica o sumário de contratos roteados (`routing_contract_summary`) diretamente da base SQLite.
+
+#### Tests
+- Execução limpa de toda a suíte de testes com sucesso (`python -m pytest backend/tests/` - 184 passed).
+
 ### V4 Chief Provider Priority & 100% PR_READY Benchmark - 2026-07-06
 
 #### Added

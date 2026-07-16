@@ -82,6 +82,9 @@ class ModelCallLedgerService:
                     f"Chief Engineer paid budget exceeded: {key}={limit}, requested={value}"
                 )
 
+    async def get_run_totals(self, *, project_id: int, run_id: int) -> dict[str, float]:
+        return await self._run_totals(project_id=project_id, run_id=run_id)
+
     async def _run_totals(self, *, project_id: int, run_id: int) -> dict[str, float]:
         result = await self.session.execute(
             select(

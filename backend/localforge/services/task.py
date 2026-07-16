@@ -54,8 +54,20 @@ VALID_TRANSITIONS: dict[TaskStatus, set[TaskStatus]] = {
         TaskStatus.FAILED_SAFE,
     },
     TaskStatus.PR_READY: {TaskStatus.DONE, TaskStatus.FAILED_SAFE, TaskStatus.CANCELLED},
-    TaskStatus.BLOCKED: {TaskStatus.READY, TaskStatus.CANCELLED},
-    TaskStatus.FAILED_SAFE: {TaskStatus.READY, TaskStatus.CANCELLED},
+    TaskStatus.BLOCKED: {
+        TaskStatus.READY,
+        TaskStatus.BLOCKED_NEEDS_HUMAN_REVIEW,
+        TaskStatus.CANCELLED,
+    },
+    TaskStatus.FAILED_SAFE: {
+        TaskStatus.READY,
+        TaskStatus.BLOCKED_NEEDS_HUMAN_REVIEW,
+        TaskStatus.CANCELLED,
+    },
+    TaskStatus.BLOCKED_NEEDS_HUMAN_REVIEW: {
+        TaskStatus.READY,
+        TaskStatus.CANCELLED,
+    },
     TaskStatus.DONE: set(),
     TaskStatus.CANCELLED: set(),
 }

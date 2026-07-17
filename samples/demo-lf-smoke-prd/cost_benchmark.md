@@ -1,14 +1,31 @@
-# LocalForge OS — Cost Benchmark Report
+# LocalForge OS — Cost Benchmark Report (V5.2 demo)
 
-Comparing hybrid execution (API + Local) against hypothetical API-only competitor baselines.
+| Provider | Calls | Tokens (in+out) | USD |
+| :--- | :---: | :---: | :---: |
+| ollama (gemma4:12b)            | 13 | 3186+1704 | $0.0000 |
+| openrouter (minimaxai/minimax-m3) |  2 |   82+592  | $0.0029 |
+| **Total LocalForge Actual**    | **15** | **5564** | **$0.0029** |
 
-| Metric | LocalForge Actual | OpenAI API-Only | Anthropic API-Only | Google API-Only |
-| :--- | :---: | :---: | :---: | :---: |
-| **Total Spend (USD)** | $0.0000 | $0.0473 | $0.0511 | $0.0070 |
-| **Actual Paid Calls** | 0 | - | - | - |
-| **Local Calls Avoided** | 10 | - | - | - |
-| **Projected Savings** | - | $0.0473 | $0.0511 | $0.0070 |
+## Competitor API-only hypothetical baselines (same workload)
 
-*Note: Baselines are estimated token-cost comparison models based on official pricing snapshots, not exact proprietary billing invoices.*
+| Provider | Hypothetical USD | Savings vs LocalForge |
+| :--- | :---: | :---: |
+| OpenAI GPT-5.5 large       | $0.1555 | $0.1526 |
+| Anthropic Claude Opus 4.8 | $0.1453 | $0.1424 |
+| Google Gemini 2.5 Pro    | $0.0398 | $0.0368 |
 
-*Pricing snapshots references used: #1 (gpt-5.5-large), #2 (gpt-5.4-medium), #3 (gpt-5.4-mini), #4 (claude-opus-4.8), #5 (claude-sonnet-4.6), #6 (claude-haiku-4.5), #7 (gemini-2.5-pro), #8 (gemini-2.5-flash), #9 (gemini-2.5-flash-lite)*
+*Source: `localforge costs report --run 1` snapshot on 2026-07-17.*
+
+## Interpretation
+
+Total actual spend: **$0.0029 USD** for 13 local Ollama calls plus 2 paid
+Chief Engineer repairs (recorded in `model_call_ledger`). Three of the
+five tasks reached PR_READY via the local Ollama lane (gemma4:12b with
+the configured `LOCALFORGE_LLM_NUM_CTX=32768` context window). The
+remaining two tasks exhausted the absolute recovery budget after three
+cycles and were escalated to `BLOCKED_NEEDS_HUMAN_REVIEW`.
+
+The OpenAI / Anthropic / Google baselines are token-cost simulations
+against public pricing snapshots, **not** actual invoices. The
+LocalForge cost ledger records the real spend `ModelCallLedgerService`
+persisted during the run.

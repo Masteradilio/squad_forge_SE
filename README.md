@@ -160,23 +160,28 @@ If the Squad cannot produce a fully green run, the resulting
 and in any run's `run_summary.md`, so the closure is auditable rather
 than disguised.
 
-## Demo: reproduce a 4/5 PR_READY run locally
+## Demo: reproduce a real V5.2 run locally
 
-``samples/demo-lf-smoke-prd/`` records a real end-to-end demo where a
-five-task PRD was driven entirely by **local Ollama** (gemma4:12b,
-granite4.1:8b, nemotron-3-nano:4b) and the V5.1 hardened scheduler.
+``samples/demo-lf-smoke-prd/`` records a real end-to-end demo of the
+V5.2 release. Five PRD tasks are driven through the hardened
+scheduler against a configured Chief Engineer lane (NVIDIA NIM
+primary with OpenRouter fallback) and an explicit Ollama work lane
+(gemma4:12b).
 
-- 4/5 tasks reached ``PR_READY`` in ~8 minutes
-- 1 task honestly escalated to ``BLOCKED_NEEDS_HUMAN_REVIEW`` after
-  the absolute recovery budget was exhausted
-- Paid USD = **$0.0000**; OpenAI/Anthropic/Google API-only baselines
-  $0.0473–$0.0511
+- **3 / 5 tasks reached ``PR_READY``** in ~11 minutes
+- 2 / 5 tasks honestly escalated to ``BLOCKED_NEEDS_HUMAN_REVIEW``
+  after the absolute recovery ceiling was reached
+- Paid USD = **$0.0029** (two Chief Engineer repair calls executed
+  through the OpenRouter fallback after the NIM free tier rejected
+  the request). OpenAI / Anthropic / Google API-only baselines
+  $0.1555 / $0.1453 / $0.0398 respectively.
+- V4 benchmark verdict: ``PARTIAL`` (3 PR_READY of 5, 2 escalated to
+  human review). The verdict is honest.
+- Ollama context window: ``LOCALFORGE_LLM_NUM_CTX=32768`` matches
+  the gemma4:12b supported context budget.
 - ``samples/demo-lf-smoke-prd/RUN_NOTES.md`` is the human-facing
-  narrative; ``run_summary.md`` and ``cost_benchmark.md`` are the
-  machine-verifiable artifacts.
-- Reproduce locally with the exact env vars and
-  ``scripts/apply_demo_local_first.py`` described in
-  ``RUN_NOTES.md``.
+  reproduction guide; ``run_summary.md`` and ``cost_benchmark.md``
+  are the machine-verifiable artifacts produced by the run.
 
 ## Quick Setup
 

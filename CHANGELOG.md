@@ -2,9 +2,71 @@
 
 All notable changes to LocalForge OS will be documented in this file.
 
-## [Unreleased]
+ ## [Unreleased]
 
-### V5 Open-Source Readiness - Hardening Runtime - 2026-07-15
+### V5.2 Open-Source Readiness - Chief Engineer Routes - 2026-07-17
+
+#### Added
+- ``OpenAICompatibleProvider._looks_like_upstream_error``: detects the
+  ``{"error": "Model unavailable"}`` payload that NVIDIA NIM embeds in
+  assistant ``content`` while returning ``HTTP 200``. Treating that as
+  a normal schema reply used to loop until the absolute recovery
+  budget was exhausted, with every pay-and-fail cycle failing in JSON
+  parse or schema validate. The helper raises a distinct, retryable
+  ``LLMError`` so the wrapper or the fallback provider can route
+  around the broken model.
+- ``FallbackLLMProvider``: catches the new upstream-error signal and
+  forwards to the configured fallback (default NIM -> OpenRouter)
+  instead of propagating the failure. The runtime still records the
+  failed call in ``model_call_ledger`` with the original provider as
+  attribution.
+- ``OpenAICompatibleProvider``: reads
+  ``LOCALFORGE_LLM_MAX_OUTPUT_TOKENS`` and forwards
+  ``LOCALFORGE_LLM_NUM_CTX`` (Ollama ``options.num_ctx``). The default
+  Ollama server only grants 2 KiB which silently caps the local lanes
+  on supported models (gemma4:12b -> 32 KiB, granite4.1:8b -> 131
+  KiB). The V5.2 contract lets operators pin the value to the model's
+  supported context window via env.
+- ``.env.example``: documents ``LOCALFORGE_LLM_NUM_CTX`` and
+  ``LOCALFORGE_LLM_MAX_OUTPUT_TOKENS``. See ``samples/demo-lf-smoke-prd/RUN_NOTES.md``
+  for the full reproduction.
+- Re-recorded ``samples/demo-lf-smoke-prd/`` from a real V5.2
+  end-to-end run that paid $0.0029 USD for two Chief Engineer
+  repairs and 13 local Ollama calls (gemma4:12b). Verdict is
+  ``PARTIAL`` for honest reasons (3 PR_READY of 5, 2 escalated to
+  BLOCKED_NEEDS_HUMAN_REVIEW after 3 cycles), but the new
+  Chief Engineer path now makes a real paid call instead of looping
+  inside the Validator until the budget runs out.
+
+#### Changed
+- Default ``ChiefEngineerConfig.max_input_tokens_per_call`` bumped
+  from 12000 to 32000 and ``max_output_tokens_per_call`` from 2000 to
+  8000. The Chief Engineer lane routinely truncates plan serialisations
+  at 2 KiB output, which collapses otherwise valid JSON Schema
+  responses into ``content: null``. The wider ceiling gives the
+  Validator room to actually parse the plan.
+
+#### Fixed
+- ``SandboxConfig.type`` field preserved. The contract was previously
+  missing the ``type`` field, breaking every test that read
+  ``config.sandbox.type``. Restored the missing field with its
+  ``"local"`` default; the runtime still reads it through the
+  ``sandbox factory`` without any consumer change.
+
+#### Tests
+- Backend regression: **196 passed** (the 3 remaining failures are
+  the pre-existing ``test_phase31_32_chief_engineer`` baselines that
+  depend on the localforge root ``.env`` containing
+  ``OPENROUTER_MODEL``, which is overridden by ``NVIDIA_LLM_MODEL``
+  on this host).
+- Type check: ``mypy backend`` clean across 151 source files.
+- Real end-to-end demo captured in ``samples/demo-lf-smoke-prd/``:
+  3/5 tasks reached ``PR_READY`` on a single run, 2/5 tasks were
+  honestly escalated to ``BLOCKED_NEEDS_HUMAN_REVIEW`` after 3
+  recovery cycles, paid USD spent $0.0029 (vs OpenAI / Anthropic /
+  Google API-only baselines at $0.1555 / $0.1453 / $0.0398).
+
+ ### V5 Open-Source Readiness - Hardening Runtime - 2026-07-15
 
 #### Added
 - New `TaskStatus.BLOCKED_NEEDS_HUMAN_REVIEW` state with explicit

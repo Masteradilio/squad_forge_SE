@@ -2,11 +2,69 @@ import os
 import json
 from collections.abc import AsyncIterator
 from typing import Any
-
 import httpx
 
-from localforge.llm.base import BaseLLMProvider, LLMConnectionError, LLMError, LLMTimeoutError
+from localforge.llm.base import (
+    BaseLLMProvider,
+    LLMConnectionError,
+    LLMError,
+    LLMHTTPError,
+    LLMTimeoutError,
+)
 
+_UPSTREAM_ERROR_HINTS = (
+    "model unavailable",
+    "model cannot process this request",
+    "engine unavailable",
+    "service temporarily unavailable",
+    "context length",
+    "tokens exceed",
+    "context_window",
+)
+
+
+def _looks_like_upstream_error(content: str) -> bool:
+    """Return True if ``content`` looks like an error payload instead of
+    a real assistant message.
+
+    Several free-tier inference providers (notably NVIDIA NIM with
+    Minimax-M3 when ``response_format=json_object`` is requested)
+    return ``HTTP 200`` with the error message embedded as the
+    assistant ``content``. Treating that as a normal answer routes it
+    into the schema validator and yields repeated ``ValidationError``s
+    that never recover. Detect that pattern early."""
+    if not content:
+        return False
+    lowered = content.strip().lower()
+    if not lowered:
+        return False
+    if lowered.startswith("{\"error\""):
+        return True
+    return any(hint in lowered for hint in _UPSTREAM_ERROR_HINTS)
+
+
+def _ollama_options_overrides() -> dict[str, object]:
+    """Read Ollama runtime overrides from the environment.
+
+    LOCALFORGE_LLM_NUM_CTX (int, recommended >= 32768): maps to the
+    Ollama ``options.num_ctx`` request field, which controls the model's
+    effective context window. The default Ollama server hands out
+    2 KiB unless overridden, which silently caps the local lanes and
+    forces the squad to fall back to paid APIs for tasks the local
+    host is fully capable of handling. LocalForge deliberately leaves
+    this opt-in: operators are expected to set the value to match the
+    model's supported context window (gemma4:12b → 262144,
+    granite4.1:8b → 131072, nemotron-3-nano:4b → 4096).
+    """
+    options: dict[str, object] = {}
+    raw = os.getenv("LOCALFORGE_LLM_NUM_CTX")
+    if not raw:
+        return options
+    try:
+        options["num_ctx"] = int(raw)
+    except ValueError:
+        return options
+    return options
 
 class OpenAICompatibleProvider(BaseLLMProvider):
     """LLM provider wrapper using OpenAI-compatible API schemas (e.g.
@@ -22,9 +80,32 @@ class OpenAICompatibleProvider(BaseLLMProvider):
         provider_name: str = "openai_compatible",
     ):
         self.base_url = base_url.rstrip("/")
-        self.api_key = api_key or os.getenv("OPENROUTER_API_KEY") or os.getenv("LOCALFORGE_MODEL_API_KEY") or "no-key"
+        self.api_key = (
+            api_key
+            or os.getenv("OPENROUTER_API_KEY")
+            or os.getenv("LOCALFORGE_MODEL_API_KEY")
+            or "no-key"
+        )
         self.default_model = default_model
         self.provider_name = provider_name
+        # Honour ``LOCALFORGE_LLM_MAX_OUTPUT_TOKENS`` (and the
+        # ``LOCALFORGE_LLM_MAX_INPUT_TOKENS`` companion). Operators with
+        # free-tier NVIDIA / OpenRouter keys regularly hit ``max_tokens``
+        # truncation that collapses otherwise valid JSON Schema responses
+        # into ``content: null``; the default of 0 means "let the
+        # provider decide", which is fine but easy to misjudge.
+        try:
+            self.default_max_output_tokens = int(
+                os.getenv("LOCALFORGE_LLM_MAX_OUTPUT_TOKENS", "0") or "0"
+            )
+        except ValueError:
+            self.default_max_output_tokens = 0
+        try:
+            self.default_max_input_tokens = int(
+                os.getenv("LOCALFORGE_LLM_MAX_INPUT_TOKENS", "0") or "0"
+            )
+        except ValueError:
+            self.default_max_input_tokens = 0
 
     async def list_models(self) -> list[str]:
         """Fetch active models using the GET /v1/models endpoint."""
@@ -34,7 +115,10 @@ class OpenAICompatibleProvider(BaseLLMProvider):
             async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.get(url, headers=headers)
                 if resp.status_code != 200:
-                    raise LLMError(f"HTTP Error {resp.status_code}: {resp.text}")
+                    raise LLMHTTPError(
+                        f"HTTP Error {resp.status_code}: {resp.text}",
+                        status_code=resp.status_code,
+                    )
                 data = resp.json()
                 # Parse list format
                 items = data.get("data", [])
@@ -71,7 +155,7 @@ class OpenAICompatibleProvider(BaseLLMProvider):
                 config = load_config()
                 default_limit = config.budgets.max_active_model_calls
             except Exception:
-                default_limit = 50
+                default_limit = 4
             limit = get_llm_limit(task_run_id, default_limit)
             await check_and_increment_llm_calls(task_run_id, limit)
 
@@ -89,11 +173,29 @@ class OpenAICompatibleProvider(BaseLLMProvider):
             "messages": messages,
             "stream": stream,
         }
+        # Operator-tunable output token ceiling. We default to letting
+        # the remote side decide (``0`` means "omit max_tokens") so the
+        # existing tests keep their behaviour, but a positive env value
+        # unlocks the full output budget the configured model can emit.
+        if self.default_max_output_tokens > 0:
+            payload["max_tokens"] = self.default_max_output_tokens
 
-        # Request JSON output format
+        # Request JSON output format; the Ollama host ignores this flag
+        # (it always answers with plain JSON content) while NIM/vLLM
+        # honour it, so the backend normalisation happens here.
         if response_schema is not None:
             payload["response_format"] = {"type": "json_object"}
-
+        # Forward Ollama-specific runtime options (currently only
+        # num_ctx, the model's effective context window). We key them
+        # under "options" to match the Ollama /v1 API the way the
+        # upstream Ollama server expects when called with raw JSON
+        # instead of the ``-d`` shell wrapper.
+        ollama_options = _ollama_options_overrides()
+        if (
+            ollama_options
+            and (self.provider_name or "").lower().startswith("ollama")
+        ):
+            payload["options"] = ollama_options
         if stream:
             return self._stream_chat_completion(url, headers, payload, timeout)
 
@@ -101,12 +203,28 @@ class OpenAICompatibleProvider(BaseLLMProvider):
             async with httpx.AsyncClient(timeout=timeout) as client:
                 resp = await client.post(url, headers=headers, json=payload)
                 if resp.status_code != 200:
-                    raise LLMError(f"Completion API failed ({resp.status_code}): {resp.text}")
+                    raise LLMHTTPError(
+                        f"Completion API failed ({resp.status_code}): {resp.text}",
+                        status_code=resp.status_code,
+                    )
                 data = resp.json()
                 choices = data.get("choices", [])
                 if not choices:
                     raise LLMError("API response did not contain completion choices.")
-                return str(choices[0]["message"]["content"])
+                # Detect upstream-model errors hidden inside the first choice.
+                # than as an HTTP 4xx/5xx. Treating that as a normal
+                # content would route it into the validator, where every
+                # subsequent retry then has to fail in JSON parse-or-
+                # schema-validate before the operator notices. Surface it
+                # as a distinct, retryable LLMError so the wrapper or the
+                # fall-through provider can skip the model.
+                content = choices[0].get("message", {}).get("content") or ""
+                if _looks_like_upstream_error(content):
+                    raise LLMError(
+                        f"Upstream model error returned inside content: "
+                        f"{content[:300]!r}"
+                    )
+                return str(content)
         except httpx.TimeoutException as e:
             raise LLMTimeoutError(f"Chat completion call timed out after {timeout}s") from e
         except httpx.RequestError as e:
@@ -129,8 +247,9 @@ class OpenAICompatibleProvider(BaseLLMProvider):
                 async with client.stream("POST", url, headers=headers, json=payload) as response:
                     if response.status_code != 200:
                         body = await response.aread()
-                        raise LLMError(
-                            f"Streaming request failed ({response.status_code}): {body.decode()}"
+                        raise LLMHTTPError(
+                            f"Streaming request failed ({response.status_code}): {body.decode()}",
+                            status_code=response.status_code,
                         )
 
                     async for line in response.aiter_lines():

@@ -32,10 +32,9 @@ DEFAULT_CONFIG = {
         "fallback_model": None,
         "fallback_api_key": None,
         "fallback_after_seconds": 30.0,
-        "enabled": True,
         "timeout": 240.0,
-        "max_input_tokens_per_call": 12000,
-        "max_output_tokens_per_call": 2000,
+        "max_input_tokens_per_call": 32000,
+        "max_output_tokens_per_call": 8000,
     },
     "sandbox": {
         "type": "local",
@@ -91,15 +90,14 @@ class ChiefEngineerConfig(BaseModel):
     fallback_after_seconds: float = Field(default=30.0)
     enabled: bool = Field(default=True)
     timeout: float = Field(default=240.0)
-    max_input_tokens_per_call: int = Field(default=12000)
-    max_output_tokens_per_call: int = Field(default=2000)
+    max_input_tokens_per_call: int = Field(default=32000)
+    max_output_tokens_per_call: int = Field(default=8000)
 
 
 class SandboxConfig(BaseModel):
     type: str = Field(default="local")
     image: str = Field(default="python:3.12-slim")
     network_enabled: bool = Field(default=False)
-
 
 class BudgetsConfig(BaseModel):
     max_run_time: float = Field(default=5400.0)

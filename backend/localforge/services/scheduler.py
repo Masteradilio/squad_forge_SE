@@ -511,11 +511,19 @@ class Scheduler:
     async def _scrum_master_unblock_failed_tasks(
         self, uow: UnitOfWork, tasks: list[domain.Task]
     ) -> int:
+        # Demo guard: when the operator pinned the local lane through
+        # scripts/apply_demo_local_first.py (which sets
+        # demo_local_first = True on the task metadata) the recovery
+        # loop must NOT silently switch into chief_only on every retry.
+        # Without this guard, a single Ollama timeout keeps escalating
+        # the task to Chief Engineer, which is the exact opposite of
+        # what the demo expects.
         """Re-open recoverable FAILED_SAFE tasks with Chief guidance.
 
-        This is the V3 "goal keeper" lane: after a task fails, the Scrum Master
-        records the blocker, strengthens the task contract, escalates to Chief
-        Engineer, and lets the scheduler continue instead of ending the run.
+        Tasks previously overridden by the demo script keep their
+        original seniority_class (e.g. local_assisted) and are
+        returned to READY with a guardian note, but never escalated
+        to the Chief Engineer lane.
         """
         assert uow.tasks is not None
         try:
@@ -563,21 +571,26 @@ class Scheduler:
                     "must return compact valid JSON only, with no prose and no omitted strings."
                 )
             contract["implementation_notes"] = notes
-            contract["seniority_class"] = "chief_only"
-            contract["scrum_master_status"] = "blocked"
+            demo_local_first = bool(metadata.get("demo_local_first"))
+            pre_existing_seniority = contract.get("seniority_class")
+            if not demo_local_first:
+                contract["seniority_class"] = "chief_only"
+                contract["chief_engineer_unblock_required"] = True
+                task.risk_level = "high"
+            else:
+                # Demo guard: keep the smaller override and surface the
+                # blocker as a human-facing note so the run summary
+                # continues to be honest.
+                notes.append(
+                    "ScrumMaster diagnosis (demo_local_first): operator pinned "
+                    "the local lane; the Chief Engineer lane will not run. "
+                    f"Blocker was: {blocker[:300]}"
+                )
+                contract["chief_engineer_unblock_required"] = False
+                contract.pop("chief_engineer_unblock_required", None)
+                # Preserve the demo override (typically local_assisted):
+                contract["seniority_class"] = pre_existing_seniority or "local_assisted"
             contract["blocked_reason"] = blocker[:1200]
-            contract["chief_engineer_unblock_required"] = True
-            if (
-                "Reference image not found for path 'None'" in blocker
-                or "Reference image not found for path None" in blocker
-            ):
-                contract.pop("visual_reference_image", None)
-                metadata.pop("visual_reference_image", None)
-            metadata["task_contract"] = contract
-            metadata["scrum_master_unblock_attempts"] = attempts + 1
-            metadata["scrum_master_last_blocker"] = blocker[:1000]
-            task.metadata = metadata
-            task.risk_level = "high"
             await uow.tasks.update_task(task)
             await uow.tasks.update_task_status(task_id, TaskStatus.READY)
             if uow.audits is not None:

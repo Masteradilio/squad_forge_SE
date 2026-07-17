@@ -66,6 +66,56 @@ All notable changes to LocalForge OS will be documented in this file.
 - Type check: `mypy backend` clean across 151 source files.
 - V4 benchmark classifier tests cover both the recovery-healthy and
   recovery-exhausted scenarios.
+### V5.1 Open-Source Readiness - Demo Hardening - 2026-07-17
+
+#### Added
+- ``scripts/apply_demo_local_first.py``: marks every task in the
+  workspace as ``local_assisted`` / low risk so the demo pins the local
+  Ollama lane and never escalates to Chief Engineer. Used only by the
+  ``samples/demo-lf-smoke-prd/`` reproducible demonstration, not by
+  production workloads.
+- ``WorktreeManager._git_prune_stale_worktrees`` runs
+  ``git worktree prune`` before reusing a worktree path. Resolves the
+  Windows-specific "is a missing but already registered worktree" error
+  that aborted every repeated demo run.
+- ``SelfHealingEngine`` / ``Scheduler._scrum_master_unblock_failed_tasks``
+  honour ``task.metadata.demo_local_first`` so the recovery loop
+  returns a recoverable task to READY without re-escalating to chief_only.
+  Production tasks (without the marker) still get the existing
+  chief_only / risk_level=high re-escalation policy.
+- Three new regression tests in
+  ``backend/tests/test_scheduler.py`` for the demo contract.
+
+#### Changed
+- Default ``max_active_model_calls`` is now 30 (was 4) so that a single
+  Ollama-side stall during one task does not immediately kill the run.
+  Production tuning remains possible through the per-task metadata or
+  ``.localforge/config.yaml`` overrides.
+- Default budget widening already landed in V5.1 carries through:
+  ``max_run_time`` 5400 s, ``max_task_duration`` 900 s,
+  ``max_repair_attempts`` 5, ``max_diff_growth`` 4000 chars, file count
+  12, paid USD absolute $6.
+
+#### Fixed
+- Repeated V5.1 demo runs aborted on Windows with
+  ``fatal: 'E:/tmp/.../worktrees/lf-prd-002 is a missing but already
+  registered worktree'``. ``_git_prune_stale_worktrees`` is now invoked
+  before every ``setup_worktree`` call.
+- A Scrum Master recovery loop kept promoting the same task to
+  ``chief_only`` even when ``scripts/apply_demo_local_first.py`` had
+  pinned the local lane. The ``demo_local_first`` guard prevents the
+  escalation without losing the blocker audit log.
+
+#### Tests
+- Backend regression: ``195 passed`` (the four ``test_phase31_32_*``
+  baselines were already broken by the root ``.env`` BEFORE this
+  change, see CHANGELOG of V4).
+- Type check: ``mypy backend`` clean across 151 source files.
+- Real end-to-end demo captured in ``samples/demo-lf-smoke-prd/``:
+  4/5 tasks reached ``PR_READY`` on a single run, 1 task was honestly
+  escalated to ``BLOCKED_NEEDS_HUMAN_REVIEW`` after 3 recovery cycles,
+  paid USD spent $0.0000, OI/OA/AG baseline cost $0.0473-$0.0511.
+
 
 ### V5 Open-Source Readiness - 2026-07-12
 

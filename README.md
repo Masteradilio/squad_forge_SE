@@ -155,12 +155,28 @@ models (`gemma4:12b` → `granite4.1:8b` → `nemotron-3-nano:4b`) and the
 remaining 30 % went through the Chief Engineer lane with NVIDIA NIM as
 primary and OpenRouter as fallback. See
 `scripts/run_benchmark_v4_only.py` for the reproducible harness.
-
 If the Squad cannot produce a fully green run, the resulting
 `BLOCKED_NEEDS_HUMAN_REVIEW` count appears in the V4 benchmark verdict
 and in any run's `run_summary.md`, so the closure is auditable rather
 than disguised.
 
+## Demo: reproduce a 4/5 PR_READY run locally
+
+``samples/demo-lf-smoke-prd/`` records a real end-to-end demo where a
+five-task PRD was driven entirely by **local Ollama** (gemma4:12b,
+granite4.1:8b, nemotron-3-nano:4b) and the V5.1 hardened scheduler.
+
+- 4/5 tasks reached ``PR_READY`` in ~8 minutes
+- 1 task honestly escalated to ``BLOCKED_NEEDS_HUMAN_REVIEW`` after
+  the absolute recovery budget was exhausted
+- Paid USD = **$0.0000**; OpenAI/Anthropic/Google API-only baselines
+  $0.0473–$0.0511
+- ``samples/demo-lf-smoke-prd/RUN_NOTES.md`` is the human-facing
+  narrative; ``run_summary.md`` and ``cost_benchmark.md`` are the
+  machine-verifiable artifacts.
+- Reproduce locally with the exact env vars and
+  ``scripts/apply_demo_local_first.py`` described in
+  ``RUN_NOTES.md``.
 
 ## Quick Setup
 

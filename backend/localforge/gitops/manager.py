@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 import re
 import shutil
@@ -6,6 +7,8 @@ import shutil
 from localforge.gitops.adapter import GitAdapter
 from localforge.models.enums import RunMode, TaskStatus
 from localforge.storage import UnitOfWork
+
+logger = logging.getLogger(__name__)
 
 
 def get_task_branch_name(task_key: str, title: str) -> str:
@@ -90,7 +93,14 @@ class WorktreeManager:
         base_branch = await self._base_branch_for_task(task_id, default_branch)
         lock = self._get_worktree_lock(worktree_path)
         async with lock:
-            await self._remove_stale_worktree_path(git, worktree_path, project.root_path)
+            # Prune any stale worktree registrations BEFORE attempting to add.
+            # Windows reliably leaves branches registered but missing on disk
+            # between runs; without this `git worktree add` aborts with
+            # "is a missing but already registered worktree".
+            await self._git_prune_stale_worktrees(git)
+            await self._remove_stale_worktree_path(
+                git, worktree_path, project.root_path
+            )
             try:
                 await git.create_worktree(
                     path=worktree_path,
@@ -98,10 +108,20 @@ class WorktreeManager:
                     base_branch=base_branch,
                 )
             except Exception:
-                await self._remove_stale_worktree_path(git, worktree_path, project.root_path)
+                await self._remove_stale_worktree_path(
+                    git, worktree_path, project.root_path
+                )
                 raise
-
         return worktree_path, branch_name
+
+    async def _git_prune_stale_worktrees(self, git: GitAdapter) -> None:
+        """Best-effort ``git worktree prune`` so registered but orphan worktrees
+        stop blocking subsequent ``git worktree add`` runs."""
+        try:
+            await git._execute_git(["worktree", "prune"], use_task_context=False)
+        except Exception:
+            logger = logging.getLogger(__name__)
+            logger.debug("git worktree prune was a no-op or failed; continuing")
 
     async def _remove_stale_worktree_path(
         self, git: GitAdapter, worktree_path: str, project_root: str

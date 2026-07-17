@@ -4,10 +4,10 @@ Comparing hybrid execution (API + Local) against hypothetical API-only competito
 
 | Metric | LocalForge Actual | OpenAI API-Only | Anthropic API-Only | Google API-Only |
 | :--- | :---: | :---: | :---: | :---: |
-| **Total Spend (USD)** | $0.0000 | $0.0128 | $0.0137 | $0.0019 |
+| **Total Spend (USD)** | $0.0000 | $0.0473 | $0.0511 | $0.0070 |
 | **Actual Paid Calls** | 0 | - | - | - |
-| **Local Calls Avoided** | 3 | - | - | - |
-| **Projected Savings** | - | $0.0128 | $0.0137 | $0.0019 |
+| **Local Calls Avoided** | 10 | - | - | - |
+| **Projected Savings** | - | $0.0473 | $0.0511 | $0.0070 |
 
 *Note: Baselines are estimated token-cost comparison models based on official pricing snapshots, not exact proprietary billing invoices.*
 

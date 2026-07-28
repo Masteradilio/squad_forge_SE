@@ -1,0 +1,24 @@
+{
+  "phase_id": "phase_02",
+  "phase_name": "Circuit Breakers, Progress Detection, and Kill Controls",
+  "timestamp": "2026-07-27T22:45:00Z",
+  "source_commit": "575b6e40889f5bc3a83015f3408013e2e8587d60",
+  "changed_modules": [
+    "backend/localforge/models/enums.py",
+    "backend/localforge/models/domain.py",
+    "backend/localforge/storage/orm.py",
+    "backend/localforge/storage/bootstrap.py",
+    "backend/localforge/storage/transactions.py",
+    "backend/localforge/services/fingerprint.py",
+    "backend/localforge/services/circuit_breaker.py",
+    "backend/localforge/services/loop_coordinator.py",
+    "backend/localforge/api/schemas.py",
+    "backend/localforge/api/routes/circuit_breakers.py",
+    "backend/localforge/api/routes/__init__.py",
+    "backend/localforge/api/app.py",
+    "backend/localforge/cli/circuit_breakers.py",
+    "backend/localforge/cli/main.py",
+    "backend/tests/test_phase6_circuit_breakers.py"
+  ],
+  "verdict": "PHASE_ACCEPTED"
+}

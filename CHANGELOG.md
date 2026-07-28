@@ -4,6 +4,18 @@ All notable changes to LocalForge OS will be documented in this file.
 
  ## [Unreleased]
 
+### V6 Phase 2 - Circuit Breakers, Progress Detection, and Kill Controls - 2026-07-27
+
+#### Added
+- **Error Normalization & Deterministic Fingerprints**: Created `fingerprint.py` with `normalize_error_message` (stripping volatile memory addresses, timestamps, and local paths) and `generate_error_fingerprint`.
+- **Progress Signal Classification**: Added logic in `fingerprint.py` classifying attempt progress into `PROGRESS`, `STAGNATION`, `REGRESSION`, and `REPEATED_FAILURE`.
+- **Persistent Circuit Breakers & Migration v8**: Defined `CircuitBreakerState` model and `CircuitBreakerStateORM` with version 8 schema upgrade path, supporting states `CLOSED`, `OPEN`, `COOLDOWN`, `HALF_OPEN`, `ESCALATED` across scopes `LOOP`, `RUN`, `ITEM`, `TASK`, `PROVIDER`.
+- **Scheduler & Loop Breaker Checks**: Integrated `CircuitBreakerService` in `LoopCoordinator` to block execution when circuit breaker is open or escalated, preventing infinite retry loops and ineffective patch repetition.
+- **Kill Controls & Emergency Stop**: Added `kill_loop_run` in `LoopCoordinator` cancelling active runs with audit trail without generating unearned success verdicts.
+- **REST API & CLI Surfaces**: Added `/projects/{id}/circuit-breakers`, `/projects/{id}/circuit-breakers/reset`, and `/loop-runs/{id}/kill` API endpoints and `localforge breakers` CLI commands (`list`, `reset`).
+- **Phase 2 Evidence**: Added `docs/e2e/v6/phase_02/manifest.json`, `docs/e2e/v6/phase_02/test_summary.json`, and `docs/e2e/v6/phase_02/acceptance_report.md`.
+
+
 ### V6 Phase 1 - Loop Coordinator & Durable Loop State - 2026-07-27
 
 #### Added

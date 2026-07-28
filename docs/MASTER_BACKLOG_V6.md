@@ -453,51 +453,52 @@ failure fingerprints and no-progress detection.
 
 ### V6-200 — Define failure and progress signals
 
-- [ ] Normalize errors into stable fingerprints.
-- [ ] Record test-result signature, diff signature, artifact signature, and
+- [x] Normalize errors into stable fingerprints.
+- [x] Record test-result signature, diff signature, artifact signature, and
       progress counters per attempt.
-- [ ] Define `progress`, `stagnation`, `regression`, and `repeated_failure`.
-- [ ] Exclude timestamps, random IDs, and irrelevant paths from fingerprints.
+- [x] Define `progress`, `stagnation`, `regression`, and `repeated_failure`.
+- [x] Exclude timestamps, random IDs, and irrelevant paths from fingerprints.
 
 ### V6-201 — Implement persistent circuit-breaker state
 
-- [ ] Add closed, open, cooldown, half-open, and escalated states.
-- [ ] Add thresholds for identical errors, no progress, regression, time, cost,
+- [x] Add closed, open, cooldown, half-open, and escalated states.
+- [x] Add thresholds for identical errors, no progress, regression, time, cost,
       attempts, and aggregate daily consumption.
-- [ ] Scope breakers to Loop, Run, external item, task, and provider as needed.
-- [ ] Persist the exact reason and evidence that opened the breaker.
+- [x] Scope breakers to Loop, Run, external item, task, and provider as needed.
+- [x] Persist the exact reason and evidence that opened the breaker.
 
 ### V6-202 — Integrate breaker decisions with scheduler and healing
 
-- [ ] Check the breaker before retries, recovery cycles, and paid calls.
-- [ ] Stop retries when the same normalized failure repeats.
-- [ ] Prevent healing from reverting and reapplying the same ineffective patch.
-- [ ] Escalate with a compact summary, last relevant error, attempted remedies,
+- [x] Check the breaker before retries, recovery cycles, and paid calls.
+- [x] Stop retries when the same normalized failure repeats.
+- [x] Prevent healing from reverting and reapplying the same ineffective patch.
+- [x] Escalate with a compact summary, last relevant error, attempted remedies,
       and requested human decision.
-- [ ] Never translate an open breaker into `PR_READY`.
+- [x] Never translate an open breaker into `PR_READY`.
 
 ### V6-203 — Add pause, resume, and kill
 
-- [ ] Add project, Loop, Loop Run, scheduler Run, and task pause controls.
-- [ ] Add a kill operation that stops future actions and releases resources.
-- [ ] Preserve evidence and state after kill.
-- [ ] Require an auditable actor and reason for manual resume.
+- [x] Add project, Loop, Loop Run, scheduler Run, and task pause controls.
+- [x] Add a kill operation that stops future actions and releases resources.
+- [x] Preserve evidence and state after kill.
+- [x] Require an auditable actor and reason for manual resume.
 
 **Targeted regression**
 
-- [ ] Repeated identical error opens the breaker.
-- [ ] Semantically different errors do not share a fingerprint accidentally.
-- [ ] Progress resets the stagnation counter.
-- [ ] Token, cost, time, and daily aggregate budgets stop execution.
-- [ ] Restart preserves open/cooldown state.
-- [ ] Kill cancels pending work and releases leases.
-- [ ] No breaker state produces an unearned success verdict.
+- [x] Repeated identical error opens the breaker.
+- [x] Semantically different errors do not share a fingerprint accidentally.
+- [x] Progress resets the stagnation counter.
+- [x] Token, cost, time, and daily aggregate budgets stop execution.
+- [x] Restart preserves open/cooldown state.
+- [x] Kill cancels pending work and releases leases.
+- [x] No breaker state produces an unearned success verdict.
 
 **Phase 2 exit gate**
 
-- [ ] Infinite retry and repeated-patch fixtures terminate deterministically.
-- [ ] Escalation evidence explains why automation stopped.
-- [ ] Complete the mandatory phase synchronization gate.
+- [x] Infinite retry and repeated-patch fixtures terminate deterministically.
+- [x] Escalation evidence explains why automation stopped.
+- [x] Complete the mandatory phase synchronization gate.
+
 
 ---
 

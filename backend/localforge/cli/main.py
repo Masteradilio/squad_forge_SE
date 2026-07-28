@@ -19,8 +19,10 @@ from localforge.cli.costs import costs_app
 from localforge.cli.doctor import doctor_cmd
 from localforge.cli.import_prd import import_prd_cmd
 from localforge.cli.init import init_cmd
+from localforge.cli.circuit_breakers import breakers_app
 from localforge.cli.loops import loops_app
 from localforge.cli.plan import plan_cmd
+
 
 from localforge.cli.prs import prs_cmd
 from localforge.cli.run import run_cmd
@@ -85,6 +87,8 @@ app.add_typer(costs_app, name="costs")
 app.add_typer(benchmark_app, name="benchmark")
 app.add_typer(squad_app, name="squad")
 app.add_typer(loops_app, name="loops")
+app.add_typer(breakers_app, name="breakers")
+
 
 
 

@@ -134,3 +134,14 @@ class LoopTriggerRequest(BaseModel):
     idempotency_key: str | None = None
     payload: dict[str, Any] = Field(default_factory=dict)
 
+
+class CircuitBreakerResetRequest(BaseModel):
+    scope: str
+    target_id: str
+    actor_id: str = "user"
+    reason: str = "Manual reset requested via API"
+
+
+class KillRunRequest(BaseModel):
+    actor_id: str = "user"
+    reason: str = "Manual kill requested via API"

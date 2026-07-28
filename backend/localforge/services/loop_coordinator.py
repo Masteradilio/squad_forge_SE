@@ -9,6 +9,8 @@ from localforge.models import domain
 from localforge.models.enums import (
     AuditEventActorType,
     AuditEventType,
+    CircuitScope,
+    CircuitState,
     LoopRunStatus,
     LoopRunVerdict,
     LoopStatus,
@@ -17,6 +19,7 @@ from localforge.models.enums import (
     TriggerKind,
 )
 from localforge.services.audit import AuditService
+from localforge.services.circuit_breaker import CircuitBreakerService
 from localforge.services.execution import ExecutionService
 from localforge.services.loop_service import LoopService
 
@@ -34,6 +37,7 @@ class LoopCoordinator:
         self.loop_service = LoopService(session)
         self.execution_service = ExecutionService(session)
         self.audit_service = AuditService(session)
+        self.circuit_breaker_service = CircuitBreakerService(session)
 
     async def trigger_loop(
         self,
@@ -52,6 +56,16 @@ class LoopCoordinator:
 
         if loop_def.status == LoopStatus.PAUSED:
             raise ValueError(f"Loop {loop_id} is currently paused")
+
+        # Check Circuit Breaker for this Loop
+        can_proceed, breaker_state, breaker_reason = await self.circuit_breaker_service.check_breaker(
+            project_id=loop_def.project_id,
+            scope=CircuitScope.LOOP,
+            target_id=str(loop_id),
+        )
+        if not can_proceed:
+            raise ValueError(f"Loop {loop_id} is blocked by Circuit Breaker ({breaker_state.value}): {breaker_reason}")
+
 
         key = idempotency_key or f"loop_{loop_id}_{trigger_kind}_{datetime.now(UTC).timestamp()}"
 
@@ -255,3 +269,29 @@ class LoopCoordinator:
         )
         await self.loop_service.create_or_update_snapshot(snapshot)
 
+    async def kill_loop_run(
+        self,
+        run_id: int,
+        actor_id: str = "user",
+        reason: str = "Manual kill requested",
+    ) -> domain.LoopRun:
+        """Kill an active or triaging Loop Run, stopping execution and logging audit evidence."""
+        run = await self.loop_service.get_loop_run(run_id)
+        if not run:
+            raise ValueError(f"LoopRun with ID {run_id} not found")
+
+        run.status = LoopRunStatus.CANCELLED
+        run.completed_at = datetime.now(UTC)
+        run.error_message = f"Killed by {actor_id}: {reason}"
+        updated_run = await self.loop_service.update_loop_run(run)
+
+        loop_def = await self.loop_service.get_loop(run.loop_id)
+        if loop_def:
+            await self._log_audit_event(
+                project_id=loop_def.project_id,
+                details=f"LoopRun {run_id} killed by {actor_id}: {reason}",
+                execution_id=run.scheduler_run_id,
+            )
+            await self._update_loop_snapshot(run.loop_id, active_run_id=None)
+
+        return updated_run

@@ -1064,3 +1064,69 @@ class LoopStateSnapshotORM(Base):
             total_runs=d.total_runs,
             total_cost_usd=d.total_cost_usd,
         )
+
+
+class CircuitBreakerStateORM(Base):
+    __tablename__ = "circuit_breaker_states"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
+    scope: Mapped[str] = mapped_column(String(50), nullable=False)
+    target_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    state: Mapped[str] = mapped_column(String(50), default="CLOSED", nullable=False)
+    consecutive_failures: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    stagnation_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    fingerprint_counts_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    last_fingerprint: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    opened_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    cooldown_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    evidence_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    schema_version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC)
+    )
+
+    def to_domain(self) -> domain.CircuitBreakerState:
+        return domain.CircuitBreakerState(
+            id=self.id,
+            project_id=self.project_id,
+            scope=enums.CircuitScope(self.scope),
+            target_id=self.target_id,
+            state=enums.CircuitState(self.state),
+            consecutive_failures=self.consecutive_failures,
+            stagnation_count=self.stagnation_count,
+            fingerprint_counts=self.fingerprint_counts_json,
+            last_fingerprint=self.last_fingerprint,
+            opened_at=self.opened_at,
+            cooldown_until=self.cooldown_until,
+            reason=self.reason,
+            evidence_json=self.evidence_json,
+            schema_version=self.schema_version,
+            created_at=self.created_at,
+            updated_at=self.updated_at,
+        )
+
+    @classmethod
+    def from_domain(cls, d: domain.CircuitBreakerState) -> "CircuitBreakerStateORM":
+        return cls(
+            id=d.id,
+            project_id=d.project_id,
+            scope=d.scope.value if isinstance(d.scope, enums.CircuitScope) else str(d.scope),
+            target_id=d.target_id,
+            state=d.state.value if isinstance(d.state, enums.CircuitState) else str(d.state),
+            consecutive_failures=d.consecutive_failures,
+            stagnation_count=d.stagnation_count,
+            fingerprint_counts_json=d.fingerprint_counts,
+            last_fingerprint=d.last_fingerprint,
+            opened_at=d.opened_at,
+            cooldown_until=d.cooldown_until,
+            reason=d.reason,
+            evidence_json=d.evidence_json,
+            schema_version=d.schema_version,
+            created_at=d.created_at,
+            updated_at=d.updated_at,
+        )

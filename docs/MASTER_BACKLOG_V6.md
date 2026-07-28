@@ -511,53 +511,54 @@ verification mandatory for code-changing work.
 
 ### V6-300 — Define autonomy levels
 
-- [ ] L0: definition, plan, and simulation only.
-- [ ] L1: report-only inspection with no repository mutation.
-- [ ] L2: isolated implementation, validation, and draft PR with human review.
-- [ ] L3: unattended execution up to `PR_READY`, still without merge.
-- [ ] Define permitted actions, required approvals, maximum budgets, and
+- [x] L0: definition, plan, and simulation only.
+- [x] L1: report-only inspection with no repository mutation.
+- [x] L2: isolated implementation, validation, and draft PR with human review.
+- [x] L3: unattended execution up to `PR_READY`, still without merge.
+- [x] Define permitted actions, required approvals, maximum budgets, and
       escalation behavior for each level.
 
 ### V6-301 — Enforce autonomy in the action path
 
-- [ ] Evaluate autonomy before file, command, network, provider, Git, PR, and
+- [x] Evaluate autonomy before file, command, network, provider, Git, PR, and
       external-system actions.
-- [ ] Reject attempts to elevate autonomy through prompts, skills, task metadata,
+- [x] Reject attempts to elevate autonomy through prompts, skills, task metadata,
       or graph mutations.
-- [ ] Require explicit persisted approval for level changes.
-- [ ] Record effective level and policy source in every action audit.
+- [x] Require explicit persisted approval for level changes.
+- [x] Record effective level and policy source in every action audit.
 
 ### V6-302 — Separate maker and checker identities
 
-- [ ] Add explicit implementer and verifier assignments.
-- [ ] Prevent the same TaskRun/agent context from being the sole checker.
-- [ ] Give the checker fresh task contracts and evidence rather than hidden
+- [x] Add explicit implementer and verifier assignments.
+- [x] Prevent the same TaskRun/agent context from being the sole checker.
+- [x] Give the checker fresh task contracts and evidence rather than hidden
       implementer reasoning.
-- [ ] Allow deterministic checks to reject work before model-based review.
-- [ ] Require the checker to report tests executed and `not_checked`.
+- [x] Allow deterministic checks to reject work before model-based review.
+- [x] Require the checker to report tests executed and `not_checked`.
 
 ### V6-303 — Define acceptance and human handoff
 
-- [ ] Separate task implementation, technical verification, `PR_READY`, human
+- [x] Separate task implementation, technical verification, `PR_READY`, human
       acceptance, merge, and deployment statuses.
-- [ ] Require human review for every merge.
-- [ ] Add clear handoff payloads for blocked, rejected, and ready work.
-- [ ] Prevent role spoofing through free-form payload fields.
+- [x] Require human review for every merge.
+- [x] Add clear handoff payloads for blocked, rejected, and ready work.
+- [x] Prevent role spoofing through free-form payload fields.
 
 **Targeted regression**
 
-- [ ] L0 and L1 cannot write.
-- [ ] L2 can write only in an approved worktree and cannot merge.
-- [ ] L3 can reach `PR_READY` but cannot merge.
-- [ ] Same-context self-verification is rejected.
-- [ ] Missing checker evidence prevents `PR_READY`.
-- [ ] Autonomy escalation without approval is rejected and audited.
+- [x] L0 and L1 cannot write.
+- [x] L2 can write only in an approved worktree and cannot merge.
+- [x] L3 can reach `PR_READY` but cannot merge.
+- [x] Same-context self-verification is rejected.
+- [x] Missing checker evidence prevents `PR_READY`.
+- [x] Autonomy escalation without approval is rejected and audited.
 
 **Phase 3 exit gate**
 
-- [ ] All autonomy levels pass positive and negative permission tests.
-- [ ] A maker cannot approve its own code-changing task.
-- [ ] Complete the mandatory phase synchronization gate.
+- [x] All autonomy levels pass positive and negative permission tests.
+- [x] A maker cannot approve its own code-changing task.
+- [x] Complete the mandatory phase synchronization gate.
+
 
 ---
 

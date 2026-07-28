@@ -17,6 +17,8 @@ from localforge.services.simulation import APISimulationService
 from localforge.services.loop_service import LoopService
 from localforge.services.loop_coordinator import LoopCoordinator
 from localforge.services.circuit_breaker import CircuitBreakerService
+from localforge.services.autonomy import AutonomyService
+from localforge.services.maker_checker import MakerCheckerService
 from localforge.storage.database import DatabaseManager, db_manager
 
 
@@ -45,6 +47,8 @@ class UnitOfWork:
         self.loops: LoopService | None = None
         self.loop_coordinator: LoopCoordinator | None = None
         self.circuit_breakers: CircuitBreakerService | None = None
+        self.autonomy: AutonomyService | None = None
+        self.maker_checker: MakerCheckerService | None = None
 
     async def __aenter__(self) -> Self:
         self.session = await self.db_manager.get_session()
@@ -62,7 +66,10 @@ class UnitOfWork:
         self.loops = LoopService(self.session)
         self.loop_coordinator = LoopCoordinator(self.session)
         self.circuit_breakers = CircuitBreakerService(self.session)
+        self.autonomy = AutonomyService()
+        self.maker_checker = MakerCheckerService(self.session)
         return self
+
 
 
 

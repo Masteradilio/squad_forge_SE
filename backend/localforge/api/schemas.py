@@ -145,3 +145,25 @@ class CircuitBreakerResetRequest(BaseModel):
 class KillRunRequest(BaseModel):
     actor_id: str = "user"
     reason: str = "Manual kill requested via API"
+
+
+class VerificationCreateRequest(BaseModel):
+    project_id: int
+    task_run_id: int
+    maker_agent_id: str
+    checker_agent_id: str
+
+
+class VerificationSubmitRequest(BaseModel):
+    checker_agent_id: str
+    approved: bool
+    deterministic_passed: bool
+    tests_executed: list[str] = Field(default_factory=list)
+    not_checked: list[str] = Field(default_factory=list)
+    feedback: str | None = None
+
+
+class AutonomyEvaluateRequest(BaseModel):
+    autonomy_level: str
+    action_kind: str
+    target: str | None = None

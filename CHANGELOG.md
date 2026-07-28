@@ -4,6 +4,17 @@ All notable changes to LocalForge OS will be documented in this file.
 
  ## [Unreleased]
 
+### V6 Phase 3 - Progressive Autonomy and Independent Maker/Checker - 2026-07-27
+
+#### Added
+- **Enforced Server Autonomy Policies L0-L3**: Created `autonomy.py` and `AutonomyService` evaluating action permissions before file write, command execution, git commit, and `PR_READY` transitions. Enforced `git_merge` denial for all automated agents.
+- **Independent Maker/Checker Verification & Migration v9**: Created `maker_checker.py`, `MakerCheckerVerification` model, and `MakerCheckerVerificationORM` with version 9 schema upgrade path.
+- **Self-Verification & Role Spoofing Prevention**: Implemented strict validation rejecting self-approval (`maker_agent_id == checker_agent_id`) and unassigned verifier submissions (`DENIED_ROLE_SPOOFING`).
+- **Deterministic Gates & PR_READY Eligibility**: Required successful unit tests/linters (`deterministic_passed=True`) and explicit test execution or `not_checked` reporting before tasks can reach `PR_READY`.
+- **REST API & CLI Surfaces**: Added `/autonomy/evaluate`, `/verifications`, `/verifications/{id}/submit`, `/task-runs/{id}/pr-ready-check` REST routes and `localforge autonomy` CLI commands (`evaluate`, `verify-pr`).
+- **Phase 3 Evidence**: Added `docs/e2e/v6/phase_03/manifest.json`, `docs/e2e/v6/phase_03/test_summary.json`, and `docs/e2e/v6/phase_03/acceptance_report.md`.
+
+
 ### V6 Phase 2 - Circuit Breakers, Progress Detection, and Kill Controls - 2026-07-27
 
 #### Added

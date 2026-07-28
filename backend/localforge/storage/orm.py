@@ -1130,3 +1130,60 @@ class CircuitBreakerStateORM(Base):
             created_at=d.created_at,
             updated_at=d.updated_at,
         )
+
+
+class MakerCheckerVerificationORM(Base):
+    __tablename__ = "maker_checker_verifications"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
+    task_run_id: Mapped[int] = mapped_column(
+        ForeignKey("task_runs.id", ondelete="CASCADE"), nullable=False
+    )
+    maker_agent_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    checker_agent_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(String(50), default="PENDING", nullable=False)
+    tests_executed_json: Mapped[Any] = mapped_column(JSON, default=list, nullable=False)
+    not_checked_json: Mapped[Any] = mapped_column(JSON, default=list, nullable=False)
+
+    deterministic_passed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    checker_feedback: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC)
+    )
+
+    def to_domain(self) -> domain.MakerCheckerVerification:
+        return domain.MakerCheckerVerification(
+            id=self.id,
+            project_id=self.project_id,
+            task_run_id=self.task_run_id,
+            maker_agent_id=self.maker_agent_id,
+            checker_agent_id=self.checker_agent_id,
+            status=enums.VerificationStatus(self.status),
+            tests_executed=self.tests_executed_json if isinstance(self.tests_executed_json, list) else [],
+            not_checked=self.not_checked_json if isinstance(self.not_checked_json, list) else [],
+            deterministic_passed=self.deterministic_passed,
+            checker_feedback=self.checker_feedback,
+            created_at=self.created_at,
+            updated_at=self.updated_at,
+        )
+
+    @classmethod
+    def from_domain(cls, d: domain.MakerCheckerVerification) -> "MakerCheckerVerificationORM":
+        return cls(
+            id=d.id,
+            project_id=d.project_id,
+            task_run_id=d.task_run_id,
+            maker_agent_id=d.maker_agent_id,
+            checker_agent_id=d.checker_agent_id,
+            status=d.status.value if isinstance(d.status, enums.VerificationStatus) else str(d.status),
+            tests_executed_json=d.tests_executed,
+            not_checked_json=d.not_checked,
+            deterministic_passed=d.deterministic_passed,
+            checker_feedback=d.checker_feedback,
+            created_at=d.created_at,
+            updated_at=d.updated_at,
+        )

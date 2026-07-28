@@ -255,3 +255,45 @@ class SwarmCreateRequest(BaseModel):
     policy: SwarmPolicyInput = Field(default_factory=SwarmPolicyInput)
     auto_start: bool = True
 
+
+class MemoryFactCreateRequest(BaseModel):
+    project_id: int
+    fact: str
+    kind: str = "stack_fact"
+    source: str = "manual"
+    category: str = "OBSERVED_FACT"
+    validity: str = "AUTHORITATIVE"
+    confidence: float = 1.0
+    pinned: bool = False
+    repository: str | None = None
+    run_id: int | None = None
+    task_key: str | None = None
+    attempt_number: int | None = None
+    artifact_id: int | None = None
+    verifier: str | None = None
+    policy_scope: str | None = None
+    tags: list[str] = Field(default_factory=list)
+
+
+class MemoryRelationCreateRequest(BaseModel):
+    source_fact_id: int
+    target_fact_id: int
+    relation_type: str
+    provenance: dict[str, Any] = Field(default_factory=dict)
+
+
+class MemoryConsolidateRequest(BaseModel):
+    project_id: int
+    max_fact_age_days: int = 90
+    deduplication_threshold: float = 0.95
+
+
+class MemoryRetrieveRequest(BaseModel):
+    project_id: int
+    query: str
+    task_key: str | None = None
+    category: str | None = None
+    validity: str | None = None
+    limit: int = 5
+
+

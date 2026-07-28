@@ -4,6 +4,19 @@ All notable changes to LocalForge OS will be documented in this file.
 
  ## [Unreleased]
 
+### V6 Phase 10 - Provenance-Aware Operational Memory - 2026-07-28
+
+#### Added
+- **Memory Enums & Schema v15**: Added `MemoryFactCategory`, `MemoryRelationType`, `MemoryValidityStatus` enums. Updated `memory_facts` ORM table with provenance columns (`repository`, `run_id`, `task_key`, `attempt_number`, `artifact_id`, `verifier`, `validity`, `confidence`, `policy_scope`, `category`). Created `memory_relations` ORM table (Schema Version 15).
+- **Extended Memory Provenance (V6-1000)**: Captured detailed provenance metadata. Categorized facts into observed facts, decisions, constraints, failure patterns, outcomes, and human instructions. Restricted learning to validated evidence; unverified or failed attempts are marked non-authoritative (`REJECTED`/`UNVERIFIED`).
+- **Memory Relationships & Cycle Prevention (V6-1001)**: Created `MemoryRelation` entity and `MemoryRelationService`. Supported relationship types `RELATES_TO`, `SUPERSEDES`, `CONTRADICTS`, `DERIVED_FROM`, `VALIDATED_BY`. Added DFS cycle prevention for partial-order relationships (`SUPERSEDES`, `DERIVED_FROM`). Automatically update target fact validity to `SUPERSEDED` or `CONTRADICTED`.
+- **Consolidation & Staleness Expiration (V6-1002)**: Added `MemoryRetentionPolicy` and bounded `consolidate_memory()` background job. Automatically expires facts older than `max_fact_age_days` and merges/supersedes exact duplicate facts.
+- **Structured Retrieval & Evaluation Benchmark (V6-1003)**: Built `retrieve_advanced()` with structured filters (task, file path, category, validity). Added `calculate_retrieval_metrics()` for Recall@k, MRR, latency, zero-result rate, stale hit rate, and contradictory hit rate. Created `MockEmbeddingProvider` protocol interface to keep tests zero-cost without external paid APIs.
+- **Safe Prompt Injection & Human Overrides (V6-1004)**: Built `inject_scoped_memory()` to format read-only, scoped, authoritative memory context for agent prompts, strictly isolated from permission elevation. Provided REST endpoints (`/memory/...`) and CLI sub-app (`localforge memory`) for manual fact creation, relationship mapping, consolidation, retrieval, and human overrides.
+- **Phase 10 Evidence**: Added `docs/e2e/v6/phase_10/` with manifest, test summary, and acceptance report.
+
+
+
 ### V6 Phase 9 - Server-Owned Dynamic Task DAG and Deep Swarm - 2026-07-27
 
 #### Added

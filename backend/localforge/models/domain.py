@@ -45,9 +45,13 @@ from localforge.models.enums import (
     GraphMutationType,
     GraphNodeKind,
     DeepSwarmStatus,
+    MemoryFactCategory,
+    MemoryRelationType,
+    MemoryValidityStatus,
     SquadRole,
     SeniorityClass,
 )
+
 
 
 
@@ -227,8 +231,71 @@ class MemoryFact(BaseModel):
     pinned: bool = False
     status: str = "active"
     tags: list[str] = Field(default_factory=list)
+    # Provenance-aware extensions (Phase 10 / V6-1000)
+    repository: Optional[str] = None
+    run_id: Optional[int] = None
+    task_key: Optional[str] = None
+    attempt_number: Optional[int] = None
+    artifact_id: Optional[int] = None
+    verifier: Optional[str] = None
+    validity: MemoryValidityStatus = MemoryValidityStatus.AUTHORITATIVE
+    confidence: float = 1.0
+    policy_scope: Optional[str] = None
+    category: MemoryFactCategory = MemoryFactCategory.OBSERVED_FACT
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
+
+
+class MemoryRelation(BaseModel):
+    """Relationship between two memory facts (V6-1001)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: Optional[int] = None
+    source_fact_id: int
+    target_fact_id: int
+    relation_type: MemoryRelationType
+    provenance: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime = Field(default_factory=utc_now)
+
+
+class MemoryRetentionPolicy(BaseModel):
+    """Project-configurable retention and staleness policy (V6-1002)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    max_fact_age_days: int = 90
+    auto_expire_unverified: bool = True
+    consolidation_enabled: bool = True
+    deduplication_threshold: float = 0.95
+
+
+class MemoryRetrievalFilter(BaseModel):
+    """Structured search filters for operational memory (V6-1003)."""
+
+    task_key: Optional[str] = None
+    file_path: Optional[str] = None
+    error_fingerprint: Optional[str] = None
+    provider: Optional[str] = None
+    category: Optional[MemoryFactCategory] = None
+    validity: Optional[MemoryValidityStatus] = None
+    tags: list[str] = Field(default_factory=list)
+
+
+class MemoryRetrievalBenchmarkResult(BaseModel):
+    """Evaluation metrics for retrieval quality baseline (V6-1003)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    total_queries: int = 0
+    recall_at_k: float = 0.0
+    mrr: float = 0.0                      # Mean Reciprocal Rank
+    latency_ms: float = 0.0
+    zero_result_rate: float = 0.0
+    stale_hit_rate: float = 0.0
+    contradictory_hit_rate: float = 0.0
+    created_at: datetime = Field(default_factory=utc_now)
+
 
 
 class Policy(BaseModel):

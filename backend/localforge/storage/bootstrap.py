@@ -202,8 +202,49 @@ async def bootstrap_database(db_manager: DatabaseManager) -> int:
                             "(plan_id, graph_version)"
                         )
                     )
+
+            # Phase 10 / Schema v15 Migration: Memory provenance columns and memory_relations table
+            if current_version < 15:
+                async with db_manager.engine.begin() as conn:
+                    result = await conn.execute(text("PRAGMA table_info(memory_facts)"))
+                    memory_fact_columns = {row[1] for row in result.fetchall()}
+
+                    if "repository" not in memory_fact_columns:
+                        await conn.execute(text("ALTER TABLE memory_facts ADD COLUMN repository TEXT"))
+                    if "run_id" not in memory_fact_columns:
+                        await conn.execute(text("ALTER TABLE memory_facts ADD COLUMN run_id INTEGER"))
+                    if "task_key" not in memory_fact_columns:
+                        await conn.execute(text("ALTER TABLE memory_facts ADD COLUMN task_key VARCHAR(100)"))
+                    if "attempt_number" not in memory_fact_columns:
+                        await conn.execute(text("ALTER TABLE memory_facts ADD COLUMN attempt_number INTEGER"))
+                    if "artifact_id" not in memory_fact_columns:
+                        await conn.execute(text("ALTER TABLE memory_facts ADD COLUMN artifact_id INTEGER"))
+                    if "verifier" not in memory_fact_columns:
+                        await conn.execute(text("ALTER TABLE memory_facts ADD COLUMN verifier VARCHAR(255)"))
+                    if "validity" not in memory_fact_columns:
+                        await conn.execute(text("ALTER TABLE memory_facts ADD COLUMN validity VARCHAR(50) NOT NULL DEFAULT 'AUTHORITATIVE'"))
+                    if "confidence" not in memory_fact_columns:
+                        await conn.execute(text("ALTER TABLE memory_facts ADD COLUMN confidence FLOAT NOT NULL DEFAULT 1.0"))
+                    if "policy_scope" not in memory_fact_columns:
+                        await conn.execute(text("ALTER TABLE memory_facts ADD COLUMN policy_scope VARCHAR(255)"))
+                    if "category" not in memory_fact_columns:
+                        await conn.execute(text("ALTER TABLE memory_facts ADD COLUMN category VARCHAR(50) NOT NULL DEFAULT 'OBSERVED_FACT'"))
+
+                    # Create memory_relations table if not existing
+                    await conn.execute(text("""
+                        CREATE TABLE IF NOT EXISTS memory_relations (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            source_fact_id INTEGER NOT NULL REFERENCES memory_facts(id) ON DELETE CASCADE,
+                            target_fact_id INTEGER NOT NULL REFERENCES memory_facts(id) ON DELETE CASCADE,
+                            relation_type VARCHAR(50) NOT NULL,
+                            provenance_json JSON NOT NULL DEFAULT '{}',
+                            created_at DATETIME
+                        )
+                    """))
+
             session.add(SchemaVersionORM(version=CURRENT_VERSION))
             await session.commit()
+
 
             # Seed pricing snapshots
             await seed_pricing_data(session)

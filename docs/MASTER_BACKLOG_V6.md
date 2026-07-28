@@ -941,63 +941,64 @@ considering a semantic graph or embeddings.
 
 ### V6-1000 — Extend memory provenance
 
-- [ ] Record project, repository, source Run, task, attempt, artifact, verifier,
+- [x] Record project, repository, source Run, task, attempt, artifact, verifier,
       timestamp, validity, confidence, and policy scope.
-- [ ] Distinguish observed fact, decision, constraint, failure pattern, outcome,
+- [x] Distinguish observed fact, decision, constraint, failure pattern, outcome,
       and human instruction.
-- [ ] Link learned facts only to validated evidence.
-- [ ] Prevent failed or rejected attempts from becoming authoritative memory.
+- [x] Link learned facts only to validated evidence.
+- [x] Prevent failed or rejected attempts from becoming authoritative memory.
 
 ### V6-1001 — Add memory relationships
 
-- [ ] Add `relates_to`, `supersedes`, `contradicts`, `derived_from`, and
+- [x] Add `relates_to`, `supersedes`, `contradicts`, `derived_from`, and
       `validated_by`.
-- [ ] Preserve relationship provenance and timestamps.
-- [ ] Prevent cycles where relationship semantics require a partial order.
-- [ ] Render conflicting and superseded facts explicitly.
+- [x] Preserve relationship provenance and timestamps.
+- [x] Prevent cycles where relationship semantics require a partial order.
+- [x] Render conflicting and superseded facts explicitly.
 
 ### V6-1002 — Add consolidation and staleness
 
-- [ ] Detect exact duplicates, semantic candidates, contradictions, and expired
+- [x] Detect exact duplicates, semantic candidates, contradictions, and expired
       facts.
-- [ ] Require deterministic or human resolution before replacing authoritative
+- [x] Require deterministic or human resolution before replacing authoritative
       memory.
-- [ ] Add project-configurable retention and staleness policy.
-- [ ] Run consolidation in a bounded background job.
+- [x] Add project-configurable retention and staleness policy.
+- [x] Run consolidation in a bounded background job.
 
 ### V6-1003 — Improve retrieval and evaluation
 
-- [ ] Establish a versioned lexical/structured retrieval baseline.
-- [ ] Add task, file, error fingerprint, provider, and outcome filters.
-- [ ] Measure Recall@k, MRR, latency, zero-result rate, stale-hit rate, and
+- [x] Establish a versioned lexical/structured retrieval baseline.
+- [x] Add task, file, error fingerprint, provider, and outcome filters.
+- [x] Measure Recall@k, MRR, latency, zero-result rate, stale-hit rate, and
       contradictory-hit rate.
-- [ ] Add embeddings only behind an optional interface and only if measured
+- [x] Add embeddings only behind an optional interface and only if measured
       retrieval improves.
-- [ ] Keep paid embedding services out of default tests.
+- [x] Keep paid embedding services out of default tests.
 
 ### V6-1004 — Integrate memory safely with Loop and Swarm
 
-- [ ] Inject only scoped, current, provenance-bearing facts.
-- [ ] Give the checker access to evidence provenance, not hidden maker reasoning.
-- [ ] Record which memories influenced a task.
-- [ ] Allow humans to pin, correct, supersede, or invalidate memory.
-- [ ] Prevent retrieved memory from changing policy or autonomy.
+- [x] Inject only scoped, current, provenance-bearing facts.
+- [x] Give the checker access to evidence provenance, not hidden maker reasoning.
+- [x] Record which memories influenced a task.
+- [x] Allow humans to pin, correct, supersede, or invalidate memory.
+- [x] Prevent retrieved memory from changing policy or autonomy.
 
 **Targeted regression**
 
-- [ ] Provenance persistence and scope isolation.
-- [ ] Supersession and contradiction behavior.
-- [ ] Stale fact exclusion.
-- [ ] Failed-attempt learning rejection.
-- [ ] Retrieval benchmark reproducibility.
-- [ ] Prompt-injected memory cannot elevate permissions.
-- [ ] Existing V5 memory backup compatibility.
+- [x] Provenance persistence and scope isolation.
+- [x] Supersession and contradiction behavior.
+- [x] Stale fact exclusion.
+- [x] Failed-attempt learning rejection.
+- [x] Retrieval benchmark reproducibility.
+- [x] Prompt-injected memory cannot elevate permissions.
+- [x] Existing V5 memory backup compatibility.
 
 **Phase 10 exit gate**
 
-- [ ] Operational memory is provenance-aware and evaluated.
-- [ ] Semantic embeddings are enabled only if evidence justifies them.
-- [ ] Complete the mandatory phase synchronization gate.
+- [x] Operational memory is provenance-aware and evaluated.
+- [x] Semantic embeddings are enabled only if evidence justifies them.
+- [x] Complete the mandatory phase synchronization gate.
+
 
 ---
 

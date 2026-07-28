@@ -470,12 +470,24 @@ class MemoryFactORM(Base):
     pinned: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     status: Mapped[str] = mapped_column(String(30), default="active", nullable=False)
     tags: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    # Provenance fields (Phase 10 / V6-1000)
+    repository: Mapped[str | None] = mapped_column(Text, nullable=True)
+    run_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    task_key: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    attempt_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    artifact_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    verifier: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    validity: Mapped[str] = mapped_column(String(50), default="AUTHORITATIVE", nullable=False)
+    confidence: Mapped[float] = mapped_column(Float, default=1.0, nullable=False)
+    policy_scope: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    category: Mapped[str] = mapped_column(String(50), default="OBSERVED_FACT", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC)
     )
 
     def to_domain(self) -> domain.MemoryFact:
+        from localforge.models.enums import MemoryFactCategory, MemoryValidityStatus
         return domain.MemoryFact(
             id=self.id,
             project_id=self.project_id,
@@ -485,6 +497,16 @@ class MemoryFactORM(Base):
             pinned=self.pinned,
             status=self.status,
             tags=self.tags,
+            repository=self.repository,
+            run_id=self.run_id,
+            task_key=self.task_key,
+            attempt_number=self.attempt_number,
+            artifact_id=self.artifact_id,
+            verifier=self.verifier,
+            validity=MemoryValidityStatus(self.validity),
+            confidence=self.confidence,
+            policy_scope=self.policy_scope,
+            category=MemoryFactCategory(self.category),
             created_at=self.created_at,
             updated_at=self.updated_at,
         )
@@ -494,15 +516,65 @@ class MemoryFactORM(Base):
         return cls(
             id=d.id,
             project_id=d.project_id,
-            kind=d.kind.value,
+            kind=d.kind.value if isinstance(d.kind, enums.MemoryRecordKind) else str(d.kind),
             fact=d.fact,
             source=d.source,
             pinned=d.pinned,
             status=d.status,
             tags=d.tags,
+            repository=d.repository,
+            run_id=d.run_id,
+            task_key=d.task_key,
+            attempt_number=d.attempt_number,
+            artifact_id=d.artifact_id,
+            verifier=d.verifier,
+            validity=d.validity.value if isinstance(d.validity, enums.MemoryValidityStatus) else str(d.validity),
+            confidence=d.confidence,
+            policy_scope=d.policy_scope,
+            category=d.category.value if isinstance(d.category, enums.MemoryFactCategory) else str(d.category),
             created_at=d.created_at,
             updated_at=d.updated_at,
         )
+
+
+class MemoryRelationORM(Base):
+    """ORM for MemoryRelation (V6-1001)."""
+
+    __tablename__ = "memory_relations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    source_fact_id: Mapped[int] = mapped_column(
+        ForeignKey("memory_facts.id", ondelete="CASCADE"), nullable=False
+    )
+    target_fact_id: Mapped[int] = mapped_column(
+        ForeignKey("memory_facts.id", ondelete="CASCADE"), nullable=False
+    )
+    relation_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    provenance_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+
+    def to_domain(self) -> domain.MemoryRelation:
+        from localforge.models.enums import MemoryRelationType
+        return domain.MemoryRelation(
+            id=self.id,
+            source_fact_id=self.source_fact_id,
+            target_fact_id=self.target_fact_id,
+            relation_type=MemoryRelationType(self.relation_type),
+            provenance=dict(self.provenance_json or {}),
+            created_at=self.created_at,
+        )
+
+    @classmethod
+    def from_domain(cls, d: domain.MemoryRelation) -> "MemoryRelationORM":
+        return cls(
+            id=d.id,
+            source_fact_id=d.source_fact_id,
+            target_fact_id=d.target_fact_id,
+            relation_type=d.relation_type.value if isinstance(d.relation_type, enums.MemoryRelationType) else str(d.relation_type),
+            provenance_json=dict(d.provenance),
+            created_at=d.created_at,
+        )
+
 
 
 class PolicyORM(Base):

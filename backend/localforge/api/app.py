@@ -19,6 +19,7 @@ from localforge.api.routes import (
     circuit_breakers_router,
     light_swarm_router,
     loops_router,
+    memory_router,
     runners_router,
     task_graph_router,
     typed_handoffs_router,
@@ -123,6 +124,8 @@ def create_app(
     app.include_router(typed_handoffs_router)
     app.include_router(light_swarm_router)
     app.include_router(task_graph_router)
+    app.include_router(memory_router)
+
 
 
 

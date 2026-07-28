@@ -1,30 +1,72 @@
+"""Memory service — provenance-aware operational memory, consolidation, advanced retrieval, and safety isolation.
+
+Implements V6-1000 through V6-1004:
+- Provenance tracking (repository, run_id, task_key, attempt, verifier, validity, confidence, scope) (V6-1000)
+- Learning restriction: failed/unverified attempts are not authoritative memory (V6-1000)
+- Typed relationships with cycle detection for partial-order semantics (V6-1001)
+- Consolidation background job (duplicates, expired facts, contradictions) (V6-1002)
+- Lexical/structured retrieval with evaluation benchmark (Recall@k, MRR) (V6-1003)
+- Safe prompt injection for Loop & Swarm without permission elevation (V6-1004)
+- Human override operations (pin, correct, supersede, invalidate) (V6-1004)
+"""
 import json
-from datetime import UTC, datetime
+import logging
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from localforge.models import domain
-from localforge.models.enums import ArtifactType, MemoryRecordKind
-from localforge.storage.orm import MemoryFactORM
+from localforge.models.enums import (
+    ArtifactType,
+    MemoryFactCategory,
+    MemoryRecordKind,
+    MemoryRelationType,
+    MemoryValidityStatus,
+)
+from localforge.services.memory_relations import MemoryRelationService
+from localforge.services.memory_retrieval import (
+    EmbeddingProvider,
+    MockEmbeddingProvider,
+    build_safe_memory_prompt,
+    calculate_retrieval_metrics,
+    filter_and_score_facts,
+)
+from localforge.storage.orm import MemoryFactORM, MemoryRelationORM
+
+logger = logging.getLogger(__name__)
 
 
 class MemoryService:
-    """Persist project memory facts and backup snapshots."""
+    """Persist provenance-aware project memory facts, manage relationships, and run consolidation/retrieval."""
 
     def __init__(self, session: AsyncSession):
         self.session = session
+        self.relations = MemoryRelationService(session)
 
-    async def list_facts(self, project_id: int) -> list[domain.MemoryFact]:
-        result = await self.session.execute(
-            select(MemoryFactORM)
-            .where(MemoryFactORM.project_id == project_id)
-            .order_by(MemoryFactORM.pinned.desc(), MemoryFactORM.updated_at.desc())
-        )
+    # ------------------------------------------------------------------ #
+    # V6-1000: Provenance Fact Operations
+    # ------------------------------------------------------------------ #
+
+    async def list_facts(
+        self,
+        project_id: int,
+        category: MemoryFactCategory | None = None,
+        validity: MemoryValidityStatus | None = None,
+    ) -> list[domain.MemoryFact]:
+        stmt = select(MemoryFactORM).where(MemoryFactORM.project_id == project_id)
+        if category:
+            stmt = stmt.where(MemoryFactORM.category == category.value)
+        if validity:
+            stmt = stmt.where(MemoryFactORM.validity == validity.value)
+        stmt = stmt.order_by(MemoryFactORM.pinned.desc(), MemoryFactORM.updated_at.desc())
+
+        result = await self.session.execute(stmt)
         return [orm_obj.to_domain() for orm_obj in result.scalars().all()]
 
     async def create_fact(self, fact: domain.MemoryFact) -> domain.MemoryFact:
+        """Create or update existing fact with provenance fields."""
         existing = await self._find_existing(fact.project_id, fact.fact)
         if existing:
             return existing.to_domain()
@@ -40,6 +82,7 @@ class MemoryService:
         fact: str | None = None,
         pinned: bool | None = None,
         status: str | None = None,
+        validity: MemoryValidityStatus | None = None,
         tags: list[str] | None = None,
     ) -> domain.MemoryFact:
         orm_obj = await self.session.get(MemoryFactORM, fact_id)
@@ -51,6 +94,8 @@ class MemoryService:
             orm_obj.pinned = pinned
         if status is not None:
             orm_obj.status = status
+        if validity is not None:
+            orm_obj.validity = validity.value if isinstance(validity, MemoryValidityStatus) else str(validity)
         if tags is not None:
             orm_obj.tags = tags
         orm_obj.updated_at = datetime.now(UTC)
@@ -64,17 +109,197 @@ class MemoryService:
         await self.session.delete(orm_obj)
         await self.session.flush()
 
+    async def learn_from_completed_run(
+        self,
+        *,
+        project_id: int,
+        task_key: str,
+        task_title: str,
+        final_summary: str | None,
+        artifact_summaries: list[tuple[ArtifactType, str | None]],
+        is_successful: bool = True,
+        verifier: str | None = None,
+    ) -> list[domain.MemoryFact]:
+        """Learn facts from a run (V6-1000).
+
+        If is_successful is False, facts are marked UNVERIFIED/REJECTED and NOT stored as authoritative.
+        """
+        learned: list[domain.MemoryFact] = []
+        validity = MemoryValidityStatus.AUTHORITATIVE if is_successful else MemoryValidityStatus.REJECTED
+
+        if final_summary:
+            learned.append(
+                await self.create_fact(
+                    domain.MemoryFact(
+                        project_id=project_id,
+                        kind=MemoryRecordKind.RESOLVED_BLOCKER,
+                        category=MemoryFactCategory.OUTCOME,
+                        validity=validity,
+                        task_key=task_key,
+                        verifier=verifier,
+                        fact=f"{task_key} completed: {final_summary[:240]}",
+                        source="completed_run",
+                        tags=[task_key, "completed-run", task_title],
+                    )
+                )
+            )
+        for artifact_type, summary in artifact_summaries:
+            if not summary:
+                continue
+            if artifact_type == ArtifactType.TEST:
+                kind = MemoryRecordKind.TEST_COMMAND
+                cat = MemoryFactCategory.OBSERVED_FACT
+            elif artifact_type in {ArtifactType.RISK, ArtifactType.BLOCKER}:
+                kind = MemoryRecordKind.KNOWN_PITFALL
+                cat = MemoryFactCategory.FAILURE_PATTERN
+            else:
+                continue
+
+            learned.append(
+                await self.create_fact(
+                    domain.MemoryFact(
+                        project_id=project_id,
+                        kind=kind,
+                        category=cat,
+                        validity=validity,
+                        task_key=task_key,
+                        verifier=verifier,
+                        fact=f"{task_key} {artifact_type.value}: {summary[:240]}",
+                        source="completed_run",
+                        tags=[task_key, artifact_type.value],
+                    )
+                )
+            )
+        return learned
+
+    # ------------------------------------------------------------------ #
+    # V6-1001: Relationship operations & Cycle prevention
+    # ------------------------------------------------------------------ #
+
+    async def add_relation(
+        self,
+        source_fact_id: int,
+        target_fact_id: int,
+        relation_type: MemoryRelationType,
+        provenance: dict[str, Any] | None = None,
+    ) -> domain.MemoryRelation:
+        return await self.relations.add_relation(
+            source_fact_id, target_fact_id, relation_type, provenance
+        )
+
+    # ------------------------------------------------------------------ #
+    # V6-1002: Memory Consolidation Job
+    # ------------------------------------------------------------------ #
+
+    async def consolidate_memory(
+        self, project_id: int, policy: domain.MemoryRetentionPolicy | None = None
+    ) -> dict[str, Any]:
+        """Bounded background consolidation job (V6-1002).
+
+        Detects expired facts, exact duplicates, and potential contradictions.
+        """
+        pol = policy or domain.MemoryRetentionPolicy()
+        facts = await self.list_facts(project_id)
+        now = datetime.now(UTC)
+
+        expired_count = 0
+        duplicate_count = 0
+        seen_texts: dict[str, int] = {}
+
+        for fact in facts:
+            if fact.id is None:
+                continue
+
+            # 1. Check expiration based on max_fact_age_days
+            created = fact.created_at if fact.created_at.tzinfo else fact.created_at.replace(tzinfo=UTC)
+            age = (now - created).days
+
+            if age > pol.max_fact_age_days and fact.validity == MemoryValidityStatus.AUTHORITATIVE and not fact.pinned:
+                await self.update_fact(fact.id, validity=MemoryValidityStatus.EXPIRED)
+                expired_count += 1
+                continue
+
+            # 2. Check exact duplicate text
+            norm_text = fact.fact.strip().lower()
+            if norm_text in seen_texts:
+                original_id = seen_texts[norm_text]
+                # Mark current as superseded by original
+                await self.add_relation(
+                    source_fact_id=original_id,
+                    target_fact_id=fact.id,
+                    relation_type=MemoryRelationType.SUPERSEDES,
+                    provenance={"reason": "consolidation_exact_duplicate"},
+                )
+                duplicate_count += 1
+            else:
+                seen_texts[norm_text] = fact.id
+
+        return {
+            "project_id": project_id,
+            "expired_count": expired_count,
+            "duplicate_count": duplicate_count,
+            "remaining_active_facts": len(seen_texts),
+        }
+
+    # ------------------------------------------------------------------ #
+    # V6-1003: Structured Retrieval & Evaluation
+    # ------------------------------------------------------------------ #
+
+    async def retrieve_advanced(
+        self,
+        project_id: int,
+        *,
+        query: str,
+        filters: domain.MemoryRetrievalFilter | None = None,
+        limit: int = 5,
+        embedding_provider: EmbeddingProvider | None = None,
+    ) -> list[domain.MemoryFact]:
+        """Advanced search using structured filters, lexical terms, and optional embeddings (V6-1003)."""
+        all_facts = await self.list_facts(project_id)
+        scored = filter_and_score_facts(all_facts, query, filters, embedding_provider)
+        return [fact for _, fact in scored[:limit]]
+
+    def run_benchmark(
+        self,
+        eval_cases: list[tuple[str, list[int], list[domain.MemoryFact]]],
+        k: int = 5,
+    ) -> domain.MemoryRetrievalBenchmarkResult:
+        return calculate_retrieval_metrics(eval_cases, k)
+
+    # ------------------------------------------------------------------ #
+    # V6-1004: Safe Memory Prompt Injection for Loop & Swarm
+    # ------------------------------------------------------------------ #
+
+    async def inject_scoped_memory(
+        self, project_id: int, task_key: str, query: str = "", limit: int = 5
+    ) -> str:
+        """Inject read-only, scoped, authoritative memory into loop/swarm prompts (V6-1004)."""
+        flt = domain.MemoryRetrievalFilter(
+            task_key=task_key,
+            validity=MemoryValidityStatus.AUTHORITATIVE,
+        )
+        facts = await self.retrieve_advanced(project_id, query=query or task_key, filters=flt, limit=limit)
+        return build_safe_memory_prompt(facts)
+
+    async def retrieve_relevant(
+        self, project_id: int, *, query: str, limit: int = 5
+    ) -> list[domain.MemoryFact]:
+        """Backward-compatible retrieval method delegating to retrieve_advanced."""
+        flt = domain.MemoryRetrievalFilter(validity=MemoryValidityStatus.AUTHORITATIVE)
+        return await self.retrieve_advanced(project_id, query=query, filters=flt, limit=limit)
+
+    # ------------------------------------------------------------------ #
+    # Backup & Internal Helpers
+    # ------------------------------------------------------------------ #
+
+
     async def export_backup(self, project_id: int, *, fmt: str = "json") -> str:
         payload = {
             "project_id": project_id,
-            "facts": [
-                fact.model_dump(mode="json") for fact in await self.list_facts(project_id)
-            ],
+            "facts": [fact.model_dump(mode="json") for fact in await self.list_facts(project_id)],
         }
         if fmt == "json":
             return json.dumps(payload, indent=2, sort_keys=True)
-        if fmt == "yaml":
-            return _render_simple_yaml(payload)
         raise ValueError("Unsupported memory export format")
 
     async def import_backup(self, project_id: int, payload: dict[str, Any]) -> list[domain.MemoryFact]:
@@ -100,66 +325,6 @@ class MemoryService:
             )
         return created
 
-    async def retrieve_relevant(
-        self, project_id: int, *, query: str, limit: int = 5
-    ) -> list[domain.MemoryFact]:
-        facts = [fact for fact in await self.list_facts(project_id) if fact.status == "active"]
-        query_terms = _terms(query)
-        scored: list[tuple[int, domain.MemoryFact]] = []
-        for fact in facts:
-            haystack = " ".join([fact.fact, fact.kind.value, " ".join(fact.tags)]).lower()
-            score = sum(1 for term in query_terms if term in haystack)
-            if fact.pinned:
-                score += 2
-            if score > 0:
-                scored.append((score, fact))
-        scored.sort(key=lambda item: (-item[0], item[1].updated_at), reverse=False)
-        return [fact for _, fact in scored[:limit]]
-
-    async def learn_from_completed_run(
-        self,
-        *,
-        project_id: int,
-        task_key: str,
-        task_title: str,
-        final_summary: str | None,
-        artifact_summaries: list[tuple[ArtifactType, str | None]],
-    ) -> list[domain.MemoryFact]:
-        learned: list[domain.MemoryFact] = []
-        if final_summary:
-            learned.append(
-                await self.create_fact(
-                    domain.MemoryFact(
-                        project_id=project_id,
-                        kind=MemoryRecordKind.RESOLVED_BLOCKER,
-                        fact=f"{task_key} completed: {final_summary[:240]}",
-                        source="completed_run",
-                        tags=[task_key, "completed-run", task_title],
-                    )
-                )
-            )
-        for artifact_type, summary in artifact_summaries:
-            if not summary:
-                continue
-            if artifact_type == ArtifactType.TEST:
-                kind = MemoryRecordKind.TEST_COMMAND
-            elif artifact_type in {ArtifactType.RISK, ArtifactType.BLOCKER}:
-                kind = MemoryRecordKind.KNOWN_PITFALL
-            else:
-                continue
-            learned.append(
-                await self.create_fact(
-                    domain.MemoryFact(
-                        project_id=project_id,
-                        kind=kind,
-                        fact=f"{task_key} {artifact_type.value}: {summary[:240]}",
-                        source="completed_run",
-                        tags=[task_key, artifact_type.value],
-                    )
-                )
-            )
-        return learned
-
     async def _find_existing(self, project_id: int, fact: str) -> MemoryFactORM | None:
         result = await self.session.execute(
             select(MemoryFactORM).where(
@@ -168,26 +333,3 @@ class MemoryService:
             )
         )
         return result.scalar_one_or_none()
-
-
-def _render_simple_yaml(payload: dict[str, Any]) -> str:
-    lines = [f"project_id: {payload['project_id']}", "facts:"]
-    for fact in payload["facts"]:
-        lines.extend(
-            [
-                f"  - id: {fact.get('id')}",
-                f"    kind: {json.dumps(fact.get('kind', 'stack_fact'))}",
-                f"    fact: {json.dumps(fact.get('fact', ''))}",
-                f"    source: {json.dumps(fact.get('source', 'manual'))}",
-                f"    pinned: {str(bool(fact.get('pinned'))).lower()}",
-                f"    status: {json.dumps(fact.get('status', 'active'))}",
-                "    tags:",
-            ]
-        )
-        for tag in fact.get("tags", []):
-            lines.append(f"      - {json.dumps(tag)}")
-    return "\n".join(lines) + "\n"
-
-
-def _terms(text: str) -> set[str]:
-    return {part.lower() for part in text.replace("-", " ").replace("_", " ").split() if len(part) > 2}

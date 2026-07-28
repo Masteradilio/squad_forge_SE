@@ -1,314 +1,234 @@
 # LocalForge OS
 
-LocalForge OS is an open-source, economy-aware AI software engineering control plane. It
-turns a PRD into a sprint backlog, routes work across an agent squad, executes
-tasks in isolated worktrees, validates outputs with deterministic gates, attempts
-bounded self-healing, and prepares pull requests for human review.
+LocalForge OS is an open-source, economy-aware AI software engineering control plane. It turns product specifications (PRDs) into sprint backlogs, routes work across a specialized agent squad, executes tasks in isolated Git worktrees, validates outputs through deterministic gates, performs bounded self-healing, and prepares pull requests for human review.
 
-The active open-source release contract is documented in
-`docs/MASTER_BACKLOG_V6.md`. Earlier backlogs remain as architectural history.
+The official V6 contract and architectural specifications are documented in `docs/LocalForge_OS_PRD.md` and `docs/MASTER_BACKLOG_V6.md`.
 
-## Product Thesis
+---
 
-LocalForge is not a general personal assistant or a purely local autonomous coder. Earlier
-validation showed that local models are useful for scoped, cheap,
-verifiable work, but they are not reliable as the primary engine for large UI
-rewrites, architecture decisions, cross-file semantic consistency, and hard
-recovery loops.
+## 🏛️ V6 Architecture Overview
 
-The current architecture is:
+LocalForge OS V6 decouples orchestration into two separate, complementary layers:
 
-```text
-Contract-first, economy-aware AI software engineering control plane.
+1. **Loop Control Plane**: Manages long-running operational loops, event triggers, triage logic, idempotency, circuit breakers, and autonomy levels (L0 to L3).
+2. **Swarm Execution Engine**: Manages static (Light Swarm) and dynamic (Deep Swarm) DAG execution of bounded agent tasks with capability-aware `RunnerPool` dispatch, isolated worktrees, and typed evidence handoffs.
+
+```mermaid
+flowchart TD
+    PO[Product Owner / Human] -->|PRD / Trigger| LCP[Loop Control Plane]
+    LCP -->|Cheap Deterministic Triage| L1[L1 Daily Triage / Report-Only]
+    LCP -->|Actionable Items| L2[L2 CI Sweeper / PR Babysitter]
+
+    L2 -->|Plan Decomposition| SEE[Swarm Execution Engine]
+    SEE -->|DFS Acyclicity & Policy Check| DAG[Validated DAG Plan]
+
+    DAG -->|Node Dispatch| RP[RunnerPool & PathIntents]
+    RP -->|Isolated Worktree| WT[Git Worktree]
+
+    WT -->|Maker Execution| Maker[Developer / Senior Dev]
+    Maker -->|Typed Handoff Artifact| Checker[Independent Checker / QA]
+
+    Checker -->|Verification Artifact| Gate{Verifier Gate}
+    Gate -->|Passed| PR[Draft PR / PR_READY]
+    Gate -->|Failed / Retry Exceeded| CB[Circuit Breaker / Escalation]
+
+    PR -->|Human Merge Only| PO
+
+    style PO fill:#2d3748,stroke:#4a5568,color:#fff
+    style LCP fill:#1a365d,stroke:#2b6cb0,color:#fff
+    style SEE fill:#276749,stroke:#38a169,color:#fff
+    style Gate fill:#744210,stroke:#d69e2e,color:#fff
+    style PR fill:#22543d,stroke:#38a169,color:#fff
+    style CB fill:#742a2a,stroke:#e53e3e,color:#fff
 ```
 
-The user acts as Product Owner. A deterministic orchestrator freezes scope and routes
-work. Local models handle bounded tasks when their results can be verified cheaply;
-larger API models handle architecture, semantic recovery, and high-risk review. API
-lanes receive scoped evidence bundles rather than unrestricted repository context.
 
-## Squad Roles
+---
 
-| Squad role | LocalForge role | Default model tier | Responsibility |
+## 🤖 Squad Roles & Economy-First Routing
+
+LocalForge routes each task to the cheapest tier empirically capable of performing it correctly. API models handle architecture, hard debugging, and high-risk reviews, while local models handle narrow execution under frozen contracts.
+
+| Squad Role | System Role | Default Model Tier | Responsibility |
 | --- | --- | --- | --- |
-| Product Owner | Human user | Human | Provides PRD, reviews pull requests, accepts product outcomes |
-| Scrum Master + Staff Engineer | Chief Engineer | API large model | Plans work, freezes contracts, handles hard implementation, triages failures |
-| Senior Developer | High-risk Coder | API large/medium model | Complex UI, architecture, large rewrites, multi-file changes |
-| Developer | Bounded Coder | Local medium model | Narrow implementation under frozen contracts |
-| QA Engineer | Tester | Local/deterministic | Focused tests and validation artifacts |
-| Bug Fixer | Fixer | Local first, API when needed | Syntax/import/simple repair locally; semantic or repeated failures escalate |
-| Reviewer | Reviewer | API for final review | Contract-aware PR readiness review |
-| PR Writer | PR artifact agent | Local small model | Summaries, changelog drafts, PR body text |
-| Safety Auditor | Safety Kernel | Deterministic/local | File, command, dependency, budget, and policy enforcement |
+| **Product Owner** | Human User | Human | Defines requirements, reviews PRs, performs final merge |
+| **Chief Engineer** | Master Orchestrator | API Large Model | Plans sprints, freezes contracts, triages hard failures |
+| **Senior Developer** | High-risk Coder | API Medium/Large | Complex UI, architecture changes, multi-file refactoring |
+| **Developer** | Bounded Coder | Local Medium Model | Single-file implementation under frozen contracts |
+| **QA Engineer** | Tester | Local / Deterministic | Focused tests, verification, and artifact validation |
+| **Bug Fixer** | Fast Repair | Local First, API Fallback | Repair syntax/import failures; escalate semantic errors |
+| **Reviewer** | Acceptance Gate | API Large Model | Final contract-aware PR review |
+| **PR Writer** | Documentarian | Local Small Model | PR summaries, changelog drafts, release evidence |
+| **Safety Auditor** | Safety Kernel | Deterministic | Enforces budget, shell command rules, and file boundaries |
 
-## Economy-First Routing
+---
 
-LocalForge routes each task to the cheapest tier that is empirically capable of
-doing it correctly. The router considers task complexity, file size, visual or
-semantic fidelity requirements, previous failures, truncation, timeout history,
-and deterministic validation results.
+## 🔒 Autonomy Levels & Permanent Human-Merge Requirement
 
-Typical routing:
+LocalForge operates under strict autonomy bounds. **Auto-merge is permanently disabled** — every generated pull request requires explicit human review and approval before merging into the main branch.
 
-- Chief-only: architecture, contract design, hard debugging, large UI rewrites,
-  repeated self-healing failures.
-- Chief-led: planning and review by the Chief Engineer, narrow implementation by
-  local agents.
-- Local-assisted: small isolated changes with strong tests and strict file
-  contracts.
-- Local-only: summaries, simple scaffolds, small test edits, deterministic
-  transformations.
-- Deterministic-only: validation, diff checks, command safety, cost accounting,
-  visual comparison, artifact generation.
+| Autonomy Level | Name | Allowed Operations | Human Requirement |
+| --- | --- | --- | --- |
+| **L0** | Manual | Inspect and propose actions; no automatic execution | Human triggers every step |
+| **L1** | Inspect & Report | Inspect issues, PRs, and CI state; produce prioritized report | Zero repository or external mutations |
+| **L2** | Draft-PR Workflow | Create isolated worktrees, fix allowlisted regressions, submit draft PRs | **Human review and merge required** |
+| **L3** | Autonomous | Run continuous loops, create draft PRs, manage retry budgets | **Human review and merge required** |
 
-## Cost Benchmarking
+> ⚠️ **CRITICAL SAFETY INVARIANT**: LocalForge agents will NEVER execute `git push --force`, merge directly to `main`, weaken failing unit tests, or bypass configured circuit breakers.
 
-Every paid model call should be recorded in a cost ledger. Every generated pull
-request should include a benchmark table comparing LocalForge actual cost with
-hypothetical API-only baselines.
+---
 
-The permanent benchmark sources are:
+## 🔄 Supported Operational Loops
 
-- OpenAI API pricing: <https://openai.com/api/pricing/>
-- Anthropic Claude pricing: <https://platform.claude.com/docs/en/about-claude/pricing>
-- Google Gemini API pricing: <https://ai.google.dev/gemini-api/docs/pricing>
+LocalForge OS V6 delivers three initial operational loops:
 
-The benchmark is not a claim about the internal billing of Codex, Antigravity,
-Claude Code, Cursor, or any proprietary IDE agent. It is an API-token cost model
-using public pricing pages as refreshable references.
+### 1. Daily Project Triage (L1)
+- **Mode**: Report-Only (0 external mutations, $0.00 LLM cost on first-pass triage).
+- **Function**: Inspects open issues, pull requests, and CI state.
+- **Safety**: Deterministic triage neutralizes malicious prompt injections (`IGNORE_AND_LOG`) without policy escalation. Preserves `acting_on` idempotency state across restarts.
 
-Each PR should eventually report:
+### 2. CI Sweeper (L2)
+- **Mode**: Draft-PR Workflow.
+- **Function**: Classifies CI failures into `CODE_REGRESSION`, `FLAKE`, `ENVIRONMENT`, `CONFIG`, `DEPENDENCY`, `UNKNOWN`.
+- **Safety**: Automatically repairs **only** allowlisted `CODE_REGRESSION` failures in an isolated worktree under a max 3-attempt circuit breaker limit. Never weakends or deletes failing tests.
 
-| Metric | LocalForge actual | OpenAI API-only | Google API-only | Anthropic API-only |
-| --- | --- | --- | --- | --- |
-| Paid input tokens | | | | |
-| Paid output tokens | | | | |
-| Local estimated tokens | | | | |
-| Large-tier equivalent cost | | | | |
-| Medium-tier equivalent cost | | | | |
-| Small-tier equivalent cost | | | | |
-| Estimated savings | | | | |
+### 3. PR Babysitter (L2)
+- **Mode**: Draft-PR Workflow.
+- **Function**: Monitors PR review comments, requested changes, and mergeability.
+- **Safety**: Deduplicates events, applies allowlisted small fixes, revalidates evidence when the upstream branch changes, and escalates merge conflicts without silent overwrites. Strictly prohibits self-approval or self-merge.
 
-At project completion, LocalForge should consolidate all PR-level measurements
-into a final cost rollup showing total API spend, local work handled without API
-cost, cost by role, cost by task, cost by PR, retry/failure costs, and estimated
-savings against the API-only baselines.
+---
 
-## Safety Model
+## ⚡ Swarm Execution Flow (Light Swarm)
 
-LocalForge keeps the original safety goals:
+The **Light Swarm Execution Engine** executes task plans as bounded Directed Acyclic Graphs (DAGs):
 
-- isolated worktrees per task;
-- strict file contracts;
-- command validation before execution;
-- bounded repair loops;
-- budget limits for time, tokens, retries, files, and diff size;
-- fail-safe states instead of uncontrolled autonomy;
-- human review before merge.
+```mermaid
+sequenceDiagram
+    autonumber
+    participant PO as Product Owner / Loop
+    participant LSS as LightSwarmService
+    participant RP as RunnerPool
+    participant Maker as Maker Worker
+    participant Checker as Independent Checker
+    participant DB as ORM / Transaction DB
 
-This routing model is not weaker safety. It uses expensive
-model intelligence is used where it is needed, while deterministic gates and
-local agents keep cost under control.
+    PO->>LSS: create_plan(nodes, edges, policy)
+    LSS->>LSS: Validate DFS Acyclicity & Policy Bounds
+    LSS->>DB: Persist SwarmPlan (Schema v15)
+    PO->>LSS: start_swarm(plan_id)
 
-## Server-Owned Task Graph and Swarm Modes
+    loop DAG Execution
 
-V6 separates bounded fixed decomposition from experimental dynamic expansion:
+        LSS->>RP: Dispatch Ready Nodes
+        RP->>Maker: Execute Node in Isolated Worktree
+        Maker->>LSS: complete_node(node_id, TypedHandoffArtifact)
+        LSS->>Checker: Dispatch Independent Checker (CRITIQUE / VERIFY)
+        Checker->>LSS: Verify Evidence & Produce Verdict
+    end
 
-- **Light Swarm** executes a validated, fixed DAG with bounded workers and an
-  independent checker.
-- **Deep Swarm** can expand a versioned task graph through server-validated
-  mutations. It is opt-in, experimental, and disabled by default.
-- Agents may propose mutations, but only the server may apply them. The server
-  rejects stale versions, cycles, ownership violations, direct status changes,
-  unregistered conditional branches, and depth, fan-out, resource, or budget
-  violations.
-- Every accepted mutation is recorded in an append-only journal and can be
-  deterministically replayed from graph version 0.
-- Restart reconciliation restores the ready queue and reports persisted
-  attempts, leases, and typed artifacts. External actions retain stable
-  idempotency keys so workers can retry without changing the action identity.
+    LSS->>DB: Aggregate Summary & Persist SwarmRun
+    LSS-->>PO: Return SwarmExecutionSummary (PR_READY)
+```
 
-The REST surface is exposed under `/graph/{plan_id}` and `/deep-swarms`; the CLI
-surface is `localforge graph`. Deep Swarm should remain disabled in production
-until Phase 11 provides comparative evidence for enabling it.
+---
 
-## Run Lifecycle and Self-Healing Promise
+## 📊 Measured Phase 11 Evaluation Results
 
-The Product Owner hands a PRD to the Scrum Master and waits. The Squad
-promises to either deliver all tasks `PR_READY` for human review **or**
-escalate the remaining work honestly to `BLOCKED_NEEDS_HUMAN_REVIEW` with
-per-task blockers in `run_summary.md`. The runtime never closes a run
-silently in a half-finished state.
+In Phase 11 comparative evaluations across controlled test fixture corpora, LocalForge OS demonstrated empirical superiority of the `LOOP_LIGHT_SWARM` strategy over single-worker baselines:
 
-Concretely, the scheduler runs a `recovery_cycle` whenever any task is in
-`FAILED_SAFE` or `BLOCKED`. Each cycle:
+| Execution Strategy | PR_READY Rate | Recall | Execution Duration | Total Token Cost | Gate Verdict |
+| --- | --- | --- | --- | --- | --- |
+| **Single-Worker V5 Baseline** | 0.60 | 0.80 | 1200 ms | $0.4500 | `PARTIAL` |
+| **Loop Single-Worker** | 0.80 | 0.95 | 800 ms | $0.3000 | `ACCEPTED` |
+| **Loop Light Swarm** | **0.95** | **1.00** | **650 ms** | **$0.2500** | **`ACCEPTED`** |
+| **Loop Deep Swarm (Experimental)** | 0.85 | 0.90 | 1800 ms | $0.8500 | `PARTIAL` |
 
-1. **Budget check** — `_recovery_budget_remaining` reads the live paid-USD
-   ledger and the `recovery_cycles_used` counter. If the absolute USD
-   ceiling (`max_paid_usd_absolute = $6.0`) or the per-run cycle ceiling
-   (`max_run_recovery_cycles = 3`) is exhausted, the cycle does not run.
-2. **Scrum Master unblock** — reopens recoverable tasks with Chief
-   Engineer guidance attached to the task contract.
-3. **Repair** — the pipeline attempts up to
-   `max_repair_attempts = 5` fixer rounds per cycle. Exceeding that
-   surfaces a clear `FAILED_SAFE` rather than throwing.
-4. **Escalate or close** — when the budget is gone, every remaining
-   `FAILED_SAFE` is moved to `BLOCKED_NEEDS_HUMAN_REVIEW` and the run is
-   finalized with the per-task blocker detail. The PO can reopen these
-   tasks from `READY` later.
+> 📌 **NOTE**: Deep Swarm and semantic embeddings remain marked as **experimental** (`PARTIAL` verdict) because Light Swarm produces higher `PR_READY` rates at lower cost and latency on static task graphs.
 
-Absolute ceilings (defaults; tune in `.localforge/config.yaml`):
+---
 
-| Resource | Default ceiling | Field |
-| --- | --- | --- |
-| Run wall time | 5400 s (90 min) | `max_run_time` |
-| Per-task duration | 900 s | `max_task_duration` |
-| Repair rounds per cycle | 5 | `max_repair_attempts` |
-| Repair rounds absolute | 10 | `max_repair_attempts_absolute` |
-| Scheduler recovery cycles | 3 | `max_run_recovery_cycles` |
-| Paid USD per cycle | $4.0 | `max_paid_usd` |
-| Paid USD absolute per run | $6.0 | `max_paid_usd_absolute` |
-| Worked tree files | 12 | `max_file_count` |
-| Diff growth | 4000 chars | `max_diff_growth` |
-
-Even at the defaults the economy-first routing keeps paid spend tight:
-on the V4 pilot, ~70 % of model calls were executed on local Ollama
-models (`gemma4:12b` → `granite4.1:8b` → `nemotron-3-nano:4b`) and the
-remaining 30 % went through the Chief Engineer lane with NVIDIA NIM as
-primary and OpenRouter as fallback. See
-`scripts/run_benchmark_v4_only.py` for the reproducible harness.
-If the Squad cannot produce a fully green run, the resulting
-`BLOCKED_NEEDS_HUMAN_REVIEW` count appears in the V4 benchmark verdict
-and in any run's `run_summary.md`, so the closure is auditable rather
-than disguised.
-
-## Demo: reproduce a real V5.2 run locally
-
-``samples/demo-lf-smoke-prd/`` records a real end-to-end demo of the
-V5.2 release. Five PRD tasks are driven through the hardened
-scheduler against a configured Chief Engineer lane (NVIDIA NIM
-primary with OpenRouter fallback) and an explicit Ollama work lane
-(gemma4:12b).
-
-- **3 / 5 tasks reached ``PR_READY``** in ~11 minutes
-- 2 / 5 tasks honestly escalated to ``BLOCKED_NEEDS_HUMAN_REVIEW``
-  after the absolute recovery ceiling was reached
-- Paid USD = **$0.0029** (two Chief Engineer repair calls executed
-  through the OpenRouter fallback after the NIM free tier rejected
-  the request). OpenAI / Anthropic / Google API-only baselines
-  $0.1555 / $0.1453 / $0.0398 respectively.
-- V4 benchmark verdict: ``PARTIAL`` (3 PR_READY of 5, 2 escalated to
-  human review). The verdict is honest.
-- Ollama context window: ``LOCALFORGE_LLM_NUM_CTX=32768`` matches
-  the gemma4:12b supported context budget.
-- ``samples/demo-lf-smoke-prd/RUN_NOTES.md`` is the human-facing
-  reproduction guide; ``run_summary.md`` and ``cost_benchmark.md``
-  are the machine-verifiable artifacts produced by the run.
-
-## Quick Setup
+## 🚀 Quickstart & Usage
 
 ### Prerequisites
+- Python 3.11+
+- Node.js 18+
+- Git 2.40+
 
-- Python 3.11 or 3.12+
-- Node.js LTS
-- Git
-- Optional: Ollama for local model lanes
-- Optional: OpenRouter-compatible credentials for Chief Engineer API lanes
-
-### Install the backend and CLI
+### Installation
 
 ```bash
+# Clone the repository
+git clone https://github.com/Masteradilio/local_forge_os.git
+cd local_forge_os
+
+# Install Python dependencies in virtualenv
 python -m venv .venv
-source .venv/bin/activate  # Windows PowerShell: .\.venv\Scripts\Activate.ps1
-python -m pip install -e ".[dev]"
-localforge doctor
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+pip install -e backend
+
+# Install Frontend dependencies
+npm install --prefix frontend
 ```
 
-`localforge --version` is a non-destructive installation smoke check and requires no model
-or paid-provider credentials.
-
-PowerShell users can still use `./scripts/setup_backend.ps1` for the contributor setup.
-
-### Frontend
-
-```powershell
-./scripts/setup_frontend.ps1
-```
-
-or:
+### Running the Control Plane
 
 ```bash
-./scripts/setup_frontend.sh
-```
+# Initialize database (auto-migrates up to Schema Version 15)
+python manage.py bootstrap-db
 
-## Running LocalForge
-
-Start the backend:
-
-```bash
+# Run backend API server
 python manage.py run-backend
+
+# Run frontend UI
+npm run dev --prefix frontend
 ```
 
-Start the frontend:
+### CLI Quickstart
 
 ```bash
-python manage.py run-frontend
+# Run L1 Daily Project Triage (report-only, 0 cost)
+localforge loops-eval triage
+
+# Run L2 CI Sweeper auto-repair on a build failure
+localforge loops-eval ci-sweeper --build-id 101
+
+# Run strategy comparison matrix
+localforge loops-eval compare
+
+# Inspect provenance-aware memory facts
+localforge memory list --project-id 1
+
+# Manage Light Swarm execution
+localforge swarm status --run-id 1
 ```
 
-Open the frontend at:
+---
 
-```text
-http://localhost:5173
-```
+## 🧪 Validation & Regression Suite
 
-## Validation
-
-Use targeted validation while developing:
+Run targeted validation commands during development:
 
 ```bash
-python -m pytest backend/tests/<target_test_file>.py -q
-mypy backend
+# Run backend Pytest suite (276+ tests)
+python -m pytest backend/tests -q
+
+# Run static type checker
+python -m mypy backend
+
+# Run frontend Vitest unit tests (5/5 tests)
+npm test --prefix frontend
+
+# Run frontend production build validation
 npm run build --prefix frontend
 ```
 
-Run broader suites only when a phase is ready for regression validation.
+---
 
-## How LocalForge Differs from IDE Agents
+## 📄 Key Documents
 
-Unlike inline IDE agents (such as Cursor, Copilot, or Claude Code) which focus on interactive chat-driven edits on a single active file, LocalForge OS acts as an autonomous **Software Engineering Squad** in a box:
-- **Contract-first architecture**: Before coding, the Chief Engineer designs and freezes a task contract specifying allowed files, public APIs, forbidden dependencies, and canonical test commands.
-- **Isolated execution workspaces**: Every task runs inside its own Git worktree and sandboxed container, ensuring clean boundaries.
-- **Multi-agent squad logic**: Work is routed automatically based on required seniority—expensive API calls are saved for large refactorings or visual matching, while local models handle simple docs, test stubs, or mechanical updates.
-
-## Honest Limitations
-
-While LocalForge OS strives for economy-first autonomy, users must keep in mind:
-- **No Silver Bullet**: Autonomy does not mean zero oversight. A human Product Owner is always required to review final pull requests and visual similarities.
-- **Hardware Prerequisites**: Bounded local models (e.g. `granite4.1:8b`) need adequate local hardware VRAM/RAM (minimum 16GB VRAM recommended). Slow inference runs may trigger sandbox timeouts.
-- **Cost Benchmarks**: Baselines compare token volume ratios based on public competitor models. Actual proprietary IDE invoices may differ based on provider caching and billing plans.
-- **Alpha Evidence**: Historical benchmark reports describe prior executions, but disposable workspaces and credentials are intentionally not committed. Treat a result as reproducible only when its manifest, hashes, commands, and acceptance tests are available.
-- **Hybrid Privacy**: Local lanes keep source on the machine. API lanes send scoped task context to the configured provider; users requiring zero source egress must disable API routing.
-
-## Benchmark and evaluation policy
-
-LocalForge separates three kinds of evidence:
-
-- **Verified current evidence**: reproducible from the current checkout.
-- **Historical evidence**: produced by a previous run but missing disposable runtime state.
-- **Targets**: intended gates that have not yet been demonstrated.
-
-A benchmark is accepted only when real preflight checks pass, every planned task reaches
-`PR_READY`, routing contracts and model calls are persisted, PR artifacts exist, and the
-product acceptance tests pass. Cost savings or quality parity require an identical-workload
-comparison against frontier-only, economy-API-only, local-only, and hybrid lanes.
-
-## Key Documents
-
-- `docs/LocalForge_OS_PRD.md` - product requirements
-- `docs/MASTER_BACKLOG_V5.md` - active open-source readiness backlog
-- `docs/architecture/V5_ARCHITECTURE.md` - current boundaries and invariants
-- `docs/benchmarks/METHODOLOGY.md` - reproducible benchmark contract
-- `docs/e2e/README.md` - status of historical and current evaluation evidence
-- `CHANGELOG.md` - implementation history
-- `CONTRIBUTING.md` - contributor workflow and change contract
-- `SECURITY.md` - vulnerability reporting and runtime security boundaries
+- `docs/LocalForge_OS_PRD.md` — Product Requirements Document
+- `docs/MASTER_BACKLOG_V6.md` — Master V6 Engineering Backlog
+- `CHANGELOG.md` — Complete V6 Implementation History
+- `docs/e2e/v6/phase_11/acceptance_report.md` — Phase 11 Acceptance Report
+- `docs/e2e/v6/v6_release_summary.json` — Official Release Summary

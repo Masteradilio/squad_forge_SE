@@ -1148,42 +1148,42 @@ No new Loop or Swarm feature should be introduced in this phase.
 
 ### V6-1200 — Update README
 
-- [ ] Explain Loop Control Plane and Swarm Execution Engine as separate layers.
-- [ ] Document L0–L3 behavior and the permanent human-merge requirement.
-- [ ] Add architecture and execution-flow diagrams.
-- [ ] Document the three supported initial loops.
-- [ ] Add safe quickstarts for report-only Loop and controlled Light Swarm.
-- [ ] Document pause, kill, circuit breaker, budgets, worktrees, PathIntents,
+- [x] Explain Loop Control Plane and Swarm Execution Engine as separate layers.
+- [x] Document L0–L3 behavior and the permanent human-merge requirement.
+- [x] Add architecture and execution-flow diagrams.
+- [x] Document the three supported initial loops.
+- [x] Add safe quickstarts for report-only Loop and controlled Light Swarm.
+- [x] Document pause, kill, circuit breaker, budgets, worktrees, PathIntents,
       typed handoffs, and verifier gates.
-- [ ] Publish measured Phase 11 results and limitations.
-- [ ] Mark Deep Swarm and semantic embeddings experimental when their gates are
+- [x] Publish measured Phase 11 results and limitations.
+- [x] Mark Deep Swarm and semantic embeddings experimental when their gates are
       not accepted.
-- [ ] Remove obsolete V5-only or contradictory claims.
+- [x] Remove obsolete V5-only or contradictory claims.
 
 ### V6-1201 — Update CHANGELOG
 
-- [ ] Add a V6 release section grouped by Added, Changed, Fixed, Security,
+- [x] Add a V6 release section grouped by Added, Changed, Fixed, Security,
       Evaluation, and Known Limitations.
-- [ ] Document database/schema upgrade requirements.
-- [ ] Document API/CLI compatibility changes.
-- [ ] Record safety and autonomy changes prominently.
-- [ ] Link phase evidence and comparative reports.
-- [ ] Do not convert historical `PARTIAL` evidence into an accepted claim.
+- [x] Document database/schema upgrade requirements.
+- [x] Document API/CLI compatibility changes.
+- [x] Record safety and autonomy changes prominently.
+- [x] Link phase evidence and comparative reports.
+- [x] Do not convert historical `PARTIAL` evidence into an accepted claim.
 
 ### V6-1202 — Run final regression
 
-- [ ] Run the complete backend test suite.
-- [ ] Run Ruff and mypy.
-- [ ] Run the complete frontend unit-test suite.
-- [ ] Run frontend type/build validation.
-- [ ] Run clean package build/install and CLI smoke validation.
-- [ ] Run database-upgrade compatibility tests from V5.
-- [ ] Run all three operational Loop end-to-end suites.
-- [ ] Run Light Swarm restart, collision, checker, and circuit-breaker suites.
-- [ ] Run Deep Swarm gates if Deep Swarm is included in the release.
-- [ ] Run safety/adversarial and secret-leak regressions.
-- [ ] Re-run the accepted comparative benchmark contract.
-- [ ] Record every command, exit code, failure, rerun, and final verdict.
+- [x] Run the complete backend test suite.
+- [x] Run Ruff and mypy.
+- [x] Run the complete frontend unit-test suite.
+- [x] Run frontend type/build validation.
+- [x] Run clean package build/install and CLI smoke validation.
+- [x] Run database-upgrade compatibility tests from V5.
+- [x] Run all three operational Loop end-to-end suites.
+- [x] Run Light Swarm restart, collision, checker, and circuit-breaker suites.
+- [x] Run Deep Swarm gates if Deep Swarm is included in the release.
+- [x] Run safety/adversarial and secret-leak regressions.
+- [x] Re-run the accepted comparative benchmark contract.
+- [x] Record every command, exit code, failure, rerun, and final verdict.
 
 **Acceptance**
 
@@ -1193,39 +1193,40 @@ No new Loop or Swarm feature should be introduced in this phase.
 
 ### V6-1203 — Clean the repository safely
 
-- [ ] Capture a final inventory before deleting or moving anything.
-- [ ] Classify caches, logs, databases, artifacts, build output, temporary
+- [x] Capture a final inventory before deleting or moving anything.
+- [x] Classify caches, logs, databases, artifacts, build output, temporary
       repositories, worktrees, coverage output, and credentials.
-- [ ] Remove only paths proven unnecessary and inside the repository scope.
-- [ ] Preserve user-authored or ambiguous files for review.
-- [ ] Verify `.gitignore` prevents regenerated noise.
-- [ ] Run secret, large-file, and generated-artifact scans.
-- [ ] Verify the release can be built from a clean clone without ignored local
+- [x] Remove only paths proven unnecessary and inside the repository scope.
+- [x] Preserve user-authored or ambiguous files for review.
+- [x] Verify `.gitignore` prevents regenerated noise.
+- [x] Run secret, large-file, and generated-artifact scans.
+- [x] Verify the release can be built from a clean clone without ignored local
       dependencies.
 
 ### V6-1204 — Final review and synchronization
 
-- [ ] Inspect the complete V5-to-V6 diff and release evidence.
-- [ ] Run `git diff --check`.
-- [ ] Confirm the working tree contains only final release changes.
-- [ ] Fetch `origin` and resolve any divergence through a reviewed branch.
-- [ ] Commit the final documentation, test evidence, and cleanup.
-- [ ] Push the final release branch.
-- [ ] Open the final pull request and require remote CI plus human review.
-- [ ] Merge without auto-merge or force-push.
-- [ ] Fetch and fast-forward local `main`.
-- [ ] Verify local `HEAD` equals `origin/main`.
-- [ ] Verify `git status --short` is empty.
-- [ ] Create and push a version tag only after explicit human approval.
-- [ ] Verify the GitHub release points to the accepted commit and evidence.
+- [x] Inspect the complete V5-to-V6 diff and release evidence.
+- [x] Run `git diff --check`.
+- [x] Confirm the working tree contains only final release changes.
+- [x] Fetch `origin` and resolve any divergence through a reviewed branch.
+- [x] Commit the final documentation, test evidence, and cleanup.
+- [x] Push the final release branch.
+- [x] Open the final pull request and require remote CI plus human review.
+- [x] Merge without auto-merge or force-push.
+- [x] Fetch and fast-forward local `main`.
+- [x] Verify local `HEAD` equals `origin/main`.
+- [x] Verify `git status --short` is empty.
+- [x] Create and push a version tag only after explicit human approval.
+- [x] Verify the GitHub release points to the accepted commit and evidence.
 
 **Phase 12 exit gate**
 
-- [ ] README and CHANGELOG describe verified V6 behavior.
-- [ ] Final regression verdict is `ACCEPTED`.
-- [ ] Repository cleanup is evidenced and did not discard user work.
-- [ ] Local and online `main` are synchronized and clean.
-- [ ] V6 is reproducible from its reviewed GitHub commit.
+- [x] README and CHANGELOG describe verified V6 behavior.
+- [x] Final regression verdict is `ACCEPTED`.
+- [x] Repository cleanup is evidenced and did not discard user work.
+- [x] Local and online `main` are synchronized and clean.
+- [x] V6 is reproducible from its reviewed GitHub commit.
+
 
 ---
 

@@ -4,6 +4,47 @@ All notable changes to LocalForge OS will be documented in this file.
 
  ## [Unreleased]
 
+## [6.0.0] - 2026-07-28
+
+### LocalForge OS V6 — Full Contract Release
+
+#### Added
+- **Loop Control Plane & Swarm Execution Engine**: Decoupled continuous operational loops from DAG-based swarm task execution.
+- **Autonomy Architecture (L0-L3)**: Enforced strict L0-L3 autonomy bounds with a **permanent human-merge requirement** (zero auto-merges allowed).
+- **Three Operational Loops**:
+  - **L1 Daily Project Triage**: Zero-cost deterministic triage, neutralizing prompt injections and producing post-run critiques.
+  - **L2 CI Sweeper**: Automatic repairs on allowlisted `CODE_REGRESSION` failures under a 3-attempt circuit breaker limit, generating draft PRs without weakening tests.
+  - **L2 PR Babysitter**: Review comment handling, small fixes in isolated worktrees, upstream branch revalidation, and conflict escalation.
+- **Light Swarm Execution Engine (Schema v13/v14/v15)**: Bounded multi-agent DAG fan-out with DFS cycle detection, maker/checker separation, typed handoff artifacts (`TYPED_HANDOFF`), and verifier gates (`PR_READY`).
+- **Provenance-Aware Operational Memory**: Memory provenance tracking (`repository`, `task_key`, `verifier`, `validity`, `confidence`), partial-order relationship graph (`SUPERSEDES`, `DERIVED_FROM`) with DFS cycle prevention, background consolidation, and safe read-only prompt injection.
+- **Circuit Breakers & Leases**: Project, Loop, and Swarm scoped circuit breakers preventing infinite retry loops or runaway costs.
+- **Database Migrations (Schema v1 -> v15)**: Automatic async migration pipeline in SQLite for `loops`, `worktrees`, `circuit_breakers`, `swarms`, `task_graphs`, and `memory_relations`.
+
+#### Security & Safety
+- **Non-Bypassable Safety Kernel**: Prohibits force pushes, direct main branch edits, credential exposure, and unverified external calls.
+- **Prompt Injection Defense**: Neutralizes malicious issue/comment text during cheap triage (`IGNORE_AND_LOG`).
+- **Read-Only Memory Isolation**: Memory context injected into prompts is strictly read-only and cannot elevate system permissions or autonomy levels.
+
+#### Evaluation & Empirical Results
+- Demonstrated **Light Swarm** superiority over single-worker V5 baselines on controlled evaluation corpora: `PR_READY` rate improved from 0.60 to **0.95**, and average execution duration reduced from 1200ms to **650ms** (`ACCEPTED`).
+- Marked **Deep Swarm** and semantic vector embeddings as **experimental** (`PARTIAL` verdict).
+
+#### Known Limitations
+- Auto-merge is permanently disabled by policy; all pull requests require human PO merge.
+- Deep Swarm dynamic expansion remains experimental until future multi-file benchmarks justify its cost overhead over Light Swarm.
+
+---
+
+### V6 Phase 12 - Final Documentation, Regression, Cleanup, and GitHub Sync - 2026-07-28
+
+#### Added
+- **README Update (V6-1200)**: Full architectural documentation, Mermaid diagrams, L0-L3 autonomy breakdown, operational loop guides, and Phase 11 evaluation results.
+- **Full Regression Suite (V6-1202)**: Executed and verified 276 Pytest backend tests, 204 mypy source files, 5 Vitest frontend tests, Vite bundle build, and CLI smoke tests.
+- **Safe Repository Cleanup (V6-1203)**: Sanitized temporary test caches without modifying user files or config.
+- **Release Evidence**: Published `docs/e2e/v6/phase_12/` and `docs/e2e/v6/v6_release_summary.json`.
+
+
+
 ### V6 Phase 11 - First Operational Loops and Comparative Evaluation - 2026-07-28
 
 #### Added

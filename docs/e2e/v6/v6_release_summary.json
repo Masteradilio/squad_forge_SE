@@ -1,0 +1,30 @@
+{
+  "release_version": "6.0.0",
+  "release_name": "LocalForge OS V6 — Full Contract Release",
+  "date": "2026-07-28",
+  "status": "ACCEPTED",
+  "total_phases_completed": 13,
+  "phases": [
+    "Phase 0: V5 Clean Boundary & Release Closeout",
+    "Phase 1: Loop Control Plane & Durable State Model",
+    "Phase 2: Scoped Circuit Breakers, Leases, and Kill Controls",
+    "Phase 3: Autonomy Boundaries and Independent Checker",
+    "Phase 4: Non-Bypassable Safety Kernel and Preflight Safety",
+    "Phase 5: Worktree Lifecycle, Intent Tracking, and Collision Safety",
+    "Phase 6: Capability-Aware RunnerPool",
+    "Phase 7: Typed Handoffs and Evidence Lineage",
+    "Phase 8: Light Swarm Bounded Multi-Agent Fan-Out",
+    "Phase 9: Server-Owned Dynamic Task DAG and Deep Swarm",
+    "Phase 10: Provenance-Aware Operational Memory",
+    "Phase 11: First Operational Loops and Comparative Evaluation",
+    "Phase 12: Final Documentation, Regression, Cleanup, and GitHub Sync"
+  ],
+  "verification": {
+    "backend_pytest_total": 276,
+    "backend_mypy_files": 204,
+    "frontend_vitest_total": 5,
+    "frontend_build_status": "PASSED",
+    "cli_smoke_test_status": "PASSED",
+    "schema_version": 15
+  }
+}

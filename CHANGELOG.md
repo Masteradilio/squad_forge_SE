@@ -33,6 +33,12 @@ All notable changes to LocalForge OS will be documented in this file.
   `docs/e2e/v6/phase_09/`; the phase is `EVIDENCE_READY` pending remote review
   and merge.
 
+#### Fixed
+
+- **Clean-checkout packaging**: Exempted the Python source package
+  `backend/localforge/models` from the broad model-cache ignore rule so
+  installed CLI and CI environments receive the domain and enum modules.
+
 
 
 ### V6 Phase 8 - Light Swarm: Bounded Multi-Agent Fan-Out - 2026-07-27

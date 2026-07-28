@@ -28,6 +28,9 @@ def temp_git_repo(tmp_path):
 
     # git init
     repo = git.Repo.init(repo_dir)
+    repo.config_writer().set_value("user", "name", "LocalForge Test").set_value(
+        "user", "email", "localforge-test@example.invalid"
+    ).release()
 
     # Initial commit to create main branch and HEAD
     readme = repo_dir / "README.md"

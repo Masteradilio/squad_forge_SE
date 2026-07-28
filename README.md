@@ -6,7 +6,7 @@ tasks in isolated worktrees, validates outputs with deterministic gates, attempt
 bounded self-healing, and prepares pull requests for human review.
 
 The active open-source release contract is documented in
-`docs/MASTER_BACKLOG_V5.md`. Earlier V2–V4 backlogs remain as architectural history.
+`docs/MASTER_BACKLOG_V6.md`. Earlier backlogs remain as architectural history.
 
 ## Product Thesis
 
@@ -109,6 +109,28 @@ LocalForge keeps the original safety goals:
 This routing model is not weaker safety. It uses expensive
 model intelligence is used where it is needed, while deterministic gates and
 local agents keep cost under control.
+
+## Server-Owned Task Graph and Swarm Modes
+
+V6 separates bounded fixed decomposition from experimental dynamic expansion:
+
+- **Light Swarm** executes a validated, fixed DAG with bounded workers and an
+  independent checker.
+- **Deep Swarm** can expand a versioned task graph through server-validated
+  mutations. It is opt-in, experimental, and disabled by default.
+- Agents may propose mutations, but only the server may apply them. The server
+  rejects stale versions, cycles, ownership violations, direct status changes,
+  unregistered conditional branches, and depth, fan-out, resource, or budget
+  violations.
+- Every accepted mutation is recorded in an append-only journal and can be
+  deterministically replayed from graph version 0.
+- Restart reconciliation restores the ready queue and reports persisted
+  attempts, leases, and typed artifacts. External actions retain stable
+  idempotency keys so workers can retry without changing the action identity.
+
+The REST surface is exposed under `/graph/{plan_id}` and `/deep-swarms`; the CLI
+surface is `localforge graph`. Deep Swarm should remain disabled in production
+until Phase 11 provides comparative evidence for enabling it.
 
 ## Run Lifecycle and Self-Healing Promise
 

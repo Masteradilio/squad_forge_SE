@@ -1,7 +1,17 @@
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from localforge.models import domain, enums
@@ -1580,3 +1590,190 @@ class SwarmRunORM(Base):
             created_at=d.created_at,
         )
 
+
+class GraphMutationEntryORM(Base):
+    """Append-only journal of validated graph mutations (V6-900, V6-901)."""
+
+    __tablename__ = "graph_mutation_journal"
+    __table_args__ = (
+        UniqueConstraint(
+            "plan_id", "mutation_sequence", name="uq_graph_mutation_plan_sequence"
+        ),
+        UniqueConstraint(
+            "plan_id", "graph_version", name="uq_graph_mutation_plan_version"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    plan_id: Mapped[int] = mapped_column(
+        ForeignKey("swarm_plans.id", ondelete="CASCADE"), nullable=False
+    )
+    mutation_sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    graph_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    parent_graph_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    mutation_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    actor_agent_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    payload_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+
+    def to_domain(self) -> domain.GraphMutationEntry:
+        from localforge.models.enums import GraphMutationType
+        return domain.GraphMutationEntry(
+            id=self.id,
+            plan_id=self.plan_id,
+            mutation_sequence=self.mutation_sequence,
+            graph_version=self.graph_version,
+            parent_graph_version=self.parent_graph_version,
+            mutation_type=GraphMutationType(self.mutation_type),
+            actor_agent_id=self.actor_agent_id,
+            reason=self.reason,
+            payload_json=dict(self.payload_json or {}),
+            content_hash=self.content_hash,
+            created_at=self.created_at,
+        )
+
+    @classmethod
+    def from_domain(cls, d: domain.GraphMutationEntry) -> "GraphMutationEntryORM":
+        return cls(
+            id=d.id,
+            plan_id=d.plan_id,
+            mutation_sequence=d.mutation_sequence,
+            graph_version=d.graph_version,
+            parent_graph_version=d.parent_graph_version,
+            mutation_type=d.mutation_type.value if isinstance(d.mutation_type, enums.GraphMutationType) else str(d.mutation_type),
+            actor_agent_id=d.actor_agent_id,
+            reason=d.reason,
+            payload_json=dict(d.payload_json),
+            content_hash=d.content_hash,
+            created_at=d.created_at,
+        )
+
+
+class TaskGraphVersionORM(Base):
+    """Versioned snapshot of the dynamic task graph (V6-900)."""
+
+    __tablename__ = "task_graph_versions"
+    __table_args__ = (
+        UniqueConstraint(
+            "plan_id", "version", name="uq_task_graph_plan_version"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    plan_id: Mapped[int] = mapped_column(
+        ForeignKey("swarm_plans.id", ondelete="CASCADE"), nullable=False
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    nodes_snapshot_json: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    edges_snapshot_json: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    mutation_id: Mapped[int | None] = mapped_column(
+        ForeignKey("graph_mutation_journal.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+
+    def to_domain(self) -> domain.TaskGraphVersion:
+        return domain.TaskGraphVersion(
+            id=self.id,
+            plan_id=self.plan_id,
+            version=self.version,
+            nodes_snapshot_json=list(self.nodes_snapshot_json or []),
+            edges_snapshot_json=list(self.edges_snapshot_json or []),
+            content_hash=self.content_hash,
+            mutation_id=self.mutation_id,
+            created_at=self.created_at,
+        )
+
+    @classmethod
+    def from_domain(cls, d: domain.TaskGraphVersion) -> "TaskGraphVersionORM":
+        return cls(
+            id=d.id,
+            plan_id=d.plan_id,
+            version=d.version,
+            nodes_snapshot_json=list(d.nodes_snapshot_json),
+            edges_snapshot_json=list(d.edges_snapshot_json),
+            content_hash=d.content_hash,
+            mutation_id=d.mutation_id,
+            created_at=d.created_at,
+        )
+
+
+class DeepSwarmRunORM(Base):
+    """Execution state for a Deep Swarm run (V6-903, V6-904)."""
+
+    __tablename__ = "deep_swarm_runs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    plan_id: Mapped[int] = mapped_column(
+        ForeignKey("swarm_plans.id", ondelete="CASCADE"), nullable=False
+    )
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="DISABLED")
+    policy_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    current_graph_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    mutation_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    stall_ticks: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    cumulative_cost_usd: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    cumulative_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    cumulative_paid_calls: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    node_statuses_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    active_node_ids_json: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    node_side_effect_keys_json: Mapped[dict[str, Any]] = mapped_column(
+        JSON, nullable=False, default=dict
+    )
+    completed_side_effect_keys_json: Mapped[list[Any]] = mapped_column(
+        JSON, nullable=False, default=list
+    )
+    verdict: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+
+    def to_domain(self) -> domain.DeepSwarmRun:
+        from localforge.models.enums import DeepSwarmStatus
+        from localforge.models.domain import DeepSwarmPolicy
+        policy = DeepSwarmPolicy(**self.policy_json) if self.policy_json else DeepSwarmPolicy()
+        return domain.DeepSwarmRun(
+            id=self.id,
+            plan_id=self.plan_id,
+            status=DeepSwarmStatus(self.status),
+            policy=policy,
+            current_graph_version=self.current_graph_version,
+            mutation_count=self.mutation_count,
+            stall_ticks=self.stall_ticks,
+            cumulative_cost_usd=self.cumulative_cost_usd,
+            cumulative_tokens=self.cumulative_tokens,
+            cumulative_paid_calls=self.cumulative_paid_calls,
+            node_statuses=dict(self.node_statuses_json or {}),
+            active_node_ids=list(self.active_node_ids_json or []),
+            node_side_effect_keys=dict(self.node_side_effect_keys_json or {}),
+            completed_side_effect_keys=list(self.completed_side_effect_keys_json or []),
+            verdict=self.verdict,
+            started_at=self.started_at,
+            finished_at=self.finished_at,
+            created_at=self.created_at,
+        )
+
+    @classmethod
+    def from_domain(cls, d: domain.DeepSwarmRun) -> "DeepSwarmRunORM":
+        return cls(
+            id=d.id,
+            plan_id=d.plan_id,
+            status=d.status.value if isinstance(d.status, enums.DeepSwarmStatus) else str(d.status),
+            policy_json=d.policy.model_dump(mode="json"),
+            current_graph_version=d.current_graph_version,
+            mutation_count=d.mutation_count,
+            stall_ticks=d.stall_ticks,
+            cumulative_cost_usd=d.cumulative_cost_usd,
+            cumulative_tokens=d.cumulative_tokens,
+            cumulative_paid_calls=d.cumulative_paid_calls,
+            node_statuses_json=dict(d.node_statuses),
+            active_node_ids_json=list(d.active_node_ids),
+            node_side_effect_keys_json=dict(d.node_side_effect_keys),
+            completed_side_effect_keys_json=list(d.completed_side_effect_keys),
+            verdict=d.verdict,
+            started_at=d.started_at,
+            finished_at=d.finished_at,
+            created_at=d.created_at,
+        )

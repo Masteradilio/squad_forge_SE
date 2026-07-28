@@ -88,6 +88,8 @@ temp/
 
 # Large model/cache files
 models/
+!backend/localforge/models/
+!backend/localforge/models/*.py
 *.gguf
 *.safetensors
 *.bin

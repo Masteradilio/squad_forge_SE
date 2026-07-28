@@ -11,7 +11,8 @@ from localforge.storage.orm import Base, SchemaVersionORM
 
 logger = logging.getLogger(__name__)
 
-CURRENT_VERSION = 13
+CURRENT_VERSION = 15
+
 
 
 
@@ -138,6 +139,69 @@ async def bootstrap_database(db_manager: DatabaseManager) -> int:
                                 "ADD COLUMN kind VARCHAR(50) NOT NULL DEFAULT 'stack_fact'"
                             )
                         )
+                if current_version < 15:
+                    graph_columns = await conn.execute(
+                        text("PRAGMA table_info(graph_mutation_journal)")
+                    )
+                    graph_column_names = {
+                        str(row[1]) for row in graph_columns.fetchall()
+                    }
+                    if "mutation_sequence" not in graph_column_names:
+                        await conn.execute(
+                            text(
+                                "ALTER TABLE graph_mutation_journal "
+                                "ADD COLUMN mutation_sequence INTEGER "
+                                "NOT NULL DEFAULT 0"
+                            )
+                        )
+                        await conn.execute(
+                            text(
+                                "UPDATE graph_mutation_journal "
+                                "SET mutation_sequence = graph_version"
+                            )
+                        )
+
+                    deep_run_columns = await conn.execute(
+                        text("PRAGMA table_info(deep_swarm_runs)")
+                    )
+                    deep_run_column_names = {
+                        str(row[1]) for row in deep_run_columns.fetchall()
+                    }
+                    if "node_side_effect_keys_json" not in deep_run_column_names:
+                        await conn.execute(
+                            text(
+                                "ALTER TABLE deep_swarm_runs "
+                                "ADD COLUMN node_side_effect_keys_json JSON "
+                                "NOT NULL DEFAULT '{}'"
+                            )
+                        )
+                    if (
+                        "completed_side_effect_keys_json"
+                        not in deep_run_column_names
+                    ):
+                        await conn.execute(
+                            text(
+                                "ALTER TABLE deep_swarm_runs "
+                                "ADD COLUMN completed_side_effect_keys_json JSON "
+                                "NOT NULL DEFAULT '[]'"
+                            )
+                        )
+                    await conn.execute(
+                        text(
+                            "CREATE UNIQUE INDEX IF NOT EXISTS "
+                            "uq_graph_mutation_plan_sequence "
+                            "ON graph_mutation_journal "
+                            "(plan_id, mutation_sequence)"
+                        )
+                    )
+                    await conn.execute(
+                        text(
+                            "CREATE UNIQUE INDEX IF NOT EXISTS "
+                            "uq_graph_mutation_plan_version "
+                            "ON graph_mutation_journal "
+                            "(plan_id, graph_version)"
+                        )
+                    )
             session.add(SchemaVersionORM(version=CURRENT_VERSION))
             await session.commit()
 

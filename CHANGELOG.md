@@ -38,7 +38,9 @@ All notable changes to LocalForge OS will be documented in this file.
 - **Clean-checkout packaging**: Exempted the Python source package
   `backend/localforge/models` from the broad model-cache ignore rule so
   installed CLI and CI environments receive the domain and enum modules.
-
+- **Hermetic Git tests**: Configured a repository-local test identity so
+  checkpoint commits do not depend on a developer or CI runner's global Git
+  configuration.
 
 
 ### V6 Phase 8 - Light Swarm: Bounded Multi-Agent Fan-Out - 2026-07-27

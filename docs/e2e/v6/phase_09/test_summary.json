@@ -1,0 +1,45 @@
+{
+  "phase_id": "phase_09",
+  "test_suites": {
+    "phase_9_task_graph_tests": {
+      "command": "python -m pytest backend/tests/test_phase9_task_graph.py -q",
+      "status": "PASSED",
+      "total_passed": 25,
+      "total_failed": 0
+    },
+    "related_regression": {
+      "command": "python -m pytest backend/tests/test_phase8_light_swarm.py backend/tests/test_storage.py backend/tests/test_bootstrap.py backend/tests/test_api_server.py backend/tests/test_cli.py -q",
+      "status": "PASSED",
+      "total_passed": 25,
+      "total_failed": 0
+    },
+    "backend_pytest_full": {
+      "command": "python -m pytest backend/tests -q",
+      "status": "PASSED",
+      "total_passed": 260,
+      "total_failed": 0
+    },
+    "backend_mypy": {
+      "command": "python -m mypy backend",
+      "status": "PASSED",
+      "files_checked": 191,
+      "errors": 0
+    },
+    "phase_9_ruff": {
+      "status": "PASSED",
+      "errors": 0
+    },
+    "backend_ruff_global": {
+      "command": "python -m ruff check backend",
+      "status": "KNOWN_DEBT",
+      "errors": 528
+    },
+    "frontend_vitest": {
+      "command": "npm test --prefix frontend -- --run",
+      "status": "PASSED",
+      "total_passed": 5,
+      "total_failed": 0
+    }
+  },
+  "overall_status": "EVIDENCE_READY"
+}

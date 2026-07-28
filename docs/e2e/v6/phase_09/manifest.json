@@ -1,0 +1,45 @@
+{
+  "phase_id": "phase_09",
+  "task_ids": ["V6-900", "V6-901", "V6-902", "V6-903", "V6-904"],
+  "phase_name": "Server-Owned Dynamic Task DAG and Deep Swarm",
+  "evidence_generated_at": "2026-07-28T00:01:00-03:00",
+  "source_commit": "affc92a",
+  "environment": {
+    "os": "Windows",
+    "shell": "PowerShell",
+    "python_typecheck_files": 191
+  },
+  "commands": [
+    {"command": "python -m pytest backend/tests/test_phase9_task_graph.py -q", "exit_code": 0},
+    {"command": "python -m pytest backend/tests/test_phase8_light_swarm.py backend/tests/test_storage.py backend/tests/test_bootstrap.py backend/tests/test_api_server.py backend/tests/test_cli.py -q", "exit_code": 0},
+    {"command": "python -m pytest backend/tests -q", "exit_code": 0},
+    {"command": "python -m mypy backend", "exit_code": 0},
+    {"command": "python -m ruff check backend/localforge/services/task_graph.py backend/localforge/api/routes/task_graph.py backend/localforge/cli/task_graph.py backend/tests/test_phase9_task_graph.py", "exit_code": 0},
+    {"command": "npm test --prefix frontend -- --run", "exit_code": 0},
+    {"command": "python -m ruff check backend", "exit_code": 1}
+  ],
+  "changed_module_summary": {
+    "domain_and_storage": "Versioned journal, graph snapshots, bounded Deep Swarm state, and schema v14.",
+    "service": "Validated mutation, replay, execution, idempotency, and restart reconciliation.",
+    "surfaces": "REST and CLI graph and Deep Swarm controls.",
+    "tests": "Targeted semantic and integration coverage for V6-900 through V6-904.",
+    "documentation": "README, changelog, backlog status, and phase evidence."
+  },
+  "test_counts": {
+    "phase_09_passed": 25,
+    "related_passed": 25,
+    "backend_passed": 260,
+    "frontend_passed": 5,
+    "failures": 0
+  },
+  "provider_attribution": {
+    "paid_calls": 0,
+    "cost_usd": 0.0
+  },
+  "known_limitations": [
+    "Deep Swarm remains disabled by default pending Phase 11 comparative evidence.",
+    "Global backend ruff reports 528 pre-existing findings; Phase 9 files pass targeted ruff.",
+    "Final PHASE_ACCEPTED requires remote checks, human review, and reviewed merge."
+  ],
+  "verdict": "EVIDENCE_READY"
+}

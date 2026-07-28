@@ -870,60 +870,65 @@ before execution.
 
 ### V6-900 — Version the task graph
 
-- [ ] Make the server-owned graph the canonical execution structure.
-- [ ] Add graph version, mutation sequence, actor, reason, parent version, and
+- [x] Make the server-owned graph the canonical execution structure.
+- [x] Add graph version, mutation sequence, actor, reason, parent version, and
       content hash.
-- [ ] Preserve an append-only mutation journal.
-- [ ] Support deterministic replay from the initial graph and mutation journal.
+- [x] Preserve an append-only mutation journal.
+- [x] Support deterministic replay from the initial graph and mutation journal.
 
 ### V6-901 — Define validated graph mutations
 
-- [ ] Add split task, append child, add dependency, add critique, add verifier,
+- [x] Add split task, append child, add dependency, add critique, add verifier,
       supersede node, and cancel subtree operations.
-- [ ] Validate ownership, acyclicity, depth, fan-out, budget, artifacts, safety,
+- [x] Validate ownership, acyclicity, depth, fan-out, budget, artifacts, safety,
       and resource availability.
-- [ ] Prevent agents from directly changing status or dependencies.
-- [ ] Reject stale mutations against an outdated graph version.
+- [x] Prevent agents from directly changing status or dependencies.
+- [x] Reject stale mutations against an outdated graph version.
 
 ### V6-902 — Add atomic and composite nodes
 
-- [ ] Define composite completion from child evidence.
-- [ ] Add explicit critique and verification gates.
-- [ ] Allow conditional branches only through registered decision contracts.
-- [ ] Define failure propagation and partial-result behavior.
+- [x] Define composite completion from child evidence.
+- [x] Add explicit critique and verification gates.
+- [x] Allow conditional branches only through registered decision contracts.
+- [x] Define failure propagation and partial-result behavior.
 
 ### V6-903 — Implement Deep Swarm policy
 
-- [ ] Make Deep Swarm opt-in and experimental.
-- [ ] Bound maximum depth, nodes, concurrent workers, mutations, paid calls,
+- [x] Make Deep Swarm opt-in and experimental.
+- [x] Bound maximum depth, nodes, concurrent workers, mutations, paid calls,
       duration, and cost.
-- [ ] Require a justification for each dynamic expansion.
-- [ ] Prefer Light Swarm when the task fits fixed decomposition.
-- [ ] Stop expansion when marginal progress is absent.
+- [x] Require a justification for each dynamic expansion.
+- [x] Prefer Light Swarm when the task fits fixed decomposition.
+- [x] Stop expansion when marginal progress is absent.
 
 ### V6-904 — Add crash recovery and graph reconciliation
 
-- [ ] Restore graph version, ready queue, leases, attempts, and artifacts after
+- [x] Restore graph version, ready queue, leases, attempts, and artifacts after
       restart.
-- [ ] Reconcile nodes that were running during interruption.
-- [ ] Prevent completed side effects from repeating.
-- [ ] Escalate irreconcilable graph/worker state.
+- [x] Reconcile nodes that were running during interruption.
+- [x] Prevent completed side effects from repeating.
+- [x] Escalate irreconcilable graph/worker state.
 
 **Targeted regression**
 
-- [ ] Mutation replay determinism.
-- [ ] Cycle, stale-version, ownership, depth, and budget rejection.
-- [ ] Composite completion and gate behavior.
-- [ ] Dynamic child creation and typed artifact flow.
-- [ ] Crash during mutation, dispatch, and verification.
-- [ ] Duplicate external action prevention.
-- [ ] Deep-to-Light or single-worker fallback.
+- [x] Mutation replay determinism.
+- [x] Cycle, stale-version, ownership, depth, and budget rejection.
+- [x] Composite completion and gate behavior.
+- [x] Dynamic child creation and typed artifact flow.
+- [x] Crash during mutation, dispatch, and verification.
+- [x] Duplicate external action prevention.
+- [x] Deep-to-Light or single-worker fallback.
 
 **Phase 9 exit gate**
 
-- [ ] Dynamic expansion is bounded, auditable, replayable, and server-validated.
-- [ ] Deep Swarm remains disabled by default until Phase 11 evidence supports it.
+- [x] Dynamic expansion is bounded, auditable, replayable, and server-validated.
+- [x] Deep Swarm remains disabled by default until Phase 11 evidence supports it.
 - [ ] Complete the mandatory phase synchronization gate.
+
+Phase status: `EVIDENCE_READY`. The technical acceptance criteria and local
+regressions are complete. Final `PHASE_ACCEPTED` remains gated on the feature
+branch pull request, successful remote checks, human review, and reviewed merge.
+
 
 ---
 

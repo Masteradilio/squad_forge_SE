@@ -14,14 +14,17 @@ from fastapi.responses import StreamingResponse
 from pydantic import ValidationError
 
 from localforge import __version__
-from localforge.api.routes import autonomy_router, circuit_breakers_router, loops_router, worktrees_router, runners_router, typed_handoffs_router, light_swarm_router
-
-
-
-
-
+from localforge.api.routes import (
+    autonomy_router,
+    circuit_breakers_router,
+    light_swarm_router,
+    loops_router,
+    runners_router,
+    task_graph_router,
+    typed_handoffs_router,
+    worktrees_router,
+)
 from localforge.api.schemas import (
-
     ImportPRDRequest,
     MemoryFactRequest,
     MemoryFactUpdateRequest,
@@ -119,6 +122,7 @@ def create_app(
     app.include_router(runners_router)
     app.include_router(typed_handoffs_router)
     app.include_router(light_swarm_router)
+    app.include_router(task_graph_router)
 
 
 

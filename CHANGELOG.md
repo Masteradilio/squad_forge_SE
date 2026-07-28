@@ -4,6 +4,37 @@ All notable changes to LocalForge OS will be documented in this file.
 
  ## [Unreleased]
 
+### V6 Phase 9 - Server-Owned Dynamic Task DAG and Deep Swarm - 2026-07-27
+
+#### Added
+- **Schema v15 and Canonical Graph State**: Added a v14-to-v15 compatibility
+  upgrade plus unique, versioned graph
+  snapshots, explicit mutation sequences, an append-only mutation journal, and
+  persisted Deep Swarm execution/idempotency state.
+- **Deterministic Replay (V6-900)**: Reconstructs the graph from version 0,
+  verifies contiguous parent/sequence history and complete mutation hashes, and
+  rejects a latest snapshot that diverges from replay.
+- **Server-Validated Mutations (V6-901)**: Implements split, append, dependency,
+  critique, verifier, supersede, and cancel-subtree operations with stale-version,
+  ownership, acyclicity, node/depth/fan-out, typed-artifact, registered-decision,
+  resource, cost, paid-call, and server-owned-field enforcement.
+- **Composite and Gate Semantics (V6-902)**: Preserves completed partial results,
+  propagates failures, and enforces critique and verification artifact gates.
+- **Bounded Deep Swarm (V6-903)**: Remains opt-in and disabled by default; applies
+  mutation, worker, duration, cost, paid-call, and no-progress limits and prefers
+  Light Swarm or single-worker execution when policy requires it.
+- **Crash Reconciliation (V6-904)**: Rebuilds the ready queue, reports persisted
+  worktree attempts, path leases, and typed artifacts, escalates corrupt graph
+  history, and preserves stable external-action idempotency keys across restart.
+- **REST and CLI Surfaces**: Adds graph initialization, inspection, journal,
+  mutation, reconciliation, Deep Swarm lifecycle, tick, kill, and external
+  side-effect claim/completion operations.
+- **Phase 9 Evidence**: Adds reproducible evidence under
+  `docs/e2e/v6/phase_09/`; the phase is `EVIDENCE_READY` pending remote review
+  and merge.
+
+
+
 ### V6 Phase 8 - Light Swarm: Bounded Multi-Agent Fan-Out - 2026-07-27
 
 #### Added

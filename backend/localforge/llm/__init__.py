@@ -1,4 +1,10 @@
-from localforge.llm.base import BaseLLMProvider, LLMConnectionError, LLMError, LLMTimeoutError
+from localforge.llm.base import (
+    BaseLLMProvider,
+    LLMConnectionError,
+    LLMError,
+    LLMHTTPError,
+    LLMTimeoutError,
+)
 from localforge.llm.fake import FakeLLMProvider
 from localforge.llm.fallback import FallbackLLMProvider
 from localforge.llm.nvidia import NvidiaProvider
@@ -10,6 +16,7 @@ __all__ = [
     "BaseLLMProvider",
     "LLMConnectionError",
     "LLMError",
+    "LLMHTTPError",
     "LLMTimeoutError",
     "FakeLLMProvider",
     "FallbackLLMProvider",

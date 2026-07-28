@@ -69,6 +69,31 @@ async def test_local_sandbox_timeout(tmp_path):
 
 
 @pytest.mark.anyio
+async def test_local_sandbox_rejects_shell_composition(tmp_path):
+    worktree = tmp_path / "worktree"
+    worktree.mkdir()
+    sandbox = LocalSandbox(str(worktree))
+    await sandbox.create()
+
+    with pytest.raises(ValueError, match="Shell operators"):
+        await sandbox.execute("python -c \"print(1)\" && echo unsafe")
+
+    await sandbox.destroy()
+
+
+@pytest.mark.anyio
+async def test_local_sandbox_blocks_workspace_escape_during_copy(tmp_path):
+    worktree = tmp_path / "worktree"
+    worktree.mkdir()
+    source = tmp_path / "source.txt"
+    source.write_text("payload")
+    sandbox = LocalSandbox(str(worktree))
+
+    with pytest.raises(PermissionError, match="outside its worktree"):
+        await sandbox.copy_to(str(source), str(tmp_path / "outside.txt"))
+
+
+@pytest.mark.anyio
 async def test_docker_sandbox_mocked(tmp_path):
     """Verify DockerSandbox calls Docker SDK with correct configuration and local file mapping."""
     worktree = tmp_path / "worktree"

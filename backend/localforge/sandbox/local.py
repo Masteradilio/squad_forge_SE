@@ -3,6 +3,7 @@ import os
 import shutil
 
 from localforge.sandbox.base import BaseSandbox
+from localforge.safety.command_validator import command_to_argv
 
 
 class LocalSandbox(BaseSandbox):
@@ -25,8 +26,9 @@ class LocalSandbox(BaseSandbox):
         if self._status != "running":
             raise RuntimeError("Sandbox is not running.")
 
-        proc = await asyncio.create_subprocess_shell(
-            cmd,
+        argv = command_to_argv(cmd)
+        proc = await asyncio.create_subprocess_exec(
+            *argv,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             cwd=self.worktree_path,
@@ -67,6 +69,7 @@ class LocalSandbox(BaseSandbox):
 
     async def copy_to(self, host_path: str, container_path: str) -> None:
         """Copy files locally if paths differ."""
+        self._require_workspace_path(container_path, "write")
         if os.path.abspath(host_path) == os.path.abspath(container_path):
             return
         if os.path.isdir(host_path):
@@ -79,7 +82,28 @@ class LocalSandbox(BaseSandbox):
 
     async def copy_from(self, container_path: str, host_path: str) -> None:
         """Copy files locally if paths differ."""
-        await self.copy_to(container_path, host_path)
+        self._require_workspace_path(container_path, "read")
+        if os.path.abspath(container_path) == os.path.abspath(host_path):
+            return
+        if os.path.isdir(container_path):
+            if os.path.exists(host_path):
+                shutil.rmtree(host_path)
+            shutil.copytree(container_path, host_path)
+        else:
+            os.makedirs(os.path.dirname(host_path), exist_ok=True)
+            shutil.copy2(container_path, host_path)
+
+    def _require_workspace_path(self, path: str, operation: str) -> None:
+        worktree = os.path.realpath(os.path.abspath(self.worktree_path))
+        target = os.path.realpath(os.path.abspath(path))
+        try:
+            is_within_worktree = os.path.commonpath([worktree, target]) == worktree
+        except ValueError:
+            is_within_worktree = False
+        if not is_within_worktree:
+            raise PermissionError(
+                f"Local sandbox cannot {operation} outside its worktree: {path}"
+            )
 
     async def destroy(self) -> None:
         """Halt local execution state."""

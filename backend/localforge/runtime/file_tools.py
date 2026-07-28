@@ -81,8 +81,8 @@ class SafeFileEditor:
             max_files = config.budgets.max_file_count
             max_diff = config.budgets.max_diff_growth
         except Exception:
-            max_files = 20
-            max_diff = 50000
+            max_files = 10
+            max_diff = 2000
 
         # Load overrides from run if available
         if self.run_id is not None:

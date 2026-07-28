@@ -6,6 +6,9 @@
 > Continues: `MASTER_BACKLOG.md`, `MASTER_BACKLOG_V2.md`, and `MASTER_BACKLOG_V3.md` phases 1-63
 > Companion documents: `LocalForge_OS_PRD.md`, `CHANGELOG.md`
 
+> Superseded for active development by `MASTER_BACKLOG_V5.md`. V4 remains the
+> historical record of the skill-based squad migration.
+
 ---
 
 ## 0. Why This Backlog Exists

@@ -14,6 +14,8 @@ from localforge.services.safety import SafetyService
 from localforge.services.task import TaskService
 from localforge.services.cost_benchmark import CostBenchmarkService
 from localforge.services.simulation import APISimulationService
+from localforge.services.loop_service import LoopService
+from localforge.services.loop_coordinator import LoopCoordinator
 from localforge.storage.database import DatabaseManager, db_manager
 
 
@@ -39,6 +41,8 @@ class UnitOfWork:
         self.coordination: CoordinationService | None = None
         self.cost_benchmark: CostBenchmarkService | None = None
         self.simulation: APISimulationService | None = None
+        self.loops: LoopService | None = None
+        self.loop_coordinator: LoopCoordinator | None = None
 
     async def __aenter__(self) -> Self:
         self.session = await self.db_manager.get_session()
@@ -53,7 +57,10 @@ class UnitOfWork:
         self.coordination = CoordinationService(self.session)
         self.cost_benchmark = CostBenchmarkService(self.session)
         self.simulation = APISimulationService(self.session)
+        self.loops = LoopService(self.session)
+        self.loop_coordinator = LoopCoordinator(self.session)
         return self
+
 
     async def __aexit__(
         self,

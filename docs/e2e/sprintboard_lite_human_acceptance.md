@@ -2,7 +2,11 @@
 
 This document records the human validation checks for the **SprintBoard Lite** benchmark.
 
-## STATUS: ACCEPTED
+## STATUS: HISTORICAL ACCEPTANCE — V5 RERUN REQUIRED
+
+The checklist below records the prior V4 review. The referenced disposable workspace is not
+present in the current checkout, and the stored routing summary is empty. It therefore does
+not satisfy the current V5 reproducibility contract.
 
 The product is accepted only when the benchmark reaches `ACCEPTED`. A `PARTIAL` result means LocalForge generated some PR artifacts but did not complete the product end-to-end.
 

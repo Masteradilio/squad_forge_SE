@@ -135,30 +135,12 @@ async def import_prd(
         persisted_tasks = await uow.tasks.list_tasks_for_project(project_id)
         task_id_by_title = {t.title: t.id for t in persisted_tasks if t.id is not None}
 
-        from localforge.prd.contracts import _dependencies_for_task
-        from localforge.prd.schemas import ExtractedTask
-
-        extracted_tasks = []
-        for task in plan.tasks:
-            extracted_tasks.append(
-                ExtractedTask(
-                    title=task.title,
-                    description=task.description,
-                    acceptance_criteria=task.acceptance_criteria,
-                    risk_level=task.risk_level,
-                    expected_files=task.expected_files,
-                    epic_title=task.epic_title,
-                )
-            )
-
         for persisted_task in persisted_tasks:
-            matching_plan_task = next((t for t in extracted_tasks if t.title == persisted_task.title), None)
-            if matching_plan_task:
-                dep_titles = _dependencies_for_task(matching_plan_task, extracted_tasks)
-                dep_ids = [task_id_by_title[title] for title in dep_titles if title in task_id_by_title]
-                if dep_ids:
-                    persisted_task.dependency_task_ids = dep_ids
-                    await uow.tasks.update_task(persisted_task)
+            dep_titles = contract.dependency_graph.get(persisted_task.title, [])
+            dep_ids = [task_id_by_title[title] for title in dep_titles if title in task_id_by_title]
+            if dep_ids:
+                persisted_task.dependency_task_ids = dep_ids
+                await uow.tasks.update_task(persisted_task)
 
         return _result(
             True,

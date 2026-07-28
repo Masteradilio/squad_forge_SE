@@ -71,6 +71,8 @@ runs/
 # Git worktrees and generated branches
 .worktrees/
 .localforge-worktrees/
+benchmarks/workspaces/
+.benchmarks/
 
 # Docker / local volumes
 .docker/

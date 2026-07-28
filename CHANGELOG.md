@@ -4,6 +4,28 @@ All notable changes to LocalForge OS will be documented in this file.
 
  ## [Unreleased]
 
+### V6 Phase 1 - Loop Coordinator & Durable Loop State - 2026-07-27
+
+#### Added
+- **Loop Control Plane Domain & Enums**: Defined `LoopDefinition`, `LoopTrigger`, `LoopRun`, `LoopItem`, `LoopStateSnapshot` models and `LoopStatus`, `LoopRunStatus`, `TriggerKind`, `ExecutionStrategy`, `AutonomyLevel`, `LoopRunVerdict` enums.
+- **Durable Database Persistence & Migration v7**: Created ORM models (`LoopDefinitionORM`, `LoopRunORM`, `LoopItemORM`, `LoopStateSnapshotORM`) with version 7 schema upgrade path and uniqueness constraints on trigger and item idempotency keys.
+- **Loop Service & Coordinator**: Implemented cheap detector/triage stage separating `NO_OP` outcomes from `ACTIONABLE` scheduler runs, trigger deduplication, and process restart recovery for pending/triaging loop runs.
+- **REST API Endpoints**: Added FastAPI routes under `/projects/{id}/loops` and `/loops/{id}` for loop creation, inspection, enable/disable/pause/resume controls, triage triggers, export, and history.
+- **CLI Command Suite**: Added `localforge loops` CLI commands (`list`, `create`, `inspect`, `enable`, `disable`, `pause`, `resume`, `run-now`, `history`).
+- **Audit Logging**: Correlated Loop triggers, runs, items, scheduler executions, pause/resume events, and payload redaction with system audit events.
+- **Phase 1 Evidence**: Added `docs/e2e/v6/phase_01/manifest.json`, `docs/e2e/v6/phase_01/test_summary.json`, and `docs/e2e/v6/phase_01/acceptance_report.md`.
+
+
+### V6 Phase 0 - V5 Consolidation & Clean Release Boundary - 2026-07-27
+
+#### Added
+- Immutable working-tree inventory manifest in `docs/e2e/v6/phase_00/manifest.json` classifying all 74 modified and untracked repository paths.
+- Phase Zero regression test summary in `docs/e2e/v6/phase_00/test_summary.json` (199 backend Pytest tests passed, Mypy clean across 151 files, Vitest and Frontend build passed).
+- V5 Release Candidate acceptance report in `docs/e2e/v6/phase_00/acceptance_report.md`.
+
+#### Fixed
+- Fixed missing `Console` import and instantiation (`console = Console()`) in `backend/localforge/cli/run.py` to satisfy Mypy strict typing.
+
 ### V5.2 Open-Source Readiness - Chief Engineer Routes - 2026-07-17
 
 #### Added

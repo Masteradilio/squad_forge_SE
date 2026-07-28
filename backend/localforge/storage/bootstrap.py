@@ -11,7 +11,7 @@ from localforge.storage.orm import Base, SchemaVersionORM
 
 logger = logging.getLogger(__name__)
 
-CURRENT_VERSION = 6
+CURRENT_VERSION = 7
 
 
 async def ensure_db_directory(db_url: str) -> None:

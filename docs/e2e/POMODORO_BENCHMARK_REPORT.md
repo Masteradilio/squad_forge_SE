@@ -1,5 +1,9 @@
 # LocalForge OS - Pomodoro Tracker Benchmark Report
 
+> Historical evidence notice: this report predates the V5 reproducibility contract. Treat it
+> as design history, not a current savings or quality claim, until a matching V5 manifest and
+> independent human acceptance are published.
+
 ## 1. Executive Summary
 
 Este relatório documenta a execução empírica real de ponta a ponta do **LocalForge V3 Candidate** no workspace isolado `pomodoro-v3`.

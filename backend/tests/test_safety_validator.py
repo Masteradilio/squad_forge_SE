@@ -1,5 +1,8 @@
 from localforge.core.policy import PolicyRules
-from localforge.safety import split_shell_commands, validate_command
+import pytest
+
+from localforge.safety import command_to_argv, split_shell_commands, validate_command
+from localforge.safety.command_validator import _split_direct_command
 
 
 def test_split_shell_commands_basic():
@@ -116,3 +119,41 @@ def test_validate_command_absolute_python_executable_matches_policy_prefix():
 
     assert safe is True
     assert reason == ""
+
+
+def test_command_to_argv_rejects_shell_composition():
+    assert command_to_argv('python -c "print(1)"') == ["python", "-c", "print(1)"]
+
+    with pytest.raises(ValueError, match="Shell operators"):
+        command_to_argv("git status && git diff")
+
+    with pytest.raises(ValueError, match="redirection"):
+        command_to_argv("pytest > results.txt")
+
+
+def test_direct_command_parser_preserves_quoted_windows_paths():
+    command = 'git worktree add "C:\\Users\\Ada\\work tree" main'
+
+    assert _split_direct_command(command, windows=True) == [
+        "git",
+        "worktree",
+        "add",
+        "C:\\Users\\Ada\\work tree",
+        "main",
+    ]
+
+
+def test_validate_command_rejects_docker_shell_substitution_and_redirection():
+    policy = PolicyRules(
+        blocked_commands=[],
+        allowed_commands=["pytest"],
+        protected_paths=[],
+    )
+
+    safe, reason = validate_command("pytest $(echo injected)", policy)
+    assert safe is False
+    assert "substitution" in reason
+
+    safe, reason = validate_command("pytest > results.txt", policy)
+    assert safe is False
+    assert "redirection" in reason

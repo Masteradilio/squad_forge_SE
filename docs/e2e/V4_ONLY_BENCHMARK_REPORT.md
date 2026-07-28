@@ -1,5 +1,12 @@
 # LocalForge OS - V4-Only Empirical Benchmark Report
 
+> Historical evidence notice (2026-07-12): this report records a prior V4 run. It is not
+> reproducible from the current checkout because the disposable `sprintboard-v4` workspace
+> is absent. The legacy script also used simulated Docker/Ollama preflight responses and
+> persisted no routing-contract summary. The original V4 result below is retained for audit
+> history, but a fresh run must satisfy `MASTER_BACKLOG_V5.md` before it can support current
+> quality or savings claims.
+
 ## 1. Executive Summary
 
 Este relatório documenta a execução empírica real de ponta a ponta do **LocalForge V4 Candidate** (API-led AI Engineering Squad) no workspace isolado `sprintboard-v4`.

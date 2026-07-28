@@ -1,5 +1,7 @@
 import asyncio
+import logging
 import os
+import sys
 from datetime import UTC, datetime
 
 import typer
@@ -13,6 +15,19 @@ from rich.console import Console
 console = Console()
 
 
+# LocalForge OS — direct the LLM/log diagnostics to stderr so the
+# Rich console can still print user-facing status while we keep the
+# full event stream grep-able from the run artefacts. Operators looking
+# at ``run_summary.md`` rely on these lines to retrace the expensive
+# local Ollama decisions and the Chief Engineer fallback path.
+logging.basicConfig(
+    level=os.getenv("LOCALFORGE_LOG_LEVEL", "INFO"),
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    stream=sys.stderr,
+)
+logger = logging.getLogger("localforge")
+
+
 async def run_execution(unattended: bool) -> None:
     cwd = os.getcwd()
     lf_dir = os.path.join(cwd, ".localforge")
@@ -20,7 +35,6 @@ async def run_execution(unattended: bool) -> None:
         console.print(
             "[bold red]Workspace not initialized. Run 'localforge init' first.[/bold red]"
         )
-        raise typer.Exit(code=1)
 
     async with UnitOfWork(db_manager) as uow:
         assert uow.projects is not None

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   apiClient,
   type Project,
@@ -26,34 +26,14 @@ import { Table, type Column } from './components/Table';
 import { StatusBadge } from './components/Badge';
 import { Button } from './components/Button';
 import { Alert } from './components/Alert';
-import { Timeline, type TimelineItem } from './components/Timeline';
 import { EmptyState } from './components/EmptyState';
 import { CodeBlock } from './components/CodeBlock';
 import { V3Dashboard } from './components/V3Dashboard';
 import { KanbanBoard } from './components/KanbanBoard';
+import { AppSidebar, type AppTab } from './components/AppSidebar';
+import { OperationsStream } from './components/OperationsStream';
+import { wouldCreateCycle } from './utils/taskGraph';
 
-
-const wouldCreateCycle = (
-  taskId: number,
-  newDeps: number[],
-  allTasks: Task[]
-): boolean => {
-  const tasksById = new Map(allTasks.map((task) => [task.id, task]));
-  const visited = new Set<number>();
-  const queue = [...newDeps];
-  while (queue.length > 0) {
-    const current = queue.shift()!;
-    if (current === taskId) return true;
-    if (!visited.has(current)) {
-      visited.add(current);
-      const task = tasksById.get(current);
-      if (task && task.dependency_task_ids) {
-        queue.push(...task.dependency_task_ids);
-      }
-    }
-  }
-  return false;
-};
 
 const PIPELINE_ROLES = [
   'Planner',
@@ -70,24 +50,9 @@ const PIPELINE_ROLES = [
 ];
 
 
-type Tab =
-  | 'mission-control'
-  | 'prd-backlog'
-  | 'agents'
-  | 'runs'
-  | 'prs'
-  | 'worktrees'
-  | 'models'
-  | 'skills'
-  | 'memory'
-  | 'safety'
-  | 'v3-dashboard'
-  | 'kanban'
-  | 'settings';
-
 export default function App() {
   // Navigation & Project selection
-  const [currentTab, setCurrentTab] = useState<Tab>('mission-control');
+  const [currentTab, setCurrentTab] = useState<AppTab>('mission-control');
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeProject, setActiveProject] = useState<Project | null>(null);
 
@@ -532,7 +497,7 @@ export default function App() {
   useEffect(() => {
     const handleHash = () => {
       const hash = window.location.hash.replace('#/', '');
-      const validTabs: Tab[] = [
+      const validTabs: AppTab[] = [
         'mission-control',
         'prd-backlog',
         'agents',
@@ -545,8 +510,8 @@ export default function App() {
         'safety',
         'settings',
       ];
-      if (validTabs.includes(hash as Tab)) {
-        setCurrentTab(hash as Tab);
+      if (validTabs.includes(hash as AppTab)) {
+        setCurrentTab(hash as AppTab);
       }
     };
     window.addEventListener('hashchange', handleHash);
@@ -4289,159 +4254,17 @@ export default function App() {
     }
   };
 
-  const timelineItems: TimelineItem[] = useMemo(() => events.map((ev) => {
-    let type: TimelineItem['type'] = 'info';
-    if (ev.event_type.includes('succeeded') || ev.event_type.includes('allowed')) {
-      type = 'success';
-    } else if (ev.event_type.includes('failed') || ev.event_type.includes('blocked')) {
-      type = 'danger';
-    } else if (ev.event_type.includes('started')) {
-      type = 'primary';
-    }
-    return {
-      title: ev.event_type,
-      subtitle: ev.payload.action || ev.payload.status || '',
-      content: <pre style={{ fontSize: '11px' }}>{JSON.stringify(ev.payload, null, 2)}</pre>,
-      type,
-    };
-  }), [events]);
-
   return (
     <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: 'var(--bg-app)' }}>
-      {/* Sidebar Navigation */}
-      <div style={{
-        width: 'var(--sidebar-width)',
-        backgroundColor: 'var(--bg-sidebar)',
-        borderRight: '1px solid var(--border-color)',
-        padding: '24px 16px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '24px',
-        flexShrink: 0,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <h2 style={{ fontSize: '18px', fontWeight: 700, letterSpacing: '0.5px' }}>
-            LocalForge OS
-          </h2>
-        </div>
-
-        {/* Project Selector */}
-        <div>
-          <label style={{
-            display: 'block',
-            fontSize: '11px',
-            textTransform: 'uppercase',
-            fontWeight: 600,
-            color: 'var(--text-muted)',
-            marginBottom: '8px',
-          }}>
-            Active Project
-          </label>
-          {projects.length > 0 ? (
-            <select
-              value={activeProject?.id || ''}
-              onChange={(e) => {
-                const proj = projects.find((p) => p.id === parseInt(e.target.value, 10));
-                if (proj) setActiveProject(proj);
-              }}
-              style={{
-                width: '100%',
-                padding: '10px',
-                borderRadius: '8px',
-                backgroundColor: 'var(--bg-input)',
-                border: '1px solid var(--border-color)',
-                color: 'var(--text-primary)',
-                outline: 'none',
-                cursor: 'pointer',
-              }}
-            >
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>No projects</span>
-          )}
-        </div>
-
-        {/* Sidebar Tabs */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1 }}>
-          {(
-            [
-              'mission-control',
-              'prd-backlog',
-              'agents',
-              'runs',
-              'prs',
-              'worktrees',
-              'models',
-              'skills',
-              'memory',
-              'safety',
-              'v3-dashboard',
-              'kanban',
-              'settings',
-            ] as Tab[]
-          ).map((tab) => {
-            const active = currentTab === tab;
-            return (
-              <a
-                key={tab}
-                href={`#/${tab}`}
-                style={{
-                  display: 'block',
-                  padding: '10px 16px',
-                  borderRadius: '8px',
-                  fontSize: '14px',
-                  fontWeight: 500,
-                  color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
-                  backgroundColor: active ? 'var(--color-primary)' : 'transparent',
-                  textDecoration: 'none',
-                  transition: 'all 0.2s',
-                }}
-              >
-                {tab.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
-              </a>
-            );
-          })}
-        </div>
-
-        {/* Connectivity Status Indicator */}
-        <div style={{
-          padding: '12px',
-          borderRadius: '8px',
-          backgroundColor: 'rgba(255, 255, 255, 0.02)',
-          border: '1px solid var(--border-color)',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '8px',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px' }}>
-            <span style={{
-              width: '8px',
-              height: '8px',
-              borderRadius: '50%',
-              backgroundColor: backendHealthy ? 'var(--color-success)' : 'var(--color-danger)',
-              boxShadow: `0 0 8px ${backendHealthy ? 'var(--color-success)' : 'var(--color-danger)'}`,
-            }} />
-            <span>API Server: {backendHealthy ? 'Online' : 'Offline'}</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px' }}>
-            <span style={{
-              width: '8px',
-              height: '8px',
-              borderRadius: '50%',
-              backgroundColor: sseConnected ? 'var(--color-success)' : 'var(--color-danger)',
-              boxShadow: `0 0 8px ${sseConnected ? 'var(--color-success)' : 'var(--color-danger)'}`,
-            }} />
-            <span>Live Stream: {sseConnected ? 'Subscribed' : 'Reconnecting'}</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Main Workspace & Sidebar Event Log */}
+      <AppSidebar
+        projects={projects}
+        activeProject={activeProject}
+        currentTab={currentTab}
+        backendHealthy={backendHealthy}
+        sseConnected={sseConnected}
+        onProjectChange={setActiveProject}
+      />
+      {/* Main workspace and live event stream */}
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
         <div style={{
           flex: 1,
@@ -4454,21 +4277,7 @@ export default function App() {
           {error && <Alert type="error">{error}</Alert>}
           {renderTabContent()}
         </div>
-
-        {/* Real-time events right sidebar panel */}
-        <div style={{
-          width: '320px',
-          backgroundColor: 'var(--bg-sidebar)',
-          borderLeft: '1px solid var(--border-color)',
-          padding: '24px',
-          overflowY: 'auto',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '16px',
-        }}>
-          <h3 style={{ fontSize: '16px', fontWeight: 600 }}>Real-time Operations Stream</h3>
-          <Timeline items={timelineItems} />
-        </div>
+        <OperationsStream events={events} />
       </div>
     </div>
   );

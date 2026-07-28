@@ -26,6 +26,13 @@ export interface Task {
   dependency_task_ids: number[];
   risk_level?: string;
   acceptance_criteria?: string[];
+  metadata?: {
+    task_contract?: {
+      seniority_class?: string;
+      [key: string]: unknown;
+    };
+    [key: string]: unknown;
+  };
 }
 
 export interface Run {

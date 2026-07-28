@@ -1,7 +1,7 @@
 # LocalForge OS - PRD.md
 
-> Version: 0.1
-> Status: Draft for implementation agents
+> Version: 0.5
+> Status: Open-source alpha product contract
 > Intended readers: OpenAI Codex, Google Antigravity, local coding agents, human maintainer
 > Project type: clean-room reimplementation inspired by public open-source agent orchestration systems
 > Product owner: Adilio Farias
@@ -79,6 +79,23 @@ localforge plan
 localforge run --unattended
 localforge prs
 ```
+
+### 2.1 V5 architecture amendment
+
+Local-first describes ownership, deployment, and the default privacy boundary; it does not
+require every model call to run locally. The control plane, database, policies, worktrees,
+artifacts, and audit log remain on the user's machine.
+
+Execution is economy-aware:
+
+- deterministic checks and local models handle bounded, verifiable work;
+- configured API models may receive scoped task evidence for architecture, semantic repair,
+  or high-risk review;
+- zero-egress users can disable API lanes and accept reduced task coverage;
+- every paid or remote call must be budgeted, attributed, and visible in the audit ledger.
+
+The core product is the contract, policy, routing, evidence, and review system—not a claim
+that small local models can autonomously complete every software project.
 
 Expected evening result after an unattended run:
 
@@ -1851,7 +1868,10 @@ Sections:
 
 ### 23.1 Local-First
 
-LocalForge OS must work without sending source code to cloud services.
+LocalForge OS must support a zero-egress configuration that uses only deterministic and local
+model lanes. When the user enables an API lane, only the scoped task evidence required by that
+lane may leave the machine, and the provider, purpose, token/cost budget, and result must be
+recorded in the local audit ledger.
 
 ### 23.2 Secrets
 

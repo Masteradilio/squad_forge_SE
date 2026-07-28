@@ -107,7 +107,8 @@ def test_deterministic_extractor_does_not_turn_acceptance_bullets_into_tasks():
         "Work Item Management",
         "State Machine",
     ]
-    assert any("Empty titles" in item for item in plan.tasks[0].acceptance_criteria)
+    assert all("Empty titles" not in item for item in plan.tasks[0].acceptance_criteria)
+    assert any("Empty titles" in item for item in plan.tasks[1].acceptance_criteria)
     assert any("Illegal transitions" in item for item in plan.tasks[1].acceptance_criteria)
 
 
@@ -242,37 +243,105 @@ async def test_import_prd_creates_architecture_contract_and_task_packets(
     )
 
 
-def test_architecture_contract_uses_bounded_calculator_task_packets():
+def test_architecture_contract_uses_explicit_domain_neutral_task_packets():
     from localforge.prd.contracts import build_architecture_contract
     from localforge.prd.schemas import ExtractedPlan, ExtractedTask
 
+    api_title = "Add audit event API"
+    dashboard_title = "Build audit dashboard"
     contract = build_architecture_contract(
         ExtractedPlan(
             tasks=[
-                ExtractedTask(title="Initialize calculator app structure", description=""),
-                ExtractedTask(title="Implement four-level RPN stack", description=""),
-                ExtractedTask(title="Implement TVM register model", description=""),
-                ExtractedTask(title="Implement TVM solving", description=""),
-                ExtractedTask(title="Implement NPV and IRR", description=""),
-                ExtractedTask(title="Prepare PR-ready summary", description=""),
+                ExtractedTask(
+                    title=api_title,
+                    description="",
+                    expected_files=[
+                        "backend/localforge/api/audit.py",
+                        "backend/tests/test_audit_api.py",
+                    ],
+                    metadata={
+                        "required_public_apis": ["list_audit_events"],
+                        "forbidden_dependencies": ["unsafe-shell"],
+                    },
+                ),
+                ExtractedTask(
+                    title=dashboard_title,
+                    description="",
+                    expected_files=[
+                        "frontend/src/components/audit_dashboard.tsx",
+                        "frontend/src/components/audit_dashboard.test.tsx",
+                    ],
+                    metadata={"depends_on": [api_title]},
+                ),
+                ExtractedTask(title="Document audit workflow", description=""),
             ]
         )
     )
 
-    assert contract.task_contracts["Initialize calculator app structure"].required_public_apis == [
-        "Calculator",
-        "CalculatorState",
+    assert contract.task_contracts[api_title].required_public_apis == [
+        "list_audit_events"
     ]
-    assert contract.task_contracts["Implement four-level RPN stack"].allowed_files == [
-        "calculator/stack.py",
-        "tests/test_rpn_stack.py",
+    assert contract.task_contracts[api_title].allowed_files == [
+        "backend/localforge/api/audit.py",
+        "backend/tests/test_audit_api.py",
     ]
-    assert contract.task_contracts["Implement TVM register model"].allowed_files != (
-        contract.task_contracts["Implement TVM solving"].allowed_files
-    )
-    assert "Implement TVM register model" in contract.dependency_graph["Implement TVM solving"]
-    assert contract.task_contracts["Implement NPV and IRR"].risk_level == "high"
+    assert contract.task_contracts[api_title].forbidden_dependencies == ["unsafe-shell"]
+    assert contract.dependency_graph[dashboard_title] == [api_title]
+    assert contract.task_contracts[dashboard_title].seniority_class == "chief_led"
     assert (
-        contract.task_contracts["Prepare PR-ready summary"].canonical_test_command
-        == "python -m pytest -q"
+        contract.task_contracts["Document audit workflow"].canonical_test_command
+        == "git diff --check"
     )
+
+
+@pytest.mark.anyio
+async def test_import_prd_persists_explicit_contract_dependencies(db_manager, tmp_path):
+    prd_path = tmp_path / "PRD.md"
+    prd_path.write_text("# Audit work\n", encoding="utf-8")
+    provider = FakeLLMProvider(
+        responses=[
+            json.dumps(
+                {
+                    "epics": [{"title": "Audit", "summary": "Audit work"}],
+                    "tasks": [
+                        {
+                            "epic_title": "Audit",
+                            "title": "Create audit API",
+                            "description": "Expose audit events.",
+                            "expected_files": [
+                                "backend/localforge/api/audit.py",
+                                "backend/tests/test_audit_api.py",
+                            ],
+                        },
+                        {
+                            "epic_title": "Audit",
+                            "title": "Create audit dashboard",
+                            "description": "Display audit events.",
+                            "expected_files": [
+                                "frontend/src/components/audit_dashboard.tsx",
+                                "frontend/src/components/audit_dashboard.test.tsx",
+                            ],
+                            "metadata": {"depends_on": ["Create audit API"]},
+                        },
+                    ],
+                }
+            )
+        ]
+    )
+    async with UnitOfWork(db_manager) as uow:
+        assert uow.projects is not None
+        project = await uow.projects.create_project(
+            domain.Project(name="Dependency", root_path=str(tmp_path), default_branch="main")
+        )
+        assert project.id is not None
+
+    await import_prd(prd_path, project.id, db_manager=db_manager, llm_provider=provider)
+
+    async with UnitOfWork(db_manager) as uow:
+        assert uow.tasks is not None
+        tasks = await uow.tasks.list_tasks_for_project(project.id)
+    by_title = {task.title: task for task in tasks}
+
+    assert by_title["Create audit dashboard"].dependency_task_ids == [
+        by_title["Create audit API"].id
+    ]

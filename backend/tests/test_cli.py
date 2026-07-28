@@ -30,6 +30,13 @@ def test_cli_help():
         assert command in result.stdout
 
 
+def test_cli_version_is_non_destructive_smoke_check():
+    result = runner.invoke(app, ["--version"])
+
+    assert result.exit_code == 0
+    assert result.stdout.strip() == "LocalForge OS 0.5.0"
+
+
 def test_cli_doctor():
     """Verify that doctor command executes successfully."""
     result = runner.invoke(app, ["doctor"])

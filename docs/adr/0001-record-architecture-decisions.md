@@ -1,6 +1,6 @@
 # ADR 0001 — Record Architecture Decisions
 
-Status: Draft
+Status: Accepted
 
 ## Context
 

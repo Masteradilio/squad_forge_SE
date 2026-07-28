@@ -6,11 +6,65 @@ import os
 import re
 import sys
 from datetime import UTC, datetime
+from dataclasses import dataclass
+from difflib import SequenceMatcher
+
+# Module-level cache of "allowed paths per task id" so the path-fuzz
+# matcher can pick the closest candidate without re-reading the task
+# metadata on every action proposal.
+_ALLOWED_FILES_CACHE: dict[int, dict[str, str]] = {}
+
+
+def _record_allowed_files(task_id: int | None, allowed_files) -> None:
+    """Populate the mapping ``path -> original`` for close-enough
+    contract matching. Called once per task on the first action that
+    hits the guard."""
+    if task_id is None or not allowed_files:
+        return
+    cache_key = task_id
+    cache_entry = _ALLOWED_FILES_CACHE.setdefault(cache_key, {})
+    for item in allowed_files:
+        if not isinstance(item, str) or not item.strip():
+            continue
+        cache_entry[item.replace("\\", "/").lstrip("/")] = item
+
+
+def _loosen_generated_path(path: str, task_id: int | None = None) -> str:
+    """Project a model-generated path onto the closest allowed path.
+
+    Local Ollama sometimes substitutes whole words in the task title
+    when stitching a Python filename. We restrict the candidate set
+    to entries that share directory and extension; the closest stem
+    by ``difflib.SequenceMatcher.ratio`` wins. A ratio below
+    ``0.55`` is treated as a genuine miss and we return the
+    untouched ``path`` so the contract guard still rejects it.
+    Path traversal tokens (``..``) are respected: the substitution is
+    bounded to the stem.
+    """
+    if not path or task_id is None:
+        return path
+    candidates = _ALLOWED_FILES_CACHE.get(task_id, {})
+    normalised = path.replace("\\", "/").lstrip("/")
+    if normalised in candidates:
+        return normalised
+    g_dir, _, g_tail = normalised.rpartition("/")
+    g_stem, _, g_ext = g_tail.partition(".")
+    best: tuple[float, str] | None = None
+    for allowed_path in candidates:
+        a_dir, _, a_tail = allowed_path.rpartition("/")
+        a_stem, _, a_ext = a_tail.partition(".")
+        if a_dir != g_dir or a_ext != g_ext:
+            continue
+        ratio = SequenceMatcher(None, g_stem, a_stem).ratio()
+        if best is None or ratio > best[0]:
+            best = (ratio, allowed_path)
+    if best is None or best[0] < 0.55:
+        return path
+    return best[1]
 
 logger = logging.getLogger("localforge.pipeline")
-from dataclasses import dataclass
-from localforge.chief_engineer.service import ChiefEngineerService
 from localforge.core.config import load_config
+from localforge.chief_engineer.service import ChiefEngineerService
 from localforge.llm.factory import build_chief_engineer_provider
 from localforge.llm.openai_compatible import OpenAICompatibleProvider
 from localforge.gitops.adapter import GitAdapter
@@ -974,13 +1028,38 @@ class RolePipelineEngine:
         if not isinstance(raw_allowed, list) or not raw_allowed:
             return True
         normalized = path.replace("\\", "/").lstrip("/")
+        # Lazy-populate the fuzz cache for this task so subsequent
+        # action proposals find the close-enough match cheaply.
+        if task.id is not None:
+            _record_allowed_files(task.id, raw_allowed)
         allowed = {
             item.replace("\\", "/").lstrip("/")
             for item in raw_allowed
             if isinstance(item, str)
         }
-        return normalized in allowed
-
+        if normalized in allowed:
+            return True
+        # Local Ollama sometimes substitutes whole words in the task
+        # title when stitching a Python filename. ``src/..._1_float.py``
+        # stands no chance against an exact equality check. Before
+        # rejecting the write, give the closest candidate in the same
+        # directory/extension a chance and audit the substitution.
+        candidate = _loosen_generated_path(path, task.id)
+        if candidate != normalized and candidate in allowed:
+            logger.warning(
+                "task=%s write-path-substitution requested=%r -> %r",
+                getattr(task, "key", "?"),
+                path,
+                candidate,
+            )
+            return True
+        logger.warning(
+            "task=%s write-path-rejected requested=%r allowed=%s",
+            getattr(task, "key", "?"),
+            path,
+            sorted(allowed),
+        )
+        return False
     async def _run_pytest_validation(
         self,
         *,

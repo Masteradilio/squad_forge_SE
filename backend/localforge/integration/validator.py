@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from localforge.models.enums import FailureClass
 from localforge.repair.classifier import FailureClassifier
 from localforge.runtime.compression import compress_tool_output
+from localforge.safety.command_validator import command_to_argv
 
 
 @dataclass(frozen=True)
@@ -26,15 +27,22 @@ class IntegrationBranchValidator:
     ) -> IntegrationResult:
         try:
             completed = subprocess.run(
-                test_command,
+                command_to_argv(test_command),
                 cwd=worktree_path,
-                shell=True,
                 capture_output=True,
                 text=True,
                 timeout=timeout_seconds,
                 check=False,
             )
             output = completed.stdout + completed.stderr
+        except ValueError as exc:
+            return IntegrationResult(
+                passed=False,
+                task_keys=task_keys,
+                command=test_command,
+                output_summary=compress_tool_output(str(exc), max_chars=1000),
+                failure_class=FailureClass.CONTRACT_DRIFT,
+            )
         except subprocess.TimeoutExpired as exc:
             output = (
                 _text(exc.stdout)

@@ -7,6 +7,9 @@
 > Intended executors: OpenAI Codex, Google Antigravity, local coding agents, human maintainer
 > Runtime product constraint: LocalForge OS must not depend on Codex, Antigravity, Claude, or cloud agents at runtime.
 
+> Active continuation: `MASTER_BACKLOG_V5.md` defines the open-source readiness
+> work authorized after the V4 benchmark review.
+
 ---
 
 ## 0. Mandatory Operating Instructions for LLM Implementers

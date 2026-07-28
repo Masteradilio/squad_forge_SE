@@ -115,6 +115,17 @@ def test_integration_validator_classifies_command_failure(tmp_path):
     assert result.task_keys == ["LF-4001"]
 
 
+def test_integration_validator_rejects_shell_composition(tmp_path):
+    result = IntegrationBranchValidator().validate(
+        worktree_path=str(tmp_path),
+        task_keys=["LF-4002"],
+        test_command="python -c \"print(1)\" && echo unsafe",
+    )
+
+    assert result.passed is False
+    assert "Shell operators" in result.output_summary
+
+
 def test_final_review_records_chief_engineer_paid_call(tmp_path):
     manager = DatabaseManager(f"sqlite+aiosqlite:///{(tmp_path / 'phase41.db').as_posix()}")
     asyncio.run(bootstrap_database(manager))

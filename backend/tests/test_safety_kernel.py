@@ -274,7 +274,10 @@ async def test_run_safe_command_interactive_approval(tmp_path, db_session):
 
     # Start runner command in the background (as task)
     # We mock execution return to make it fast
-    with patch("asyncio.create_subprocess_shell") as mock_subproc:
+    with patch(
+        "localforge.sandbox.local.asyncio.create_subprocess_exec",
+        new_callable=AsyncMock,
+    ) as mock_subproc:
         mock_proc = AsyncMock()
         mock_proc.communicate.return_value = (b"Command output", b"")
         mock_proc.returncode = 0

@@ -1,0 +1,35 @@
+{
+  "phase_id": "phase_00",
+  "test_suites": {
+    "backend_pytest": {
+      "command": "python -m pytest backend/tests -q",
+      "status": "PASSED",
+      "total_passed": 199,
+      "total_failed": 0,
+      "total_skipped": 0,
+      "duration_seconds": 31.43
+    },
+    "backend_mypy": {
+      "command": "python -m mypy backend",
+      "status": "PASSED",
+      "files_checked": 151,
+      "errors": 0
+    },
+    "frontend_vitest": {
+      "command": "npm test --prefix frontend",
+      "status": "PASSED",
+      "total_passed": 5,
+      "test_files_passed": 3
+    },
+    "frontend_build": {
+      "command": "npm run build --prefix frontend",
+      "status": "PASSED",
+      "dist_created": true
+    },
+    "cli_smoke": {
+      "command": "python -m localforge.cli.main --help",
+      "status": "PASSED"
+    }
+  },
+  "overall_status": "PASSED"
+}

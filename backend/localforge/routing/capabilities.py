@@ -1,10 +1,11 @@
 from dataclasses import dataclass
 from datetime import UTC, datetime
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from localforge.models.domain import Task, ModelCapability
-from localforge.models.enums import FailureClass, TaskSeniorityClass, AgentRole
+from localforge.models.domain import Task
+from localforge.models.enums import FailureClass, TaskSeniorityClass
 from localforge.storage.orm import ModelCapabilityORM
 
 
@@ -91,25 +92,19 @@ class LocalWorkerCapabilityRouter:
 
         # Check model capability and disqualification markers in DB if session is active
         if self.session and model_name:
-            orm_cap = None
-            try:
-                from unittest.mock import MagicMock
-                if isinstance(self.session, MagicMock) and not hasattr(self.session.execute, "coroutine"):
-                    pass
-                else:
-                    result = await self.session.execute(
-                        select(ModelCapabilityORM).where(
-                            ModelCapabilityORM.model_name == model_name,
-                            ModelCapabilityORM.task_class == seniority.value
-                        )
-                    )
-                    orm_cap = result.scalar_one_or_none()
-            except (TypeError, AttributeError):
-                orm_cap = None
+            result = await self.session.execute(
+                select(ModelCapabilityORM).where(
+                    ModelCapabilityORM.model_name == model_name,
+                    ModelCapabilityORM.task_class == seniority.value,
+                )
+            )
+            orm_cap = result.scalar_one_or_none()
 
             if orm_cap:
                 disq = orm_cap.disqualified_until
-                if disq and disq.replace(tzinfo=None) > datetime.utcnow():
+                if disq and (
+                    disq if disq.tzinfo else disq.replace(tzinfo=UTC)
+                ) > datetime.now(UTC):
                     reasons.append(f"Model {model_name} is disqualified: {orm_cap.disqualification_reason}")
                     return CapabilityDecision(
                         model_tier="chief_engineer",

@@ -3,6 +3,13 @@
   "date": "2026-07-06",
   "prd_file": "docs/PRD_SPRINTBOARD_LITE.md",
   "status": "ACCEPTED",
+  "evidence_status": "HISTORICAL_NOT_REPRODUCIBLE_FROM_CURRENT_CHECKOUT",
+  "v5_reassessment": "RERUN_REQUIRED",
+  "evidence_notes": [
+    "The disposable sprintboard-v4 workspace is not present in the current checkout.",
+    "The legacy V4 script used simulated Docker and Ollama preflight responses.",
+    "The recorded routing_contract_summary is empty and does not satisfy the V5 acceptance contract."
+  ],
   "blockers": [],
   "preflight_checklist": {
     "docker_or_dev_passed": true,

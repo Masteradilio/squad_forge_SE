@@ -1,6 +1,6 @@
 import pytest
 from localforge.models.domain import Project
-from localforge.storage.bootstrap import get_current_schema_version
+from localforge.storage.bootstrap import CURRENT_VERSION, get_current_schema_version
 from localforge.storage.orm import ProjectORM
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,7 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 async def test_bootstrap_initialization(db_session: AsyncSession):
     # Verify that schema version table was created and has current version
     version = await get_current_schema_version(db_session)
-    assert version == 6
+    assert version == CURRENT_VERSION
+
 
     # Verify that tables like projects, tasks, epics exist by running a simple query
     result = await db_session.execute(text("SELECT COUNT(*) FROM projects"))

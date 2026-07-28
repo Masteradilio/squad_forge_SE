@@ -4,7 +4,8 @@ from typing import Any
 from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
-from localforge.models import domain
+from localforge.models import domain, enums
+
 
 
 class Base(DeclarativeBase):
@@ -853,4 +854,213 @@ class ModelCapabilityORM(Base):
             disqualified_until=d.disqualified_until,
             disqualification_reason=d.disqualification_reason,
             metadata_json=d.metadata,
+        )
+
+
+class LoopDefinitionORM(Base):
+    __tablename__ = "loop_definitions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    repository_path: Mapped[str] = mapped_column(String(1024), nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    status: Mapped[str] = mapped_column(String(50), default="IDLE", nullable=False)
+    trigger_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    detector: Mapped[str] = mapped_column(String(255), default="default_triage", nullable=False)
+    execution_strategy: Mapped[str] = mapped_column(String(50), default="SEQUENTIAL", nullable=False)
+    autonomy: Mapped[str] = mapped_column(String(50), default="L1_INSPECT", nullable=False)
+    max_budget_usd: Mapped[float] = mapped_column(Float, default=5.0, nullable=False)
+    safety_policy_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    escalation_policy_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    schema_version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC)
+    )
+
+    def to_domain(self) -> domain.LoopDefinition:
+        return domain.LoopDefinition(
+            id=self.id,
+            project_id=self.project_id,
+            name=self.name,
+            repository_path=self.repository_path,
+            enabled=self.enabled,
+            status=enums.LoopStatus(self.status),
+            trigger=domain.LoopTrigger.model_validate(self.trigger_json),
+            detector=self.detector,
+            execution_strategy=enums.ExecutionStrategy(self.execution_strategy),
+            autonomy=enums.AutonomyLevel(self.autonomy),
+            max_budget_usd=self.max_budget_usd,
+            safety_policy=self.safety_policy_json,
+            escalation_policy=self.escalation_policy_json,
+            schema_version=self.schema_version,
+            created_at=self.created_at,
+            updated_at=self.updated_at,
+        )
+
+    @classmethod
+    def from_domain(cls, d: domain.LoopDefinition) -> "LoopDefinitionORM":
+        return cls(
+            id=d.id,
+            project_id=d.project_id,
+            name=d.name,
+            repository_path=d.repository_path,
+            enabled=d.enabled,
+            status=d.status.value if isinstance(d.status, enums.LoopStatus) else str(d.status),
+            trigger_json=d.trigger.model_dump(),
+            detector=d.detector,
+            execution_strategy=d.execution_strategy.value if isinstance(d.execution_strategy, enums.ExecutionStrategy) else str(d.execution_strategy),
+            autonomy=d.autonomy.value if isinstance(d.autonomy, enums.AutonomyLevel) else str(d.autonomy),
+            max_budget_usd=d.max_budget_usd,
+            safety_policy_json=d.safety_policy,
+            escalation_policy_json=d.escalation_policy,
+            schema_version=d.schema_version,
+            created_at=d.created_at,
+            updated_at=d.updated_at,
+        )
+
+
+class LoopRunORM(Base):
+    __tablename__ = "loop_runs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    loop_id: Mapped[int] = mapped_column(
+        ForeignKey("loop_definitions.id", ondelete="CASCADE"), nullable=False
+    )
+    status: Mapped[str] = mapped_column(String(50), default="PENDING", nullable=False)
+    trigger_kind: Mapped[str] = mapped_column(String(50), default="MANUAL", nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    triage_verdict: Mapped[str] = mapped_column(String(50), default="PENDING", nullable=False)
+    scheduler_run_id: Mapped[int | None] = mapped_column(
+        ForeignKey("runs.id", ondelete="SET NULL"), nullable=True
+    )
+    items_processed: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    cost_usd: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    started_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    def to_domain(self) -> domain.LoopRun:
+        return domain.LoopRun(
+            id=self.id,
+            loop_id=self.loop_id,
+            status=enums.LoopRunStatus(self.status),
+            trigger_kind=enums.TriggerKind(self.trigger_kind),
+            idempotency_key=self.idempotency_key,
+            triage_verdict=enums.LoopRunVerdict(self.triage_verdict),
+            scheduler_run_id=self.scheduler_run_id,
+            items_processed=self.items_processed,
+            cost_usd=self.cost_usd,
+            started_at=self.started_at,
+            completed_at=self.completed_at,
+            error_message=self.error_message,
+        )
+
+    @classmethod
+    def from_domain(cls, d: domain.LoopRun) -> "LoopRunORM":
+        return cls(
+            id=d.id,
+            loop_id=d.loop_id,
+            status=d.status.value if isinstance(d.status, enums.LoopRunStatus) else str(d.status),
+            trigger_kind=d.trigger_kind.value if isinstance(d.trigger_kind, enums.TriggerKind) else str(d.trigger_kind),
+            idempotency_key=d.idempotency_key,
+            triage_verdict=d.triage_verdict.value if isinstance(d.triage_verdict, enums.LoopRunVerdict) else str(d.triage_verdict),
+            scheduler_run_id=d.scheduler_run_id,
+            items_processed=d.items_processed,
+            cost_usd=d.cost_usd,
+            started_at=d.started_at,
+            completed_at=d.completed_at,
+            error_message=d.error_message,
+        )
+
+
+
+class LoopItemORM(Base):
+    __tablename__ = "loop_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    loop_run_id: Mapped[int] = mapped_column(
+        ForeignKey("loop_runs.id", ondelete="CASCADE"), nullable=False
+    )
+    external_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    title: Mapped[str] = mapped_column(String(512), nullable=False)
+    payload_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    status: Mapped[str] = mapped_column(String(50), default="PENDING", nullable=False)
+    scheduler_task_id: Mapped[int | None] = mapped_column(
+        ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+
+    def to_domain(self) -> domain.LoopItem:
+        return domain.LoopItem(
+            id=self.id,
+            loop_run_id=self.loop_run_id,
+            external_id=self.external_id,
+            title=self.title,
+            payload=self.payload_json,
+            status=self.status,
+            scheduler_task_id=self.scheduler_task_id,
+            idempotency_key=self.idempotency_key,
+            created_at=self.created_at,
+        )
+
+    @classmethod
+    def from_domain(cls, d: domain.LoopItem) -> "LoopItemORM":
+        return cls(
+            id=d.id,
+            loop_run_id=d.loop_run_id,
+            external_id=d.external_id,
+            title=d.title,
+            payload_json=d.payload,
+            status=d.status,
+            scheduler_task_id=d.scheduler_task_id,
+            idempotency_key=d.idempotency_key,
+            created_at=d.created_at,
+        )
+
+
+class LoopStateSnapshotORM(Base):
+    __tablename__ = "loop_state_snapshots"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    loop_id: Mapped[int] = mapped_column(
+        ForeignKey("loop_definitions.id", ondelete="CASCADE"), nullable=False
+    )
+    snapshot_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    active_run_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    last_run_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    next_eligible_run_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    circuit_status: Mapped[str] = mapped_column(String(50), default="CLOSED", nullable=False)
+    total_runs: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    total_cost_usd: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+
+    def to_domain(self) -> domain.LoopStateSnapshot:
+        return domain.LoopStateSnapshot(
+            id=self.id,
+            loop_id=self.loop_id,
+            snapshot_at=self.snapshot_at,
+            active_run_id=self.active_run_id,
+            last_run_at=self.last_run_at,
+            next_eligible_run_at=self.next_eligible_run_at,
+            circuit_status=self.circuit_status,
+            total_runs=self.total_runs,
+            total_cost_usd=self.total_cost_usd,
+        )
+
+    @classmethod
+    def from_domain(cls, d: domain.LoopStateSnapshot) -> "LoopStateSnapshotORM":
+        return cls(
+            id=d.id,
+            loop_id=d.loop_id,
+            snapshot_at=d.snapshot_at,
+            active_run_id=d.active_run_id,
+            last_run_at=d.last_run_at,
+            next_eligible_run_at=d.next_eligible_run_at,
+            circuit_status=d.circuit_status,
+            total_runs=d.total_runs,
+            total_cost_usd=d.total_cost_usd,
         )

@@ -53,22 +53,12 @@ def setup_backend():
     # Upgrade pip
     run_cmd([pip_path, "install", "--upgrade", "pip"])
     
-    # Install dependencies
-    requirements = os.path.join(ROOT_DIR, "requirements.txt")
-    requirements_dev = os.path.join(ROOT_DIR, "requirements-dev.txt")
-    
-    if os.path.exists(requirements):
-        run_cmd([pip_path, "install", "-r", "requirements.txt"])
-    if os.path.exists(requirements_dev):
-        run_cmd([pip_path, "install", "-r", "requirements-dev.txt"])
+    # Install the package and contributor tools through the canonical metadata.
+    run_cmd([pip_path, "install", "-e", ".[dev]"])
         
     # Initialize workspace using localforge init
     python_path = get_venv_python()
-    cli_main = os.path.join(ROOT_DIR, "backend", "localforge", "cli", "main.py")
-    
-    # Set pythonpath so localforge module is importable
-    env = {"PYTHONPATH": os.path.join(ROOT_DIR, "backend")}
-    run_cmd([python_path, cli_main, "init"], env_vars=env)
+    run_cmd([python_path, "-m", "localforge.cli.main", "init"])
     
     print("\n[Success] Backend setup completed!")
 

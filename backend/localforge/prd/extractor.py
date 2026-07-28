@@ -4,7 +4,7 @@ from localforge.prd.schemas import ExtractedEpic, ExtractedPlan, ExtractedTask
 
 
 class DeterministicPRDExtractor:
-    """Small Markdown parser for clean-room PRD baseline extraction."""
+    """Conservative Markdown parser for the model-independent PRD baseline."""
 
     def extract(self, markdown: str) -> ExtractedPlan:
         epics: list[ExtractedEpic] = []
@@ -78,7 +78,6 @@ class DeterministicPRDExtractor:
 
         if tasks and not epics:
             epics.append(ExtractedEpic(title="Imported PRD", summary="Tasks imported from PRD."))
-
         return ExtractedPlan(epics=epics, tasks=tasks)
 
     def _task_from_text(
@@ -100,37 +99,13 @@ class DeterministicPRDExtractor:
     def _append_global_acceptance(self, tasks: list[ExtractedTask], text: str) -> None:
         if not text or not tasks:
             return
-        normalized = text.lower()
-        target = tasks[-1]
-        for task in tasks:
-            task_text = f"{task.title} {task.description}".lower()
-            if (
-                ("título" in normalized or "titulo" in normalized or "title" in normalized)
-                and (
-                    "gestão" in task_text
-                    or "gestao" in task_text
-                    or "work item" in task_text
-                    or "management" in task_text
-                )
-            ):
-                target = task
-                break
-            if ("transi" in normalized or "estado" in normalized) and (
-                "estado" in task_text or "máquina" in task_text or "maquina" in task_text
-            ):
-                target = task
-                break
-            if ("json" in normalized or "export" in normalized) and (
-                "export" in task_text or "filtro" in task_text
-            ):
-                target = task
-                break
-        self._append_acceptance(target, text)
+        # Global criteria lack deterministic task references. Attach them to the nearest
+        # preceding task and leave semantic redistribution to human/model plan review.
+        self._append_acceptance(tasks[-1], text)
 
     def _is_acceptance_heading(self, title: str) -> bool:
         normalized = title.lower()
         return "crit" in normalized and "aceita" in normalized
 
     def _clean_text(self, text: str) -> str:
-        text = re.sub(r"\s+", " ", text).strip()
-        return text.rstrip(".")
+        return re.sub(r"\s+", " ", text).strip().rstrip(".")

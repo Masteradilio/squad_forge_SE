@@ -236,7 +236,7 @@ async def test_visual_task_sanitizer_does_not_replace_broken_tests_with_placehol
         id=2,
         project_id=1,
         key="LF-PRD-004",
-        title="Button grid",
+        title="Dashboard controls",
         description="Visual task",
         metadata={"task_contract": {"visual_required": True}},
     )
@@ -255,7 +255,7 @@ async def test_visual_task_sanitizer_does_not_replace_broken_tests_with_placehol
 
 @pytest.mark.asyncio
 async def test_chief_engineer_receives_expanded_visual_file_context(tmp_path):
-    html = tmp_path / "app" / "hp12c_platinum.html"
+    html = tmp_path / "app" / "dashboard.html"
     html.parent.mkdir()
     html.write_text("<button>1</button>\n" + ("x" * 15_000), encoding="utf-8")
 
@@ -263,12 +263,12 @@ async def test_chief_engineer_receives_expanded_visual_file_context(tmp_path):
         id=2,
         project_id=1,
         key="LF-PRD-004",
-        title="Button grid",
+        title="Dashboard controls",
         description="Visual task",
         metadata={
             "task_contract": {
                 "visual_required": True,
-                "allowed_files": ["app/hp12c_platinum.html"],
+                "allowed_files": ["app/dashboard.html"],
             }
         },
     )
@@ -286,14 +286,18 @@ async def test_chief_engineer_receives_expanded_visual_file_context(tmp_path):
     config = SimpleNamespace(
         chief_engineer=SimpleNamespace(
             enabled=True,
+            provider="openrouter",
             model="minimax/minimax-m3",
             api_key="test",
             base_url="https://openrouter.ai/api/v1",
+            fallback_provider=None,
+            fallback_model=None,
+            fallback_api_key=None,
         )
     )
 
     with patch("localforge.pipeline.engine.load_config", return_value=config), \
-         patch("localforge.pipeline.engine.OpenRouterProvider"), \
+         patch("localforge.pipeline.engine.build_chief_engineer_provider"), \
          patch("localforge.pipeline.engine.ChiefEngineerService") as service_cls:
         service_cls.return_value.plan_semantic_repair = fake_plan_semantic_repair
         engine = RolePipelineEngine(MagicMock(), project_id=1, run_id=10)
@@ -302,68 +306,11 @@ async def test_chief_engineer_receives_expanded_visual_file_context(tmp_path):
             task_run=task_run,
             context=MagicMock(),
             editor=MagicMock(),
-            changed_files=["app/hp12c_platinum.html"],
+            changed_files=["app/dashboard.html"],
             command_summaries=[],
             validation_output="Visual validation failed",
         )
 
     assert repaired is False
-    assert "app/hp12c_platinum.html" in captured["context"]
+    assert "app/dashboard.html" in captured["context"]
     assert len(captured["context"]) > 12_000
-
-
-@pytest.mark.asyncio
-async def test_hp12c_visual_task_uses_scaffold_before_local_model(tmp_path):
-    (tmp_path / "app").mkdir()
-    (tmp_path / "app" / "hp12c_platinum.html").write_text("<html></html>", encoding="utf-8")
-
-    uow = MagicMock()
-    uow.tasks = AsyncMock()
-    uow.tasks.get_task.return_value = None
-    uow.audits = AsyncMock()
-    uow.audits.create_artifact.return_value = domain.Artifact(
-        task_run_id=3,
-        type=ArtifactType.DIFF,
-        path=".localforge/artifacts/runs/10/tasks/lf-prd-004/diff.patch",
-        content_hash="abc",
-    )
-    uow.audits.append_audit_event.return_value = None
-    uow.executions = AsyncMock()
-    uow.executions.get_run.return_value = None
-
-    task = domain.Task(
-        id=2,
-        project_id=1,
-        key="LF-PRD-004",
-        title="Button grid",
-        description="Visual task",
-        metadata={
-            "task_contract": {
-                "visual_required": True,
-                "visual_actual_output": "app/hp12c_platinum.html",
-                "allowed_files": ["app/hp12c_platinum.html", "calculator/ui/buttons.py"],
-            }
-        },
-    )
-    task_run = domain.TaskRun(id=3, run_id=10, task_id=2, worktree_path=str(tmp_path))
-    engine = RolePipelineEngine(uow, project_id=1, run_id=10)
-
-    with patch.dict("os.environ", {"PYTEST_CURRENT_TEST": ""}), \
-         patch.object(engine, "_try_chief_engineer_repair", new=AsyncMock(return_value=True)) as ce_repair, \
-         patch.object(engine, "_request_model_actions", new=AsyncMock(side_effect=AssertionError("local model called"))), \
-         patch("localforge.runtime.file_tools.SafetyKernel.evaluate", new=AsyncMock(return_value=(SafetyDecision.ALLOW, "allowed"))):
-        await engine._execute_coder_actions(
-            project=domain.Project(id=1, name="P", root_path=str(tmp_path), default_branch="main"),
-            task=task,
-            task_run=task_run,
-            context=MagicMock(),
-            max_repair=0,
-        )
-
-    ce_repair.assert_not_awaited()
-    assert "HP 12C Platinum" in (tmp_path / "app" / "hp12c_platinum.html").read_text(encoding="utf-8")
-    updated_task = uow.tasks.update_task.await_args.args[0]
-    assert updated_task.metadata["changed_files"] == [
-        "app/hp12c_platinum.html",
-        "calculator/ui/buttons.py",
-    ]

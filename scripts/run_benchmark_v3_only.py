@@ -143,7 +143,7 @@ async def patch_workspace_config(
             cfg["budgets"]["max_paid_usd"] = 2.0
             cfg["budgets"]["max_task_duration"] = 1200.0
             cfg["budgets"]["max_run_time"] = 3600.0
-            cfg["budgets"]["max_diff_growth"] = 80000
+            cfg["budgets"]["max_diff_growth"] = 5000
                 
             with open(config_path, "w", encoding="utf-8") as f:
                 yaml.safe_dump(cfg, f, default_flow_style=False)

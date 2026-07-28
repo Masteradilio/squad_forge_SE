@@ -1,0 +1,136 @@
+from typing import Any
+
+from pydantic import BaseModel, Field
+
+from localforge.models.enums import AgentRole, MemoryRecordKind, RuntimeStatus, TaskStatus
+from localforge.pipeline import PipelineMode
+
+
+class ImportPRDRequest(BaseModel):
+    path: str
+    dry_run: bool = False
+
+
+class TaskUpdateRequest(BaseModel):
+    epic_id: int | None = None
+    title: str
+    description: str
+    acceptance_criteria: list[str]
+    dependency_task_ids: list[int]
+    risk_level: str
+    status: TaskStatus
+
+
+class ModelRouteRequest(BaseModel):
+    role: AgentRole
+    provider: str = "localforge"
+    model_profile_id: str
+    endpoint_url: str | None = None
+    fallback_model_profile_id: str | None = None
+
+
+class MemoryFactRequest(BaseModel):
+    fact: str
+    kind: MemoryRecordKind = MemoryRecordKind.STACK_FACT
+    source: str = "manual"
+    pinned: bool = False
+    status: str = "active"
+    tags: list[str] = Field(default_factory=list)
+
+
+class MemoryFactUpdateRequest(BaseModel):
+    fact: str | None = None
+    pinned: bool | None = None
+    status: str | None = None
+    tags: list[str] | None = None
+
+
+class MemoryImportRequest(BaseModel):
+    format: str = "json"
+    payload: dict[str, Any] | str
+
+
+class TaskCommentRequest(BaseModel):
+    author: str = "user"
+    body: str
+    thread_id: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class RuntimeRegistrationRequest(BaseModel):
+    runtime_id: str
+    name: str
+    kind: str = "local"
+    status: RuntimeStatus = RuntimeStatus.ONLINE
+    capabilities: list[str] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class RuntimeHeartbeatRequest(BaseModel):
+    status: RuntimeStatus = RuntimeStatus.ONLINE
+    metadata: dict[str, Any] | None = None
+
+
+class SquadRequest(BaseModel):
+    name: str
+    purpose: str = ""
+    roles: list[AgentRole] = Field(default_factory=list)
+    agent_ids: list[int] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class PipelineRunRequest(BaseModel):
+    mode: PipelineMode = PipelineMode.DEFAULT
+    run_id: int | None = None
+    task_run_id: int | None = None
+
+
+class SkillRequest(BaseModel):
+    name: str
+    purpose: str
+    triggers: list[str] = Field(default_factory=list)
+    allowed_actions: list[str] = Field(default_factory=list)
+    expected_artifacts: list[str] = Field(default_factory=list)
+    failure_modes: list[str] = Field(default_factory=list)
+    examples: list[str] = Field(default_factory=list)
+    enabled: bool = True
+
+
+class WorktreeRevertRequest(BaseModel):
+    checkpoint_hash: str
+
+
+class PricingSourceCreateRequest(BaseModel):
+    provider: str
+    url: str
+    notes: str = ""
+
+
+class PricingSnapshotUpdateRequest(BaseModel):
+    pricing_source_id: int
+    model_name: str
+    input_price_per_million: float
+    output_price_per_million: float
+    cached_input_price_per_million: float = 0.0
+
+
+class LoopCreateRequest(BaseModel):
+    name: str
+    repository_path: str
+    enabled: bool = True
+    trigger_kind: str = "MANUAL"
+    schedule: str | None = None
+    event_type: str | None = None
+    detector: str = "default_triage"
+    execution_strategy: str = "SEQUENTIAL"
+    autonomy: str = "L1_INSPECT"
+    max_budget_usd: float = 5.0
+    safety_policy: dict[str, Any] = Field(default_factory=dict)
+    escalation_policy: dict[str, Any] = Field(default_factory=dict)
+
+
+class LoopTriggerRequest(BaseModel):
+    trigger_kind: str = "MANUAL"
+    idempotency_key: str | None = None
+    payload: dict[str, Any] = Field(default_factory=dict)
+

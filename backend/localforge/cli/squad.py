@@ -113,6 +113,7 @@ async def run_orchestrate(prd_path: str) -> None:
     async with UnitOfWork(db_manager) as uow:
         assert uow.projects is not None
         assert uow.tasks is not None
+        assert uow.session is not None
         project = await uow.projects.get_project_by_path(cwd)
         assert project is not None
         assert project.id is not None

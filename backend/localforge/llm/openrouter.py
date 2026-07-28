@@ -3,7 +3,7 @@ from typing import Any
 
 import httpx
 
-from localforge.llm.base import LLMConnectionError, LLMError, LLMTimeoutError
+from localforge.llm.base import LLMConnectionError, LLMError, LLMHTTPError, LLMTimeoutError
 from localforge.llm.openai_compatible import OpenAICompatibleProvider
 
 
@@ -57,9 +57,10 @@ class OpenRouterProvider(OpenAICompatibleProvider):
             async with httpx.AsyncClient(timeout=timeout) as client:
                 resp = await client.post(url, headers=headers, json=payload)
                 if resp.status_code != 200:
-                    raise LLMError(
+                    raise LLMHTTPError(
                         f"OpenRouter completion failed ({resp.status_code}): "
-                        f"{self._redact(resp.text)}"
+                        f"{self._redact(resp.text)}",
+                        status_code=resp.status_code,
                     )
                 data = resp.json()
                 choices = data.get("choices", [])

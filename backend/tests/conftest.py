@@ -1,11 +1,11 @@
-from collections.abc import AsyncGenerator, Generator
-from datetime import UTC, datetime
 import faulthandler
 import os
 import platform
 import sys
 import threading
 import tracemalloc
+from collections.abc import AsyncGenerator, Generator
+from datetime import UTC, datetime
 from typing import Any, TextIO
 
 import pytest
@@ -13,7 +13,6 @@ import pytest_asyncio
 from localforge.storage.bootstrap import bootstrap_database
 from localforge.storage.database import DatabaseManager
 from sqlalchemy.ext.asyncio import AsyncSession
-
 
 _DEBUG_LOG_ENV = "LOCALFORGE_TEST_DEBUG_LOG"
 _DEBUG_TRACEMALLOC_ENV = "LOCALFORGE_TEST_DEBUG_TRACEMALLOC"
@@ -55,8 +54,9 @@ def _win_process_memory() -> dict[str, int]:
 
         counters = ProcessMemoryCounters()
         counters.cb = ctypes.sizeof(counters)
-        ok = ctypes.WinDLL("psapi.dll").GetProcessMemoryInfo(
-            ctypes.WinDLL("kernel32.dll").GetCurrentProcess(),
+        win_dll = ctypes.__dict__["WinDLL"]
+        ok = win_dll("psapi.dll").GetProcessMemoryInfo(
+            win_dll("kernel32.dll").GetCurrentProcess(),
             ctypes.byref(counters),
             counters.cb,
         )
@@ -94,7 +94,8 @@ def _win_system_memory() -> dict[str, int]:
 
         status = MemoryStatusEx()
         status.dwLength = ctypes.sizeof(status)
-        ok = ctypes.WinDLL("kernel32.dll").GlobalMemoryStatusEx(ctypes.byref(status))
+        win_dll = ctypes.__dict__["WinDLL"]
+        ok = win_dll("kernel32.dll").GlobalMemoryStatusEx(ctypes.byref(status))
         if not ok:
             return {}
         return {

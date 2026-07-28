@@ -41,6 +41,9 @@ All notable changes to LocalForge OS will be documented in this file.
 - **Hermetic Git tests**: Configured a repository-local test identity so
   checkpoint commits do not depend on a developer or CI runner's global Git
   configuration.
+- **Cross-platform type checking**: Resolved the Windows-only `ctypes.WinDLL`
+  symbol dynamically after the existing platform guard, allowing the same test
+  diagnostics module to type-check on Linux CI.
 
 
 ### V6 Phase 8 - Light Swarm: Bounded Multi-Agent Fan-Out - 2026-07-27

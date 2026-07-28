@@ -748,49 +748,50 @@ versioned artifacts validated at task boundaries.
 
 ### V6-700 — Define typed handoff artifacts
 
-- [ ] Define schema version, producer, consumer, artifact type, summary,
+- [x] Define schema version, producer, consumer, artifact type, summary,
       evidence, changed files, tests, validation results, open questions, risks,
       `not_checked`, and content hash.
-- [ ] Define artifact types for plan, research, patch, test result, critique,
+- [x] Define artifact types for plan, research, patch, test result, critique,
       verification, failure, and escalation.
-- [ ] Keep extensibility through registered schemas rather than arbitrary
+- [x] Keep extensibility through registered schemas rather than arbitrary
       unvalidated keys.
 
 ### V6-701 — Validate production and consumption
 
-- [ ] Validate artifacts before persistence.
-- [ ] Verify content hashes and producer ownership.
-- [ ] Validate consumer compatibility.
-- [ ] Enforce consume-once only where the artifact semantics require it.
-- [ ] Preserve immutable historical versions.
+- [x] Validate artifacts before persistence.
+- [x] Verify content hashes and producer ownership.
+- [x] Validate consumer compatibility.
+- [x] Enforce consume-once only where the artifact semantics require it.
+- [x] Preserve immutable historical versions.
 
 ### V6-702 — Carry artifacts through dependency edges
 
-- [ ] Declare required input and output artifact types on Task edges.
-- [ ] Prevent a dependent task from becoming ready with missing or rejected
+- [x] Declare required input and output artifact types on Task edges.
+- [x] Prevent a dependent task from becoming ready with missing or rejected
       evidence.
-- [ ] Allow multiple upstream artifacts with explicit aggregation rules.
-- [ ] Expose provenance from final evidence back to every producer.
+- [x] Allow multiple upstream artifacts with explicit aggregation rules.
+- [x] Expose provenance from final evidence back to every producer.
 
 ### V6-703 — Add human-readable handoff rendering
 
-- [ ] Render compact summaries without losing machine-readable payloads.
-- [ ] Highlight missing checks, risks, and unresolved questions.
-- [ ] Redact secrets and untrusted large content.
+- [x] Render compact summaries without losing machine-readable payloads.
+- [x] Highlight missing checks, risks, and unresolved questions.
+- [x] Redact secrets and untrusted large content.
 
 **Targeted regression**
 
-- [ ] Schema validation and version compatibility.
-- [ ] Tampered hash and wrong-owner rejection.
-- [ ] Missing dependency artifact blocks readiness.
-- [ ] Multi-producer aggregation.
-- [ ] Audit and replay preserve artifact lineage.
-- [ ] Existing V5 handoff compatibility or explicit migration.
+- [x] Schema validation and version compatibility.
+- [x] Tampered hash and wrong-owner rejection.
+- [x] Missing dependency artifact blocks readiness.
+- [x] Multi-producer aggregation.
+- [x] Audit and replay preserve artifact lineage.
+- [x] Existing V5 handoff compatibility or explicit migration.
 
 **Phase 7 exit gate**
 
-- [ ] Task readiness depends on validated evidence, not status alone.
-- [ ] Complete the mandatory phase synchronization gate.
+- [x] Task readiness depends on validated evidence, not status alone.
+- [x] Complete the mandatory phase synchronization gate.
+
 
 ---
 

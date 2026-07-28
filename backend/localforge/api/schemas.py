@@ -204,3 +204,20 @@ class RunnerDispatchRequest(BaseModel):
     required_lane: str | None = None
     required_tools: list[str] = Field(default_factory=list)
     required_task_type: str | None = None
+
+
+class TypedHandoffCreateRequest(BaseModel):
+    project_id: int
+    task_run_id: int
+    producer_agent_id: str
+    consumer_agent_id: str
+    summary: str
+    artifact_type: str = "RESEARCH"
+    schema_version: str = "1.0"
+    evidence_json: dict[str, Any] = Field(default_factory=dict)
+    changed_files: list[str] = Field(default_factory=list)
+    tests_executed: list[str] = Field(default_factory=list)
+    validation_results_json: dict[str, Any] = Field(default_factory=dict)
+    open_questions: list[str] = Field(default_factory=list)
+    risks: list[str] = Field(default_factory=list)
+    not_checked: list[str] = Field(default_factory=list)

@@ -1,0 +1,22 @@
+{
+  "phase_id": "phase_07",
+  "phase_name": "Typed Handoffs and Evidence-Carrying Dependencies",
+  "timestamp": "2026-07-27T23:14:00Z",
+  "source_commit": "86e88bc7702f3cfc68ffeb28b939eb51aa7dfef4",
+  "changed_modules": [
+    "backend/localforge/models/enums.py",
+    "backend/localforge/models/domain.py",
+    "backend/localforge/storage/orm.py",
+    "backend/localforge/storage/bootstrap.py",
+    "backend/localforge/storage/transactions.py",
+    "backend/localforge/services/typed_handoff.py",
+    "backend/localforge/api/schemas.py",
+    "backend/localforge/api/routes/typed_handoffs.py",
+    "backend/localforge/api/routes/__init__.py",
+    "backend/localforge/api/app.py",
+    "backend/localforge/cli/typed_handoffs.py",
+    "backend/localforge/cli/main.py",
+    "backend/tests/test_phase7_typed_handoffs.py"
+  ],
+  "verdict": "PHASE_ACCEPTED"
+}

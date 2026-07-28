@@ -4,6 +4,17 @@ All notable changes to LocalForge OS will be documented in this file.
 
  ## [Unreleased]
 
+### V6 Phase 7 - Typed Handoffs and Evidence-Carrying Dependencies - 2026-07-27
+
+#### Added
+- **Typed Handoff Artifacts & Migration v12**: Defined `TypedHandoffArtifact` domain model and `TypedHandoffArtifactORM` with Schema Version 12 upgrade path. Supports explicit types (`PLAN`, `RESEARCH`, `PATCH`, `TEST_RESULT`, `CRITIQUE`, `VERIFICATION`, `FAILURE`, `ESCALATION`).
+- **Integrity Validation & Consume-Once**: Built `TypedHandoffService` (`typed_handoff.py`) calculating canonical SHA-256 `content_hash`. Implemented `validate_artifact_integrity` to detect tampered payloads and `consume_artifact` for consume-once semantics.
+- **DAG Evidence Dependencies & Provenance**: Required validated evidence artifacts before dependent tasks become ready. Built provenance lineage tracking from final artifacts back to all upstream producers.
+- **Human-Readable Markdown Rendering & Redaction**: Implemented `render_markdown_summary` formatting clear summaries with GitHub-style alerts (`[!WARNING]`, `[!IMPORTANT]`, `[!NOTE]`) for open questions, risks, and `not_checked` items, with automatic secret redaction.
+- **REST API & CLI Surfaces**: Added `/handoff-artifacts`, `/handoff-artifacts/{id}/validate`, `/handoff-artifacts/{id}/consume`, and `/task-runs/{id}/handoff-artifacts` REST routes and `localforge handoffs` CLI commands (`list`, `verify`, `render`).
+- **Phase 7 Evidence**: Added `docs/e2e/v6/phase_07/manifest.json`, `docs/e2e/v6/phase_07/test_summary.json`, and `docs/e2e/v6/phase_07/acceptance_report.md`.
+
+
 ### V6 Phase 6 - Capability-Aware RunnerPool and Resource Governance - 2026-07-27
 
 #### Added

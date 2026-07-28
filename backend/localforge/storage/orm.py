@@ -1394,3 +1394,75 @@ class RunnerDispatchLogORM(Base):
             rejection_reasons_json=d.rejection_reasons_json,
             created_at=d.created_at,
         )
+
+
+class TypedHandoffArtifactORM(Base):
+    __tablename__ = "typed_handoff_artifacts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
+    task_run_id: Mapped[int] = mapped_column(
+        ForeignKey("task_runs.id", ondelete="CASCADE"), nullable=False
+    )
+    producer_agent_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    consumer_agent_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    artifact_type: Mapped[str] = mapped_column(String(50), default="RESEARCH", nullable=False)
+    schema_version: Mapped[str] = mapped_column(String(20), default="1.0", nullable=False)
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    evidence_json: Mapped[Any] = mapped_column(JSON, default=dict, nullable=False)
+    changed_files_json: Mapped[Any] = mapped_column(JSON, default=list, nullable=False)
+    tests_executed_json: Mapped[Any] = mapped_column(JSON, default=list, nullable=False)
+    validation_results_json: Mapped[Any] = mapped_column(JSON, default=dict, nullable=False)
+    open_questions_json: Mapped[Any] = mapped_column(JSON, default=list, nullable=False)
+    risks_json: Mapped[Any] = mapped_column(JSON, default=list, nullable=False)
+    not_checked_json: Mapped[Any] = mapped_column(JSON, default=list, nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    is_consumed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+
+    def to_domain(self) -> domain.TypedHandoffArtifact:
+        return domain.TypedHandoffArtifact(
+            id=self.id,
+            project_id=self.project_id,
+            task_run_id=self.task_run_id,
+            producer_agent_id=self.producer_agent_id,
+            consumer_agent_id=self.consumer_agent_id,
+            artifact_type=enums.TypedArtifactType(self.artifact_type),
+            schema_version=self.schema_version,
+            summary=self.summary,
+            evidence_json=self.evidence_json if isinstance(self.evidence_json, dict) else {},
+            changed_files=self.changed_files_json if isinstance(self.changed_files_json, list) else [],
+            tests_executed=self.tests_executed_json if isinstance(self.tests_executed_json, list) else [],
+            validation_results_json=self.validation_results_json if isinstance(self.validation_results_json, dict) else {},
+            open_questions=self.open_questions_json if isinstance(self.open_questions_json, list) else [],
+            risks=self.risks_json if isinstance(self.risks_json, list) else [],
+            not_checked=self.not_checked_json if isinstance(self.not_checked_json, list) else [],
+            content_hash=self.content_hash,
+            is_consumed=self.is_consumed,
+            created_at=self.created_at,
+        )
+
+    @classmethod
+    def from_domain(cls, d: domain.TypedHandoffArtifact) -> "TypedHandoffArtifactORM":
+        return cls(
+            id=d.id,
+            project_id=d.project_id,
+            task_run_id=d.task_run_id,
+            producer_agent_id=d.producer_agent_id,
+            consumer_agent_id=d.consumer_agent_id,
+            artifact_type=d.artifact_type.value if isinstance(d.artifact_type, enums.TypedArtifactType) else str(d.artifact_type),
+            schema_version=d.schema_version,
+            summary=d.summary,
+            evidence_json=d.evidence_json,
+            changed_files_json=d.changed_files,
+            tests_executed_json=d.tests_executed,
+            validation_results_json=d.validation_results_json,
+            open_questions_json=d.open_questions,
+            risks_json=d.risks,
+            not_checked_json=d.not_checked,
+            content_hash=d.content_hash,
+            is_consumed=d.is_consumed,
+            created_at=d.created_at,
+        )

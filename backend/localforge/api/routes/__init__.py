@@ -3,5 +3,6 @@ from localforge.api.routes.circuit_breakers import router as circuit_breakers_ro
 from localforge.api.routes.loops import router as loops_router
 from localforge.api.routes.worktrees import router as worktrees_router
 from localforge.api.routes.runners import router as runners_router
+from localforge.api.routes.typed_handoffs import router as typed_handoffs_router
 
-__all__ = ["loops_router", "circuit_breakers_router", "autonomy_router", "worktrees_router", "runners_router"]
+__all__ = ["loops_router", "circuit_breakers_router", "autonomy_router", "worktrees_router", "runners_router", "typed_handoffs_router"]

@@ -63,3 +63,31 @@ def verify_pr_ready(task_run_id: int = typer.Argument(..., help="TaskRun ID")) -
                 console.print(f"[bold red]TaskRun {task_run_id} is INELIGIBLE for PR_READY: {reason}[/bold red]")
 
     _run_async(_impl())
+
+
+@autonomy_app.command("pre-pr-check")
+def pre_pr_check(
+    project_id: int = typer.Option(..., "--project-id", "-p", help="Project ID"),
+    task_run_id: int = typer.Option(..., "--task-run-id", "-r", help="TaskRun ID"),
+) -> None:
+    """Run mechanical pre-PR gate checks (secret scanning, file count, verifier evidence)."""
+
+    async def _impl() -> None:
+        from localforge.safety.pre_pr_gate import MechanicalPrePRGate
+
+        gate = MechanicalPrePRGate()
+        async with UnitOfWork(db_manager) as uow:
+            res = await gate.evaluate_gate(
+                project_id=project_id,
+                task_run_id=task_run_id,
+                uow=uow,
+            )
+
+            if res.passed:
+                console.print(f"[bold green]Pre-PR Gate PASSED for TaskRun {task_run_id}[/bold green]")
+            else:
+                console.print(f"[bold red]Pre-PR Gate FAILED for TaskRun {task_run_id}:[/bold red]")
+                for v in res.violations:
+                    console.print(f"  - [red]{v}[/red]")
+
+    _run_async(_impl())

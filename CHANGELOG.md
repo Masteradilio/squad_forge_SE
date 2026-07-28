@@ -4,6 +4,17 @@ All notable changes to LocalForge OS will be documented in this file.
 
  ## [Unreleased]
 
+### V6 Phase 4 - Safety Invariants and Non-Bypassable Policy Gates - 2026-07-27
+
+#### Added
+- **Policy Contract Scope Composition**: Configured scope inheritance across Global, Project, Loop, Run, and Task levels applying the most restrictive rule wins principle.
+- **Centralized SafetyKernel Invariants**: Reinforced `SafetyKernel` with canonicalized path traversal validation (`os.path.realpath(os.path.abspath(...))`) blocking `../../.env` and symlink escapes.
+- **Mechanical Pre-PR Gate**: Implemented `MechanicalPrePRGate` in `pre_pr_gate.py` performing automated checks for file count limits, protected path contamination, secret scanning, verifier evidence, and permanent auto-merge prohibition. Emits versioned `pre_pr_gate_result.json` artifact.
+- **Adversarial Safety Test Suite**: Created `test_phase6_safety_invariants.py` verifying path traversal blocking, dangerous command/shell wrapper detection, secret scanning, and pre-PR gate enforcement.
+- **REST API & CLI Surfaces**: Added `/projects/{id}/task-runs/{task_run_id}/pre-pr-gate` REST endpoint and `localforge autonomy pre-pr-check` CLI command.
+- **Phase 4 Evidence**: Added `docs/e2e/v6/phase_04/manifest.json`, `docs/e2e/v6/phase_04/test_summary.json`, and `docs/e2e/v6/phase_04/acceptance_report.md`.
+
+
 ### V6 Phase 3 - Progressive Autonomy and Independent Maker/Checker - 2026-07-27
 
 #### Added

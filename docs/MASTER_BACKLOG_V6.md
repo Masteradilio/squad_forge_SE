@@ -571,55 +571,56 @@ must obey.
 
 ### V6-400 — Add Loop and Swarm policy contracts
 
-- [ ] Add allowed actions, denied actions, allowed commands, blocked commands,
+- [x] Add allowed actions, denied actions, allowed commands, blocked commands,
       protected paths, network scope, provider scope, file-count limits,
       diff-growth limits, and approval patterns.
-- [ ] Add stricter defaults for `.env`, credentials, authentication, payments,
+- [x] Add stricter defaults for `.env`, credentials, authentication, payments,
       infrastructure, workflows, and schema migrations.
-- [ ] Define policy composition between global, project, Loop, Run, and task
+- [x] Define policy composition between global, project, Loop, Run, and task
       scopes.
-- [ ] Resolve conflicts using the most restrictive applicable rule.
+- [x] Resolve conflicts using the most restrictive applicable rule.
 
 ### V6-401 — Centralize enforcement
 
-- [ ] Route file, command, network, Git, PR, provider, and external connector
+- [x] Route file, command, network, Git, PR, provider, and external connector
       actions through the SafetyKernel.
-- [ ] Prevent runners and extensions from invoking lower-level mutation APIs
+- [x] Prevent runners and extensions from invoking lower-level mutation APIs
       directly.
-- [ ] Validate policy both before action and before committing results.
-- [ ] Fail closed when policy or actor identity is missing.
+- [x] Validate policy both before action and before committing results.
+- [x] Fail closed when policy or actor identity is missing.
 
 ### V6-402 — Add mechanical pre-PR gates
 
-- [ ] Recheck file count, protected paths, diff growth, secret scan, generated
+- [x] Recheck file count, protected paths, diff growth, secret scan, generated
       artifacts, approvals, verifier evidence, and merge policy.
-- [ ] Treat auto-merge as permanently disabled for V6.
-- [ ] Attach gate results as a versioned artifact.
-- [ ] Reject stale approvals after material diff changes.
+- [x] Treat auto-merge as permanently disabled for V6.
+- [x] Attach gate results as a versioned artifact.
+- [x] Reject stale approvals after material diff changes.
 
 ### V6-403 — Add adversarial policy tests
 
-- [ ] Prompt-requested path escape.
-- [ ] Symlink and path-normalization escape.
-- [ ] Nested worktree escape.
-- [ ] Command alias/shell wrapping bypass.
-- [ ] Skill or runner bypass.
-- [ ] Stale approval reuse.
-- [ ] Secret and credential access.
-- [ ] Unauthorized PR approval or merge.
+- [x] Prompt-requested path escape.
+- [x] Symlink and path-normalization escape.
+- [x] Nested worktree escape.
+- [x] Command alias/shell wrapping bypass.
+- [x] Skill or runner bypass.
+- [x] Stale approval reuse.
+- [x] Secret and credential access.
+- [x] Unauthorized PR approval or merge.
 
 **Phase 4 regression**
 
-- [ ] `backend/tests/test_safety_kernel.py`.
-- [ ] `backend/tests/test_safety_validator.py`.
-- [ ] Action approval and audit regressions.
-- [ ] Scheduler and runner negative-path regressions.
+- [x] `backend/tests/test_safety_kernel.py`.
+- [x] `backend/tests/test_safety_validator.py`.
+- [x] Action approval and audit regressions.
+- [x] Scheduler and runner negative-path regressions.
 
 **Phase 4 exit gate**
 
-- [ ] All mutations are proven to pass through the SafetyKernel.
-- [ ] Bypass fixtures fail closed.
-- [ ] Complete the mandatory phase synchronization gate.
+- [x] All mutations are proven to pass through the SafetyKernel.
+- [x] Bypass fixtures fail closed.
+- [x] Complete the mandatory phase synchronization gate.
+
 
 ---
 

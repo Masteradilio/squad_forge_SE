@@ -1,4 +1,7 @@
+from typing import Any
+
 from fastapi import APIRouter, HTTPException, status
+
 
 from localforge.api.schemas import AutonomyEvaluateRequest, VerificationCreateRequest, VerificationSubmitRequest
 from localforge.models import domain
@@ -81,3 +84,25 @@ async def check_pr_ready_eligibility(task_run_id: int) -> dict[str, str | bool]:
             "eligible": eligible,
             "reason": reason,
         }
+
+
+@router.post("/projects/{project_id}/task-runs/{task_run_id}/pre-pr-gate")
+async def evaluate_pre_pr_gate(
+    project_id: int,
+    task_run_id: int,
+    diff_text: str = "",
+    modified_files: list[str] | None = None,
+) -> dict[str, Any]:
+    """Run mechanical pre-PR gate checks including secret scanning, file count, and verifier evidence."""
+    from localforge.safety.pre_pr_gate import MechanicalPrePRGate
+
+    gate = MechanicalPrePRGate()
+    async with UnitOfWork(db_manager) as uow:
+        res = await gate.evaluate_gate(
+            project_id=project_id,
+            task_run_id=task_run_id,
+            uow=uow,
+            diff_text=diff_text,
+            modified_files=modified_files or [],
+        )
+        return res.to_dict()

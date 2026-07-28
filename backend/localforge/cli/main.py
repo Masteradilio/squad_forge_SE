@@ -28,6 +28,8 @@ from localforge.cli.typed_handoffs import handoffs_app
 from localforge.cli.light_swarm import swarm_app
 from localforge.cli.task_graph import graph_app
 from localforge.cli.memory import memory_app
+from localforge.cli.operational_loops import ops_loops_app
+
 
 
 
@@ -107,6 +109,8 @@ app.add_typer(handoffs_app, name="handoffs")
 app.add_typer(swarm_app, name="swarm")
 app.add_typer(graph_app, name="graph")
 app.add_typer(memory_app, name="memory")
+app.add_typer(ops_loops_app, name="loops-eval")
+
 
 
 

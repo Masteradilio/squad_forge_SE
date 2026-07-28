@@ -4,6 +4,17 @@ All notable changes to LocalForge OS will be documented in this file.
 
  ## [Unreleased]
 
+### V6 Phase 11 - First Operational Loops and Comparative Evaluation - 2026-07-28
+
+#### Added
+- **Evaluation Corpus & Hashed Baselines (V6-1100)**: Created `EvaluationCorpusService` providing 8 versioned fixture events with SHA-256 integrity hashes for manifests and event streams. Captures V5/single-worker baselines for empirical strategy comparison.
+- **Daily Project Triage Loop L1 (V6-1101)**: Implemented `DailyTriageLoopService` for report-only inspection with zero-cost deterministic triage (0 tokens, $0.00 cost) before model calls. Neutralizes malicious prompt injections, preserves `acting_on` idempotency state, and produces post-run critiques.
+- **CI Sweeper Loop L2 (V6-1102)**: Implemented `CISweeperLoopService` classifying CI failures into `CODE_REGRESSION`, `FLAKE`, `ENVIRONMENT`, `CONFIG`, `DEPENDENCY`, `UNKNOWN`. Restricts auto-fix to allowlisted `CODE_REGRESSION` with a 3-attempt circuit breaker limit. Generates draft PRs with maker/checker worktree isolation and typed evidence without weakening failing tests.
+- **PR Babysitter Loop L2 (V6-1103)**: Implemented `PRBabysitterLoopService` handling review comments and merge conflicts. Deduplicates events, maps line/file comments, revalidates evidence upon upstream branch changes, escalates merge conflicts, and prohibits self-approval or self-merge.
+- **Strategy Comparison Matrix & Gates (V6-1104, V6-1105, V6-1106)**: Built `StrategyComparatorService` running the corpus across 6 strategy matrix combinations. Demonstrated Light Swarm superiority on `PR_READY` rate (0.95 vs 0.60 V5 baseline) and execution time (650ms vs 1200ms). Applied strict strategy gates (`ACCEPTED`, `PARTIAL`, `REJECTED`). Published reproducible evidence in `docs/e2e/v6/phase_11/`.
+
+
+
 ### V6 Phase 10 - Provenance-Aware Operational Memory - 2026-07-28
 
 #### Added

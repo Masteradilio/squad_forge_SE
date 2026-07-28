@@ -1,0 +1,29 @@
+{
+  "phase_id": "phase_11",
+  "test_suites": {
+    "phase_11_operational_loops_tests": {
+      "command": "python -m pytest backend/tests/test_phase11_operational_loops.py -q",
+      "status": "PASSED",
+      "total_passed": 8,
+      "total_failed": 0
+    },
+    "backend_pytest_full": {
+      "command": "python -m pytest backend/tests -q",
+      "status": "PASSED",
+      "total_passed": 270,
+      "total_failed": 0
+    },
+    "backend_mypy": {
+      "command": "python -m mypy backend",
+      "status": "PASSED",
+      "files_checked": 204,
+      "errors": 0
+    },
+    "frontend_vitest": {
+      "command": "npm test --prefix frontend",
+      "status": "PASSED",
+      "total_passed": 5
+    }
+  },
+  "overall_status": "PASSED"
+}

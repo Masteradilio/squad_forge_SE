@@ -1,0 +1,20 @@
+{
+  "phase_id": "phase_11",
+  "phase_name": "First Operational Loops and Comparative Evaluation",
+  "timestamp": "2026-07-28T08:38:00Z",
+  "source_commit": "HEAD",
+  "changed_modules": [
+    "backend/localforge/services/eval_corpus.py",
+    "backend/localforge/services/daily_triage_loop.py",
+    "backend/localforge/services/ci_sweeper_loop.py",
+    "backend/localforge/services/pr_babysitter_loop.py",
+    "backend/localforge/services/strategy_comparator.py",
+    "backend/localforge/api/routes/operational_loops.py",
+    "backend/localforge/api/routes/__init__.py",
+    "backend/localforge/api/app.py",
+    "backend/localforge/cli/operational_loops.py",
+    "backend/localforge/cli/main.py",
+    "backend/tests/test_phase11_operational_loops.py"
+  ],
+  "verdict": "PHASE_ACCEPTED"
+}

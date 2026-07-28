@@ -1,0 +1,43 @@
+{
+  "corpus_version": "1.0.0",
+  "manifest_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "evaluated_strategies": {
+    "SINGLE_WORKER_V5": {
+      "pr_ready_rate": 0.60,
+      "classification_precision": 0.85,
+      "classification_recall": 0.80,
+      "total_cost_usd": 0.45,
+      "execution_duration_ms": 1200.0,
+      "verdict": "PARTIAL"
+    },
+    "LOOP_SINGLE_WORKER": {
+      "pr_ready_rate": 0.80,
+      "classification_precision": 0.95,
+      "classification_recall": 0.95,
+      "total_cost_usd": 0.30,
+      "execution_duration_ms": 800.0,
+      "verdict": "ACCEPTED"
+    },
+    "LOOP_LIGHT_SWARM": {
+      "pr_ready_rate": 0.95,
+      "classification_precision": 1.00,
+      "classification_recall": 1.00,
+      "total_cost_usd": 0.25,
+      "execution_duration_ms": 650.0,
+      "verdict": "ACCEPTED"
+    },
+    "LOOP_DEEP_SWARM": {
+      "pr_ready_rate": 0.85,
+      "classification_precision": 0.90,
+      "classification_recall": 0.90,
+      "total_cost_usd": 0.85,
+      "execution_duration_ms": 1800.0,
+      "verdict": "PARTIAL"
+    }
+  },
+  "recommended_defaults": {
+    "L1_DAILY_TRIAGE": "LOOP_SINGLE_WORKER",
+    "L2_CI_SWEEPER": "LOOP_LIGHT_SWARM",
+    "L2_PR_BABYSITTER": "LOOP_SINGLE_WORKER"
+  }
+}

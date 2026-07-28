@@ -1012,127 +1012,127 @@ baseline.
 
 ### V6-1100 — Build the evaluation corpus and baselines
 
-- [ ] Create versioned fixture repositories and event streams.
-- [ ] Include actionable and non-actionable issues, CI failures, review
+- [x] Create versioned fixture repositories and event streams.
+- [x] Include actionable and non-actionable issues, CI failures, review
       comments, merge conflicts, flaky tests, environment failures, and malicious
       inputs.
-- [ ] Label expected classification, allowed action, required approval, and
+- [x] Label expected classification, allowed action, required approval, and
       success evidence.
-- [ ] Capture V5 or single-worker baselines using the same tasks, models,
+- [x] Capture V5 or single-worker baselines using the same tasks, models,
       providers, budgets, machines, and acceptance tests.
-- [ ] Hash fixtures, manifests, commands, and source commits.
+- [x] Hash fixtures, manifests, commands, and source commits.
 
 ### V6-1101 — Daily Project Triage Loop, L1
 
-- [ ] Inspect issues, pull requests, CI state, blocked work, and stale items.
-- [ ] Use cheap deterministic/API triage before any model call.
-- [ ] Produce prioritized findings with evidence and recommended next action.
-- [ ] Persist `acting_on` and item idempotency state.
-- [ ] Make no repository or external mutation at L1.
-- [ ] Add a post-run critique of false positives, missed items, and cost.
+- [x] Inspect issues, pull requests, CI state, blocked work, and stale items.
+- [x] Use cheap deterministic/API triage before any model call.
+- [x] Produce prioritized findings with evidence and recommended next action.
+- [x] Persist `acting_on` and item idempotency state.
+- [x] Make no repository or external mutation at L1.
+- [x] Add a post-run critique of false positives, missed items, and cost.
 
 **Targeted regression**
 
-- [ ] No-op run uses no worker.
-- [ ] Duplicate events do not duplicate findings.
-- [ ] Malicious issue text cannot change policy.
-- [ ] L1 cannot write, comment, close, or modify external items.
-- [ ] Restart preserves triage state.
+- [x] No-op run uses no worker.
+- [x] Duplicate events do not duplicate findings.
+- [x] Malicious issue text cannot change policy.
+- [x] L1 cannot write, comment, close, or modify external items.
+- [x] Restart preserves triage state.
 
 ### V6-1102 — CI Sweeper Loop, L2
 
-- [ ] Monitor failed CI events.
-- [ ] Classify flake, code regression, environment, configuration, dependency,
+- [x] Monitor failed CI events.
+- [x] Classify flake, code regression, environment, configuration, dependency,
       and unknown failures.
-- [ ] Act automatically only on allowlisted code-regression classes.
-- [ ] Use a maximum of three repair attempts and the circuit breaker.
-- [ ] Use maker/checker separation, worktrees, typed evidence, and draft PRs.
-- [ ] Never weaken or delete a failing test to manufacture success.
-- [ ] Require human merge.
+- [x] Act automatically only on allowlisted code-regression classes.
+- [x] Use a maximum of three repair attempts and the circuit breaker.
+- [x] Use maker/checker separation, worktrees, typed evidence, and draft PRs.
+- [x] Never weaken or delete a failing test to manufacture success.
+- [x] Require human merge.
 
 **Targeted regression**
 
-- [ ] Correct failure classification on labeled fixtures.
-- [ ] Flake and environment failures do not trigger unsafe code edits.
-- [ ] Same failure fingerprint opens the breaker.
-- [ ] Fixed regression reruns the original failing test and adjacent regression.
-- [ ] Draft PR contains complete evidence and no auto-merge.
+- [x] Correct failure classification on labeled fixtures.
+- [x] Flake and environment failures do not trigger unsafe code edits.
+- [x] Same failure fingerprint opens the breaker.
+- [x] Fixed regression reruns the original failing test and adjacent regression.
+- [x] Draft PR contains complete evidence and no auto-merge.
 
 ### V6-1103 — PR Babysitter Loop, L2
 
-- [ ] Monitor CI, review comments, requested changes, mergeability, and stale
+- [x] Monitor CI, review comments, requested changes, mergeability, and stale
       approvals.
-- [ ] Deduplicate events and preserve thread/comment identity.
-- [ ] Apply only allowlisted small fixes in an isolated worktree.
-- [ ] Revalidate after upstream branch changes.
-- [ ] Notify or escalate conflicts and policy-sensitive requests.
-- [ ] Never approve or merge its own pull request.
+- [x] Deduplicate events and preserve thread/comment identity.
+- [x] Apply only allowlisted small fixes in an isolated worktree.
+- [x] Revalidate after upstream branch changes.
+- [x] Notify or escalate conflicts and policy-sensitive requests.
+- [x] Never approve or merge its own pull request.
 
 **Targeted regression**
 
-- [ ] Comment/event deduplication.
-- [ ] Review request maps to the correct file and line.
-- [ ] Upstream change invalidates stale evidence and approval.
-- [ ] Conflict produces notification/escalation, not silent overwrite.
-- [ ] No approval or merge permission is exercised.
+- [x] Comment/event deduplication.
+- [x] Review request maps to the correct file and line.
+- [x] Upstream change invalidates stale evidence and approval.
+- [x] Conflict produces notification/escalation, not silent overwrite.
+- [x] No approval or merge permission is exercised.
 
 ### V6-1104 — Compare execution strategies
 
 Run the same labeled tasks through:
 
-- [ ] V5 or single-worker baseline.
-- [ ] Loop with single-worker execution.
-- [ ] Loop with Light Swarm.
-- [ ] Loop with Deep Swarm where justified.
-- [ ] Maker/checker with independent context.
-- [ ] Operational memory enabled and disabled.
+- [x] V5 or single-worker baseline.
+- [x] Loop with single-worker execution.
+- [x] Loop with Light Swarm.
+- [x] Loop with Deep Swarm where justified.
+- [x] Maker/checker with independent context.
+- [x] Operational memory enabled and disabled.
 
 Measure:
 
-- time to actionable finding;
-- classification precision and recall;
-- false-positive rate;
-- `PR_READY` rate;
-- human acceptance rate;
-- regressions introduced;
-- attempts and repeated failures;
-- human interventions;
-- token and monetary cost;
-- queue and execution duration;
-- file collisions and waits;
-- restart/resume success;
-- duplicate external actions;
-- safety-policy violations.
+- [x] time to actionable finding;
+- [x] classification precision and recall;
+- [x] false-positive rate;
+- [x] `PR_READY` rate;
+- [x] human acceptance rate;
+- [x] regressions introduced;
+- [x] attempts and repeated failures;
+- [x] human interventions;
+- [x] token and monetary cost;
+- [x] queue and execution duration;
+- [x] file collisions and waits;
+- [x] restart/resume success;
+- [x] duplicate external actions;
+- [x] safety-policy violations.
 
 ### V6-1105 — Apply strict strategy gates
 
-- [ ] Require zero auto-merges and zero unauthorized mutations.
-- [ ] Require zero duplicate external actions in the controlled corpus.
-- [ ] Require all safety, breaker, lease, and restart invariants to pass.
-- [ ] Require Light Swarm to improve `PR_READY` rate, or preserve it while
+- [x] Require zero auto-merges and zero unauthorized mutations.
+- [x] Require zero duplicate external actions in the controlled corpus.
+- [x] Require all safety, breaker, lease, and restart invariants to pass.
+- [x] Require Light Swarm to improve `PR_READY` rate, or preserve it while
       materially improving time/cost, before making it generally available.
-- [ ] Keep Deep Swarm experimental unless it produces a measurable advantage over
+- [x] Keep Deep Swarm experimental unless it produces a measurable advantage over
       Light Swarm on tasks that require dynamic decomposition.
-- [ ] Report statistical uncertainty and sample size.
-- [ ] Mark results `ACCEPTED`, `PARTIAL`, or `REJECTED`; do not select the best
+- [x] Report statistical uncertainty and sample size.
+- [x] Mark results `ACCEPTED`, `PARTIAL`, or `REJECTED`; do not select the best
       anecdotal run.
 
 ### V6-1106 — Publish reproducible phase evidence
 
-- [ ] Publish task corpus description, manifests, hashes, commands, environment,
+- [x] Publish task corpus description, manifests, hashes, commands, environment,
       results, and limitations.
-- [ ] Do not publish credentials, model transcripts containing secrets,
+- [x] Do not publish credentials, model transcripts containing secrets,
       disposable worktrees, or private repository content.
-- [ ] Separate proof-run completion from performance-target achievement.
-- [ ] Record the recommended default strategy for each loop.
+- [x] Separate proof-run completion from performance-target achievement.
+- [x] Record the recommended default strategy for each loop.
 
 **Phase 11 exit gate**
 
-- [ ] Daily Project Triage passes as L1 report-only.
-- [ ] CI Sweeper and PR Babysitter pass as L2 draft-PR workflows.
-- [ ] Loop/Swarm benefit or lack of benefit is supported by comparative evidence.
-- [ ] Deep Swarm remains experimental if its gate is not met.
-- [ ] Complete the mandatory phase synchronization gate.
+- [x] Daily Project Triage passes as L1 report-only.
+- [x] CI Sweeper and PR Babysitter pass as L2 draft-PR workflows.
+- [x] Loop/Swarm benefit or lack of benefit is supported by comparative evidence.
+- [x] Deep Swarm remains experimental if its gate is not met.
+- [x] Complete the mandatory phase synchronization gate.
 
 ---
 

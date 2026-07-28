@@ -11,7 +11,8 @@ from localforge.storage.orm import Base, SchemaVersionORM
 
 logger = logging.getLogger(__name__)
 
-CURRENT_VERSION = 12
+CURRENT_VERSION = 13
+
 
 
 

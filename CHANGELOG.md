@@ -4,6 +4,19 @@ All notable changes to LocalForge OS will be documented in this file.
 
  ## [Unreleased]
 
+### V6 Phase 8 - Light Swarm: Bounded Multi-Agent Fan-Out - 2026-07-27
+
+#### Added
+- **Swarm Enums & Migration v13**: Added `SwarmStrategy`, `SwarmNodeType`, `SwarmNodeStatus`, `SwarmStatus` enums. Created `swarm_plans` and `swarm_runs` ORM tables (Schema Version 13).
+- **Light Swarm Policy (V6-800)**: Defined `SwarmPolicy` enforcing hard limits: max 2–4 IMPLEMENT workers, max_depth=1, no recursive sub-swarms, independent checker requirement, aggregate time/cost/token/file/retry bounds.
+- **Bounded DAG Decomposition (V6-801)**: `LightSwarmService.create_plan()` validates acyclicity via DFS cycle detection, fan-out bounds, policy constraints, and artifact contracts before persisting any plan. SINGLE_WORKER fallback always accepted.
+- **Swarm Execution Coordination (V6-802)**: `start_swarm()` initialises ready-node queue. `complete_node()` advances downstream nodes and auto-concludes. `fail_node()` propagates BLOCKED state transitively and respects retry policy.
+- **Result Aggregation & Verification (V6-803)**: `aggregate_result()` produces replayable `SwarmExecutionSummary` with verdict, cost/tokens/duration, and artifact IDs.
+- **Controls & Observability (V6-804)**: `pause_swarm()`, `kill_swarm()`, and `get_dag_view()` at swarm scope. REST: `/swarms`, `/swarms/{id}`, `/swarms/{id}/dag`, `/swarms/{id}/summary`, `/swarms/{id}/pause`, `/swarms/{id}/kill`. CLI: `localforge swarm` (`start`, `status`, `pause`, `kill`, `summary`).
+- **Phase 8 Evidence**: Added `docs/e2e/v6/phase_08/manifest.json`, `docs/e2e/v6/phase_08/test_summary.json`, and `docs/e2e/v6/phase_08/acceptance_report.md`.
+
+
+
 ### V6 Phase 7 - Typed Handoffs and Evidence-Carrying Dependencies - 2026-07-27
 
 #### Added

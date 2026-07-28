@@ -25,6 +25,7 @@ from localforge.cli.loops import loops_app
 from localforge.cli.worktree import worktree_app
 from localforge.cli.runners import runners_app
 from localforge.cli.typed_handoffs import handoffs_app
+from localforge.cli.light_swarm import swarm_app
 
 
 
@@ -100,6 +101,7 @@ app.add_typer(autonomy_app, name="autonomy")
 app.add_typer(worktree_app, name="worktree")
 app.add_typer(runners_app, name="runners")
 app.add_typer(handoffs_app, name="handoffs")
+app.add_typer(swarm_app, name="swarm")
 
 
 

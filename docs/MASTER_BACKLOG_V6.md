@@ -804,59 +804,60 @@ recursive sub-swarms.
 
 ### V6-800 — Define Light Swarm policy
 
-- [ ] Allow two to four workers.
-- [ ] Permit only one decomposition level.
-- [ ] Require one task owner and one isolated attempt per code-changing node.
-- [ ] Require an independent checker.
-- [ ] Bound aggregate time, cost, tokens, files, and retries.
-- [ ] Disable worker-created sub-swarms.
+- [x] Allow two to four workers.
+- [x] Permit only one decomposition level.
+- [x] Require one task owner and one isolated attempt per code-changing node.
+- [x] Require an independent checker.
+- [x] Bound aggregate time, cost, tokens, files, and retries.
+- [x] Disable worker-created sub-swarms.
 
 ### V6-801 — Add bounded decomposition
 
-- [ ] Convert an actionable task into a fixed DAG of research, implementation,
+- [x] Convert an actionable task into a fixed DAG of research, implementation,
       test, critique, and verification nodes as applicable.
-- [ ] Validate acyclicity and required artifact contracts before execution.
-- [ ] Reject decomposition that exceeds policy or budget.
-- [ ] Keep a single-worker strategy available as baseline and fallback.
+- [x] Validate acyclicity and required artifact contracts before execution.
+- [x] Reject decomposition that exceeds policy or budget.
+- [x] Keep a single-worker strategy available as baseline and fallback.
 
 ### V6-802 — Coordinate Light Swarm execution
 
-- [ ] Dispatch ready nodes through the capability-aware RunnerPool.
-- [ ] Use worktree manifests and PathIntents for code-changing nodes.
-- [ ] Transport only typed handoff artifacts across edges.
-- [ ] Stop downstream work when upstream evidence fails.
-- [ ] Open the circuit breaker on repeated non-progress.
+- [x] Dispatch ready nodes through the capability-aware RunnerPool.
+- [x] Use worktree manifests and PathIntents for code-changing nodes.
+- [x] Transport only typed handoff artifacts across edges.
+- [x] Stop downstream work when upstream evidence fails.
+- [x] Open the circuit breaker on repeated non-progress.
 
 ### V6-803 — Aggregate and verify the result
 
-- [ ] Assemble candidate changes only after node-level checks pass.
-- [ ] Run deterministic integration checks in a dedicated verification context.
-- [ ] Require checker evidence before `PR_READY`.
-- [ ] Escalate conflicts that cannot be reconciled deterministically.
+- [x] Assemble candidate changes only after node-level checks pass.
+- [x] Run deterministic integration checks in a dedicated verification context.
+- [x] Require checker evidence before `PR_READY`.
+- [x] Escalate conflicts that cannot be reconciled deterministically.
 
 ### V6-804 — Add Light Swarm controls and observability
 
-- [ ] Add strategy selection to CLI/API.
-- [ ] Show DAG, workers, leases, wait time, cost, attempts, and verifier result.
-- [ ] Allow pause and kill at Swarm and node scope.
-- [ ] Export a replayable execution summary.
+- [x] Add strategy selection to CLI/API.
+- [x] Show DAG, workers, leases, wait time, cost, attempts, and verifier result.
+- [x] Allow pause and kill at Swarm and node scope.
+- [x] Export a replayable execution summary.
 
 **Targeted regression**
 
-- [ ] Maximum worker and depth limits.
-- [ ] Bounded decomposition and acyclicity.
-- [ ] Parallel non-overlapping work.
-- [ ] Overlapping path serialization/escalation.
-- [ ] Upstream failure propagation.
-- [ ] Checker rejection and repair cycle.
-- [ ] Pause, kill, restart, and lease recovery.
-- [ ] Single-worker fallback.
+- [x] Maximum worker and depth limits.
+- [x] Bounded decomposition and acyclicity.
+- [x] Parallel non-overlapping work.
+- [x] Overlapping path serialization/escalation.
+- [x] Upstream failure propagation.
+- [x] Checker rejection and repair cycle.
+- [x] Pause, kill, restart, and lease recovery.
+- [x] Single-worker fallback.
 
 **Phase 8 exit gate**
 
-- [ ] Light Swarm completes a controlled multi-file fixture without collision,
+- [x] Light Swarm completes a controlled multi-file fixture without collision,
       unbounded retries, or self-verification.
-- [ ] Complete the mandatory phase synchronization gate.
+- [x] Complete the mandatory phase synchronization gate.
+
 
 ---
 

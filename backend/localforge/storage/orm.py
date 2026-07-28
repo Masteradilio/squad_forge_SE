@@ -1466,3 +1466,117 @@ class TypedHandoffArtifactORM(Base):
             is_consumed=d.is_consumed,
             created_at=d.created_at,
         )
+
+
+class SwarmPlanORM(Base):
+    """ORM for SwarmPlan — the server-owned validated DAG plan for a Light Swarm."""
+
+    __tablename__ = "swarm_plans"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
+    task_run_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    strategy: Mapped[str] = mapped_column(String(50), nullable=False, default="LIGHT")
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="DRAFT")
+    policy_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    nodes_json: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    edges_json: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    paused_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC)
+    )
+
+    def to_domain(self) -> domain.SwarmPlan:
+        from localforge.models.enums import SwarmStrategy, SwarmStatus, SwarmNodeType, SwarmNodeStatus, TypedArtifactType
+        from localforge.models.domain import SwarmNode, SwarmPolicy
+
+        nodes = [SwarmNode(**n) for n in (self.nodes_json or [])]
+        edges: list[tuple[str, str]] = [tuple(e) for e in (self.edges_json or [])]  # type: ignore[misc]
+        policy = SwarmPolicy(**self.policy_json) if self.policy_json else SwarmPolicy()
+        return domain.SwarmPlan(
+            id=self.id,
+            project_id=self.project_id,
+            task_run_id=self.task_run_id,
+            strategy=SwarmStrategy(self.strategy),
+            status=SwarmStatus(self.status),
+            policy=policy,
+            nodes=nodes,
+            edges=edges,
+            paused_at=self.paused_at,
+            created_at=self.created_at,
+            updated_at=self.updated_at,
+        )
+
+    @classmethod
+    def from_domain(cls, d: domain.SwarmPlan) -> "SwarmPlanORM":
+        nodes_json = [n.model_dump(mode="json") for n in d.nodes]
+        edges_json = [list(e) for e in d.edges]
+        return cls(
+            id=d.id,
+            project_id=d.project_id,
+            task_run_id=d.task_run_id,
+            strategy=d.strategy.value if isinstance(d.strategy, enums.SwarmStrategy) else str(d.strategy),
+            status=d.status.value if isinstance(d.status, enums.SwarmStatus) else str(d.status),
+            policy_json=d.policy.model_dump(mode="json"),
+            nodes_json=nodes_json,
+            edges_json=edges_json,
+            paused_at=d.paused_at,
+            created_at=d.created_at,
+            updated_at=d.updated_at,
+        )
+
+
+class SwarmRunORM(Base):
+    """ORM for SwarmRun — mutable execution state of a swarm."""
+
+    __tablename__ = "swarm_runs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    plan_id: Mapped[int] = mapped_column(
+        ForeignKey("swarm_plans.id", ondelete="CASCADE"), nullable=False
+    )
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="PENDING")
+    active_node_ids_json: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    cumulative_cost_usd: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    cumulative_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    node_statuses_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    verdict: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+
+    def to_domain(self) -> domain.SwarmRun:
+        from localforge.models.enums import SwarmStatus
+        return domain.SwarmRun(
+            id=self.id,
+            plan_id=self.plan_id,
+            status=SwarmStatus(self.status),
+            active_node_ids=list(self.active_node_ids_json or []),
+            cumulative_cost_usd=self.cumulative_cost_usd,
+            cumulative_tokens=self.cumulative_tokens,
+            node_statuses=dict(self.node_statuses_json or {}),
+            verdict=self.verdict,
+            started_at=self.started_at,
+            finished_at=self.finished_at,
+            created_at=self.created_at,
+        )
+
+    @classmethod
+    def from_domain(cls, d: domain.SwarmRun) -> "SwarmRunORM":
+        return cls(
+            id=d.id,
+            plan_id=d.plan_id,
+            status=d.status.value if isinstance(d.status, enums.SwarmStatus) else str(d.status),
+            active_node_ids_json=list(d.active_node_ids),
+            cumulative_cost_usd=d.cumulative_cost_usd,
+            cumulative_tokens=d.cumulative_tokens,
+            node_statuses_json=dict(d.node_statuses),
+            verdict=d.verdict,
+            started_at=d.started_at,
+            finished_at=d.finished_at,
+            created_at=d.created_at,
+        )
+

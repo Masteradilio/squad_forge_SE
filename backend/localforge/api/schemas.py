@@ -221,3 +221,37 @@ class TypedHandoffCreateRequest(BaseModel):
     open_questions: list[str] = Field(default_factory=list)
     risks: list[str] = Field(default_factory=list)
     not_checked: list[str] = Field(default_factory=list)
+
+
+class SwarmNodeInput(BaseModel):
+    node_id: str
+    node_type: str
+    title: str
+    description: str
+    depends_on: list[str] = Field(default_factory=list)
+    required_input_artifact_type: str | None = None
+    output_artifact_type: str | None = None
+
+
+class SwarmPolicyInput(BaseModel):
+    strategy: str = "LIGHT"
+    max_workers: int = 4
+    max_depth: int = 1
+    max_duration_seconds: int = 3600
+    max_cost_usd: float = 5.0
+    max_tokens: int = 500_000
+    max_files: int = 50
+    max_retries_per_node: int = 3
+    allow_sub_swarms: bool = False
+    require_independent_checker: bool = True
+
+
+class SwarmCreateRequest(BaseModel):
+    project_id: int
+    task_run_id: int
+    strategy: str = "LIGHT"
+    nodes: list[SwarmNodeInput] = Field(default_factory=list)
+    edges: list[tuple[str, str]] = Field(default_factory=list)
+    policy: SwarmPolicyInput = Field(default_factory=SwarmPolicyInput)
+    auto_start: bool = True
+

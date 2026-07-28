@@ -23,6 +23,7 @@ from localforge.services.worktree import WorktreeService
 from localforge.services.path_lease import PathLeaseService
 from localforge.services.runner_pool import RunnerPoolService
 from localforge.services.typed_handoff import TypedHandoffService
+from localforge.services.light_swarm import LightSwarmService
 from localforge.storage.database import DatabaseManager, db_manager
 
 
@@ -57,6 +58,7 @@ class UnitOfWork:
         self.path_leases: PathLeaseService | None = None
         self.runner_pool: RunnerPoolService | None = None
         self.typed_handoffs: TypedHandoffService | None = None
+        self.light_swarm: LightSwarmService | None = None
 
     async def __aenter__(self) -> Self:
         self.session = await self.db_manager.get_session()
@@ -80,6 +82,7 @@ class UnitOfWork:
         self.path_leases = PathLeaseService(self.session)
         self.runner_pool = RunnerPoolService(self.session)
         self.typed_handoffs = TypedHandoffService(self.session)
+        self.light_swarm = LightSwarmService(self.session)
         return self
 
 

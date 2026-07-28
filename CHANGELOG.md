@@ -4,6 +4,28 @@ All notable changes to LocalForge OS will be documented in this file.
 
  ## [Unreleased]
 
+### V6 Phase 6 - Capability-Aware RunnerPool and Resource Governance - 2026-07-27
+
+#### Added
+- **Runner Capabilities & Migration v11**: Defined `RunnerCapability` model, `RunnerPoolState` model, and ORM tables `runner_pool_states` and `runner_dispatch_logs` with Schema Version 11 upgrade path.
+- **Health Tracking & Concurrency Leases**: Managed health states (`READY`, `BUSY`, `DEGRADED`, `UNAVAILABLE`, `DRAINING`, `QUARANTINED`). Built capacity reservation and release on task completion or failure.
+- **Deterministic Dispatch Engine**: Implemented 3-step dispatch in `RunnerPoolService` (`runner_pool.py`): Hard Filter -> Score Ranking -> Stable Tie-Breaking. Persists audit logs detailing winner and competitor rejection reasons (`NO_COMPATIBLE_RUNNER`).
+- **Backpressure & Leaked Lease Reconciliation**: Automatic reconciliation of leaked task capacity count on server restart via `reconcile_leaked_leases`.
+- **REST API & CLI Surfaces**: Added `/runners`, `/runners/dispatch`, and `/runners/{id}/health` REST routes and `localforge runners` CLI commands (`list`, `register`, `dispatch`, `health`).
+- **Phase 6 Evidence**: Added `docs/e2e/v6/phase_06/manifest.json`, `docs/e2e/v6/phase_06/test_summary.json`, and `docs/e2e/v6/phase_06/acceptance_report.md`.
+
+
+### V6 Phase 5 - Worktree Attempt Lifecycle and Path Intents - 2026-07-27
+
+#### Added
+- **Attempt Manifest & Migration v10**: Defined `WorktreeAttemptManifest` model and `WorktreeAttemptManifestORM` with Schema Version 10 upgrade path. Tracks physical path, branch name, source commit, owner agent, and status (`ACTIVE`, `VERIFIED`, `REJECTED`, `ESCALATED`, `MERGED`, `STALE`, `CLEANED`).
+- **PathIntent & Lease Coordination**: Built `PathLeaseService` in `path_lease.py` and ORM table `path_leases`. Implemented `is_path_overlapping` for exact and parent-child hierarchy overlap detection (e.g., `src/` vs `src/components/App.tsx`).
+- **Lease Release & Deadlock Handling**: Automatic release of active leases on task run completion, cancellation, or circuit breaker trips via `release_all_leases_for_run`.
+- **Report-Only Reconciliation & Cleanup**: Built `WorktreeService` in `worktree.py` providing report-only reconciliation of worktree manifests against physical filesystems (`reconcile_worktree_manifests`). Automatically flags missing directories as `STALE` without destructive file deletion.
+- **REST API & CLI Surfaces**: Added `/path-leases/acquire`, `/projects/{id}/path-leases`, `/worktree-attempts`, and `/projects/{id}/reconciliation/report` REST routes and `localforge worktree` CLI commands (`leases`, `reconcile`).
+- **Phase 5 Evidence**: Added `docs/e2e/v6/phase_05/manifest.json`, `docs/e2e/v6/phase_05/test_summary.json`, and `docs/e2e/v6/phase_05/acceptance_report.md`.
+
+
 ### V6 Phase 4 - Safety Invariants and Non-Bypassable Policy Gates - 2026-07-27
 
 #### Added

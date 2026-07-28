@@ -1,0 +1,23 @@
+{
+  "phase_id": "phase_06",
+  "phase_name": "Capability-Aware RunnerPool and Resource Governance",
+  "timestamp": "2026-07-27T23:08:00Z",
+  "source_commit": "b53e788c5efb054fb4ebbf27cba8ef7bf3ec64a6",
+  "changed_modules": [
+    "backend/localforge/models/enums.py",
+    "backend/localforge/models/domain.py",
+    "backend/localforge/storage/orm.py",
+    "backend/localforge/storage/bootstrap.py",
+    "backend/localforge/storage/transactions.py",
+    "backend/localforge/services/runner_pool.py",
+    "backend/localforge/services/runners.py",
+    "backend/localforge/api/schemas.py",
+    "backend/localforge/api/routes/runners.py",
+    "backend/localforge/api/routes/__init__.py",
+    "backend/localforge/api/app.py",
+    "backend/localforge/cli/runners.py",
+    "backend/localforge/cli/main.py",
+    "backend/tests/test_phase6_runner_pool_governance.py"
+  ],
+  "verdict": "PHASE_ACCEPTED"
+}

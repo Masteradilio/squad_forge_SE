@@ -1299,3 +1299,98 @@ class PathLeaseORM(Base):
             release_reason=d.release_reason.value if isinstance(d.release_reason, enums.LeaseReleaseReason) else d.release_reason,
             created_at=d.created_at,
         )
+
+
+class RunnerPoolStateORM(Base):
+    __tablename__ = "runner_pool_states"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    runner_id: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    lane: Mapped[str] = mapped_column(String(50), default="INLINE", nullable=False)
+    health_state: Mapped[str] = mapped_column(String(50), default="READY", nullable=False)
+    active_tasks_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    max_concurrency: Mapped[int] = mapped_column(Integer, default=4, nullable=False)
+    capabilities_json: Mapped[Any] = mapped_column(JSON, default=dict, nullable=False)
+    success_rate: Mapped[float] = mapped_column(Float, default=1.0, nullable=False)
+    quarantine_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC)
+    )
+
+    def to_domain(self) -> domain.RunnerPoolState:
+        caps_dict = self.capabilities_json if isinstance(self.capabilities_json, dict) else {}
+        return domain.RunnerPoolState(
+            id=self.id,
+            runner_id=self.runner_id,
+            name=self.name,
+            lane=enums.RunnerLane(self.lane),
+            health_state=enums.RunnerHealthState(self.health_state),
+            active_tasks_count=self.active_tasks_count,
+            max_concurrency=self.max_concurrency,
+            capabilities=domain.RunnerCapability.model_validate(caps_dict) if caps_dict else domain.RunnerCapability(),
+            success_rate=self.success_rate,
+            quarantine_reason=self.quarantine_reason,
+            created_at=self.created_at,
+            updated_at=self.updated_at,
+        )
+
+    @classmethod
+    def from_domain(cls, d: domain.RunnerPoolState) -> "RunnerPoolStateORM":
+        return cls(
+            id=d.id,
+            runner_id=d.runner_id,
+            name=d.name,
+            lane=d.lane.value if isinstance(d.lane, enums.RunnerLane) else str(d.lane),
+            health_state=d.health_state.value if isinstance(d.health_state, enums.RunnerHealthState) else str(d.health_state),
+            active_tasks_count=d.active_tasks_count,
+            max_concurrency=d.max_concurrency,
+            capabilities_json=d.capabilities.model_dump(mode="json"),
+            success_rate=d.success_rate,
+            quarantine_reason=d.quarantine_reason,
+            created_at=d.created_at,
+            updated_at=d.updated_at,
+        )
+
+
+class RunnerDispatchLogORM(Base):
+    __tablename__ = "runner_dispatch_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
+    task_run_id: Mapped[int] = mapped_column(
+        ForeignKey("task_runs.id", ondelete="CASCADE"), nullable=False
+    )
+    selected_runner_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    dispatch_status: Mapped[str] = mapped_column(String(50), default="SUCCESS", nullable=False)
+    ranking_scores_json: Mapped[Any] = mapped_column(JSON, default=dict, nullable=False)
+    rejection_reasons_json: Mapped[Any] = mapped_column(JSON, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+
+    def to_domain(self) -> domain.RunnerDispatchLog:
+        return domain.RunnerDispatchLog(
+            id=self.id,
+            project_id=self.project_id,
+            task_run_id=self.task_run_id,
+            selected_runner_id=self.selected_runner_id,
+            dispatch_status=self.dispatch_status,
+            ranking_scores_json=self.ranking_scores_json if isinstance(self.ranking_scores_json, dict) else {},
+            rejection_reasons_json=self.rejection_reasons_json if isinstance(self.rejection_reasons_json, dict) else {},
+            created_at=self.created_at,
+        )
+
+    @classmethod
+    def from_domain(cls, d: domain.RunnerDispatchLog) -> "RunnerDispatchLogORM":
+        return cls(
+            id=d.id,
+            project_id=d.project_id,
+            task_run_id=d.task_run_id,
+            selected_runner_id=d.selected_runner_id,
+            dispatch_status=d.dispatch_status,
+            ranking_scores_json=d.ranking_scores_json,
+            rejection_reasons_json=d.rejection_reasons_json,
+            created_at=d.created_at,
+        )

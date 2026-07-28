@@ -21,6 +21,7 @@ from localforge.services.autonomy import AutonomyService
 from localforge.services.maker_checker import MakerCheckerService
 from localforge.services.worktree import WorktreeService
 from localforge.services.path_lease import PathLeaseService
+from localforge.services.runner_pool import RunnerPoolService
 from localforge.storage.database import DatabaseManager, db_manager
 
 
@@ -53,6 +54,7 @@ class UnitOfWork:
         self.maker_checker: MakerCheckerService | None = None
         self.worktrees: WorktreeService | None = None
         self.path_leases: PathLeaseService | None = None
+        self.runner_pool: RunnerPoolService | None = None
 
     async def __aenter__(self) -> Self:
         self.session = await self.db_manager.get_session()
@@ -74,7 +76,9 @@ class UnitOfWork:
         self.maker_checker = MakerCheckerService(self.session)
         self.worktrees = WorktreeService(self.session)
         self.path_leases = PathLeaseService(self.session)
+        self.runner_pool = RunnerPoolService(self.session)
         return self
+
 
 
 

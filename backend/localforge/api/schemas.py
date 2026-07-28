@@ -187,3 +187,20 @@ class WorktreeManifestCreateRequest(BaseModel):
     source_commit: str
     owner_agent_id: str
     expected_paths: list[str] = Field(default_factory=list)
+
+
+class RunnerRegisterRequest(BaseModel):
+    runner_id: str
+    name: str
+    lane: str = "INLINE"
+    tools: list[str] = Field(default_factory=list)
+    supported_task_types: list[str] = Field(default_factory=list)
+    max_concurrency: int = 4
+
+
+class RunnerDispatchRequest(BaseModel):
+    project_id: int
+    task_run_id: int
+    required_lane: str | None = None
+    required_tools: list[str] = Field(default_factory=list)
+    required_task_type: str | None = None

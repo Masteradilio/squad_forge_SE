@@ -23,6 +23,8 @@ from localforge.cli.autonomy import autonomy_app
 from localforge.cli.circuit_breakers import breakers_app
 from localforge.cli.loops import loops_app
 from localforge.cli.worktree import worktree_app
+from localforge.cli.runners import runners_app
+
 
 
 from localforge.cli.plan import plan_cmd
@@ -94,6 +96,8 @@ app.add_typer(loops_app, name="loops")
 app.add_typer(breakers_app, name="breakers")
 app.add_typer(autonomy_app, name="autonomy")
 app.add_typer(worktree_app, name="worktree")
+app.add_typer(runners_app, name="runners")
+
 
 
 

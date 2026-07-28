@@ -692,49 +692,50 @@ outcome-aware dispatch.
 
 ### V6-600 — Define runner capabilities
 
-- [ ] Add lane, tools, platform, workspace type, model/provider access, network
+- [x] Add lane, tools, platform, workspace type, model/provider access, network
       policy, concurrency, memory/CPU expectations, and supported task types.
-- [ ] Add task capability requirements and hard constraints.
-- [ ] Reject dispatch when no runner satisfies required capabilities.
+- [x] Add task capability requirements and hard constraints.
+- [x] Reject dispatch when no runner satisfies required capabilities.
 
 ### V6-601 — Add health and resource leases
 
-- [ ] Track ready, busy, degraded, unavailable, draining, and quarantined states.
-- [ ] Reserve concurrency, provider, workspace, and paid-call capacity before
+- [x] Track ready, busy, degraded, unavailable, draining, and quarantined states.
+- [x] Reserve concurrency, provider, workspace, and paid-call capacity before
       dispatch.
-- [ ] Release capacity on completion, cancellation, timeout, and crash.
-- [ ] Reconcile leaked leases after restart.
+- [x] Release capacity on completion, cancellation, timeout, and crash.
+- [x] Reconcile leaked leases after restart.
 
 ### V6-602 — Implement deterministic dispatch
 
-- [ ] Filter by hard capability and safety requirements.
-- [ ] Rank eligible runners by health, locality, cost, load, and verified
+- [x] Filter by hard capability and safety requirements.
+- [x] Rank eligible runners by health, locality, cost, load, and verified
       outcomes.
-- [ ] Add stable tie-breaking.
-- [ ] Persist why the selected runner won and why others were rejected.
-- [ ] Keep provider routing attribution separate from runner selection.
+- [x] Add stable tie-breaking.
+- [x] Persist why the selected runner won and why others were rejected.
+- [x] Keep provider routing attribution separate from runner selection.
 
 ### V6-603 — Add backpressure and fairness
 
-- [ ] Bound project, Loop, lane, provider, and global concurrency.
-- [ ] Prevent one Loop from starving others.
-- [ ] Add queue aging without bypassing priority or safety.
-- [ ] Include queued time in budget and observability.
+- [x] Bound project, Loop, lane, provider, and global concurrency.
+- [x] Prevent one Loop from starving others.
+- [x] Add queue aging without bypassing priority or safety.
+- [x] Include queued time in budget and observability.
 
 **Targeted regression**
 
-- [ ] Capability match and no-compatible-runner behavior.
-- [ ] Stable selection and attribution.
-- [ ] Degraded/quarantined runner exclusion.
-- [ ] Lease release on crash and cancellation.
-- [ ] Global and per-Loop backpressure.
-- [ ] Fairness under competing queues.
-- [ ] Existing local worktree runner compatibility.
+- [x] Capability match and no-compatible-runner behavior.
+- [x] Stable selection and attribution.
+- [x] Degraded/quarantined runner exclusion.
+- [x] Lease release on crash and cancellation.
+- [x] Global and per-Loop backpressure.
+- [x] Fairness under competing queues.
+- [x] Existing local worktree runner compatibility.
 
 **Phase 6 exit gate**
 
-- [ ] Dispatch is deterministic, explainable, bounded, and restart-safe.
-- [ ] Complete the mandatory phase synchronization gate.
+- [x] Dispatch is deterministic, explainable, bounded, and restart-safe.
+- [x] Complete the mandatory phase synchronization gate.
+
 
 ---
 

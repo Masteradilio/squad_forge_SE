@@ -1,0 +1,32 @@
+{
+  "phase_id": "phase_06",
+  "test_suites": {
+    "backend_pytest": {
+      "command": "python -m pytest backend/tests -q",
+      "status": "PASSED",
+      "total_passed": 224,
+      "total_failed": 0
+    },
+    "phase_6_runner_pool_governance_tests": {
+      "command": "python -m pytest backend/tests/test_phase6_runner_pool_governance.py -q",
+      "status": "PASSED",
+      "total_passed": 3
+    },
+    "backend_mypy": {
+      "command": "python -m mypy backend",
+      "status": "PASSED",
+      "files_checked": 179,
+      "errors": 0
+    },
+    "frontend_vitest": {
+      "command": "npm test --prefix frontend",
+      "status": "PASSED",
+      "total_passed": 5
+    },
+    "frontend_build": {
+      "command": "npm run build --prefix frontend",
+      "status": "PASSED"
+    }
+  },
+  "overall_status": "PASSED"
+}

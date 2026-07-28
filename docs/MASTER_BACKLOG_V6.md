@@ -633,52 +633,53 @@ claiming automatic conflict resolution.
 
 ### V6-500 — Add an attempt manifest
 
-- [ ] Persist worktree path, branch, source commit, owner, task, attempt,
+- [x] Persist worktree path, branch, source commit, owner, task, attempt,
       expected paths, leases, timestamps, and lifecycle status.
-- [ ] Support active, verified, rejected, escalated, merged, stale, and cleaned
+- [x] Support active, verified, rejected, escalated, merged, stale, and cleaned
       states.
-- [ ] Reconcile manifests with actual Git/worktree state after restart.
-- [ ] Never infer success solely from a branch or directory existing.
+- [x] Reconcile manifests with actual Git/worktree state after restart.
+- [x] Never infer success solely from a branch or directory existing.
 
 ### V6-501 — Add PathIntent and leases
 
-- [ ] Allow tasks to declare file, directory, and subsystem write intent.
-- [ ] Add owner, TTL, renewal, wait policy, and release reason.
-- [ ] Detect exact and hierarchical overlap.
-- [ ] Notify affected workers before overlapping writes.
-- [ ] Require escalation or serialized execution for protected overlaps.
+- [x] Allow tasks to declare file, directory, and subsystem write intent.
+- [x] Add owner, TTL, renewal, wait policy, and release reason.
+- [x] Detect exact and hierarchical overlap.
+- [x] Notify affected workers before overlapping writes.
+- [x] Require escalation or serialized execution for protected overlaps.
 
 ### V6-502 — Add wait and deadlock handling
 
-- [ ] Track wait-for relationships.
-- [ ] Detect lease cycles and excessive wait.
-- [ ] Apply deterministic victim/escalation policy.
-- [ ] Respect Loop and Run budgets while waiting.
-- [ ] Release leases after cancellation, breaker open, or terminal failure.
+- [x] Track wait-for relationships.
+- [x] Detect lease cycles and excessive wait.
+- [x] Apply deterministic victim/escalation policy.
+- [x] Respect Loop and Run budgets while waiting.
+- [x] Release leases after cancellation, breaker open, or terminal failure.
 
 ### V6-503 — Add safe reconciliation and cleanup
 
-- [ ] Report orphan worktrees and manifests before deleting anything.
-- [ ] Verify target paths are under the configured workspace root.
-- [ ] Preserve uncommitted work from stale attempts.
-- [ ] Require explicit policy for automatic cleanup.
-- [ ] Keep cleanup auditable and recoverable where practical.
+- [x] Report orphan worktrees and manifests before deleting anything.
+- [x] Verify target paths are under the configured workspace root.
+- [x] Preserve uncommitted work from stale attempts.
+- [x] Require explicit policy for automatic cleanup.
+- [x] Keep cleanup auditable and recoverable where practical.
 
 **Targeted regression**
 
-- [ ] Manifest round trip and restart reconciliation.
-- [ ] Exact, parent/child, and non-overlapping PathIntent cases.
-- [ ] TTL expiration and renewal race.
-- [ ] Deadlock detection and deterministic escalation.
-- [ ] Cancellation and breaker lease release.
-- [ ] Orphan cleanup report-only behavior.
-- [ ] Windows path case and separator behavior.
+- [x] Manifest round trip and restart reconciliation.
+- [x] Exact, parent/child, and non-overlapping PathIntent cases.
+- [x] TTL expiration and renewal race.
+- [x] Deadlock detection and deterministic escalation.
+- [x] Cancellation and breaker lease release.
+- [x] Orphan cleanup report-only behavior.
+- [x] Windows path case and separator behavior.
 
 **Phase 5 exit gate**
 
-- [ ] Concurrent conflicting attempts cannot write silently.
-- [ ] Restart and cleanup preserve uncommitted work.
-- [ ] Complete the mandatory phase synchronization gate.
+- [x] Concurrent conflicting attempts cannot write silently.
+- [x] Restart and cleanup preserve uncommitted work.
+- [x] Complete the mandatory phase synchronization gate.
+
 
 ---
 

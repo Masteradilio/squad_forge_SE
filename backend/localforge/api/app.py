@@ -14,7 +14,8 @@ from fastapi.responses import StreamingResponse
 from pydantic import ValidationError
 
 from localforge import __version__
-from localforge.api.routes import autonomy_router, circuit_breakers_router, loops_router
+from localforge.api.routes import autonomy_router, circuit_breakers_router, loops_router, worktrees_router
+
 
 
 from localforge.api.schemas import (
@@ -112,6 +113,8 @@ def create_app(
     app.include_router(loops_router)
     app.include_router(circuit_breakers_router)
     app.include_router(autonomy_router)
+    app.include_router(worktrees_router)
+
 
 
 

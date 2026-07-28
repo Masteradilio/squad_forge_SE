@@ -1187,3 +1187,115 @@ class MakerCheckerVerificationORM(Base):
             created_at=d.created_at,
             updated_at=d.updated_at,
         )
+
+
+class WorktreeAttemptManifestORM(Base):
+    __tablename__ = "worktree_attempt_manifests"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
+    task_id: Mapped[int] = mapped_column(
+        ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False
+    )
+    task_run_id: Mapped[int] = mapped_column(
+        ForeignKey("task_runs.id", ondelete="CASCADE"), nullable=False
+    )
+    attempt_number: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    worktree_path: Mapped[str] = mapped_column(Text, nullable=False)
+    branch_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    source_commit: Mapped[str] = mapped_column(String(255), nullable=False)
+    owner_agent_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    expected_paths_json: Mapped[Any] = mapped_column(JSON, default=list, nullable=False)
+    leases_held_json: Mapped[Any] = mapped_column(JSON, default=list, nullable=False)
+    status: Mapped[str] = mapped_column(String(50), default="ACTIVE", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC)
+    )
+
+    def to_domain(self) -> domain.WorktreeAttemptManifest:
+        return domain.WorktreeAttemptManifest(
+            id=self.id,
+            project_id=self.project_id,
+            task_id=self.task_id,
+            task_run_id=self.task_run_id,
+            attempt_number=self.attempt_number,
+            worktree_path=self.worktree_path,
+            branch_name=self.branch_name,
+            source_commit=self.source_commit,
+            owner_agent_id=self.owner_agent_id,
+            expected_paths=self.expected_paths_json if isinstance(self.expected_paths_json, list) else [],
+            leases_held=self.leases_held_json if isinstance(self.leases_held_json, list) else [],
+            status=enums.WorktreeAttemptStatus(self.status),
+            created_at=self.created_at,
+            updated_at=self.updated_at,
+        )
+
+    @classmethod
+    def from_domain(cls, d: domain.WorktreeAttemptManifest) -> "WorktreeAttemptManifestORM":
+        return cls(
+            id=d.id,
+            project_id=d.project_id,
+            task_id=d.task_id,
+            task_run_id=d.task_run_id,
+            attempt_number=d.attempt_number,
+            worktree_path=d.worktree_path,
+            branch_name=d.branch_name,
+            source_commit=d.source_commit,
+            owner_agent_id=d.owner_agent_id,
+            expected_paths_json=d.expected_paths,
+            leases_held_json=d.leases_held,
+            status=d.status.value if isinstance(d.status, enums.WorktreeAttemptStatus) else str(d.status),
+            created_at=d.created_at,
+            updated_at=d.updated_at,
+        )
+
+
+class PathLeaseORM(Base):
+    __tablename__ = "path_leases"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
+    task_run_id: Mapped[int] = mapped_column(
+        ForeignKey("task_runs.id", ondelete="CASCADE"), nullable=False
+    )
+    owner_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    target_path: Mapped[str] = mapped_column(Text, nullable=False)
+    is_directory: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    ttl_seconds: Mapped[int] = mapped_column(Integer, default=3600, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    release_reason: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+
+    def to_domain(self) -> domain.PathLease:
+        return domain.PathLease(
+            id=self.id,
+            project_id=self.project_id,
+            task_run_id=self.task_run_id,
+            owner_id=self.owner_id,
+            target_path=self.target_path,
+            is_directory=self.is_directory,
+            ttl_seconds=self.ttl_seconds,
+            expires_at=self.expires_at,
+            release_reason=enums.LeaseReleaseReason(self.release_reason) if self.release_reason else None,
+            created_at=self.created_at,
+        )
+
+    @classmethod
+    def from_domain(cls, d: domain.PathLease) -> "PathLeaseORM":
+        return cls(
+            id=d.id,
+            project_id=d.project_id,
+            task_run_id=d.task_run_id,
+            owner_id=d.owner_id,
+            target_path=d.target_path,
+            is_directory=d.is_directory,
+            ttl_seconds=d.ttl_seconds,
+            expires_at=d.expires_at,
+            release_reason=d.release_reason.value if isinstance(d.release_reason, enums.LeaseReleaseReason) else d.release_reason,
+            created_at=d.created_at,
+        )

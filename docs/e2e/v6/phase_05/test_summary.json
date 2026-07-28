@@ -1,0 +1,32 @@
+{
+  "phase_id": "phase_05",
+  "test_suites": {
+    "backend_pytest": {
+      "command": "python -m pytest backend/tests -q",
+      "status": "PASSED",
+      "total_passed": 221,
+      "total_failed": 0
+    },
+    "phase_5_worktrees_path_intents_tests": {
+      "command": "python -m pytest backend/tests/test_phase6_worktrees_path_intents.py -q",
+      "status": "PASSED",
+      "total_passed": 3
+    },
+    "backend_mypy": {
+      "command": "python -m mypy backend",
+      "status": "PASSED",
+      "files_checked": 175,
+      "errors": 0
+    },
+    "frontend_vitest": {
+      "command": "npm test --prefix frontend",
+      "status": "PASSED",
+      "total_passed": 5
+    },
+    "frontend_build": {
+      "command": "npm run build --prefix frontend",
+      "status": "PASSED"
+    }
+  },
+  "overall_status": "PASSED"
+}

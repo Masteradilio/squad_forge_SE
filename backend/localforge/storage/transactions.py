@@ -19,6 +19,8 @@ from localforge.services.loop_coordinator import LoopCoordinator
 from localforge.services.circuit_breaker import CircuitBreakerService
 from localforge.services.autonomy import AutonomyService
 from localforge.services.maker_checker import MakerCheckerService
+from localforge.services.worktree import WorktreeService
+from localforge.services.path_lease import PathLeaseService
 from localforge.storage.database import DatabaseManager, db_manager
 
 
@@ -49,6 +51,8 @@ class UnitOfWork:
         self.circuit_breakers: CircuitBreakerService | None = None
         self.autonomy: AutonomyService | None = None
         self.maker_checker: MakerCheckerService | None = None
+        self.worktrees: WorktreeService | None = None
+        self.path_leases: PathLeaseService | None = None
 
     async def __aenter__(self) -> Self:
         self.session = await self.db_manager.get_session()
@@ -68,7 +72,10 @@ class UnitOfWork:
         self.circuit_breakers = CircuitBreakerService(self.session)
         self.autonomy = AutonomyService()
         self.maker_checker = MakerCheckerService(self.session)
+        self.worktrees = WorktreeService(self.session)
+        self.path_leases = PathLeaseService(self.session)
         return self
+
 
 
 

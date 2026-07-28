@@ -167,3 +167,23 @@ class AutonomyEvaluateRequest(BaseModel):
     autonomy_level: str
     action_kind: str
     target: str | None = None
+
+
+class PathLeaseAcquireRequest(BaseModel):
+    project_id: int
+    task_run_id: int
+    owner_id: str
+    target_path: str
+    is_directory: bool = False
+    ttl_seconds: int = 3600
+
+
+class WorktreeManifestCreateRequest(BaseModel):
+    project_id: int
+    task_id: int
+    task_run_id: int
+    worktree_path: str
+    branch_name: str
+    source_commit: str
+    owner_agent_id: str
+    expected_paths: list[str] = Field(default_factory=list)

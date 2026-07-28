@@ -1,0 +1,23 @@
+{
+  "phase_id": "phase_05",
+  "phase_name": "Worktree Attempt Lifecycle and Path Intents",
+  "timestamp": "2026-07-27T23:02:00Z",
+  "source_commit": "a0534f2d72111818d6bc7f59aa38914c6fb73dbe",
+  "changed_modules": [
+    "backend/localforge/models/enums.py",
+    "backend/localforge/models/domain.py",
+    "backend/localforge/storage/orm.py",
+    "backend/localforge/storage/bootstrap.py",
+    "backend/localforge/storage/transactions.py",
+    "backend/localforge/services/path_lease.py",
+    "backend/localforge/services/worktree.py",
+    "backend/localforge/api/schemas.py",
+    "backend/localforge/api/routes/worktrees.py",
+    "backend/localforge/api/routes/__init__.py",
+    "backend/localforge/api/app.py",
+    "backend/localforge/cli/worktree.py",
+    "backend/localforge/cli/main.py",
+    "backend/tests/test_phase6_worktrees_path_intents.py"
+  ],
+  "verdict": "PHASE_ACCEPTED"
+}

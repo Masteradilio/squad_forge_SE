@@ -2,6 +2,7 @@
 
 import logging
 from datetime import UTC, datetime
+from statistics import pvariance
 
 from pydantic import BaseModel, Field
 
@@ -28,6 +29,8 @@ class StrategyMetrics(BaseModel):
     total_cost_usd: float = 0.0
     total_tokens: int = 0
     execution_duration_ms: float = 0.0
+    duration_variance_ms: float | None = None
+    pr_ready_confidence_interval: tuple[float, float] | None = None
     unknown_metrics: list[str] = Field(default_factory=list)
     file_collisions: int = 0
     restart_success_rate: float = 1.0
@@ -60,6 +63,8 @@ class StrategyComparisonReport(BaseModel):
     metrics: dict[str, StrategyMetrics]
     gate_results: dict[str, StrategyGateResult]
     recommended_strategy_per_loop: dict[str, str]
+    fair_comparison_passed: bool = True
+    comparison_reasons: list[str] = Field(default_factory=list)
 
 
 class StrategyComparatorService:
@@ -82,6 +87,7 @@ class StrategyComparatorService:
             "MAKER_CHECKER",
             "MEMORY_ON",
         ]
+        comparison_reasons = self._validate_fair_comparison(strategies, observations)
 
         metrics_map = {
             strategy: self._evaluate_strategy(strategy, observations) for strategy in strategies
@@ -103,7 +109,52 @@ class StrategyComparatorService:
                 "L2_CI_SWEEPER": "LOOP_LIGHT_SWARM",
                 "L2_PR_BABYSITTER": "LOOP_SINGLE_WORKER",
             },
+            fair_comparison_passed=not comparison_reasons,
+            comparison_reasons=comparison_reasons
+            or ["All strategies were measured against the same corpus and budget envelope."],
         )
+
+    def _validate_fair_comparison(
+        self,
+        strategies: list[str],
+        observations: list[ObservedStrategyResult],
+    ) -> list[str]:
+        events = {event.id for event in self.corpus_service.list_events()}
+        reasons: list[str] = []
+        by_strategy = {
+            strategy: [result for result in observations if result.strategy_name == strategy]
+            for strategy in strategies
+        }
+        for strategy, strategy_observations in by_strategy.items():
+            observed_events = {result.event_id for result in strategy_observations}
+            if observed_events != events:
+                reasons.append(
+                    f"{strategy} did not run the exact corpus: "
+                    f"missing={sorted(events - observed_events)}, extra={sorted(observed_events - events)}."
+                )
+            for result in strategy_observations:
+                if result.task_run_id is None:
+                    reasons.append(f"{strategy}/{result.event_id} has no task_run_id binding.")
+                if not result.artifact_ids:
+                    reasons.append(f"{strategy}/{result.event_id} has no artifact ID binding.")
+
+        comparable_fields = (
+            "corpus_version",
+            "target_commit",
+            "environment_fingerprint",
+            "budget_usd",
+            "timeout_seconds",
+            "prompt_context_revision",
+        )
+        for field_name in comparable_fields:
+            values = {
+                getattr(result, field_name)
+                for result in observations
+                if getattr(result, field_name) is not None
+            }
+            if len(values) > 1:
+                reasons.append(f"Observed results disagree on {field_name}: {sorted(values)!r}.")
+        return sorted(set(reasons))
 
     def _evaluate_strategy(
         self,
@@ -119,6 +170,7 @@ class StrategyComparatorService:
         pr_ready = accepted = regressions = attempts = tokens = 0
         duplicate_actions = unauthorized_mutations = auto_merges = 0
         cost = duration = 0.0
+        durations: list[float] = []
         unknown_metrics: set[str] = set()
 
         for result in strategy_observations:
@@ -151,6 +203,11 @@ class StrategyComparatorService:
                 unknown_metrics.add("execution_duration_ms")
             else:
                 duration += result.duration_ms
+                durations.append(result.duration_ms)
+            if result.task_run_id is None:
+                unknown_metrics.add("task_run_id")
+            if not result.artifact_ids:
+                unknown_metrics.add("artifact_ids")
 
             if result.task_status == "PR_READY":
                 pr_ready += 1
@@ -164,6 +221,8 @@ class StrategyComparatorService:
         precision_denominator = true_positive + false_positive
         recall_denominator = true_positive + false_negative
         auto_fix_total = sum(1 for event in events.values() if event.allowed_action == "AUTO_FIX")
+        pr_ready_rate = pr_ready / auto_fix_total if auto_fix_total else 0.0
+        ci = _wilson_interval(pr_ready, auto_fix_total) if auto_fix_total else None
 
         return StrategyMetrics(
             strategy_name=strategy_name,
@@ -174,13 +233,15 @@ class StrategyComparatorService:
             ),
             classification_recall=true_positive / recall_denominator if recall_denominator else 1.0,
             false_positive_rate=false_positive / total if total else 0.0,
-            pr_ready_rate=pr_ready / auto_fix_total if auto_fix_total else 0.0,
+            pr_ready_rate=pr_ready_rate,
             human_acceptance_rate=accepted / total if total else 0.0,
             regressions_introduced=regressions,
             attempts_count=attempts,
             total_cost_usd=round(cost, 6),
             total_tokens=tokens,
             execution_duration_ms=round(duration, 3),
+            duration_variance_ms=round(pvariance(durations), 3) if len(durations) > 1 else None,
+            pr_ready_confidence_interval=ci,
             unknown_metrics=sorted(unknown_metrics),
             duplicate_external_actions=duplicate_actions,
             auto_merges_count=auto_merges,
@@ -198,6 +259,10 @@ class StrategyComparatorService:
             reasons.append("Strategy produced duplicate external actions.")
         if metrics.pr_ready_rate <= 0:
             reasons.append("Strategy produced no PR_READY outcomes.")
+        if metrics.unknown_metrics:
+            reasons.append(
+                "Strategy has unavailable measurements: " + ", ".join(metrics.unknown_metrics)
+            )
         if metrics.strategy_name == "LOOP_DEEP_SWARM":
             reasons.append("Deep Swarm remains opt-in until repeated controlled runs justify it.")
 
@@ -220,3 +285,14 @@ class StrategyComparatorService:
             reasons=reasons
             or ["Strategy metrics were derived from labeled task outcomes and passed gates."],
         )
+
+
+def _wilson_interval(successes: int, total: int) -> tuple[float, float]:
+    if total <= 0:
+        return (0.0, 0.0)
+    z = 1.96
+    p_hat = successes / total
+    denominator = 1 + z**2 / total
+    center = (p_hat + z**2 / (2 * total)) / denominator
+    spread = z * ((p_hat * (1 - p_hat) + z**2 / (4 * total)) / total) ** 0.5 / denominator
+    return (round(max(0.0, center - spread), 4), round(min(1.0, center + spread), 4))

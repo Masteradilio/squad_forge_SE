@@ -778,61 +778,61 @@ corpus under controlled conditions.
 
 ### V61C-900 — Build an immutable evaluation corpus
 
-- [ ] Version each task, repository fixture, expected outcome, acceptance test,
+- [x] Version each task, repository fixture, expected outcome, acceptance test,
       safety expectation, and difficulty class.
-- [ ] Separate development fixtures from holdout tasks.
-- [ ] Hash actual non-empty corpus files.
-- [ ] Record licenses and provenance for every fixture.
+- [x] Separate development fixtures from holdout tasks.
+- [x] Hash actual non-empty corpus files.
+- [x] Record licenses and provenance for every fixture.
 
 ### V61C-901 — Instrument observed execution
 
-- [ ] Persist strategy, task, model/provider, prompt/context revision, attempts,
+- [x] Persist strategy, task, model/provider, prompt/context revision, attempts,
       start/end times, tokens, cost ledger entries, readiness evidence, safety
       events, and human outcome.
-- [ ] Remove constants for tokens, costs, durations, or success.
-- [ ] Mark unavailable measurements `UNKNOWN`.
-- [ ] Bind each observation to task-run and artifact IDs.
+- [x] Remove constants for tokens, costs, durations, or success.
+- [x] Mark unavailable measurements `UNKNOWN`.
+- [x] Bind each observation to task-run and artifact IDs.
 
 ### V61C-902 — Run fair strategy comparisons
 
-- [ ] Execute single-worker baseline, Loop single-worker, Light Swarm, and
+- [x] Execute single-worker baseline, Loop single-worker, Light Swarm, and
       optionally Deep Swarm on the same corpus.
-- [ ] Keep model/provider eligibility, budgets, timeout, environment, target
+- [x] Keep model/provider eligibility, budgets, timeout, environment, target
       commit, and acceptance tests equivalent.
-- [ ] Record warm-up policy and repeated runs.
-- [ ] Preserve failures and timeouts in aggregates.
+- [x] Record warm-up policy and repeated runs.
+- [x] Preserve failures and timeouts in aggregates.
 
 ### V61C-903 — Apply statistical and release discipline
 
-- [ ] Report sample size, variance, confidence interval where meaningful, and
+- [x] Report sample size, variance, confidence interval where meaningful, and
       missing data.
-- [ ] Calculate `PR_READY` rate only from valid canonical readiness records.
-- [ ] Calculate cost/tokens only from provider and local ledger evidence.
-- [ ] Separate proof-run completion from target achievement.
-- [ ] Keep a strategy `PARTIAL` when superiority or safety thresholds are not
+- [x] Calculate `PR_READY` rate only from valid canonical readiness records.
+- [x] Calculate cost/tokens only from provider and local ledger evidence.
+- [x] Separate proof-run completion from target achievement.
+- [x] Keep a strategy `PARTIAL` when superiority or safety thresholds are not
       met.
 
 ### V61C-904 — Generate all benchmark publications
 
 - [ ] Generate JSONL observations, aggregates, tables, and Markdown from the
       same data.
-- [ ] Remove hand-maintained performance tables from release truth.
-- [ ] Include reproduction commands and environment fingerprints.
+- [x] Remove hand-maintained performance tables from release truth.
+- [x] Include reproduction commands and environment fingerprints.
 - [ ] Validate hashes and row counts in CI.
 
 ### Required regression tests
 
-- [ ] Metrics change when persisted observations change.
-- [ ] No production evaluation code assigns synthetic token/cost/duration.
-- [ ] Unknown measurements remain unknown.
-- [ ] Same-corpus/fair-budget violations invalidate comparison.
+- [x] Metrics change when persisted observations change.
+- [x] No production evaluation code assigns synthetic token/cost/duration.
+- [x] Unknown measurements remain unknown.
+- [x] Same-corpus/fair-budget violations invalidate comparison.
 - [ ] Generated README/report tables match JSON aggregates exactly.
 
 ### Phase R9 exit gate
 
-- [ ] Every published number traces to an observed task run.
-- [ ] Light/Deep Swarm status reflects measured evidence.
-- [ ] Unsupported superiority claims are absent.
+- [x] Every published number traces to an observed task run.
+- [x] Light/Deep Swarm status reflects measured evidence.
+- [x] Unsupported superiority claims are absent.
 
 ---
 

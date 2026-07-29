@@ -40,9 +40,11 @@ def test_eval_corpus_manifest_and_hashing() -> None:
     svc = EvaluationCorpusService()
     manifest = svc.get_manifest()
 
-    assert manifest.corpus_version == "1.0.0"
+    assert manifest.corpus_version == "6.2.0-r9.1"
     assert manifest.total_events == 8
     assert len(manifest.manifest_hash) == 64  # SHA-256
+    assert len(manifest.corpus_file_hash) == 64
+    assert len(manifest.observation_file_hash) == 64
     assert len(manifest.event_hashes) == 8
 
     events = svc.list_events()
@@ -366,6 +368,26 @@ def test_strategy_comparator_metrics_change_with_observed_labels() -> None:
     assert changed_report.metrics["LOOP_LIGHT_SWARM"].classification_precision < original_precision
 
 
+def test_strategy_comparator_rejects_unfair_strategy_observations() -> None:
+    comparator = StrategyComparatorService()
+    observations = comparator.corpus_service.list_observed_results()
+    observations[0].budget_usd = 999.0
+
+    reasons = comparator._validate_fair_comparison(
+        [
+            "SINGLE_WORKER_V5",
+            "LOOP_SINGLE_WORKER",
+            "LOOP_LIGHT_SWARM",
+            "LOOP_DEEP_SWARM",
+            "MAKER_CHECKER",
+            "MEMORY_ON",
+        ],
+        observations,
+    )
+
+    assert any("budget_usd" in reason for reason in reasons)
+
+
 def test_strategy_comparator_rejects_empty_corpus() -> None:
     comparator = StrategyComparatorService()
     comparator.corpus_service.fixtures = []
@@ -400,7 +422,9 @@ def test_strategy_comparator_marks_missing_ledger_values_unknown() -> None:
     )
 
     assert metrics.unknown_metrics == [
+        "artifact_ids",
         "execution_duration_ms",
+        "task_run_id",
         "total_cost_usd",
         "total_tokens",
     ]

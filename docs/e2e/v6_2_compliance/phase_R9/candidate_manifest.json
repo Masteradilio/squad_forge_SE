@@ -1,0 +1,42 @@
+{
+  "schema_version": "localforge.v6_2.candidate_manifest.v1",
+  "release_version": "6.2.0",
+  "release_tag": "v6.2.0",
+  "phase": "R9",
+  "task_ids": [
+    "V61C-900",
+    "V61C-901",
+    "V61C-902",
+    "V61C-903",
+    "V61C-904"
+  ],
+  "source_commit": "e449972",
+  "candidate_branch": "codex/v62-truth-reset-foundation",
+  "reviewed_pr_number": 14,
+  "verdict": "EVIDENCE_READY",
+  "corpus_hash": "db14971b596340a196354f0b82c5b0bd5e1cf7543f255fbcb6d5fcf4ef995eb9",
+  "input_hashes": {
+    "docs/e2e/v6_2_compliance/phase_R9/observed_corpus.json": "db14971b596340a196354f0b82c5b0bd5e1cf7543f255fbcb6d5fcf4ef995eb9"
+  },
+  "known_limitations": [
+    "Candidate evidence is not final release acceptance.",
+    "Observed corpus is controlled compliance evidence, not broad production statistics.",
+    "JSONL publication export and CI row-count validation remain open.",
+    "Deep Swarm remains opt-in and PARTIAL until repeated controlled runs justify it."
+  ],
+  "commands": [
+    {
+      "command": "python -m pytest backend/tests/test_phase11_operational_loops.py -q",
+      "exit_code": 0
+    },
+    {
+      "command": "python -m mypy backend/localforge/services/eval_corpus.py backend/localforge/services/strategy_comparator.py backend/tests/test_phase11_operational_loops.py",
+      "exit_code": 0
+    },
+    {
+      "command": "python -m ruff check backend/localforge/services/eval_corpus.py backend/localforge/services/strategy_comparator.py backend/tests/test_phase11_operational_loops.py",
+      "exit_code": 0
+    }
+  ],
+  "manifest_sha256": "6c2101f5c0a219ff18529e94dbd7b1f8e1b70413ec5c5ebf85610c99763fbc67"
+}

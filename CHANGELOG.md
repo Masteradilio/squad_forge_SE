@@ -58,6 +58,12 @@ All notable changes to LocalForge OS will be documented in this file.
   `docs/e2e/v6_2_compliance/phase_R8/`.
 - Added `OperationalIdempotencyStore` and regression coverage proving Daily
   Triage, CI Sweeper, and PR Babysitter idempotency survives service restart.
+- Added Phase R9 candidate evidence under
+  `docs/e2e/v6_2_compliance/phase_R9/`.
+- Added an observed comparative evaluation corpus with fixture provenance,
+  holdout flags, task-run/artifact bindings, model/provider metadata,
+  environment fingerprints, cost/tokens/duration measurements, and corpus file
+  hashing.
 
 #### Fixed
 - Removed the clean-interpreter import cycle exposed by importing
@@ -90,6 +96,9 @@ All notable changes to LocalForge OS will be documented in this file.
 - Hardened operational loops to use restart-durable idempotency state instead
   of per-service in-memory dictionaries/sets for triage findings, CI repair
   attempts, and PR review event deduplication.
+- Hardened strategy comparison so unfair corpus/budget/environment mismatches
+  invalidate comparison evidence and unavailable cost/token/duration values
+  remain explicit `UNKNOWN` measurements.
 
 ### V6.1 Compliance Closure - 2026-07-28
 

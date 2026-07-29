@@ -23,9 +23,9 @@
       "exit_code": 0
     }
   ],
-  "manifest_sha256": "04d92c8d64e334a70f73d7c4379c1298366d81ec23c3059fcb34d7d84c762641",
+  "manifest_sha256": "2461d44ae48cc08f1192548cd2a40bb1288f1ac9f50f98ef200b27eb193c17a9",
   "input_hashes": {
-    ".github/workflows/ci.yml": "e4717032a6be354cd43b34b95d1e4b9973b00d00a18f0fe157295f2a8939cdd3",
+    ".github/workflows/ci.yml": "463c8ac144651b84ee25d74577c464c5cf0ef467fa875bad57b351d89dd2ab53",
     "backend/localforge/services/compliance_evidence.py": "851aecd9b439fe6a566844a2e1984843c2ab2e3312dc02fbd2cd91ee0af4b9ac",
     "backend/localforge/services/file_hashes.py": "f0015dce9e0312685674b59a96236e55f4bc0347d100e847fac7685406f435f1",
     "scripts/check_candidate_evidence.py": "01a686a60ffd063f5abccbb7f554d10ae03adce75c3c654b784769e49efe8803",

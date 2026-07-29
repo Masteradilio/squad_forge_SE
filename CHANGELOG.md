@@ -135,6 +135,9 @@ All notable changes to LocalForge OS will be documented in this file.
   including `334 passed` for `backend/tests`.
 - Hardened final V6.2 evidence validation so `ACCEPTED` requires an explicit
   backlog path with no unresolved mandatory `- [ ]` checkboxes.
+- Added a release-truth CI guardrail that rejects stale stable-release claims,
+  verifies historical V6.1 evidence remains invalid, and blocks final accepted
+  manifests while mandatory compliance tasks remain open.
 
 ### V6.1 Compliance Closure - 2026-07-28
 

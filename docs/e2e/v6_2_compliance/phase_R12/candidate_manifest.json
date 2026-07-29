@@ -16,17 +16,18 @@
   "reviewed_pr_number": 14,
   "verdict": "EVIDENCE_READY",
   "input_hashes": {
-    ".github/workflows/ci.yml": "e4717032a6be354cd43b34b95d1e4b9973b00d00a18f0fe157295f2a8939cdd3",
+    ".github/workflows/ci.yml": "463c8ac144651b84ee25d74577c464c5cf0ef467fa875bad57b351d89dd2ab53",
     "backend/localforge/services/release_audit.py": "a7b39a6d29917086ddc263f12f9c109da7d6c51b7da7f237b8188402b6ee98da",
     "backend/localforge/services/file_hashes.py": "f0015dce9e0312685674b59a96236e55f4bc0347d100e847fac7685406f435f1",
     "scripts/check_release_tree.py": "a79ffb6a7d3ed274f96025125d50d8092c7d87ff63d10227c45eeeefdda6e00d",
     "scripts/check_candidate_evidence.py": "01a686a60ffd063f5abccbb7f554d10ae03adce75c3c654b784769e49efe8803",
     "scripts/check_clean_package_install.py": "a7cb4635f5e1447c9f0ed8b8e5f5586aa625f6268141daeabd357163c2326bb7",
+    "scripts/check_release_truth.py": "0728cc8d09172a9da9f8233b11941e0d3bc2d426ff8346d9ccdf77e0a2b5ec68",
     "backend/tests/test_phase_r12_release_audit.py": "a286de18bdbe68cc64a7c74a7e4d2f54f53957947d0293774e3217b881fc779f",
     "docs/e2e/v6_2_compliance/phase_R12/acceptance_report.md": "36b6db886cb328ecb80a6f3ef984cf74cf72eafe3a72dcba289100ac6ff5a960",
-    "docs/e2e/v6_2_compliance/phase_R12/test_summary.json": "2bcd03b7d1be8753ddfc24adb5b327d170c0c8d6349f0be4c26edf219f5d09e8",
+    "docs/e2e/v6_2_compliance/phase_R12/test_summary.json": "6d7d3cf11ed94beb0779ac6e2131518900728a607e820a80b0f41d8ace9b5a6c",
     "docs/e2e/v6_2_compliance/phase_R12/known_limitations.md": "092e15475c86a5f6850e78dddd1aa68f45df0fb6142e8cbd7e8e4b93068b9e53",
-    "docs/e2e/v6_2_compliance/phase_R12/release_tree_report.json": "e8ebfe8d10694094f8eff89acd61e8be35f155be325f2cd0cb190a1200b190e8"
+    "docs/e2e/v6_2_compliance/phase_R12/release_tree_report.json": "c5822d15c126f545dfb5eca6641631ebccd8d46eeae302941b17b8f7115ed20d"
   },
   "known_limitations": [
     "Candidate evidence is not final release acceptance.",
@@ -50,5 +51,5 @@
       "exit_code": 0
     }
   ],
-  "manifest_sha256": "4b816beb8e0c9b9fb95bc0c6873ca7781a2fcc7155b7d65e6075ef5b24c990f9"
+  "manifest_sha256": "91358a1bef86f193577864ca300d3c88681095fb109c31192fcbd26da92d017f"
 }

@@ -37,11 +37,19 @@ jobs:
         run: python scripts/check_import_matrix.py
       - name: Validate V6.2 candidate evidence
         run: python scripts/check_candidate_evidence.py --output artifacts/candidate-evidence.json
+      - name: Validate V6.2 release truth
+        run: python scripts/check_release_truth.py --output artifacts/release-truth.json
       - name: Upload candidate evidence validator output
         uses: actions/upload-artifact@v4
         with:
           name: candidate-evidence-${{ github.job }}
           path: artifacts/candidate-evidence.json
+          if-no-files-found: error
+      - name: Upload release truth validator output
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-truth-${{ github.job }}
+          path: artifacts/release-truth.json
           if-no-files-found: error
       - name: Run backend tests
         run: python -m pytest backend/tests -q

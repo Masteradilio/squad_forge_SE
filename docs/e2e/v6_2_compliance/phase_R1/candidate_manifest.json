@@ -48,10 +48,10 @@
       "exit_code": 0
     }
   ],
-  "manifest_sha256": "eba9c854855af462a003564870564434dc501d0b30e0ea2becfb2acdbfd20a06",
+  "manifest_sha256": "4bbed178465fa3b08ed85701970e8281e5857c330628b6a3df36a4626c7a1c2a",
   "input_hashes": {
     "pyproject.toml": "4ce389aa25b157607a6b9bf42cb84f08ae342ad3e894b185c3a56252ccd09508",
-    ".github/workflows/ci.yml": "e4717032a6be354cd43b34b95d1e4b9973b00d00a18f0fe157295f2a8939cdd3",
+    ".github/workflows/ci.yml": "463c8ac144651b84ee25d74577c464c5cf0ef467fa875bad57b351d89dd2ab53",
     "scripts/check_version_consistency.py": "3be60aed9c2962127f031d28774918340682d99247add3a4a55b064d034a9243",
     "scripts/check_import_matrix.py": "941ecca70d75ff6ba7eaccdcb7308534ff8f506ab55e5ba61b206512dccacc2a",
     "scripts/check_candidate_evidence.py": "01a686a60ffd063f5abccbb7f554d10ae03adce75c3c654b784769e49efe8803",

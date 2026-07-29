@@ -26,7 +26,12 @@
     {
       "command": "python -m pytest backend/tests -q",
       "exit_code": 0,
-      "summary": "334 passed in 49.18s"
+      "summary": "339 passed in 49.51s"
+    },
+    {
+      "command": "python scripts/check_release_truth.py",
+      "exit_code": 0,
+      "summary": "Release truth guard passed and recorded unresolved mandatory backlog count"
     }
   ],
   "remaining_gates": [

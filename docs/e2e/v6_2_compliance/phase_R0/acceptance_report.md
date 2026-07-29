@@ -33,6 +33,19 @@ and canonical validator acceptance.
 | AOA-11 | Still open for R11: public/demo/recruiter path remains required. |
 | AOA-12 | Still open for R10/R12: production security, migration, recovery, and E2E evidence remain required. |
 
+## Release Truth Guardrails
+
+- `scripts/check_release_truth.py` verifies the historical V6.1 manifest remains
+  `INVALID` under the canonical validator.
+- The same guardrail records the unresolved mandatory checkbox count from
+  `docs/compliance_backlog_V6-1.md` and rejects any final V6.2 `ACCEPTED`
+  manifest while that count is non-zero.
+- The guardrail scans tracked documentation for the exact stable production
+  claim phrase and allows it only inside compliance backlog documents until
+  final accepted release notes exist.
+- `.github/workflows/ci.yml` runs this check on compliance PR heads and uploads
+  `release-truth.json` as a workflow artifact.
+
 ## Current Product Status
 
 ```text

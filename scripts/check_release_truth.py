@@ -18,6 +18,7 @@ from localforge.services.compliance_evidence import ACCEPTED, INVALID, Complianc
 BACKLOG_PATH = Path("docs/compliance_backlog_V6-1.md")
 HISTORICAL_V61_MANIFEST = Path("docs/e2e/v6_1_compliance/manifest.json")
 AOA_REPORT = Path("docs/e2e/v6_2_compliance/phase_R0/audit_of_audit.md")
+RELEASE_IDENTITY = Path("docs/e2e/v6_2_compliance/release_identity.md")
 FORBIDDEN_STABLE_PHRASE = "supervised-production-ready stable release"
 STABLE_PHRASE_ALLOWLIST = {
     "docs/compliance_backlog_V6.md",
@@ -162,6 +163,34 @@ def audit_of_audit_status(root: Path) -> dict[str, object]:
     }
 
 
+def release_identity_status(root: Path) -> dict[str, object]:
+    identity_path = root / RELEASE_IDENTITY
+    if not identity_path.is_file():
+        return {
+            "path": RELEASE_IDENTITY.as_posix(),
+            "passed": False,
+            "missing_fragments": ["file is missing"],
+        }
+
+    text = identity_path.read_text(encoding="utf-8")
+    required_fragments = [
+        "`v6.1.0` is immutable historical state.",
+        "Product version: `6.2.0`",
+        "Candidate release tag string in candidate manifests: `v6.2.0`",
+        "Candidate evidence schema: `localforge.v6_2.candidate_manifest.v1`",
+        "Candidate evidence verdict: `EVIDENCE_READY`",
+        "The annotated tag `v6.2.0` is created at the accepted merge commit.",
+        "Release assets are downloaded in a clean checkout and revalidated by the",
+        "Treating candidate evidence as `ACCEPTED`.",
+    ]
+    missing_fragments = [fragment for fragment in required_fragments if fragment not in text]
+    return {
+        "path": RELEASE_IDENTITY.as_posix(),
+        "passed": not missing_fragments,
+        "missing_fragments": missing_fragments,
+    }
+
+
 def build_report(root: Path) -> dict[str, object]:
     validator = ComplianceEvidenceValidator(root)
     backlog_path = root / BACKLOG_PATH
@@ -170,6 +199,7 @@ def build_report(root: Path) -> dict[str, object]:
     final_accepted = accepted_final_manifests(root)
     phrase_leaks = stable_claim_leaks(root)
     aoa_report = audit_of_audit_status(root)
+    release_identity = release_identity_status(root)
 
     findings: list[str] = []
     if v61_result.verdict != INVALID:
@@ -180,6 +210,8 @@ def build_report(root: Path) -> dict[str, object]:
         findings.append("stable production claim phrase appears outside allowed backlog documents")
     if not aoa_report["passed"]:
         findings.append("audit-of-audit report must map AOA-01 through AOA-12 to reproducible evidence")
+    if not release_identity["passed"]:
+        findings.append("release identity document must define candidate and stable tag conventions")
 
     return {
         "schema_version": "localforge.v6_2.release_truth_check.v1",
@@ -199,6 +231,7 @@ def build_report(root: Path) -> dict[str, object]:
         "accepted_final_manifests": final_accepted,
         "stable_claim_leaks": phrase_leaks,
         "audit_of_audit": aoa_report,
+        "release_identity": release_identity,
     }
 
 

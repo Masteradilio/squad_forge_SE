@@ -262,7 +262,7 @@ make the ten audited defects reproducible.
 - [ ] Approve the next version with the owner; default recommendation is
       `6.2.0`.
 - [x] Document that `v6.1.0` will not be moved or replaced.
-- [ ] Define candidate and stable tag conventions.
+- [x] Define candidate and stable tag conventions.
 
 ### Required regression tests
 

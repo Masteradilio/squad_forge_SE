@@ -145,6 +145,9 @@ All notable changes to LocalForge OS will be documented in this file.
 - Extended release-truth output with generated per-phase backlog status so
   unresolved compliance work is reported from the current backlog instead of
   hand-authored closure claims.
+- Added the V6.2 release identity convention document and release-truth
+  enforcement for immutable V6.1 history, candidate tag semantics, stable tag
+  criteria, and forbidden candidate-to-accepted shortcuts.
 
 ### V6.1 Compliance Closure - 2026-07-28
 

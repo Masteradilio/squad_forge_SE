@@ -13,6 +13,7 @@ def test_release_truth_script_passes_current_repository() -> None:
     historical_manifest = cast(dict[str, Any], report["historical_v61_manifest"])
     backlog = cast(dict[str, Any], report["backlog"])
     audit_of_audit = cast(dict[str, Any], report["audit_of_audit"])
+    release_identity = cast(dict[str, Any], report["release_identity"])
 
     assert report["passed"] is True
     assert historical_manifest["verdict"] == "INVALID"
@@ -22,6 +23,8 @@ def test_release_truth_script_passes_current_repository() -> None:
     assert audit_of_audit["passed"] is True
     assert audit_of_audit["missing_ids"] == []
     assert audit_of_audit["missing_sections"] == []
+    assert release_identity["passed"] is True
+    assert release_identity["missing_fragments"] == []
 
 
 def test_release_truth_requires_audit_of_audit_matrix(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -76,6 +79,20 @@ def test_release_truth_reports_backlog_status_by_phase(tmp_path: Path) -> None:
             "status": "CHECKBOXES_CLOSED",
         },
     ]
+
+
+def test_release_truth_requires_release_identity_conventions(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    identity_path = tmp_path / "release_identity.md"
+    identity_path.write_text("Product version: `6.2.0`\n", encoding="utf-8")
+    monkeypatch.setattr(release_truth, "RELEASE_IDENTITY", Path("release_identity.md"))
+
+    status = release_truth.release_identity_status(tmp_path)
+    missing = cast(list[str], status["missing_fragments"])
+
+    assert status["passed"] is False
+    assert "Candidate evidence verdict: `EVIDENCE_READY`" in missing
 
 
 def test_release_truth_detects_stable_claim_leak(tmp_path: Path) -> None:

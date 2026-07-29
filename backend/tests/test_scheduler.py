@@ -4,9 +4,11 @@ import os
 import pytest
 from localforge.models import domain
 from localforge.models.enums import (
+    AgentRole,
     ArtifactType,
     AuditEventActorType,
     AuditEventType,
+    HandoffKind,
     RunMode,
     RunnerHealthState,
     RunStatus,
@@ -398,14 +400,34 @@ async def test_scheduler_releases_runner_lease_after_pipeline_success(
                 content_hash="a" * 64,
             )
         )
+        assert self.uow.executions is not None
+        handoff = await self.uow.executions.create_handoff(
+            domain.Handoff(
+                task_run_id=task_run_id,
+                from_role=AgentRole.REVIEWER,
+                to_role=AgentRole.PR_WRITER,
+                kind=HandoffKind.PR_READY,
+                payload_json={"source": "test_scheduler_pipeline"},
+            )
+        )
         await self.uow.tasks.mark_pr_ready(
             task_id,
             gate_evidence={
                 "source": "test_scheduler_pipeline",
                 "task_run_id": task_run_id,
+                "handoff_id": handoff.id,
                 "maker_id": "scheduler-test",
                 "checker_id": "mechanical-pre-pr-gate",
-                "pre_pr_gate": {"passed": True},
+                "maker_attempt_id": f"scheduler-test:{task_run_id}",
+                "checker_attempt_id": f"mechanical-pre-pr-gate:{task_run_id}",
+                "pre_pr_gate": {
+                    "passed": True,
+                    "source_commit": "source-commit",
+                    "target_commit": "target-commit",
+                    "diff_hash": "a" * 64,
+                },
+                "risk_verdict": {"passed": True, "source": "test_scheduler_pipeline"},
+                "safety_verdict": {"passed": True, "source": "test_scheduler_pipeline"},
                 "checks_executed": ["pytest"],
                 "artifact_paths": [artifact.path],
                 "branch_name": task_run.branch_name,
@@ -576,14 +598,34 @@ async def test_scheduler_lifecycle_and_parallel_limits(
                 content_hash="b" * 64,
             )
         )
+        assert uow.executions is not None
+        handoff = await uow.executions.create_handoff(
+            domain.Handoff(
+                task_run_id=task_run.id or 0,
+                from_role=AgentRole.REVIEWER,
+                to_role=AgentRole.PR_WRITER,
+                kind=HandoffKind.PR_READY,
+                payload_json={"source": "test_scheduler_cleanup"},
+            )
+        )
         await uow.tasks.mark_pr_ready(
             tid,
             gate_evidence={
                 "source": "test_scheduler_cleanup",
                 "task_run_id": task_run.id or 0,
+                "handoff_id": handoff.id,
                 "maker_id": "scheduler-test",
                 "checker_id": "mechanical-pre-pr-gate",
-                "pre_pr_gate": {"passed": True},
+                "maker_attempt_id": f"scheduler-test:{task_run.id or 0}",
+                "checker_attempt_id": f"mechanical-pre-pr-gate:{task_run.id or 0}",
+                "pre_pr_gate": {
+                    "passed": True,
+                    "source_commit": "source-commit",
+                    "target_commit": "target-commit",
+                    "diff_hash": "b" * 64,
+                },
+                "risk_verdict": {"passed": True, "source": "test_scheduler_cleanup"},
+                "safety_verdict": {"passed": True, "source": "test_scheduler_cleanup"},
                 "checks_executed": ["pytest"],
                 "artifact_paths": [artifact.path],
                 "branch_name": task_run.branch_name,

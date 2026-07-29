@@ -48,7 +48,7 @@
       "exit_code": 0
     }
   ],
-  "manifest_sha256": "6f111e93d9d2337f073b67b9ca2e99f0f417a2ac5865b8c783b254e91107ea23",
+  "manifest_sha256": "c12b4e5d731cc6a10545652d94eac85cadbd83d3f76f0538f2e5e4d220c6b13a",
   "input_hashes": {
     "pyproject.toml": "4ce389aa25b157607a6b9bf42cb84f08ae342ad3e894b185c3a56252ccd09508",
     ".github/workflows/ci.yml": "463c8ac144651b84ee25d74577c464c5cf0ef467fa875bad57b351d89dd2ab53",
@@ -63,7 +63,7 @@
     "docs/e2e/v6_2_compliance/phase_R1/known_limitations.md": "3ba5468f79a7da1e1a395cafe6c4b9251e493231f2eee3bd6637fa0f5615f451",
     "docs/demo.md": "b7e8ca3d28b575a8d4cf02521ecdbd34ff919f90f1c3bc0c5cde42343a29c388",
     "backend/tests/test_release_truth.py": "81cd15cb2fbfdba5363addb5e108d9cc8bdedcfc6aba28586531416ea0f9e445",
-    "docs/compliance_backlog_V6-1.md": "296dcc7c0c2bc9048cd01deaffb00b3d4bb243fe7317846d600ae9128e6dae13"
+    "docs/compliance_backlog_V6-1.md": "94263fc27e8b9a70e7d9424f0fa05d6a6d5db68c5ca0805c2d8ca28ab450192f"
   },
   "environment": {
     "os": "windows-local-and-github-actions-matrix",

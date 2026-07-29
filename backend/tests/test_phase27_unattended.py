@@ -13,9 +13,11 @@ from localforge.llm.context import (
 from localforge.llm.openai_compatible import OpenAICompatibleProvider
 from localforge.models import domain
 from localforge.models.enums import (
+    AgentRole,
     ArtifactType,
     AuditEventActorType,
     AuditEventType,
+    HandoffKind,
     RunMode,
     RunStatus,
     TaskRunStatus,
@@ -115,14 +117,34 @@ async def transition_task_to(uow: UnitOfWork, task_id: int, target_status: TaskS
                     content_hash="c" * 64,
                 )
             )
+            assert uow.executions is not None
+            handoff = await uow.executions.create_handoff(
+                domain.Handoff(
+                    task_run_id=task_run.id,
+                    from_role=AgentRole.REVIEWER,
+                    to_role=AgentRole.PR_WRITER,
+                    kind=HandoffKind.PR_READY,
+                    payload_json={"source": "test_phase27_transition"},
+                )
+            )
             await uow.tasks.mark_pr_ready(
                 task_id,
                 gate_evidence={
                     "source": "test_phase27_transition",
                     "task_run_id": task_run.id,
+                    "handoff_id": handoff.id,
                     "maker_id": "phase27-test",
                     "checker_id": "mechanical-pre-pr-gate",
-                    "pre_pr_gate": {"passed": True},
+                    "maker_attempt_id": f"phase27-test:{task_run.id}",
+                    "checker_attempt_id": f"mechanical-pre-pr-gate:{task_run.id}",
+                    "pre_pr_gate": {
+                        "passed": True,
+                        "source_commit": "source-commit",
+                        "target_commit": "target-commit",
+                        "diff_hash": "a" * 64,
+                    },
+                    "risk_verdict": {"passed": True, "source": "test_phase27_transition"},
+                    "safety_verdict": {"passed": True, "source": "test_phase27_transition"},
                     "checks_executed": ["pytest"],
                     "artifact_paths": [artifact.path],
                     "branch_name": task_run.branch_name,

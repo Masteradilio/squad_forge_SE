@@ -2,8 +2,16 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from localforge.models import domain
-from localforge.models.enums import AuditEventActorType, AuditEventType, TaskStatus
-from localforge.storage.orm import ArtifactORM, AuditEventORM, EpicORM, TaskORM, TaskRunORM
+from localforge.models.enums import AuditEventActorType, AuditEventType, HandoffKind, TaskStatus
+from localforge.storage.orm import (
+    ArtifactORM,
+    AuditEventORM,
+    EpicORM,
+    HandoffORM,
+    TaskORM,
+    TaskRunORM,
+    WorktreeAttemptManifestORM,
+)
 
 # Explicit task status state machine
 VALID_TRANSITIONS: dict[TaskStatus, set[TaskStatus]] = {
@@ -226,6 +234,8 @@ class TaskService:
             raise ValueError("PR_READY evidence branch_name does not match task run")
         if evidence.worktree_path and evidence.worktree_path != task_run.worktree_path:
             raise ValueError("PR_READY evidence worktree_path does not match task run")
+        await self._validate_pr_ready_handoff(evidence)
+        await self._validate_pr_ready_commit_binding(task_id, evidence)
 
         result = await self.session.execute(
             select(ArtifactORM)
@@ -249,6 +259,39 @@ class TaskService:
                 "worktree_path": evidence.worktree_path or task_run.worktree_path,
             }
         )
+
+    async def _validate_pr_ready_handoff(self, evidence: domain.PRReadyEvidence) -> None:
+        result = await self.session.execute(
+            select(HandoffORM).where(HandoffORM.id == evidence.handoff_id)
+        )
+        handoff = result.scalar_one_or_none()
+        if handoff is None:
+            raise ValueError("PR_READY evidence references unknown handoff")
+        if handoff.task_run_id != evidence.task_run_id:
+            raise ValueError("PR_READY evidence handoff does not belong to task run")
+        if HandoffKind(handoff.kind) != HandoffKind.PR_READY:
+            raise ValueError("PR_READY evidence handoff kind must be PR_READY")
+
+    async def _validate_pr_ready_commit_binding(
+        self, task_id: int, evidence: domain.PRReadyEvidence
+    ) -> None:
+        task = await self.get_task(task_id)
+        metadata = dict(task.metadata or {}) if task else {}
+        expected_source = metadata.get("current_source_commit") or metadata.get("source_commit")
+        expected_target = metadata.get("current_target_commit") or metadata.get("target_commit")
+        if expected_source is not None and str(expected_source) != evidence.source_commit:
+            raise ValueError("PR_READY evidence source_commit is stale")
+        if expected_target is not None and str(expected_target) != evidence.target_commit:
+            raise ValueError("PR_READY evidence target_commit is stale")
+
+        result = await self.session.execute(
+            select(WorktreeAttemptManifestORM)
+            .where(WorktreeAttemptManifestORM.task_run_id == evidence.task_run_id)
+            .order_by(WorktreeAttemptManifestORM.updated_at.desc())
+        )
+        manifest = result.scalars().first()
+        if manifest and manifest.source_commit != evidence.source_commit:
+            raise ValueError("PR_READY evidence source_commit does not match worktree manifest")
 
     async def update_task(self, task: domain.Task) -> domain.Task:
         """Update general task fields (except status validation)."""

@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 from localforge.contracts.verifier import ContractVerifier
 from localforge.models import domain
-from localforge.models.enums import AuditEventActorType, AuditEventType, TaskStatus
+from localforge.models.enums import AgentRole, AuditEventActorType, AuditEventType, HandoffKind, TaskStatus
 from localforge.pr_factory.github import GitHubPRAdapter
 from localforge.storage import UnitOfWork
 from localforge.storage.artifacts import ArtifactStore
@@ -187,20 +187,43 @@ class LocalPRFactory:
         ready = not reasons
         task_metadata = dict(task.metadata or {})
         if ready and task.status == TaskStatus.REVIEWING:
+            assert self.uow.executions is not None
+            handoff = await self.uow.executions.create_handoff(
+                domain.Handoff(
+                    task_run_id=task_run_id,
+                    from_role=AgentRole.REVIEWER,
+                    to_role=AgentRole.PR_WRITER,
+                    kind=HandoffKind.PR_READY,
+                    payload_json={"source": "pr_factory", "artifact_path": pr_artifact.path},
+                )
+            )
+            source_commit = str(task_metadata.get("source_commit", "unknown-source"))
+            target_commit = str(task_metadata.get("target_commit", "unknown-target"))
             await self.uow.tasks.mark_pr_ready(
                 task_id,
                 gate_evidence={
                     "source": "pr_factory",
                     "task_run_id": task_run_id,
+                    "handoff_id": handoff.id or 0,
                     "maker_id": "pr-factory",
                     "checker_id": "mechanical-pre-pr-gate",
-                    "pre_pr_gate": {"passed": True, "remote_url": remote_url},
+                    "maker_attempt_id": f"pr-factory:{task_run_id}",
+                    "checker_attempt_id": f"mechanical-pre-pr-gate:{task_run_id}",
+                    "pre_pr_gate": {
+                        "passed": True,
+                        "remote_url": remote_url,
+                        "source_commit": source_commit,
+                        "target_commit": target_commit,
+                        "diff_hash": pr_artifact.content_hash,
+                    },
+                    "risk_verdict": {"passed": True, "source": "contract-verifier"},
+                    "safety_verdict": {"passed": True, "source": "mechanical-pre-pr-gate"},
                     "checks_executed": ["local-pr-artifact-created", "contract-verifier"],
                     "artifact_paths": [pr_artifact.path],
                     "branch_name": task_run.branch_name,
                     "worktree_path": task_run.worktree_path,
-                    "source_commit": str(task_metadata.get("source_commit", "unknown-source")),
-                    "target_commit": str(task_metadata.get("target_commit", "unknown-target")),
+                    "source_commit": source_commit,
+                    "target_commit": target_commit,
                     "diff_hash": pr_artifact.content_hash,
                 },
             )

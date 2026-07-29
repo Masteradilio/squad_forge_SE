@@ -171,9 +171,14 @@ class PRReadyEvidence(BaseModel):
     evidence_schema: str = Field(default="localforge.pr_ready_evidence.v1", alias="schema")
     source: str
     task_run_id: int
+    handoff_id: int
     maker_id: str
     checker_id: str
+    maker_attempt_id: str
+    checker_attempt_id: str
     pre_pr_gate: dict[str, Any]
+    risk_verdict: dict[str, Any]
+    safety_verdict: dict[str, Any]
     checks_executed: list[str]
     artifact_paths: list[str] = Field(default_factory=list)
     branch_name: str | None = None
@@ -186,6 +191,8 @@ class PRReadyEvidence(BaseModel):
         "source",
         "maker_id",
         "checker_id",
+        "maker_attempt_id",
+        "checker_attempt_id",
         "source_commit",
         "target_commit",
         "diff_hash",
@@ -211,8 +218,18 @@ class PRReadyEvidence(BaseModel):
             raise ValueError("unsupported PR_READY evidence schema")
         if self.maker_id == self.checker_id:
             raise ValueError("maker_id and checker_id must be independent")
+        if self.maker_attempt_id == self.checker_attempt_id:
+            raise ValueError("maker_attempt_id and checker_attempt_id must be independent")
         if self.pre_pr_gate.get("passed") is not True:
             raise ValueError("pre_pr_gate.passed must be true")
+        if self.risk_verdict.get("passed") is not True:
+            raise ValueError("risk_verdict.passed must be true")
+        if self.safety_verdict.get("passed") is not True:
+            raise ValueError("safety_verdict.passed must be true")
+        for field_name in ("source_commit", "target_commit", "diff_hash"):
+            observed = self.pre_pr_gate.get(field_name)
+            if observed is not None and str(observed) != getattr(self, field_name):
+                raise ValueError(f"pre_pr_gate.{field_name} must match evidence")
         return self
 
 

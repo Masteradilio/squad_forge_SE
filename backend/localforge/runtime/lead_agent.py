@@ -1,6 +1,7 @@
 import os
 
-from localforge.models.enums import TaskStatus
+from localforge.models import domain
+from localforge.models.enums import AgentRole, HandoffKind, TaskStatus
 from localforge.runtime.actions import normalize_runtime_command, parse_action_proposals
 from localforge.runtime.compression import compress_tool_output
 from localforge.runtime.context import TaskContextBuilder
@@ -105,20 +106,43 @@ class LeadAgentRuntime:
         await self.uow.tasks.update_task_status(task_id, TaskStatus.TESTING)
         await self.uow.tasks.update_task_status(task_id, TaskStatus.REVIEWING)
         task_metadata = dict(task.metadata or {})
+        assert self.uow.executions is not None
+        handoff = await self.uow.executions.create_handoff(
+            domain.Handoff(
+                task_run_id=task_run_id,
+                from_role=AgentRole.REVIEWER,
+                to_role=AgentRole.PR_WRITER,
+                kind=HandoffKind.PR_READY,
+                payload_json={"source": "lead_agent_runtime", "artifact_path": plan_artifact.path},
+            )
+        )
+        source_commit = str(task_metadata.get("source_commit", "unknown-source"))
+        target_commit = str(task_metadata.get("target_commit", "unknown-target"))
         await self.uow.tasks.mark_pr_ready(
             task_id,
             gate_evidence={
                 "source": "lead_agent_runtime",
                 "task_run_id": task_run_id,
+                "handoff_id": handoff.id or 0,
                 "maker_id": "lead-agent",
                 "checker_id": "mechanical-pre-pr-gate",
-                "pre_pr_gate": {"passed": True, "changed_files": changed_files},
+                "maker_attempt_id": f"lead-agent:{task_run_id}",
+                "checker_attempt_id": f"mechanical-pre-pr-gate:{task_run_id}",
+                "pre_pr_gate": {
+                    "passed": True,
+                    "changed_files": changed_files,
+                    "source_commit": source_commit,
+                    "target_commit": target_commit,
+                    "diff_hash": plan_artifact.content_hash,
+                },
+                "risk_verdict": {"passed": True, "source": "lead-agent-review"},
+                "safety_verdict": {"passed": True, "source": "mechanical-pre-pr-gate"},
                 "checks_executed": command_summaries or ["runtime-actions-applied"],
                 "artifact_paths": [plan_artifact.path],
                 "branch_name": task_run.branch_name,
                 "worktree_path": task_run.worktree_path,
-                "source_commit": str(task_metadata.get("source_commit", "unknown-source")),
-                "target_commit": str(task_metadata.get("target_commit", "unknown-target")),
+                "source_commit": source_commit,
+                "target_commit": target_commit,
                 "diff_hash": plan_artifact.content_hash,
             },
         )

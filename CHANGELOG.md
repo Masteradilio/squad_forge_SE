@@ -33,6 +33,9 @@ All notable changes to LocalForge OS will be documented in this file.
   transition, including independent maker/checker identities, pre-PR gate
   success, deterministic checks, branch/worktree context, and persisted
   artifact validation.
+- Hardened `PRReadyEvidence` to require persisted typed `PR_READY` handoffs,
+  independent maker/checker attempt IDs, risk and safety verdicts, commit-bound
+  pre-PR gate evidence, and stale source/target commit rejection.
 - Added Phase R4 candidate evidence under
   `docs/e2e/v6_2_compliance/phase_R4/`.
 - Added a durable loop schedule runtime for interval and cron triggers with

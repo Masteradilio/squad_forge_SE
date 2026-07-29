@@ -4,7 +4,8 @@ import git
 import pytest
 from localforge.gitops import GitAdapter, WorktreeManager, get_task_branch_name
 from localforge.models import domain
-from localforge.models.enums import ArtifactType, TaskStatus
+from localforge.models.enums import AgentRole, ArtifactType, HandoffKind, TaskStatus
+from localforge.services.execution import ExecutionService
 from localforge.storage import UnitOfWork
 
 
@@ -61,6 +62,7 @@ async def test_git_adapter_and_checkpoints(temp_git_repo, db_session):
     uow.projects = ProjectService(db_session)
     uow.tasks = TaskService(db_session)
     uow.audits = AuditService(db_session)
+    uow.executions = ExecutionService(db_session)
     uow.safety = SafetyService(db_session)
 
     # Register project
@@ -134,6 +136,7 @@ async def test_worktree_manager_setup_and_isolation(temp_git_repo, db_session):
     uow.projects = ProjectService(db_session)
     uow.tasks = TaskService(db_session)
     uow.audits = AuditService(db_session)
+    uow.executions = ExecutionService(db_session)
     uow.safety = SafetyService(db_session)
 
     # Register project
@@ -227,14 +230,33 @@ async def test_worktree_manager_setup_and_isolation(temp_git_repo, db_session):
             content_hash="a" * 64,
         )
     )
+    handoff = await uow.executions.create_handoff(
+        domain.Handoff(
+            task_run_id=task_run.id,
+            from_role=AgentRole.REVIEWER,
+            to_role=AgentRole.PR_WRITER,
+            kind=HandoffKind.PR_READY,
+            payload_json={"source": "test_gitops"},
+        )
+    )
     await uow.tasks.mark_pr_ready(
         task.id,
         gate_evidence={
             "source": "test_gitops",
             "task_run_id": task_run.id,
+            "handoff_id": handoff.id,
             "maker_id": "gitops-test",
             "checker_id": "mechanical-pre-pr-gate",
-            "pre_pr_gate": {"passed": True},
+            "maker_attempt_id": f"gitops-test:{task_run.id}",
+            "checker_attempt_id": f"mechanical-pre-pr-gate:{task_run.id}",
+            "pre_pr_gate": {
+                "passed": True,
+                "source_commit": "source-commit",
+                "target_commit": "target-commit",
+                "diff_hash": "a" * 64,
+            },
+            "risk_verdict": {"passed": True, "source": "test_gitops"},
+            "safety_verdict": {"passed": True, "source": "test_gitops"},
             "checks_executed": ["pytest"],
             "artifact_paths": [artifact.path],
             "branch_name": task_run.branch_name,
@@ -265,6 +287,7 @@ async def test_worktree_manager_replaces_stale_task_worktree_path(temp_git_repo,
     uow.projects = ProjectService(db_session)
     uow.tasks = TaskService(db_session)
     uow.audits = AuditService(db_session)
+    uow.executions = ExecutionService(db_session)
     uow.safety = SafetyService(db_session)
 
     project = await uow.projects.create_project(
@@ -309,6 +332,7 @@ async def test_worktree_manager_uses_ready_dependency_branch_as_base(temp_git_re
     uow.projects = ProjectService(db_session)
     uow.tasks = TaskService(db_session)
     uow.audits = AuditService(db_session)
+    uow.executions = ExecutionService(db_session)
     uow.safety = SafetyService(db_session)
 
     project = await uow.projects.create_project(
@@ -363,6 +387,15 @@ async def test_worktree_manager_uses_ready_dependency_branch_as_base(temp_git_re
             content_hash="b" * 64,
         )
     )
+    dep_handoff = await uow.executions.create_handoff(
+        domain.Handoff(
+            task_run_id=dep_task_run.id,
+            from_role=AgentRole.REVIEWER,
+            to_role=AgentRole.PR_WRITER,
+            kind=HandoffKind.PR_READY,
+            payload_json={"source": "test_gitops_dependency"},
+        )
+    )
     await uow.tasks.update_task_status(dependency.id, TaskStatus.READY)
     await uow.tasks.update_task_status(dependency.id, TaskStatus.CLAIMED)
     await uow.tasks.update_task_status(dependency.id, TaskStatus.PLANNING)
@@ -374,9 +407,19 @@ async def test_worktree_manager_uses_ready_dependency_branch_as_base(temp_git_re
         gate_evidence={
             "source": "test_gitops_dependency",
             "task_run_id": dep_task_run.id,
+            "handoff_id": dep_handoff.id,
             "maker_id": "gitops-test",
             "checker_id": "mechanical-pre-pr-gate",
-            "pre_pr_gate": {"passed": True},
+            "maker_attempt_id": f"gitops-test:{dep_task_run.id}",
+            "checker_attempt_id": f"mechanical-pre-pr-gate:{dep_task_run.id}",
+            "pre_pr_gate": {
+                "passed": True,
+                "source_commit": "source-commit",
+                "target_commit": "target-commit",
+                "diff_hash": "b" * 64,
+            },
+            "risk_verdict": {"passed": True, "source": "test_gitops_dependency"},
+            "safety_verdict": {"passed": True, "source": "test_gitops_dependency"},
             "checks_executed": ["pytest"],
             "artifact_paths": [dep_artifact.path],
             "branch_name": dep_task_run.branch_name,

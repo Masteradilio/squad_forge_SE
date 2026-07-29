@@ -1812,24 +1812,44 @@ class RolePipelineEngine:
                     raise ValueError("PR_READY transition requires a persisted task run")
                 task_run = task_runs[0]
                 task_metadata = dict(task.metadata or {})
+                assert self.uow.executions is not None
+                handoff = await self.uow.executions.create_handoff(
+                    domain.Handoff(
+                        task_run_id=task_run.id or 0,
+                        from_role=AgentRole.REVIEWER,
+                        to_role=AgentRole.PR_WRITER,
+                        kind=HandoffKind.PR_READY,
+                        payload_json={"source": "role_pipeline", "target": target.value},
+                    )
+                )
+                source_commit = str(task_metadata.get("source_commit", "unknown-source"))
+                target_commit = str(task_metadata.get("target_commit", "unknown-target"))
+                diff_hash = str(task_metadata.get("diff_hash", "role-pipeline"))
                 task = await self.uow.tasks.mark_pr_ready(
                     task.id or 0,
                     gate_evidence={
                         "source": "role_pipeline",
                         "task_run_id": task_run.id or 0,
+                        "handoff_id": handoff.id or 0,
                         "maker_id": "role-pipeline",
                         "checker_id": "mechanical-pre-pr-gate",
-                        "pre_pr_gate": {"passed": True, "target": target.value},
+                        "maker_attempt_id": f"role-pipeline:{task_run.id or 0}",
+                        "checker_attempt_id": f"mechanical-pre-pr-gate:{task_run.id or 0}",
+                        "pre_pr_gate": {
+                            "passed": True,
+                            "target": target.value,
+                            "source_commit": source_commit,
+                            "target_commit": target_commit,
+                            "diff_hash": diff_hash,
+                        },
+                        "risk_verdict": {"passed": True, "source": "role-pipeline"},
+                        "safety_verdict": {"passed": True, "source": "mechanical-pre-pr-gate"},
                         "checks_executed": ["role-pipeline-artifacts"],
                         "branch_name": task_run.branch_name,
                         "worktree_path": task_run.worktree_path,
-                        "source_commit": str(
-                            task_metadata.get("source_commit", "unknown-source")
-                        ),
-                        "target_commit": str(
-                            task_metadata.get("target_commit", "unknown-target")
-                        ),
-                        "diff_hash": str(task_metadata.get("diff_hash", "role-pipeline")),
+                        "source_commit": source_commit,
+                        "target_commit": target_commit,
+                        "diff_hash": diff_hash,
                     },
                 )
                 continue

@@ -15,25 +15,16 @@
   "verdict": "EVIDENCE_READY",
   "known_limitations": [
     "Candidate evidence is not final release acceptance.",
-    "Source and target commit binding is not complete.",
     "Full mutation-surface ActionGateway inventory remains required.",
-    "Stale evidence invalidation remains required."
+    "Dependency and test-content stale evidence invalidation remain required."
   ],
   "commands": [
     {
-      "command": "python -m pytest backend/tests/test_services.py backend/tests/test_gitops.py backend/tests/test_scheduler.py backend/tests/test_phase27_unattended.py -q",
-      "exit_code": 0
-    },
-    {
-      "command": "python -m mypy backend/localforge/models/domain.py backend/localforge/services/task.py backend/localforge/pr_factory/local.py backend/localforge/runtime/lead_agent.py backend/localforge/pipeline/engine.py backend/tests/test_services.py backend/tests/test_gitops.py backend/tests/test_scheduler.py backend/tests/test_phase27_unattended.py",
-      "exit_code": 0
-    },
-    {
-      "command": "python -m ruff check backend/localforge/models/domain.py backend/localforge/services/task.py backend/localforge/pr_factory/local.py backend/localforge/runtime/lead_agent.py backend/localforge/pipeline/engine.py backend/tests/test_services.py backend/tests/test_gitops.py backend/tests/test_scheduler.py backend/tests/test_phase27_unattended.py",
+      "command": "python -m pytest backend\\tests\\test_services.py backend\\tests\\test_gitops.py backend\\tests\\test_scheduler.py backend\\tests\\test_phase27_unattended.py -q",
       "exit_code": 0
     }
   ],
-  "manifest_sha256": "bc02eb5fdcc0b919795d67e1f8195b274fa828c7eba94754fb5c2a4b9eff5801",
+  "manifest_sha256": "40011275d0bf7e743d522dc475aa2be160fb35059ed159a4562baf0614702daf",
   "environment": {
     "os": "windows-local-and-github-actions-matrix",
     "python": "3.11-local / 3.12-ci",
@@ -44,16 +35,18 @@
     "Candidate evidence remains EVIDENCE_READY until reviewed PR, merge commit, exact-head CI, owner-approved tag, and final release validation exist."
   ],
   "input_hashes": {
-    "docs/e2e/v6_2_compliance/phase_R3/acceptance_report.md": "39626285acf4eba239a0f7742259981b81e57e6e02db1b917456a9ba2c2a0faf",
-    "docs/e2e/v6_2_compliance/phase_R3/known_limitations.md": "868d1f7d9317cbba5c4f61682b6eadf1dd503979f28c514a5fdf89a0a87157ee",
-    "backend/localforge/models/domain.py": "5b865091a6464f1a0bf659bae916e99906a428bf49e8dcd413138b73985cc9ac",
-    "backend/localforge/pr_factory/local.py": "499eae3bd13b33176f55442705da46d1607e85a2bacfaea987f0f87a47005eee",
-    "backend/localforge/runtime/lead_agent.py": "52f84c195a78c8c864d70a7310abe6e72975a34b8a257b903f5b86be3e7a06fb",
-    "backend/localforge/pipeline/engine.py": "978f410e1581685d3b71a9fd0cd8aa03278ec62b9ce5f5c7a370d938c5864e49",
-    "backend/tests/test_services.py": "c95c8f4573f067ddbe7f975c83d72a8e1180e657ab14e1d20ac6e5a46c8627e8",
-    "backend/tests/test_gitops.py": "a648ec97b0d8d0c2fd73be4fa284c2338f8aa176947c8ff5ef3622d0bbd14918",
-    "backend/tests/test_scheduler.py": "acc6afb31a30d300538f38d8e940f3235aed55481b979a8704a893d6c04e6500",
-    "backend/tests/test_phase27_unattended.py": "024d87e566c358d2a5cbb190362c9d2c8b88e787d204cfbfab4f0a07c8f8aee3",
-    "docs/compliance_backlog_V6-1.md": "296dcc7c0c2bc9048cd01deaffb00b3d4bb243fe7317846d600ae9128e6dae13"
+    "docs/e2e/v6_2_compliance/phase_R3/acceptance_report.md": "accad9d2f14147555fbd9c66aac7ff34f6019d4e143b5f5542d0c8fad2c3054c",
+    "docs/e2e/v6_2_compliance/phase_R3/known_limitations.md": "76fa81d6fd35da3f3ec646563a9e802d2ff6bfa19adeb8da2eaaa8c4fa83cc4b",
+    "backend/localforge/models/domain.py": "9dee389e1f6eb7e8caed84a2e30bb7597fb2ea9bf9502386f233c5e48d3556e3",
+    "backend/localforge/pr_factory/local.py": "240c56a205d08101408279e5f8d9f000311c96da3fbdf094429265daa0ddbe49",
+    "backend/localforge/runtime/lead_agent.py": "3a1a2baea520274db7df10dd44206e2ac1bcfe1dc6b3b7a0b70f2726317023bf",
+    "backend/localforge/pipeline/engine.py": "aff76535a140e33309a786c55c9d89d0e074fea654c7711b5840f19d1ab3c83b",
+    "backend/tests/test_services.py": "9061bae4726ecfd02c400a00cf00f296cea350b22c0a84b28e1a6c08a6dbe942",
+    "backend/tests/test_gitops.py": "785f4762e53b6694cd36f72d212c1706ef5501cf2f8e5446cf6ef60f54edd6e6",
+    "backend/tests/test_scheduler.py": "4701af1d51f791a03fb637e9d8723d8c0157b4801f90e414a9a1fb6d24514584",
+    "backend/tests/test_phase27_unattended.py": "0d919b769dae55f9d009a017dfe747b311bdb2f49db4ff91eafa06181f8823c5",
+    "docs/compliance_backlog_V6-1.md": "94263fc27e8b9a70e7d9424f0fa05d6a6d5db68c5ca0805c2d8ca28ab450192f",
+    "backend/localforge/services/task.py": "152429170d4b8187659651c74437a43d6b6a2de100ece852fdedcaad826a5848",
+    "CHANGELOG.md": "dabe0116188246cc9d4c74aa296b8ccc0cfb7b517c357903ce36be183f5f5fdf"
   }
 }

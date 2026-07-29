@@ -21,6 +21,58 @@ from localforge.services.task import TaskService
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
+async def _create_pr_ready_handoff(
+    exec_service: ExecutionService, task_run_id: int, *, source: str = "unit_test"
+) -> domain.Handoff:
+    return await exec_service.create_handoff(
+        domain.Handoff(
+            task_run_id=task_run_id,
+            from_role=AgentRole.REVIEWER,
+            to_role=AgentRole.PR_WRITER,
+            kind=HandoffKind.PR_READY,
+            payload_json={"source": source},
+        )
+    )
+
+
+def _pr_ready_evidence(
+    *,
+    task_run: domain.TaskRun,
+    handoff: domain.Handoff,
+    artifact_path: str,
+    source: str = "unit_test",
+    maker_id: str = "maker",
+    checker_id: str = "checker",
+    source_commit: str = "source-commit",
+    target_commit: str = "target-commit",
+    diff_hash: str = "a" * 64,
+) -> dict[str, object]:
+    return {
+        "source": source,
+        "task_run_id": task_run.id,
+        "handoff_id": handoff.id,
+        "maker_id": maker_id,
+        "checker_id": checker_id,
+        "maker_attempt_id": f"{maker_id}:{task_run.id}",
+        "checker_attempt_id": f"{checker_id}:{task_run.id}",
+        "pre_pr_gate": {
+            "passed": True,
+            "source_commit": source_commit,
+            "target_commit": target_commit,
+            "diff_hash": diff_hash,
+        },
+        "risk_verdict": {"passed": True, "source": "unit_test"},
+        "safety_verdict": {"passed": True, "source": "unit_test"},
+        "checks_executed": ["pytest"],
+        "artifact_paths": [artifact_path],
+        "branch_name": task_run.branch_name,
+        "worktree_path": task_run.worktree_path,
+        "source_commit": source_commit,
+        "target_commit": target_commit,
+        "diff_hash": diff_hash,
+    }
+
+
 @pytest.mark.asyncio
 async def test_project_service(db_session: AsyncSession):
     proj_service = ProjectService(db_session)
@@ -133,25 +185,20 @@ async def test_task_service_and_state_machine(db_session: AsyncSession):
             content_hash="a" * 64,
         )
     )
-    gate_evidence = {
-        "source": "unit_test",
-        "task_run_id": task_run.id,
-        "maker_id": "maker",
-        "checker_id": "checker",
-        "pre_pr_gate": {"passed": True},
-        "checks_executed": ["pytest"],
-        "artifact_paths": [artifact.path],
-        "branch_name": task_run.branch_name,
-        "worktree_path": task_run.worktree_path,
-        "source_commit": "source-commit",
-        "target_commit": "target-commit",
-        "diff_hash": "a" * 64,
-    }
+    handoff = await _create_pr_ready_handoff(exec_service, task_run.id)
+    gate_evidence = _pr_ready_evidence(
+        task_run=task_run,
+        handoff=handoff,
+        artifact_path=artifact.path,
+    )
     pr_ready = await task_service.mark_pr_ready(task.id, gate_evidence=gate_evidence)
     assert pr_ready.status == TaskStatus.PR_READY
     assert pr_ready.metadata["pr_ready_gate"]["passed"] is True
     evidence = pr_ready.metadata["pr_ready_gate"]["evidence"]
     assert evidence["schema"] == "localforge.pr_ready_evidence.v1"
+    assert evidence["handoff_id"] == handoff.id
+    assert evidence["risk_verdict"] == {"passed": True, "source": "unit_test"}
+    assert evidence["safety_verdict"] == {"passed": True, "source": "unit_test"}
     assert evidence["artifact_paths"] == [artifact.path]
     assert evidence["source_commit"] == "source-commit"
     assert evidence["target_commit"] == "target-commit"
@@ -198,6 +245,13 @@ async def test_pr_ready_rejects_untyped_or_spoofed_evidence(db_session: AsyncSes
             content_hash="b" * 64,
         )
     )
+    handoff = await _create_pr_ready_handoff(exec_service, task_run.id)
+    valid_evidence = _pr_ready_evidence(
+        task_run=task_run,
+        handoff=handoff,
+        artifact_path=".localforge/artifacts/runs/1/tasks/lf-101/pr.md",
+        diff_hash="b" * 64,
+    )
     for status in (
         TaskStatus.READY,
         TaskStatus.CLAIMED,
@@ -231,33 +285,95 @@ async def test_pr_ready_rejects_untyped_or_spoofed_evidence(db_session: AsyncSes
     with pytest.raises(ValueError, match="independent"):
         await task_service.mark_pr_ready(
             task.id,
-            gate_evidence={
-                "source": "unit_test",
-                "task_run_id": task_run.id,
-                "maker_id": "same",
-                "checker_id": "same",
-                "pre_pr_gate": {"passed": True},
-                "checks_executed": ["pytest"],
-                "source_commit": "source-commit",
-                "target_commit": "target-commit",
-                "diff_hash": "b" * 64,
-            },
+            gate_evidence={**valid_evidence, "maker_id": "same", "checker_id": "same"},
         )
     with pytest.raises(ValueError, match="pre_pr_gate"):
         await task_service.mark_pr_ready(
             task.id,
-            gate_evidence={
-                "source": "unit_test",
-                "task_run_id": task_run.id,
-                "maker_id": "maker",
-                "checker_id": "checker",
-                "pre_pr_gate": {"passed": False},
-                "checks_executed": ["pytest"],
-                "source_commit": "source-commit",
-                "target_commit": "target-commit",
-                "diff_hash": "c" * 64,
+            gate_evidence={**valid_evidence, "pre_pr_gate": {"passed": False}},
+        )
+    with pytest.raises(ValueError, match="risk_verdict"):
+        await task_service.mark_pr_ready(
+            task.id,
+            gate_evidence={**valid_evidence, "risk_verdict": {"passed": False}},
+        )
+    with pytest.raises(ValueError, match="safety_verdict"):
+        await task_service.mark_pr_ready(
+            task.id,
+            gate_evidence={**valid_evidence, "safety_verdict": {"passed": False}},
+        )
+    with pytest.raises(ValueError, match="handoff"):
+        await task_service.mark_pr_ready(task.id, gate_evidence={**valid_evidence, "handoff_id": 0})
+
+
+@pytest.mark.asyncio
+async def test_pr_ready_rejects_stale_source_or_target_commit(db_session: AsyncSession):
+    proj_service = ProjectService(db_session)
+    task_service = TaskService(db_session)
+    exec_service = ExecutionService(db_session)
+    audit_service = AuditService(db_session)
+
+    proj = await proj_service.create_project(
+        domain.Project(name="LF Test", root_path="/t", default_branch="m")
+    )
+    assert proj.id is not None
+    task = await task_service.create_task(
+        domain.Task(
+            project_id=proj.id,
+            key="LF-102",
+            title="Task",
+            description="Desc",
+            metadata={
+                "current_source_commit": "current-source",
+                "current_target_commit": "current-target",
             },
         )
+    )
+    assert task.id is not None
+    run = await exec_service.create_run(
+        domain.Run(project_id=proj.id, mode=RunMode.UNATTENDED, initiated_by="test")
+    )
+    assert run.id is not None
+    task_run = await task_service.create_task_run(
+        domain.TaskRun(
+            run_id=run.id,
+            task_id=task.id,
+            worktree_path="/tmp/lf-102",
+            branch_name="localforge/lf-102",
+        )
+    )
+    assert task_run.id is not None
+    artifact = await audit_service.create_artifact(
+        domain.Artifact(
+            task_run_id=task_run.id,
+            type=ArtifactType.PR,
+            path=".localforge/artifacts/runs/1/tasks/lf-102/pr.md",
+            content_hash="c" * 64,
+        )
+    )
+    handoff = await _create_pr_ready_handoff(exec_service, task_run.id)
+    evidence = _pr_ready_evidence(
+        task_run=task_run,
+        handoff=handoff,
+        artifact_path=artifact.path,
+        source_commit="old-source",
+        target_commit="current-target",
+        diff_hash="c" * 64,
+    )
+
+    with pytest.raises(ValueError, match="source_commit is stale"):
+        await task_service.mark_pr_ready(task.id, gate_evidence=evidence)
+
+    evidence = _pr_ready_evidence(
+        task_run=task_run,
+        handoff=handoff,
+        artifact_path=artifact.path,
+        source_commit="current-source",
+        target_commit="old-target",
+        diff_hash="c" * 64,
+    )
+    with pytest.raises(ValueError, match="target_commit is stale"):
+        await task_service.mark_pr_ready(task.id, gate_evidence=evidence)
 
 
 @pytest.mark.asyncio

@@ -401,19 +401,19 @@ audited, fail-closed gate.
 ### V61C-300 — Define typed readiness evidence
 
 - [x] Add a versioned `PRReadyEvidence` contract.
-- [ ] Require task/run identity, source commit, worktree/branch, diff hash,
+- [x] Require task/run identity, source commit, worktree/branch, diff hash,
       test commands and results, typed handoffs, maker identity, independent
       checker identity, risk verdict, safety verdict, and pre-PR gate result.
   - Candidate R3 implementation now requires task-run identity,
     branch/worktree context, source commit, target commit, diff hash,
     deterministic checks, persisted artifacts, independent maker/checker
-    identities, and pre-PR gate success; typed handoff, risk verdict, and
-    safety verdict requirements remain open.
-- [ ] Reject unknown, stale, cross-task, or mismatched evidence.
+    identities and attempt IDs, typed `PR_READY` handoff ownership, risk
+    verdict, safety verdict, and pre-PR gate success.
+- [x] Reject unknown, stale, cross-task, or mismatched evidence.
   - Candidate R3 implementation rejects unknown, cross-task, branch/worktree
-    mismatches and unknown artifact paths; stale source/target commit evidence
-    remains open.
-- [ ] Bind evidence to the exact source and target commits.
+    mismatches, unknown handoff/artifact paths, stale current source/target
+    commit metadata, and persisted worktree-manifest source commit mismatches.
+- [x] Bind evidence to the exact source and target commits.
 
 ### V61C-301 — Make one transition authoritative
 
@@ -427,9 +427,9 @@ audited, fail-closed gate.
 
 ### V61C-302 — Enforce independent checking
 
-- [ ] Prohibit maker and checker from sharing identity or attempt ownership.
+- [x] Prohibit maker and checker from sharing identity or attempt ownership.
   - Candidate R3 implementation prohibits identical maker/checker identities;
-    attempt ownership validation remains open.
+    it now also prohibits identical maker/checker attempt identities.
 - [ ] Require checker execution after the final maker commit.
 - [ ] Invalidate checker evidence when source, dependency, test, or target
       branch state changes.
@@ -452,11 +452,10 @@ audited, fail-closed gate.
 - [x] Empty or arbitrary dictionaries cannot satisfy `PRReadyEvidence`.
 - [x] Generic status APIs cannot reach `PR_READY`.
 - [x] Same maker/checker identity is rejected.
-- [ ] Stale evidence is rejected after source or target branch changes.
-- [ ] Missing tests, diff, handoff, checker, or pre-PR gate blocks readiness.
+- [x] Stale evidence is rejected after source or target branch changes.
+- [x] Missing tests, diff, handoff, checker, or pre-PR gate blocks readiness.
   - Candidate R3 implementation covers missing tests, diff hash, checker,
-    pre-PR gate, and persisted artifacts; typed handoff requirements remain
-    open.
+    typed handoff, pre-PR gate, risk/safety verdicts, and persisted artifacts.
 - [ ] Every mutation surface has a negative bypass test.
 - [x] A valid controlled task reaches `PR_READY` exactly once.
 

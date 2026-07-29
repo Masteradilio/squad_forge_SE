@@ -1,5 +1,6 @@
 import logging
 import os
+import posixpath
 from datetime import UTC, datetime, timedelta
 from pathlib import PurePosixPath
 from uuid import uuid4
@@ -17,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 def normalize_lease_path(path: str) -> str:
     """Normalize a lease path into a comparable repository-relative form."""
-    normalized = os.path.normpath(path).replace("\\", "/").strip("/")
+    normalized = posixpath.normpath(path.replace("\\", "/")).strip("/")
     normalized = str(PurePosixPath(normalized))
     if os.name == "nt":
         normalized = normalized.lower()

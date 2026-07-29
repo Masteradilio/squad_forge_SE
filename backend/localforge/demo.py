@@ -72,10 +72,15 @@ def run_ci_regression_demo(output_dir: Path) -> DemoRun:
     _run(["git", "init"], cwd=repo_dir)
     _run(["git", "config", "user.email", "demo@localforge.local"], cwd=repo_dir)
     _run(["git", "config", "user.name", "LocalForge Demo"], cwd=repo_dir)
-    (repo_dir / "calculator.py").write_text("def add(a: int, b: int) -> int:\n    return a - b\n", encoding="utf-8")
+    (repo_dir / "calculator.py").write_text(
+        "def add(a: int, b: int) -> int:\n    return a - b\n",
+        encoding="utf-8",
+        newline="\n",
+    )
     (repo_dir / "test_calculator.py").write_text(
         "from calculator import add\n\n\ndef test_addition() -> None:\n    assert add(2, 3) == 5\n",
         encoding="utf-8",
+        newline="\n",
     )
     _run(["git", "add", "."], cwd=repo_dir)
     _run(["git", "commit", "-m", "seed failing calculator regression"], cwd=repo_dir)
@@ -83,7 +88,11 @@ def run_ci_regression_demo(output_dir: Path) -> DemoRun:
     failing = _run([sys.executable, "-m", "pytest", "test_calculator.py", "-q"], cwd=repo_dir, check=False)
     worktree_dir = (worktrees_dir / "ci-regression-fix").resolve()
     _run(["git", "worktree", "add", "-b", "lf-demo-ci-regression", str(worktree_dir)], cwd=repo_dir)
-    (worktree_dir / "calculator.py").write_text("def add(a: int, b: int) -> int:\n    return a + b\n", encoding="utf-8")
+    (worktree_dir / "calculator.py").write_text(
+        "def add(a: int, b: int) -> int:\n    return a + b\n",
+        encoding="utf-8",
+        newline="\n",
+    )
     passing = _run(
         [sys.executable, "-m", "pytest", "test_calculator.py", "-q"],
         cwd=worktree_dir,
@@ -99,7 +108,7 @@ def run_ci_regression_demo(output_dir: Path) -> DemoRun:
     checksums: dict[str, str] = {}
     for relative_path, content in files.items():
         target = artifacts_dir / relative_path
-        target.write_text(content, encoding="utf-8")
+        target.write_text(content, encoding="utf-8", newline="\n")
         checksums[f"artifacts/{relative_path}"] = _sha256_file(target)
 
     event = {
@@ -173,7 +182,11 @@ def run_ci_regression_demo(output_dir: Path) -> DemoRun:
     )
     sanitized = redact_secrets_recursive(demo.model_dump(mode="json"))
     demo_path = output_dir / "demo_run.json"
-    demo_path.write_text(json.dumps(sanitized, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    demo_path.write_text(
+        json.dumps(sanitized, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
     _write_static_replay(output_dir / "demo_replay.html", sanitized)
     checksums["demo_run.json"] = _sha256_file(demo_path)
     _remove_tree(repo_dir)
@@ -207,6 +220,7 @@ def _write_static_replay(path: Path, demo_payload: object) -> None:
         "<ol>${demo.timeline.map(e=>`<li><strong>${e.title}</strong>: ${e.summary}</li>`).join('')}</ol>`;"
         "</script>",
         encoding="utf-8",
+        newline="\n",
     )
 
 

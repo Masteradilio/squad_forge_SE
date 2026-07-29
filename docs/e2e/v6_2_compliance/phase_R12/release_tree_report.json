@@ -10,10 +10,14 @@
     "docs/e2e/v6_2_compliance/phase_R10/candidate_manifest.json": "3d2ce6ab41fac01d4f4be34424308ce49fcb9497c1d4737acf97e9be609666ec",
     "docs/e2e/v6_2_compliance/phase_R10/known_limitations.md": "b70a1b2c94ced9df85f1a59a955d00e64ed734afcf564000d86da57954f32298",
     "docs/e2e/v6_2_compliance/phase_R11/acceptance_report.md": "b48450bc8ea50fd4c488ab6837e5046302a40adcf078b611bf0107d9214a9412",
-    "docs/e2e/v6_2_compliance/phase_R11/candidate_manifest.json": "7caeb068b4c62d41113190d743b893af81c94667e626999d373364ce777b8a67",
-    "docs/e2e/v6_2_compliance/phase_R11/demo/demo_replay.html": "369bc90f0b08a5df3fa8a5be92d7ae3a70f04e7f085e6b6e2e0e8fcc84a8f91f",
-    "docs/e2e/v6_2_compliance/phase_R11/demo/demo_run.json": "2970082ea0c30587dbe71be6f612569a71149a46620026d8f9be465e75ea9081",
+    "docs/e2e/v6_2_compliance/phase_R11/candidate_manifest.json": "2117aad894fa992a9924e16c479b141518fd2074ebfe47e8a5a1c1f4697e4df2",
+    "docs/e2e/v6_2_compliance/phase_R11/demo/demo_replay.html": "64ca4339dd0a29da04a927387a95888172dc4489a27f0f7cead647afd720f4ae",
+    "docs/e2e/v6_2_compliance/phase_R11/demo/demo_run.json": "046859c37dd431a3ffcfd9e12b5aae6c3d42c639383725eb920b177bfa3eb5a2",
     "docs/e2e/v6_2_compliance/phase_R11/known_limitations.md": "5a2e69e30b2bcfba54b7f9181657f25ceb5c69e64a511e3ad843f28801a5b4e2",
+    "docs/e2e/v6_2_compliance/phase_R12/acceptance_report.md": "0017ef92091cae4fdc5f16a35b87569eb042e04bb54b15cb131b2c53cb383cfb",
+    "docs/e2e/v6_2_compliance/phase_R12/candidate_manifest.json": "3c64eac412dd686d78c2759bf66b4ebf267f6da65b7c8c342bdd4bc59f08311e",
+    "docs/e2e/v6_2_compliance/phase_R12/known_limitations.md": "092e15475c86a5f6850e78dddd1aa68f45df0fb6142e8cbd7e8e4b93068b9e53",
+    "docs/e2e/v6_2_compliance/phase_R12/release_tree_report.json": "4670d4f958a63c0e35b708180055b4ee91499f55bf88c6eb50b9470ae4bde994",
     "docs/e2e/v6_2_compliance/phase_R2/acceptance_report.md": "4b8ba9fd41bc1211c0b569b83cf67522a8e6334460c0b662bcc8f0ce9a27205f",
     "docs/e2e/v6_2_compliance/phase_R2/candidate_manifest.json": "e646f885b1fe4f5b30b990be8ed74ee3c107a20f6b89eec7036196bf24209519",
     "docs/e2e/v6_2_compliance/phase_R2/known_limitations.md": "f263f950516d991f121b97b8fe44882045c5f51786fb7d830fb3665baf975c66",
@@ -43,5 +47,5 @@
   "findings": [],
   "schema_version": "localforge.v6_2.release_tree_report.v1",
   "scope": "docs/e2e/v6_2_compliance",
-  "tracked_files": 39
+  "tracked_files": 43
 }

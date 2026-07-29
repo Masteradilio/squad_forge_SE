@@ -117,6 +117,10 @@ All notable changes to LocalForge OS will be documented in this file.
 - Hardened API operation so configured bearer-token auth and oversized payload
   rejection fail closed while preserving unauthenticated local development by
   default.
+- Fixed cross-platform path lease normalization for Windows-style paths on
+  Linux CI.
+- Fixed deterministic demo evidence generation to write LF-normalized files so
+  manifest checksums are stable across Windows and Linux.
 
 ### V6.1 Compliance Closure - 2026-07-28
 

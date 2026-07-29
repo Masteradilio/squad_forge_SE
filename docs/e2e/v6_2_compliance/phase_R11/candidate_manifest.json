@@ -15,10 +15,10 @@
   "reviewed_pr_number": 14,
   "verdict": "EVIDENCE_READY",
   "input_hashes": {
-    "backend/localforge/demo.py": "8ff915ddc8bdab4e5b0e06c82fbd30c7d96817c41d518340a7b89700451222ae",
+    "backend/localforge/demo.py": "a567f8f31cada6abf914fe640a29abc5905033a624237489914da9f25b5db770",
     "backend/tests/test_phase_r11_demo.py": "f25baed46239541196c7ed59e010f3a047b546cf979d1c97c1610110cdc6674c",
-    "docs/e2e/v6_2_compliance/phase_R11/demo/demo_run.json": "2970082ea0c30587dbe71be6f612569a71149a46620026d8f9be465e75ea9081",
-    "docs/e2e/v6_2_compliance/phase_R11/demo/demo_replay.html": "369bc90f0b08a5df3fa8a5be92d7ae3a70f04e7f085e6b6e2e0e8fcc84a8f91f"
+    "docs/e2e/v6_2_compliance/phase_R11/demo/demo_run.json": "046859c37dd431a3ffcfd9e12b5aae6c3d42c639383725eb920b177bfa3eb5a2",
+    "docs/e2e/v6_2_compliance/phase_R11/demo/demo_replay.html": "64ca4339dd0a29da04a927387a95888172dc4489a27f0f7cead647afd720f4ae"
   },
   "known_limitations": [
     "Candidate evidence is not final public release evidence.",
@@ -38,5 +38,5 @@
       "exit_code": 0
     }
   ],
-  "manifest_sha256": "ddd8de6d214a5824919af00d6aa739c46f3caba1e2f9f47325103584acc6fe42"
+  "manifest_sha256": "c95ef7c9b7501764900032c5f1b1635da6b19e47619a064ba0be7405dbb4b27b"
 }

@@ -404,6 +404,11 @@ audited, fail-closed gate.
 - [ ] Require task/run identity, source commit, worktree/branch, diff hash,
       test commands and results, typed handoffs, maker identity, independent
       checker identity, risk verdict, safety verdict, and pre-PR gate result.
+  - Candidate R3 implementation now requires task-run identity,
+    branch/worktree context, source commit, target commit, diff hash,
+    deterministic checks, persisted artifacts, independent maker/checker
+    identities, and pre-PR gate success; typed handoff, risk verdict, and
+    safety verdict requirements remain open.
 - [ ] Reject unknown, stale, cross-task, or mismatched evidence.
   - Candidate R3 implementation rejects unknown, cross-task, branch/worktree
     mismatches and unknown artifact paths; stale source/target commit evidence
@@ -449,8 +454,9 @@ audited, fail-closed gate.
 - [x] Same maker/checker identity is rejected.
 - [ ] Stale evidence is rejected after source or target branch changes.
 - [ ] Missing tests, diff, handoff, checker, or pre-PR gate blocks readiness.
-  - Candidate R3 implementation covers missing tests, checker, pre-PR gate, and
-    persisted artifacts; diff and typed handoff requirements remain open.
+  - Candidate R3 implementation covers missing tests, diff hash, checker,
+    pre-PR gate, and persisted artifacts; typed handoff requirements remain
+    open.
 - [ ] Every mutation surface has a negative bypass test.
 - [x] A valid controlled task reaches `PR_READY` exactly once.
 

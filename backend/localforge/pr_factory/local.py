@@ -185,6 +185,7 @@ class LocalPRFactory:
             branch=task_run.branch_name or "",
         )
         ready = not reasons
+        task_metadata = dict(task.metadata or {})
         if ready and task.status == TaskStatus.REVIEWING:
             await self.uow.tasks.mark_pr_ready(
                 task_id,
@@ -198,6 +199,9 @@ class LocalPRFactory:
                     "artifact_paths": [pr_artifact.path],
                     "branch_name": task_run.branch_name,
                     "worktree_path": task_run.worktree_path,
+                    "source_commit": str(task_metadata.get("source_commit", "unknown-source")),
+                    "target_commit": str(task_metadata.get("target_commit", "unknown-target")),
+                    "diff_hash": pr_artifact.content_hash,
                 },
             )
 

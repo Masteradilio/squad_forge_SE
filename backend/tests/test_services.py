@@ -143,6 +143,9 @@ async def test_task_service_and_state_machine(db_session: AsyncSession):
         "artifact_paths": [artifact.path],
         "branch_name": task_run.branch_name,
         "worktree_path": task_run.worktree_path,
+        "source_commit": "source-commit",
+        "target_commit": "target-commit",
+        "diff_hash": "a" * 64,
     }
     pr_ready = await task_service.mark_pr_ready(task.id, gate_evidence=gate_evidence)
     assert pr_ready.status == TaskStatus.PR_READY
@@ -150,6 +153,9 @@ async def test_task_service_and_state_machine(db_session: AsyncSession):
     evidence = pr_ready.metadata["pr_ready_gate"]["evidence"]
     assert evidence["schema"] == "localforge.pr_ready_evidence.v1"
     assert evidence["artifact_paths"] == [artifact.path]
+    assert evidence["source_commit"] == "source-commit"
+    assert evidence["target_commit"] == "target-commit"
+    assert evidence["diff_hash"] == "a" * 64
     assert await task_service.mark_pr_ready(task.id, gate_evidence=gate_evidence) == pr_ready
     conflicting_evidence = {**gate_evidence, "source": "conflicting"}
     with pytest.raises(ValueError, match="already been recorded"):
@@ -207,6 +213,21 @@ async def test_pr_ready_rejects_untyped_or_spoofed_evidence(db_session: AsyncSes
             task.id,
             gate_evidence={"source": "unit_test", "task_run_id": task_run.id},
         )
+    with pytest.raises(ValueError):
+        await task_service.mark_pr_ready(
+            task.id,
+            gate_evidence={
+                "source": "unit_test",
+                "task_run_id": task_run.id,
+                "maker_id": "maker",
+                "checker_id": "checker",
+                "pre_pr_gate": {"passed": True},
+                "checks_executed": ["pytest"],
+                "artifact_paths": [".localforge/artifacts/runs/1/tasks/lf-101/pr.md"],
+                "branch_name": task_run.branch_name,
+                "worktree_path": task_run.worktree_path,
+            },
+        )
     with pytest.raises(ValueError, match="independent"):
         await task_service.mark_pr_ready(
             task.id,
@@ -217,6 +238,9 @@ async def test_pr_ready_rejects_untyped_or_spoofed_evidence(db_session: AsyncSes
                 "checker_id": "same",
                 "pre_pr_gate": {"passed": True},
                 "checks_executed": ["pytest"],
+                "source_commit": "source-commit",
+                "target_commit": "target-commit",
+                "diff_hash": "b" * 64,
             },
         )
     with pytest.raises(ValueError, match="pre_pr_gate"):
@@ -229,6 +253,9 @@ async def test_pr_ready_rejects_untyped_or_spoofed_evidence(db_session: AsyncSes
                 "checker_id": "checker",
                 "pre_pr_gate": {"passed": False},
                 "checks_executed": ["pytest"],
+                "source_commit": "source-commit",
+                "target_commit": "target-commit",
+                "diff_hash": "c" * 64,
             },
         )
 

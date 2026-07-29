@@ -178,11 +178,18 @@ class PRReadyEvidence(BaseModel):
     artifact_paths: list[str] = Field(default_factory=list)
     branch_name: str | None = None
     worktree_path: str | None = None
-    source_commit: str | None = None
-    target_commit: str | None = None
-    diff_hash: str | None = None
+    source_commit: str
+    target_commit: str
+    diff_hash: str
 
-    @field_validator("source", "maker_id", "checker_id")
+    @field_validator(
+        "source",
+        "maker_id",
+        "checker_id",
+        "source_commit",
+        "target_commit",
+        "diff_hash",
+    )
     @classmethod
     def _require_non_empty_text(cls, value: str) -> str:
         normalized = value.strip()

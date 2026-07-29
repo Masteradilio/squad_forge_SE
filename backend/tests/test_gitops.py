@@ -239,6 +239,9 @@ async def test_worktree_manager_setup_and_isolation(temp_git_repo, db_session):
             "artifact_paths": [artifact.path],
             "branch_name": task_run.branch_name,
             "worktree_path": task_run.worktree_path,
+            "source_commit": "source-commit",
+            "target_commit": "target-commit",
+            "diff_hash": "a" * 64,
         },
     )
     await uow.tasks.update_task_status(task.id, TaskStatus.DONE)
@@ -378,6 +381,9 @@ async def test_worktree_manager_uses_ready_dependency_branch_as_base(temp_git_re
             "artifact_paths": [dep_artifact.path],
             "branch_name": dep_task_run.branch_name,
             "worktree_path": dep_task_run.worktree_path,
+            "source_commit": "source-commit",
+            "target_commit": "target-commit",
+            "diff_hash": "b" * 64,
         },
     )
     await uow.session.commit()

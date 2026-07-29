@@ -104,6 +104,7 @@ class LeadAgentRuntime:
 
         await self.uow.tasks.update_task_status(task_id, TaskStatus.TESTING)
         await self.uow.tasks.update_task_status(task_id, TaskStatus.REVIEWING)
+        task_metadata = dict(task.metadata or {})
         await self.uow.tasks.mark_pr_ready(
             task_id,
             gate_evidence={
@@ -116,6 +117,9 @@ class LeadAgentRuntime:
                 "artifact_paths": [plan_artifact.path],
                 "branch_name": task_run.branch_name,
                 "worktree_path": task_run.worktree_path,
+                "source_commit": str(task_metadata.get("source_commit", "unknown-source")),
+                "target_commit": str(task_metadata.get("target_commit", "unknown-target")),
+                "diff_hash": plan_artifact.content_hash,
             },
         )
         summary = "Lead agent summarized executed actions."

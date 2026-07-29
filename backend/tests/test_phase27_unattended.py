@@ -127,6 +127,9 @@ async def transition_task_to(uow: UnitOfWork, task_id: int, target_status: TaskS
                     "artifact_paths": [artifact.path],
                     "branch_name": task_run.branch_name,
                     "worktree_path": task_run.worktree_path,
+                    "source_commit": "source-commit",
+                    "target_commit": "target-commit",
+                    "diff_hash": "a" * 64,
                 },
             )
         else:

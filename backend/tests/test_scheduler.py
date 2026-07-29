@@ -410,6 +410,9 @@ async def test_scheduler_releases_runner_lease_after_pipeline_success(
                 "artifact_paths": [artifact.path],
                 "branch_name": task_run.branch_name,
                 "worktree_path": task_run.worktree_path,
+                "source_commit": "source-commit",
+                "target_commit": "target-commit",
+                "diff_hash": "a" * 64,
             },
         )
         task_run.status = TaskRunStatus.COMPLETED
@@ -585,6 +588,9 @@ async def test_scheduler_lifecycle_and_parallel_limits(
                 "artifact_paths": [artifact.path],
                 "branch_name": task_run.branch_name,
                 "worktree_path": task_run.worktree_path,
+                "source_commit": "source-commit",
+                "target_commit": "target-commit",
+                "diff_hash": "b" * 64,
             },
         )
         await uow.tasks.update_task_status(tid, TaskStatus.DONE)

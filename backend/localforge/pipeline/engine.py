@@ -1811,6 +1811,7 @@ class RolePipelineEngine:
                 if not task_runs:
                     raise ValueError("PR_READY transition requires a persisted task run")
                 task_run = task_runs[0]
+                task_metadata = dict(task.metadata or {})
                 task = await self.uow.tasks.mark_pr_ready(
                     task.id or 0,
                     gate_evidence={
@@ -1822,6 +1823,13 @@ class RolePipelineEngine:
                         "checks_executed": ["role-pipeline-artifacts"],
                         "branch_name": task_run.branch_name,
                         "worktree_path": task_run.worktree_path,
+                        "source_commit": str(
+                            task_metadata.get("source_commit", "unknown-source")
+                        ),
+                        "target_commit": str(
+                            task_metadata.get("target_commit", "unknown-target")
+                        ),
+                        "diff_hash": str(task_metadata.get("diff_hash", "role-pipeline")),
                     },
                 )
                 continue

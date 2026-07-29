@@ -157,6 +157,9 @@ All notable changes to LocalForge OS will be documented in this file.
 - Hardened V6.2 candidate evidence so manifests must carry audited input
   hashes, validation environment metadata, known limitations, generated gate
   reasons, and checksum-bearing validator output uploaded by CI.
+- Hardened `PRReadyEvidence` so source commit, target commit, and diff hash are
+  mandatory evidence fields before the server-owned `PR_READY` transition can
+  run.
 
 ### V6.1 Compliance Closure - 2026-07-28
 

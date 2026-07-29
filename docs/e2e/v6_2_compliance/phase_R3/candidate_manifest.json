@@ -33,7 +33,7 @@
       "exit_code": 0
     }
   ],
-  "manifest_sha256": "f78c7002f1d1e24241b60679031b67aad1838660c36542d1618c68c22fae18c0",
+  "manifest_sha256": "bc02eb5fdcc0b919795d67e1f8195b274fa828c7eba94754fb5c2a4b9eff5801",
   "environment": {
     "os": "windows-local-and-github-actions-matrix",
     "python": "3.11-local / 3.12-ci",
@@ -44,7 +44,16 @@
     "Candidate evidence remains EVIDENCE_READY until reviewed PR, merge commit, exact-head CI, owner-approved tag, and final release validation exist."
   ],
   "input_hashes": {
-    "docs/e2e/v6_2_compliance/phase_R3/acceptance_report.md": "38f25390a212aa40a5bd293075ce9e394909b1580467ccc20af2ac0dc539b54a",
-    "docs/e2e/v6_2_compliance/phase_R3/known_limitations.md": "50011d7c22a3c90878c1c672b7b7a1e331e13cbb9a7c9e33aad96e14ba13341a"
+    "docs/e2e/v6_2_compliance/phase_R3/acceptance_report.md": "39626285acf4eba239a0f7742259981b81e57e6e02db1b917456a9ba2c2a0faf",
+    "docs/e2e/v6_2_compliance/phase_R3/known_limitations.md": "868d1f7d9317cbba5c4f61682b6eadf1dd503979f28c514a5fdf89a0a87157ee",
+    "backend/localforge/models/domain.py": "5b865091a6464f1a0bf659bae916e99906a428bf49e8dcd413138b73985cc9ac",
+    "backend/localforge/pr_factory/local.py": "499eae3bd13b33176f55442705da46d1607e85a2bacfaea987f0f87a47005eee",
+    "backend/localforge/runtime/lead_agent.py": "52f84c195a78c8c864d70a7310abe6e72975a34b8a257b903f5b86be3e7a06fb",
+    "backend/localforge/pipeline/engine.py": "978f410e1581685d3b71a9fd0cd8aa03278ec62b9ce5f5c7a370d938c5864e49",
+    "backend/tests/test_services.py": "c95c8f4573f067ddbe7f975c83d72a8e1180e657ab14e1d20ac6e5a46c8627e8",
+    "backend/tests/test_gitops.py": "a648ec97b0d8d0c2fd73be4fa284c2338f8aa176947c8ff5ef3622d0bbd14918",
+    "backend/tests/test_scheduler.py": "acc6afb31a30d300538f38d8e940f3235aed55481b979a8704a893d6c04e6500",
+    "backend/tests/test_phase27_unattended.py": "024d87e566c358d2a5cbb190362c9d2c8b88e787d204cfbfab4f0a07c8f8aee3",
+    "docs/compliance_backlog_V6-1.md": "296dcc7c0c2bc9048cd01deaffb00b3d4bb243fe7317846d600ae9128e6dae13"
   }
 }

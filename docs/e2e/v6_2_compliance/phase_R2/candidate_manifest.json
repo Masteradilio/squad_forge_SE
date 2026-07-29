@@ -23,15 +23,15 @@
       "exit_code": 0
     }
   ],
-  "manifest_sha256": "c710532b3d5d75eb5b24e017d8edd2bbe858cdafc33e8a67e4979adf692b0832",
+  "manifest_sha256": "04d92c8d64e334a70f73d7c4379c1298366d81ec23c3059fcb34d7d84c762641",
   "input_hashes": {
     ".github/workflows/ci.yml": "e4717032a6be354cd43b34b95d1e4b9973b00d00a18f0fe157295f2a8939cdd3",
-    "backend/localforge/services/compliance_evidence.py": "3ffe82a0ddd6e2cc302c837bfa03feab619544aa91214b7d61e08739ebc5353b",
+    "backend/localforge/services/compliance_evidence.py": "851aecd9b439fe6a566844a2e1984843c2ab2e3312dc02fbd2cd91ee0af4b9ac",
     "backend/localforge/services/file_hashes.py": "f0015dce9e0312685674b59a96236e55f4bc0347d100e847fac7685406f435f1",
     "scripts/check_candidate_evidence.py": "01a686a60ffd063f5abccbb7f554d10ae03adce75c3c654b784769e49efe8803",
-    "backend/tests/test_compliance_evidence.py": "992b486e2a3a804d1e59b710e42626c4b227f433c85d21742574e1c25b61cb49",
-    "docs/e2e/v6_2_compliance/phase_R2/acceptance_report.md": "71fcc45948287f58f19dd72d41d1ac4e6ad492d4523e39279b465489aa0ebe2b",
-    "docs/e2e/v6_2_compliance/phase_R2/test_summary.json": "04c9c6d3ee07d5213290ec0a8cb0d8e428f3b7e805fa89a44e4af25276c1fae2",
+    "backend/tests/test_compliance_evidence.py": "db6d9090675aa427dc1ae997542e6e3cd5f4b50990a1e8888821955e8e647924",
+    "docs/e2e/v6_2_compliance/phase_R2/acceptance_report.md": "b41f5c2bc9bcf20f3b80661d336e792026e0d382326163f21783676afe7e8f60",
+    "docs/e2e/v6_2_compliance/phase_R2/test_summary.json": "ada9b3e8156e491df53714e6c99ebe0c91f1d4111a87f46286df9345d68a3b31",
     "docs/e2e/v6_2_compliance/phase_R2/known_limitations.md": "f263f950516d991f121b97b8fe44882045c5f51786fb7d830fb3665baf975c66"
   }
 }

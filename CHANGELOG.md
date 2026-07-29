@@ -133,6 +133,8 @@ All notable changes to LocalForge OS will be documented in this file.
   from release wheels.
 - Recorded local package-smoke and backend regression evidence for R1/R2/R12,
   including `334 passed` for `backend/tests`.
+- Hardened final V6.2 evidence validation so `ACCEPTED` requires an explicit
+  backlog path with no unresolved mandatory `- [ ]` checkboxes.
 
 ### V6.1 Compliance Closure - 2026-07-28
 

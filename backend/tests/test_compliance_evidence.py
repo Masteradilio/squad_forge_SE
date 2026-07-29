@@ -153,6 +153,8 @@ def test_compliance_evidence_rejects_synthetic_benchmark_observations(tmp_path: 
 
 def test_compliance_evidence_accepts_immutable_fixture(tmp_path: Path) -> None:
     manifest_path = tmp_path / "manifest.json"
+    backlog_path = tmp_path / "completed_backlog.md"
+    backlog_path.write_text("- [x] Completed mandatory task\n", encoding="utf-8")
     commit = _head_commit()
     manifest = _base_manifest(commit)
     manifest.update(
@@ -165,6 +167,7 @@ def test_compliance_evidence_accepts_immutable_fixture(tmp_path: Path) -> None:
             "merge_commit": commit,
             "ci_run_url": "https://github.com/Masteradilio/local_forge_os/actions/runs/1",
             "human_reviewed": True,
+            "backlog_path": str(backlog_path),
             "mandatory_phases": {"R0": ACCEPTED, "R1": ACCEPTED, "R2": ACCEPTED},
             "github_metadata": {
                 "pr_number": 13,
@@ -186,6 +189,46 @@ def test_compliance_evidence_accepts_immutable_fixture(tmp_path: Path) -> None:
 
     assert result.verdict == ACCEPTED
     assert result.accepted is True
+
+
+def test_compliance_evidence_rejects_accepted_with_unresolved_backlog_task(tmp_path: Path) -> None:
+    manifest_path = tmp_path / "manifest.json"
+    backlog_path = tmp_path / "open_backlog.md"
+    backlog_path.write_text("- [x] Completed task\n- [ ] Open mandatory task\n", encoding="utf-8")
+    commit = _head_commit()
+    manifest = _base_manifest(commit)
+    manifest.update(
+        {
+            "schema_version": V62_FINAL_SCHEMA,
+            "verdict": ACCEPTED,
+            "release_version": "6.2.0",
+            "release_tag": "v6.2.0",
+            "reviewed_pr_number": 13,
+            "merge_commit": commit,
+            "ci_run_url": "https://github.com/Masteradilio/local_forge_os/actions/runs/1",
+            "human_reviewed": True,
+            "backlog_path": str(backlog_path),
+            "mandatory_phases": {"R0": ACCEPTED, "R1": ACCEPTED, "R2": ACCEPTED},
+            "github_metadata": {
+                "pr_number": 13,
+                "author_login": "automation",
+                "reviewer_login": "owner",
+                "head_commit": commit,
+                "merge_commit": commit,
+                "ci_run_url": "https://github.com/Masteradilio/local_forge_os/actions/runs/1",
+                "ci_conclusion": "success",
+                "human_reviewed": True,
+                "direct_to_main": False,
+                "release_tag": "v6.2.0",
+            },
+        }
+    )
+    _write_manifest(manifest_path, manifest)
+
+    result = ComplianceEvidenceValidator(Path.cwd()).validate_manifest(manifest_path)
+
+    assert result.verdict == INVALID
+    assert any("unresolved mandatory backlog checkboxes" in reason for reason in result.reasons)
 
 
 def test_compliance_evidence_rejects_unknown_schema(tmp_path: Path) -> None:

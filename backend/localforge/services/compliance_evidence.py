@@ -101,6 +101,7 @@ class ComplianceEvidenceValidator:
         requested_verdict = str(manifest.get("verdict", ""))
         if requested_verdict == ACCEPTED:
             reasons.extend(self._validate_mandatory_phase_status(manifest))
+            reasons.extend(self._validate_backlog_completion(manifest))
             if V62_FINAL_SCHEMA not in schema_values:
                 reasons.append("ACCEPTED requires the canonical final V6.2 evidence schema")
             reasons.extend(self._validate_accepted_release_fields(manifest))
@@ -167,6 +168,26 @@ class ComplianceEvidenceValidator:
 
         if incomplete:
             return [f"mandatory phases are incomplete: {', '.join(incomplete)}"]
+        return []
+
+    def _validate_backlog_completion(self, manifest: dict[str, Any]) -> list[str]:
+        backlog_path_value = manifest.get("backlog_path")
+        if not backlog_path_value:
+            return ["ACCEPTED requires backlog_path with no unresolved mandatory checkboxes"]
+
+        candidate_path = Path(str(backlog_path_value))
+        backlog_path = candidate_path if candidate_path.is_absolute() else self.repo_root / candidate_path
+        if not backlog_path.is_file():
+            return [f"backlog_path is missing: {backlog_path_value}"]
+
+        unchecked: list[str] = []
+        for line_number, line in enumerate(backlog_path.read_text(encoding="utf-8").splitlines(), start=1):
+            if line.lstrip().startswith("- [ ]"):
+                unchecked.append(f"{backlog_path_value}:{line_number}")
+        if unchecked:
+            preview = ", ".join(unchecked[:5])
+            suffix = f" and {len(unchecked) - 5} more" if len(unchecked) > 5 else ""
+            return [f"unresolved mandatory backlog checkboxes block ACCEPTED: {preview}{suffix}"]
         return []
 
     def _validate_commands(self, manifest: dict[str, Any]) -> list[str]:

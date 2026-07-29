@@ -4,6 +4,11 @@
   "status": "EVIDENCE_READY",
   "commands": [
     {
+      "command": "python -m pytest backend/tests/test_compliance_evidence.py -q",
+      "exit_code": 0,
+      "summary": "17 passed in 1.74s"
+    },
+    {
       "command": "python scripts/check_candidate_evidence.py",
       "exit_code": 0,
       "summary": "13 candidate manifests validated as EVIDENCE_READY"
@@ -11,7 +16,7 @@
     {
       "command": "python -m pytest backend/tests/test_phase_r1_release_integrity.py backend/tests/test_compliance_evidence.py backend/tests/test_phase_r12_release_audit.py -q",
       "exit_code": 0,
-      "summary": "25 passed in 13.85s"
+      "summary": "26 passed in 14.21s"
     },
     {
       "command": "python -m mypy backend scripts/check_candidate_evidence.py scripts/check_clean_package_install.py",

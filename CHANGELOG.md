@@ -37,6 +37,8 @@ All notable changes to LocalForge OS will be documented in this file.
 - Hardened accepted evidence validation to reject candidate-schema acceptance,
   missing trusted GitHub metadata, direct-to-main evidence, self-review, and
   mismatched PR/CI/merge/tag metadata.
+- Updated GitHub Actions checkout depth so compliance tests can verify
+  immutable historical commits instead of failing under shallow clones.
 
 ### V6.1 Compliance Closure - 2026-07-28
 

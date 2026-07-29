@@ -10,6 +10,7 @@ from localforge.models.enums import RunMode
 class RunnerContext:
     worktree_path: str | None = None
     branch_name: str | None = None
+    source_commit: str | None = None
     sandbox_id: str | None = None
 
 
@@ -45,10 +46,11 @@ class LocalWorktreeTaskRunner(BaseTaskRunner):
             run_id=run_id,
             run_mode=self.run_mode,
         )
-        worktree_path, branch_name = await manager.setup_worktree(task.id)
+        worktree_path, branch_name, source_commit = await manager.setup_worktree_attempt(task.id)
         return RunnerContext(
             worktree_path=worktree_path,
             branch_name=branch_name,
+            source_commit=source_commit,
             sandbox_id="local-worktree",
         )
 

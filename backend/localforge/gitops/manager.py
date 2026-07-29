@@ -53,6 +53,11 @@ class WorktreeManager:
 
         Returns (worktree_path, branch_name).
         """
+        worktree_path, branch_name, _source_commit = await self.setup_worktree_attempt(task_id)
+        return worktree_path, branch_name
+
+    async def setup_worktree_attempt(self, task_id: int) -> tuple[str, str, str]:
+        """Create a deterministic Git worktree and return its immutable base commit."""
         assert self.uow.projects is not None
         assert self.uow.tasks is not None
 
@@ -91,6 +96,7 @@ class WorktreeManager:
 
         default_branch = await git.default_branch()
         base_branch = await self._base_branch_for_task(task_id, default_branch)
+        source_commit = await git.resolve_ref(base_branch, use_task_context=False)
         lock = self._get_worktree_lock(worktree_path)
         async with lock:
             # Prune any stale worktree registrations BEFORE attempting to add.
@@ -108,7 +114,7 @@ class WorktreeManager:
             except Exception:
                 await self._remove_stale_worktree_path(git, worktree_path, project.root_path)
                 raise
-        return worktree_path, branch_name
+        return worktree_path, branch_name, source_commit
 
     async def _git_prune_stale_worktrees(self, git: GitAdapter) -> None:
         """Best-effort ``git worktree prune`` so registered but orphan worktrees

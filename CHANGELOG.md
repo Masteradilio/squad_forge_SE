@@ -80,6 +80,9 @@ All notable changes to LocalForge OS will be documented in this file.
 - Added persisted PathLease repeated-contention tracking so repeated waits for
   the same owner/path transition to `ESCALATED` instead of silently
   busy-waiting.
+- Added governed worktree attempt binding so scheduler startup persists the
+  runner worktree path, branch, immutable source commit, owner runner, task run,
+  and attempt number before task mutation.
 - Added R5 regression coverage for runner stale-token rejection, path lease
   renewal, exact-path reclaim, and path separator/case normalization.
 - Added Phase R6 candidate evidence under

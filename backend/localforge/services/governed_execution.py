@@ -116,6 +116,28 @@ class GovernedExecutionService:
         request.task_run.branch_name = runner_context.branch_name
         request.task_run.sandbox_id = runner_context.sandbox_id
         await uow.tasks.update_task_run(request.task_run)
+        if (
+            uow.worktrees is not None
+            and request.task.id is not None
+            and runner_context.worktree_path
+            and runner_context.branch_name
+            and runner_context.source_commit
+        ):
+            raw_expected_paths = request.task.metadata.get("expected_paths") or request.task.metadata.get(
+                "allowed_files"
+            )
+            expected_paths = raw_expected_paths if isinstance(raw_expected_paths, list) else []
+            await uow.worktrees.create_attempt_manifest(
+                project_id=request.project_id,
+                task_id=request.task.id,
+                task_run_id=task_run_id,
+                worktree_path=runner_context.worktree_path,
+                branch_name=runner_context.branch_name,
+                source_commit=runner_context.source_commit,
+                owner_agent_id=selected_runner.runner_id,
+                expected_paths=[str(path) for path in expected_paths],
+                attempt_number=request.task_run.attempt_count,
+            )
         return GovernedExecutionResult(
             status="STARTED",
             task_run=request.task_run,

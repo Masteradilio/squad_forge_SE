@@ -21,6 +21,7 @@ from localforge.services.project import ProjectService
 from localforge.services.runners import BaseTaskRunner, RunnerContext, TaskRunnerPool
 from localforge.services.scheduler import Scheduler
 from localforge.services.task import TaskService
+from localforge.services.worktree import WorktreeService
 from localforge.storage import UnitOfWork
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -35,6 +36,7 @@ class FakeRunner(BaseTaskRunner):
         return RunnerContext(
             worktree_path=f"/tmp/localforge/{task.key.lower()}",
             branch_name=f"localforge/{task.key.lower()}",
+            source_commit="fake-source-commit",
             sandbox_id="fake-local",
         )
 
@@ -68,6 +70,7 @@ async def test_task_status_transition_auditing(db_manager, db_session: AsyncSess
     uow.projects = ProjectService(db_session)
     uow.tasks = TaskService(db_session)
     uow.audits = AuditService(db_session)
+    uow.worktrees = WorktreeService(db_session)
 
     proj = await uow.projects.create_project(
         domain.Project(name="TransitionProj", root_path="/p", default_branch="main")
@@ -301,10 +304,17 @@ async def test_scheduler_uses_runner_pool_to_prepare_task_execution(
 
     async with UnitOfWork(db_manager) as verify_uow:
         assert verify_uow.runner_pool is not None
+        assert verify_uow.worktrees is not None
         logs = await verify_uow.runner_pool.list_dispatch_logs_for_task_run(task_runs[0].id)
         assert len(logs) == 1
         assert logs[0].dispatch_status == "SUCCESS"
         assert logs[0].selected_runner_id == "scheduler-local-worktree"
+        manifest = await verify_uow.worktrees.get_manifest_by_task_run(task_runs[0].id)
+        assert manifest is not None
+        assert manifest.worktree_path == "/tmp/localforge/lf-40"
+        assert manifest.branch_name == "localforge/lf-40"
+        assert manifest.source_commit == "fake-source-commit"
+        assert manifest.owner_agent_id == "scheduler-local-worktree"
 
 
 @pytest.mark.anyio
@@ -475,6 +485,7 @@ async def test_scheduler_lifecycle_and_parallel_limits(
     uow.tasks = TaskService(db_session)
     uow.executions = ExecutionService(db_session)
     uow.audits = AuditService(db_session)
+    uow.worktrees = WorktreeService(db_session)
 
     # 1. Setup project
     proj = await uow.projects.create_project(
@@ -608,6 +619,10 @@ async def test_scheduler_lifecycle_and_parallel_limits(
                 payload_json={"source": "test_scheduler_cleanup"},
             )
         )
+        assert uow.worktrees is not None
+        manifest = await uow.worktrees.get_manifest_by_task_run(task_run.id or 0)
+        assert manifest is not None
+        source_commit = manifest.source_commit
         await uow.tasks.mark_pr_ready(
             tid,
             gate_evidence={
@@ -620,7 +635,7 @@ async def test_scheduler_lifecycle_and_parallel_limits(
                 "checker_attempt_id": f"mechanical-pre-pr-gate:{task_run.id or 0}",
                 "pre_pr_gate": {
                     "passed": True,
-                    "source_commit": "source-commit",
+                    "source_commit": source_commit,
                     "target_commit": "target-commit",
                     "diff_hash": "b" * 64,
                 },
@@ -630,7 +645,7 @@ async def test_scheduler_lifecycle_and_parallel_limits(
                 "artifact_paths": [artifact.path],
                 "branch_name": task_run.branch_name,
                 "worktree_path": task_run.worktree_path,
-                "source_commit": "source-commit",
+                "source_commit": source_commit,
                 "target_commit": "target-commit",
                 "diff_hash": "b" * 64,
             },

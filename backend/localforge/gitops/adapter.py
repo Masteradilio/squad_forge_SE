@@ -149,3 +149,8 @@ class GitAdapter:
         """Get the hash of the current commit (HEAD)."""
         out = await self._execute_git(["rev-parse", "HEAD"])
         return out.strip()
+
+    async def resolve_ref(self, ref: str, *, use_task_context: bool = True) -> str:
+        """Resolve a Git ref to an immutable commit hash."""
+        out = await self._execute_git(["rev-parse", ref], use_task_context=use_task_context)
+        return out.strip()

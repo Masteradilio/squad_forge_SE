@@ -14,6 +14,7 @@
 - RunnerPool restart reconciliation now rebuilds active capacity from persisted
   successful dispatch logs joined to active TaskRuns. Capacity saturation is
   reported as bounded backpressure with deterministic queue position.
-- Worktree attempt manifests still track existing paths and stale paths, but a
-  full real-Git worktree lifecycle with base-commit drift checks and diagnostic
-  retention policy remains open.
+- Governed task startup now persists worktree path, branch, immutable source
+  commit, runner owner, task run, and attempt number. Target-branch drift
+  validation, stale worktree reconciliation without user-path deletion, and
+  failed-worktree diagnostic retention policy remain open.

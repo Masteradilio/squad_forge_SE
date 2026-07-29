@@ -578,8 +578,8 @@ Make concurrent execution deterministic and restart-safe.
 
 ### V61C-503 — Complete worktree lifecycle
 
-- [ ] Create a real isolated worktree before code mutation.
-- [ ] Bind its branch and base commit to the task attempt.
+- [x] Create a real isolated worktree before code mutation.
+- [x] Bind its branch and base commit to the task attempt.
 - [ ] Validate repository cleanliness and target-branch drift.
 - [ ] Reconcile stale worktrees without deleting user-owned paths.
 - [ ] Release or retain failed worktrees according to evidence/diagnostic
@@ -597,7 +597,7 @@ Make concurrent execution deterministic and restart-safe.
   - RunnerPool restart reconciliation now rebuilds active capacity from
     persisted successful dispatch logs joined to active TaskRuns, rather than
     resetting capacity blindly.
-- [ ] Real temporary Git worktree lifecycle is inspected on disk.
+- [x] Real temporary Git worktree lifecycle is inspected on disk.
 
 ### Phase R5 exit gate
 

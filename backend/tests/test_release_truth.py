@@ -1,3 +1,4 @@
+import ast
 import json
 import subprocess
 from pathlib import Path
@@ -101,6 +102,69 @@ def test_demo_guide_references_existing_sample_project() -> None:
     assert "samples/demo-project" not in guide
     assert Path("samples/demo-lf-smoke-prd/PRD.md").is_file()
     assert "localforge import-prd PRD.md" in guide
+
+
+def test_pr_ready_status_transition_has_single_server_owned_writer() -> None:
+    service_source = Path("backend/localforge/services/task.py").read_text(encoding="utf-8")
+    assert service_source.count("async def mark_pr_ready(") == 1
+    assert service_source.count("TaskStatus.PR_READY, allow_pr_ready=True") == 1
+
+    offenders: list[str] = []
+    ignored = {
+        Path("backend/localforge/models/enums.py"),
+        Path("backend/localforge/services/task.py"),
+        Path("backend/localforge/demo.py"),
+    }
+    for path in sorted(Path("backend/localforge").rglob("*.py")):
+        if path in ignored:
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if _is_update_task_status_to_pr_ready(node):
+                offenders.append(f"{path}:update_task_status")
+            if _is_status_assignment_to_pr_ready(node):
+                offenders.append(f"{path}:status-assignment")
+
+    assert offenders == []
+
+
+def _is_update_task_status_to_pr_ready(node: ast.AST) -> bool:
+    if not isinstance(node, ast.Call):
+        return False
+    if not isinstance(node.func, ast.Attribute) or node.func.attr != "update_task_status":
+        return False
+    return any(_is_task_status_pr_ready(arg) for arg in node.args) or any(
+        _is_task_status_pr_ready(keyword.value) for keyword in node.keywords
+    )
+
+
+def _is_status_assignment_to_pr_ready(node: ast.AST) -> bool:
+    targets: list[ast.expr]
+    value: ast.expr
+    if isinstance(node, ast.Assign):
+        targets = list(node.targets)
+        value = node.value
+    elif isinstance(node, ast.AnnAssign):
+        targets = [node.target]
+        if node.value is None:
+            return False
+        value = node.value
+    else:
+        return False
+    if not _is_task_status_pr_ready(value):
+        return False
+    return any(isinstance(target, ast.Attribute) and target.attr == "status" for target in targets)
+
+
+def _is_task_status_pr_ready(node: ast.AST) -> bool:
+    if (
+        isinstance(node, ast.Attribute)
+        and node.attr == "PR_READY"
+        and isinstance(node.value, ast.Name)
+        and node.value.id == "TaskStatus"
+    ):
+        return True
+    return isinstance(node, ast.Constant) and node.value == "PR_READY"
 
 
 def test_release_truth_detects_stable_claim_leak(tmp_path: Path) -> None:

@@ -461,7 +461,7 @@ audited, fail-closed gate.
 
 ### Phase R3 exit gate
 
-- [ ] Static search and tests find one readiness transition.
+- [x] Static search and tests find one readiness transition.
 - [ ] No mutation bypasses the ActionGateway.
 - [ ] Valid readiness has complete independently verified evidence.
 

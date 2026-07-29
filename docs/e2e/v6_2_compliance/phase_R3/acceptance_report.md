@@ -26,12 +26,16 @@ and broader ActionGateway bypass tests.
 | Commit binding and stale evidence guard | `TaskService` rejects source/target commit evidence that conflicts with current task metadata and rejects source commits that conflict with a persisted worktree attempt manifest. |
 | Atomic persistence | Normalized readiness evidence is persisted in task metadata before the server-owned state transition. |
 | Replay handling | The same normalized evidence is idempotent; conflicting replay after `PR_READY` is rejected. |
+| Static transition inventory | `test_pr_ready_status_transition_has_single_server_owned_writer` parses production Python modules and rejects direct `TaskStatus.PR_READY` status assignments or generic `update_task_status(..., PR_READY)` calls outside `TaskService.mark_pr_ready()`. |
 
 ## Validation Commands
 
 ```text
 python -m pytest backend/tests/test_services.py backend/tests/test_gitops.py backend/tests/test_scheduler.py backend/tests/test_phase27_unattended.py -q
 28 passed in 8.09s
+
+python -m pytest backend/tests/test_release_truth.py::test_pr_ready_status_transition_has_single_server_owned_writer -q
+1 passed in 0.31s
 
 python -m mypy backend/localforge/models/domain.py backend/localforge/services/task.py backend/localforge/pr_factory/local.py backend/localforge/runtime/lead_agent.py backend/localforge/pipeline/engine.py backend/tests/test_services.py backend/tests/test_gitops.py backend/tests/test_scheduler.py backend/tests/test_phase27_unattended.py
 Success: no issues found in 9 source files

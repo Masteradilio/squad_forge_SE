@@ -48,7 +48,7 @@
       "exit_code": 0
     }
   ],
-  "manifest_sha256": "c12b4e5d731cc6a10545652d94eac85cadbd83d3f76f0538f2e5e4d220c6b13a",
+  "manifest_sha256": "4b9bde65857771ccc4bb5e1fdf3b928312068d2f2039718d30dd12af1a2bdcf1",
   "input_hashes": {
     "pyproject.toml": "4ce389aa25b157607a6b9bf42cb84f08ae342ad3e894b185c3a56252ccd09508",
     ".github/workflows/ci.yml": "463c8ac144651b84ee25d74577c464c5cf0ef467fa875bad57b351d89dd2ab53",
@@ -62,8 +62,8 @@
     "docs/e2e/v6_2_compliance/phase_R1/test_summary.json": "073c061ae3bc5c2b6c9dcd30d4a8d675f6ed343f0de8dcc12acf4f0eecf10596",
     "docs/e2e/v6_2_compliance/phase_R1/known_limitations.md": "3ba5468f79a7da1e1a395cafe6c4b9251e493231f2eee3bd6637fa0f5615f451",
     "docs/demo.md": "b7e8ca3d28b575a8d4cf02521ecdbd34ff919f90f1c3bc0c5cde42343a29c388",
-    "backend/tests/test_release_truth.py": "81cd15cb2fbfdba5363addb5e108d9cc8bdedcfc6aba28586531416ea0f9e445",
-    "docs/compliance_backlog_V6-1.md": "94263fc27e8b9a70e7d9424f0fa05d6a6d5db68c5ca0805c2d8ca28ab450192f"
+    "backend/tests/test_release_truth.py": "bb2e9dd34a157a297734d5f6f5d67b4c35bcabcc508b56a51850cc1c09df5792",
+    "docs/compliance_backlog_V6-1.md": "fb5530442db6a6123e0e8bd7fc50ab4d995c39fe7d4e139ef0add2937bdadf57"
   },
   "environment": {
     "os": "windows-local-and-github-actions-matrix",

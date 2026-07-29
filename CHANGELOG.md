@@ -151,6 +151,9 @@ All notable changes to LocalForge OS will be documented in this file.
 - Corrected the E2E demo guide to reference the existing
   `samples/demo-lf-smoke-prd/` sample and added regression coverage so the
   removed `samples/demo-project/` path cannot return silently.
+- Expanded the R1 legacy SQLite migration fixture to prove backup/restore and
+  schema upgrade preserve projects, runs, tasks, audit events, memory facts,
+  graph mutations, path leases, and artifacts.
 
 ### V6.1 Compliance Closure - 2026-07-28
 

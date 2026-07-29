@@ -19,6 +19,11 @@
       "summary": "Demo guide references the existing samples/demo-lf-smoke-prd/ workspace and its local PRD.md"
     },
     {
+      "command": "python -m pytest backend/tests/test_phase_r1_release_integrity.py::test_sqlite_backup_restore_and_v5_fixture_upgrade_preserves_legacy_entities -q",
+      "exit_code": 0,
+      "summary": "V5 fixture upgrade preserved project, run, task, task run, audit event, memory fact, graph mutation, path lease, and artifact rows"
+    },
+    {
       "command": "python -m mypy backend scripts/check_candidate_evidence.py scripts/check_clean_package_install.py",
       "exit_code": 0,
       "summary": "Success: no issues found in 224 source files"
@@ -30,7 +35,6 @@
     }
   ],
   "remaining_gates": [
-    "Full legacy database upgrade must still prove preservation of projects, runs, tasks, audit events, memory, graphs, leases, and artifacts",
     "Human review, merge, and final post-merge evidence remain required"
   ]
 }

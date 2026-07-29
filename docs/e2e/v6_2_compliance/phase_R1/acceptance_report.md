@@ -28,7 +28,7 @@ post-merge evidence is generated from GitHub state.
 | Import hygiene | `localforge.services` and `localforge.storage` now use lazy public boundaries; `scripts/check_import_matrix.py` imports public modules in a clean interpreter. |
 | Clean install | `backend/tests/test_phase_r1_release_integrity.py` and `scripts/check_clean_package_install.py` build both sdist and wheel, reject wheels that package backend tests, install the wheel into an isolated venv without repository `PYTHONPATH`, and verify import, CLI version, and CLI help smoke. |
 | Demo guide sample path | `docs/demo.md` now references the existing `samples/demo-lf-smoke-prd/` workspace and imports its local `PRD.md`. |
-| Migration and backup safety | `backup_sqlite_database`, `restore_sqlite_database`, and future-schema rejection are covered by legacy SQLite fixture tests. |
+| Migration and backup safety | `backup_sqlite_database`, `restore_sqlite_database`, future-schema rejection, and V5 fixture upgrade preservation are covered for projects, runs, tasks, task runs, audit events, memory facts, graph mutations, path leases, and artifacts. |
 | Cross-platform package CI | `.github/workflows/ci.yml` runs package smoke validation on `ubuntu-latest` and `windows-latest` and uploads the JSON result as a workflow artifact. |
 
 ## Validation Commands
@@ -54,6 +54,9 @@ python -m pytest backend/tests/test_release_truth.py::test_demo_guide_references
 
 python -m pytest backend/tests/test_phase_r1_release_integrity.py -q
 8 passed in 11.89s
+
+python -m pytest backend/tests/test_phase_r1_release_integrity.py::test_sqlite_backup_restore_and_v5_fixture_upgrade_preserves_legacy_entities -q
+1 passed in 0.46s
 
 python -m mypy backend/localforge/storage/bootstrap.py backend/localforge/storage/__init__.py backend/tests/test_phase_r1_release_integrity.py
 Success: no issues found in 3 source files

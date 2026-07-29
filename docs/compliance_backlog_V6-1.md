@@ -313,7 +313,7 @@ changing orchestration.
 ### V61C-103 — Verify database upgrade and rollback safety
 
 - [x] Create a versioned V5/V6 fixture database.
-- [ ] Upgrade it to the current schema without losing projects, runs, tasks,
+- [x] Upgrade it to the current schema without losing projects, runs, tasks,
       audit events, memory, graphs, leases, or artifacts.
 - [x] Document backup and restore.
 - [x] Fail safely on an unsupported future schema.
@@ -330,7 +330,7 @@ changing orchestration.
 
 - [x] No import-order dependency remains.
 - [x] One version is reported across all deliverables.
-- [ ] Clean installation and migration evidence is reproducible.
+- [x] Clean installation and migration evidence is reproducible.
 
 ---
 

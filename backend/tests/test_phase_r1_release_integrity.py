@@ -174,7 +174,9 @@ def test_wheel_install_cli_and_import_smoke_without_pythonpath(tmp_path: Path) -
     assert cli.stdout.strip() == "LocalForge OS 6.2.0"
 
 
-def test_sqlite_backup_restore_and_v5_fixture_upgrade_preserves_projects(tmp_path: Path) -> None:
+def test_sqlite_backup_restore_and_v5_fixture_upgrade_preserves_legacy_entities(
+    tmp_path: Path,
+) -> None:
     db_path = tmp_path / "legacy_v5.db"
     restored_path = tmp_path / "restored.db"
 
@@ -195,6 +197,136 @@ def test_sqlite_backup_restore_and_v5_fixture_upgrade_preserves_projects(tmp_pat
             );
             INSERT INTO projects(name, root_path, default_branch, remote_url)
             VALUES ('legacy project', '/tmp/legacy', 'main', 'git@example.com:repo.git');
+            CREATE TABLE tasks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                project_id INTEGER NOT NULL,
+                epic_id INTEGER,
+                key VARCHAR(50) NOT NULL,
+                title VARCHAR(255) NOT NULL,
+                description TEXT NOT NULL,
+                acceptance_criteria JSON NOT NULL DEFAULT '[]',
+                dependency_task_ids JSON NOT NULL DEFAULT '[]',
+                risk_level VARCHAR(20) NOT NULL DEFAULT 'low',
+                status VARCHAR(50) NOT NULL DEFAULT 'BACKLOG',
+                assigned_agent_id INTEGER,
+                metadata_json JSON NOT NULL DEFAULT '{}',
+                created_at DATETIME,
+                updated_at DATETIME
+            );
+            INSERT INTO tasks(project_id, key, title, description, status)
+            VALUES (1, 'LF-LEGACY-1', 'legacy task', 'legacy description', 'BACKLOG');
+            CREATE TABLE runs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                project_id INTEGER NOT NULL,
+                mode VARCHAR(50) NOT NULL,
+                status VARCHAR(50) NOT NULL DEFAULT 'PENDING',
+                started_at DATETIME,
+                ended_at DATETIME,
+                initiated_by VARCHAR(100) NOT NULL,
+                resource_limits JSON NOT NULL DEFAULT '{}',
+                summary TEXT
+            );
+            INSERT INTO runs(project_id, mode, status, initiated_by)
+            VALUES (1, 'unattended', 'RUNNING', 'legacy');
+            CREATE TABLE task_runs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                run_id INTEGER NOT NULL,
+                task_id INTEGER NOT NULL,
+                status VARCHAR(50) NOT NULL DEFAULT 'PENDING',
+                worktree_path VARCHAR(1024),
+                branch_name VARCHAR(255),
+                sandbox_id VARCHAR(100),
+                attempt_count INTEGER DEFAULT 1,
+                started_at DATETIME,
+                ended_at DATETIME,
+                final_summary TEXT
+            );
+            INSERT INTO task_runs(run_id, task_id, status, branch_name)
+            VALUES (1, 1, 'RUNNING', 'legacy/branch');
+            CREATE TABLE artifacts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_run_id INTEGER NOT NULL,
+                type VARCHAR(50) NOT NULL,
+                path VARCHAR(1024) NOT NULL,
+                content_hash VARCHAR(64) NOT NULL,
+                summary TEXT,
+                created_at DATETIME
+            );
+            INSERT INTO artifacts(task_run_id, type, path, content_hash, summary)
+            VALUES (1, 'PlanArtifact', 'artifacts/legacy-plan.md', 'abc123', 'legacy artifact');
+            CREATE TABLE audit_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                project_id INTEGER NOT NULL,
+                run_id INTEGER,
+                task_id INTEGER,
+                actor_type VARCHAR(50) NOT NULL,
+                actor_id VARCHAR(100),
+                event_type VARCHAR(50) NOT NULL,
+                payload_redacted JSON NOT NULL DEFAULT '{}',
+                created_at DATETIME
+            );
+            INSERT INTO audit_events(project_id, run_id, task_id, actor_type, actor_id, event_type)
+            VALUES (1, 1, 1, 'system', 'legacy-runner', 'task.started');
+            CREATE TABLE memory_facts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                project_id INTEGER NOT NULL,
+                kind VARCHAR(50) NOT NULL DEFAULT 'stack_fact',
+                fact TEXT NOT NULL,
+                source VARCHAR(100) NOT NULL DEFAULT 'manual',
+                pinned BOOLEAN NOT NULL DEFAULT 0,
+                status VARCHAR(30) NOT NULL DEFAULT 'active',
+                tags JSON NOT NULL DEFAULT '[]',
+                created_at DATETIME,
+                updated_at DATETIME
+            );
+            INSERT INTO memory_facts(project_id, kind, fact, source, tags)
+            VALUES (1, 'stack_fact', 'legacy memory', 'legacy', '["migration"]');
+            CREATE TABLE swarm_plans (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                project_id INTEGER NOT NULL,
+                task_run_id INTEGER NOT NULL,
+                strategy VARCHAR(50) NOT NULL DEFAULT 'LIGHT',
+                status VARCHAR(50) NOT NULL DEFAULT 'DRAFT',
+                policy_json JSON NOT NULL DEFAULT '{}',
+                nodes_json JSON NOT NULL DEFAULT '[]',
+                edges_json JSON NOT NULL DEFAULT '[]',
+                paused_at DATETIME,
+                created_at DATETIME,
+                updated_at DATETIME
+            );
+            INSERT INTO swarm_plans(project_id, task_run_id, strategy, status)
+            VALUES (1, 1, 'LIGHT', 'DRAFT');
+            CREATE TABLE graph_mutation_journal (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                plan_id INTEGER NOT NULL,
+                graph_version INTEGER NOT NULL,
+                parent_graph_version INTEGER NOT NULL,
+                mutation_type VARCHAR(50) NOT NULL,
+                actor_agent_id VARCHAR(255) NOT NULL,
+                reason TEXT NOT NULL,
+                payload_json JSON NOT NULL DEFAULT '{}',
+                content_hash VARCHAR(64) NOT NULL,
+                created_at DATETIME
+            );
+            INSERT INTO graph_mutation_journal(
+                plan_id, graph_version, parent_graph_version, mutation_type,
+                actor_agent_id, reason, content_hash
+            )
+            VALUES (1, 1, 0, 'ADD_NODE', 'legacy-agent', 'legacy mutation', 'def456');
+            CREATE TABLE path_leases (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                project_id INTEGER NOT NULL,
+                task_run_id INTEGER NOT NULL,
+                owner_id VARCHAR(255) NOT NULL,
+                target_path TEXT NOT NULL,
+                is_directory BOOLEAN NOT NULL DEFAULT 0,
+                ttl_seconds INTEGER NOT NULL DEFAULT 3600,
+                expires_at DATETIME NOT NULL,
+                release_reason VARCHAR(50),
+                created_at DATETIME
+            );
+            INSERT INTO path_leases(project_id, task_run_id, owner_id, target_path, expires_at)
+            VALUES (1, 1, 'legacy-owner', 'app/legacy.py', '2030-01-01T00:00:00');
             """
         )
 
@@ -210,17 +342,72 @@ def test_sqlite_backup_restore_and_v5_fixture_upgrade_preserves_projects(tmp_pat
     try:
         assert asyncio.run(bootstrap_database(manager)) == CURRENT_VERSION
 
-        async def inspect() -> tuple[int, str]:
+        async def inspect() -> tuple[int, dict[str, int | str]]:
             async with await manager.get_session() as session:
                 version = await session.scalar(
                     text("SELECT version FROM schema_versions ORDER BY version DESC LIMIT 1")
                 )
-                name = await session.scalar(text("SELECT name FROM projects WHERE id = 1"))
-                return int(version), str(name)
+                values: dict[str, int | str] = {
+                    "project_name": str(
+                        await session.scalar(text("SELECT name FROM projects WHERE id = 1"))
+                    ),
+                    "task_key": str(await session.scalar(text("SELECT key FROM tasks WHERE id = 1"))),
+                    "run_count": int(
+                        await session.scalar(text("SELECT COUNT(*) FROM runs")) or 0
+                    ),
+                    "task_run_count": int(
+                        await session.scalar(text("SELECT COUNT(*) FROM task_runs")) or 0
+                    ),
+                    "artifact_count": int(
+                        await session.scalar(text("SELECT COUNT(*) FROM artifacts")) or 0
+                    ),
+                    "audit_count": int(
+                        await session.scalar(text("SELECT COUNT(*) FROM audit_events")) or 0
+                    ),
+                    "memory_count": int(
+                        await session.scalar(text("SELECT COUNT(*) FROM memory_facts")) or 0
+                    ),
+                    "graph_count": int(
+                        await session.scalar(
+                            text("SELECT COUNT(*) FROM graph_mutation_journal")
+                        )
+                        or 0
+                    ),
+                    "lease_count": int(
+                        await session.scalar(text("SELECT COUNT(*) FROM path_leases")) or 0
+                    ),
+                    "lease_token": str(
+                        await session.scalar(
+                            text("SELECT fencing_token FROM path_leases WHERE id = 1")
+                        )
+                    ),
+                    "graph_sequence": int(
+                        await session.scalar(
+                            text(
+                                "SELECT mutation_sequence FROM graph_mutation_journal "
+                                "WHERE id = 1"
+                            )
+                        )
+                        or 0
+                    ),
+                }
+                return int(version), values
 
-        version, name = asyncio.run(inspect())
+        version, values = asyncio.run(inspect())
         assert version == CURRENT_VERSION
-        assert name == "legacy project"
+        assert values == {
+            "project_name": "legacy project",
+            "task_key": "LF-LEGACY-1",
+            "run_count": 1,
+            "task_run_count": 1,
+            "artifact_count": 1,
+            "audit_count": 1,
+            "memory_count": 1,
+            "graph_count": 1,
+            "lease_count": 1,
+            "lease_token": "legacy-path-lease-1",
+            "graph_sequence": 1,
+        }
     finally:
         asyncio.run(manager.close())
 

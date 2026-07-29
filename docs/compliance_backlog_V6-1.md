@@ -660,10 +660,10 @@ without enabling uncontrolled expansion.
 
 ### V61C-701 — Govern graph mutation
 
-- [ ] Require a registered decision-contract artifact for expansion.
+- [x] Require a registered decision-contract artifact for expansion.
 - [ ] Validate graph version, parent revision, acyclicity, node/edge limits,
       budget effect, and allowed node types atomically.
-- [ ] Reject stale or conflicting graph mutations.
+- [x] Reject stale or conflicting graph mutations.
 - [ ] Audit the proposer, rationale, evidence, and validator verdict.
 
 ### V61C-702 — Implement recovery and cancellation
@@ -683,15 +683,18 @@ without enabling uncontrolled expansion.
 ### Required regression tests
 
 - [ ] Controlled dynamic expansion executes real worker nodes.
-- [ ] Stale/conflicting mutation is rejected.
+- [x] Stale/conflicting mutation is rejected.
 - [ ] Crash during expansion or node execution recovers without duplication.
 - [ ] Budget/node/depth limits cannot be bypassed.
-- [ ] Forced execution without decision evidence is rejected.
+- [x] Forced expansion without registered decision evidence is rejected.
 
 ### Phase R7 exit gate
 
 - [ ] Dynamic execution is governed by the same invariants as static execution.
-- [ ] Deep Swarm remains experimental unless the benchmark gate accepts it.
+- [x] Deep Swarm remains experimental unless explicit opt-in and registered
+      decision evidence are present.
+- [ ] Deep Swarm benchmark acceptance gate still required before production
+      promotion.
 
 ---
 

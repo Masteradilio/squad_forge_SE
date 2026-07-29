@@ -22,7 +22,7 @@ from localforge.models.enums import (
 )
 from localforge.services.task_graph import TaskGraphService, _compute_graph_hash
 from localforge.storage import UnitOfWork
-from localforge.storage.bootstrap import bootstrap_database
+from localforge.storage.bootstrap import CURRENT_VERSION, bootstrap_database
 from localforge.storage.database import DatabaseManager
 from sqlalchemy import text
 
@@ -353,8 +353,8 @@ def test_deep_swarm_prefers_light_and_supports_single_worker_fallback() -> None:
 
 
 @pytest.mark.asyncio
-async def test_schema_v14_is_upgraded_for_phase9_recovery_state(tmp_path) -> None:
-    """Interrupted v14 databases gain the final journal and idempotency columns."""
+async def test_schema_v14_is_upgraded_for_recovery_and_coordination_state(tmp_path) -> None:
+    """Interrupted v14 databases gain recovery, idempotency, and lease columns."""
     manager = DatabaseManager(f"sqlite+aiosqlite:///{(tmp_path / 'phase9-v14.db').as_posix()}")
     async with manager.engine.begin() as connection:
         await connection.execute(
@@ -389,7 +389,7 @@ async def test_schema_v14_is_upgraded_for_phase9_recovery_state(tmp_path) -> Non
             )
         )
 
-    assert await bootstrap_database(manager) == 15
+    assert await bootstrap_database(manager) == CURRENT_VERSION
     async with manager.engine.begin() as connection:
         journal_columns = await connection.execute(
             text("PRAGMA table_info(graph_mutation_journal)")
@@ -470,6 +470,7 @@ async def test_graph_versioning_and_mutation_journal(db_manager) -> None:
             actor_agent_id="agent-001",
             reason="Adding critique node",
             payload={
+                "decision_contract_id": "phase-c8-test-contract",
                 "node_id": "critique-1",
                 "node_type": "CRITIQUE",
                 "title": "Critique",
@@ -497,6 +498,87 @@ async def test_graph_versioning_and_mutation_journal(db_manager) -> None:
         await uow.task_graph.start_node(deep_run.id, "research")
         advanced = await uow.task_graph.tick_deep_swarm(deep_run.id, ["research"])
         assert set(advanced.active_node_ids) == {"critique-1", "verify"}
+
+
+@pytest.mark.asyncio
+async def test_deep_swarm_mutation_requires_registered_decision_contract(db_manager) -> None:
+    """R7: agent graph mutations must reference a registered decision contract."""
+    async with UnitOfWork(db_manager) as uow:
+        assert uow.projects is not None
+        assert uow.tasks is not None
+        assert uow.light_swarm is not None
+        assert uow.task_graph is not None
+
+        proj = await uow.projects.create_project(
+            domain.Project(name="Decision Contract Test", root_path="E:/tmp/decision", default_branch="main")
+        )
+        assert proj.id is not None
+        task = await uow.tasks.create_task(
+            domain.Task(project_id=proj.id, key="DC-1", title="Decision", description="")
+        )
+        assert task.id is not None
+        task_run = await uow.tasks.create_task_run(domain.TaskRun(task_id=task.id, run_id=1))
+        assert task_run.id is not None
+
+        from localforge.models.domain import SwarmNode, SwarmPolicy
+
+        nodes = [
+            SwarmNode(node_id="n0", node_type=SwarmNodeType.RESEARCH, title="R", description="")
+        ]
+        plan = await uow.light_swarm.create_plan(
+            project_id=proj.id,
+            task_run_id=task_run.id,
+            nodes=nodes,
+            edges=[],
+            policy=SwarmPolicy(require_independent_checker=False),
+        )
+        assert plan.id is not None
+        await uow.task_graph.create_initial_graph_version(plan.id)
+        deep_run = await uow.task_graph.create_deep_swarm_run(
+            plan.id,
+            domain.DeepSwarmPolicy(
+                enabled=True,
+                prefer_light_swarm=False,
+                registered_decision_contract_ids=["registered-contract"],
+            ),
+        )
+        assert deep_run.id is not None
+        await uow.task_graph.enable_deep_swarm(deep_run.id)
+
+        with pytest.raises(ValueError, match="decision_contract_id"):
+            await uow.task_graph.apply_mutation(
+                plan_id=plan.id,
+                mutation_type=GraphMutationType.APPEND_CHILD,
+                actor_agent_id="agent-001",
+                reason="Missing contract",
+                payload={
+                    "node_id": "child",
+                    "node_type": "IMPLEMENT",
+                    "parent_node_id": "n0",
+                    "title": "Child",
+                    "description": "",
+                },
+                expected_graph_version=0,
+                deep_swarm_run_id=deep_run.id,
+            )
+
+        with pytest.raises(ValueError, match="not registered"):
+            await uow.task_graph.apply_mutation(
+                plan_id=plan.id,
+                mutation_type=GraphMutationType.APPEND_CHILD,
+                actor_agent_id="agent-001",
+                reason="Wrong contract",
+                payload={
+                    "decision_contract_id": "unregistered-contract",
+                    "node_id": "child",
+                    "node_type": "IMPLEMENT",
+                    "parent_node_id": "n0",
+                    "title": "Child",
+                    "description": "",
+                },
+                expected_graph_version=0,
+                deep_swarm_run_id=deep_run.id,
+            )
 
 
 @pytest.mark.asyncio

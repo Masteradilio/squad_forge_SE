@@ -265,6 +265,15 @@ class TaskGraphService:
                 raise ValueError("Deep Swarm cost budget exhausted.")
             if len(run.active_node_ids) > policy.max_concurrent_workers:
                 raise ValueError("Deep Swarm worker capacity is unavailable.")
+            decision_contract_id = str(payload.get("decision_contract_id", "")).strip()
+            if not decision_contract_id:
+                raise ValueError(
+                    "Deep Swarm graph mutation requires payload.decision_contract_id."
+                )
+            if decision_contract_id not in policy.registered_decision_contract_ids:
+                raise ValueError(
+                    "Deep Swarm graph mutation decision_contract_id is not registered."
+                )
 
         nodes = deepcopy(current_gv.nodes_snapshot_json)
         edges = deepcopy(current_gv.edges_snapshot_json)

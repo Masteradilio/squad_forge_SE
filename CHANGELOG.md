@@ -50,6 +50,10 @@ All notable changes to LocalForge OS will be documented in this file.
   `docs/e2e/v6_2_compliance/phase_R6/`.
 - Added Light Swarm regression coverage proving completed swarm aggregation
   cannot manufacture task `PR_READY`.
+- Added Phase R7 candidate evidence under
+  `docs/e2e/v6_2_compliance/phase_R7/`.
+- Added Deep Swarm mutation regression coverage requiring registered
+  decision-contract evidence before agent-proposed graph expansion.
 
 #### Fixed
 - Removed the clean-interpreter import cycle exposed by importing
@@ -77,6 +81,8 @@ All notable changes to LocalForge OS will be documented in this file.
 - Hardened Light Swarm completion so successful aggregation returns
   `EVIDENCE_READY` instead of the canonical task readiness status; task
   readiness remains owned by `TaskService.mark_pr_ready()`.
+- Hardened Deep Swarm graph mutation so agent-proposed expansion requires a
+  `payload.decision_contract_id` registered in the run policy.
 
 ### V6.1 Compliance Closure - 2026-07-28
 

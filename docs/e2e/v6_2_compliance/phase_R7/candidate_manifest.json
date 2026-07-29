@@ -1,0 +1,37 @@
+{
+  "schema_version": "localforge.v6_2.candidate_manifest.v1",
+  "release_version": "6.2.0",
+  "release_tag": "v6.2.0",
+  "phase": "R7",
+  "task_ids": [
+    "V61C-700",
+    "V61C-701",
+    "V61C-702",
+    "V61C-703"
+  ],
+  "source_commit": "af14dd7",
+  "candidate_branch": "codex/v62-truth-reset-foundation",
+  "reviewed_pr_number": 14,
+  "verdict": "EVIDENCE_READY",
+  "known_limitations": [
+    "Candidate evidence is not final release acceptance.",
+    "Dynamic nodes are not yet dispatched through GovernedExecution.",
+    "Per-node resources and typed dependency evidence remain open.",
+    "Deep Swarm benchmark gate remains required before production promotion."
+  ],
+  "commands": [
+    {
+      "command": "python -m pytest backend/tests/test_phase9_task_graph.py -q",
+      "exit_code": 0
+    },
+    {
+      "command": "python -m mypy backend/localforge/services/task_graph.py backend/tests/test_phase9_task_graph.py",
+      "exit_code": 0
+    },
+    {
+      "command": "python -m ruff check backend/localforge/services/task_graph.py backend/tests/test_phase9_task_graph.py",
+      "exit_code": 0
+    }
+  ],
+  "manifest_sha256": "4d5d5d2df63bfd123dd4f1d4c9cf1b82e850b727f40bb63934764ed3bcb50038"
+}

@@ -77,6 +77,9 @@ All notable changes to LocalForge OS will be documented in this file.
 - Added persisted PathLease wait-for edges with bounded FIFO queue positions,
   timeout/cancellation status, and deterministic two-owner deadlock victim
   selection.
+- Added persisted PathLease repeated-contention tracking so repeated waits for
+  the same owner/path transition to `ESCALATED` instead of silently
+  busy-waiting.
 - Added R5 regression coverage for runner stale-token rejection, path lease
   renewal, exact-path reclaim, and path separator/case normalization.
 - Added Phase R6 candidate evidence under

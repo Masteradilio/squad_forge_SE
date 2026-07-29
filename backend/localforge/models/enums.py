@@ -304,6 +304,7 @@ class PathLeaseWaitStatus(StrEnum):
     TIMED_OUT = "TIMED_OUT"
     CANCELLED = "CANCELLED"
     DEADLOCK_VICTIM = "DEADLOCK_VICTIM"
+    ESCALATED = "ESCALATED"
 
 
 class RunnerHealthState(StrEnum):

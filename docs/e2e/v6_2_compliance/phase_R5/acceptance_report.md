@@ -10,11 +10,12 @@ task-run/worktree attempt attribution for path leases, exact-path active
 conflict protection, and service-level path normalization for separators and
 case handling plus repository-boundary canonicalization. It also persists
 PathLease wait-for edges with bounded timeouts, cancellation, FIFO queue
-position, and deterministic two-owner deadlock victim selection.
+position, repeated-contention escalation, and deterministic two-owner deadlock
+victim selection.
 
 This is candidate evidence only. Final R5 acceptance still requires
 database-level parent/child overlap fencing across concurrent transactions,
-repeated-contention escalation, and full worktree lifecycle reconciliation.
+and full worktree lifecycle reconciliation.
 
 ## Implemented Controls
 
@@ -32,13 +33,14 @@ repeated-contention escalation, and full worktree lifecycle reconciliation.
 | Path lease renewal | `renew_lease()` extends an active lease only when owner and fencing token match. |
 | Expired lease reclaim | Expired/released active keys can be reclaimed by a new fenced owner. |
 | Path lease wait graph | `PathLeaseWaitORM` persists bounded wait-for edges with queue position, expiry, cancellation, and status. |
+| Repeated contention escalation | Duplicate waits for the same owner/path increment `contention_count` and transition to `ESCALATED` after a deterministic threshold instead of busy-waiting. |
 | Deadlock victim selection | `enqueue_wait()` detects two-owner wait cycles and marks the lexicographically deterministic victim as `DEADLOCK_VICTIM`. |
 
 ## Validation Commands
 
 ```text
 python -m pytest backend\tests\test_phase_r5_coordination.py backend\tests\test_phase6_runner_pool_governance.py backend\tests\test_phase6_worktrees_path_intents.py -q
-17 passed, 1 skipped in 1.35s
+18 passed, 1 skipped in 1.47s
 
 python -m pytest backend/tests/test_phase_r5_coordination.py backend/tests/test_phase6_runner_pool_governance.py backend/tests/test_phase6_worktrees_path_intents.py backend/tests/test_storage.py backend/tests/test_phase_r1_release_integrity.py -q
 17 passed in 12.39s
@@ -50,7 +52,7 @@ python -m ruff check backend\localforge\services\path_lease.py backend\tests\tes
 All checks passed!
 
 python -m pytest backend\tests\test_phase_r5_coordination.py -q
-11 passed, 1 skipped in 1.30s
+12 passed, 1 skipped in 1.03s
 ```
 
 ## Remaining Acceptance Requirements
@@ -61,7 +63,8 @@ python -m pytest backend\tests\test_phase_r5_coordination.py -q
   where the host permits symlink creation.
 - FIFO wait queues, timeout/cancellation, persisted wait-for graph, and
   deterministic two-owner deadlock victim selection are covered by R5
-  regression tests; repeated contention escalation remains open.
+  regression tests. Repeated contention now transitions to `ESCALATED` instead
+  of silently busy-waiting.
 - RunnerPool backpressure is bounded and reported separately from permanent
   incompatibility.
 - Real Git worktree creation, branch/base-commit drift validation, and failed

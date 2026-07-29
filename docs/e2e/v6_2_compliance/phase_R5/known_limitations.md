@@ -9,8 +9,8 @@
   creation.
 - Lease renewal and fencing exist. Bounded FIFO waiting, persisted wait-for
   graph, timeout cancellation, and deterministic two-owner deadlock victim
-  selection are now candidate-implemented; repeated contention escalation is
-  still open.
+  selection are now candidate-implemented. Repeated contention now escalates
+  deterministically instead of busy-waiting.
 - RunnerPool restart reconciliation now rebuilds active capacity from persisted
   successful dispatch logs joined to active TaskRuns. Capacity saturation is
   reported as bounded backpressure with deterministic queue position.

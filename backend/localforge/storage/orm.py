@@ -1469,9 +1469,11 @@ class PathLeaseWaitORM(Base):
     )
     status: Mapped[str] = mapped_column(String(50), default="WAITING", nullable=False)
     queue_position: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    contention_count: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     requested_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    escalated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     def to_domain(self) -> domain.PathLeaseWait:
@@ -1486,9 +1488,11 @@ class PathLeaseWaitORM(Base):
             blocking_lease_id=self.blocking_lease_id,
             status=enums.PathLeaseWaitStatus(self.status),
             queue_position=self.queue_position,
+            contention_count=self.contention_count,
             requested_at=self.requested_at,
             expires_at=self.expires_at,
             resolved_at=self.resolved_at,
+            escalated_at=self.escalated_at,
             reason=self.reason,
         )
 
@@ -1505,9 +1509,11 @@ class PathLeaseWaitORM(Base):
             blocking_lease_id=d.blocking_lease_id,
             status=d.status.value if isinstance(d.status, enums.PathLeaseWaitStatus) else d.status,
             queue_position=d.queue_position,
+            contention_count=d.contention_count,
             requested_at=d.requested_at,
             expires_at=d.expires_at,
             resolved_at=d.resolved_at,
+            escalated_at=d.escalated_at,
             reason=d.reason,
         )
 

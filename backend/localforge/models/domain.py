@@ -680,9 +680,11 @@ class PathLeaseWait(BaseModel):
     blocking_lease_id: int | None = None
     status: PathLeaseWaitStatus = PathLeaseWaitStatus.WAITING
     queue_position: int = 1
+    contention_count: int = 1
     requested_at: datetime = Field(default_factory=utc_now)
     expires_at: datetime = Field(default_factory=utc_now)
     resolved_at: datetime | None = None
+    escalated_at: datetime | None = None
     reason: str | None = None
 
 

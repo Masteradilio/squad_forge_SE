@@ -16,8 +16,7 @@
   "known_limitations": [
     "Candidate evidence is not final release acceptance.",
     "Parent/child overlap conflicts still need database-level atomic exclusion.",
-    "Full real-Git worktree lifecycle validation remains open.",
-    "Repeated PathLease contention escalation remains open."
+    "Full real-Git worktree lifecycle validation remains open."
   ],
   "commands": [
     {
@@ -79,9 +78,13 @@
     {
       "command": ".\\.codex_venv\\Scripts\\python.exe -m pytest backend\\tests\\test_phase_r5_coordination.py backend\\tests\\test_phase6_runner_pool_governance.py backend\\tests\\test_phase6_worktrees_path_intents.py -q",
       "exit_code": 0
+    },
+    {
+      "command": ".\\.codex_venv\\Scripts\\python.exe -m pytest backend\\tests\\test_storage.py -q",
+      "exit_code": 0
     }
   ],
-  "manifest_sha256": "7b5831f7018742252c01681ee3ec4f99fd3dc08a7deb4d86ae87652e3010e327",
+  "manifest_sha256": "3ec7ee30cee73180b7ce3065a39f057bf95cc6056e81bd215f3f4e4d6bb26a27",
   "environment": {
     "os": "windows-local-and-github-actions-matrix",
     "python": "3.11-local / 3.12-ci",
@@ -92,17 +95,17 @@
     "Candidate evidence remains EVIDENCE_READY until reviewed PR, merge commit, exact-head CI, owner-approved tag, and final release validation exist."
   ],
   "input_hashes": {
-    "docs/e2e/v6_2_compliance/phase_R5/acceptance_report.md": "debe5746dbcc58e4e0c136eee62f27969140b869f778ff1010a51646cf2fabf2",
-    "docs/e2e/v6_2_compliance/phase_R5/known_limitations.md": "8706bd816afcafe66e958ec76cbcb06ebbb5b52553dde648ac8750e24b550640",
+    "docs/e2e/v6_2_compliance/phase_R5/acceptance_report.md": "1ed5987204794542d8de1abc7d2e80c4ba2306020208d60d7e1c2f135bf288c7",
+    "docs/e2e/v6_2_compliance/phase_R5/known_limitations.md": "5a0de1b8285dd2b85bab73a1685696ecda854995b6a180b713e503115a21af02",
     "backend/localforge/services/runner_pool.py": "6d0b668b763cab92f8c91677b50d121e4a6e52cb020cfa6db721bc16263e2786",
-    "backend/tests/test_phase_r5_coordination.py": "dd5da7d3ff39702f06b7735e1dc0d75affd8a9e4f8adc78419175677092e43b9",
+    "backend/tests/test_phase_r5_coordination.py": "882871b454db343ae47a4ba5fe6746ec923139a5cd76d0a90ae21abef7ae5b47",
     "backend/tests/test_phase6_runner_pool_governance.py": "52089e8a35d82fd9ca4fa70e63c2f5041d990b805630b80e8e6785dbf9b5adae",
-    "docs/compliance_backlog_V6-1.md": "8626b252374722e672d98d2a33cbca26438b20339e122533a7ffea22293b2456",
-    "CHANGELOG.md": "2c8126d8a486f8ad948b6de28fc1aa3318fe2b6f12e3dc64ddbf547d2dbe5ccf",
-    "backend/localforge/services/path_lease.py": "64fb296e43907095cbafc99c6aecc64b615e272cea57387fb03ce70214134768",
-    "backend/localforge/models/enums.py": "191e989ed9fa005cda35a834b7d8d63b759e292a781d79d3c42ca156dab83448",
-    "backend/localforge/models/domain.py": "dda31f284789ca9f1775e3ec5843546ca987bdbf51cc533ca763a372d1d55bd6",
-    "backend/localforge/storage/orm.py": "96029b79b9c8fde2b0faf23a4f7c6be28365d52fddafd39e0cf5a7f5ca446eb8",
-    "backend/localforge/storage/bootstrap.py": "0c5443eede361a13e02c4a898b3cab0e100e12dbe050fb757385ceab85af6eff"
+    "docs/compliance_backlog_V6-1.md": "12de8cc6bd8c2bbaa135fcdd5a7c27b5ec4ff6d50158b0ebf691f1c02dd68cb1",
+    "CHANGELOG.md": "be6683a44b96deb26623d27fdf1018e1fe5f2edcd609b98e63994d9f15b726f2",
+    "backend/localforge/services/path_lease.py": "d6f63db70123b3378ce8d48cc6ff8968c3cac10cef1502b16aba0f27a9cb85cf",
+    "backend/localforge/models/enums.py": "8ad6bca9afbf41c5c75c442b8b88bd5363332b191f3f93c555cd6b519635b583",
+    "backend/localforge/models/domain.py": "8577f6f2c5a8d510015749fb87843fd5c33b03afb7aa0b6cbdcd8fadf0e17983",
+    "backend/localforge/storage/orm.py": "3d3664f950d3f1eba389e9d9d42f3530c6962a4c90a8d9df59a248d891f44b84",
+    "backend/localforge/storage/bootstrap.py": "f171a3e3cd3cdc95d72f65aa5ac3b6087b122cdcd695eb94f0c0388988b25fb7"
   }
 }

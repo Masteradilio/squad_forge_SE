@@ -24,7 +24,7 @@
       "exit_code": 0
     }
   ],
-  "manifest_sha256": "1d22bb233bd9c930d5a9b3e7818fd30eee98a130a17c9ac6bd55f59b14a95ae8",
+  "manifest_sha256": "777a64c6923ae8c8d4b2ee798821b09859d8595d15900197f7d0151f4b90a942",
   "environment": {
     "os": "windows-local-and-github-actions-matrix",
     "python": "3.11-local / 3.12-ci",
@@ -37,7 +37,7 @@
   "input_hashes": {
     "docs/e2e/v6_2_compliance/phase_R3/acceptance_report.md": "aed63b03d29232537ea3c9ca295b30b4bff3ee38994f294ca5c05debe14c6920",
     "docs/e2e/v6_2_compliance/phase_R3/known_limitations.md": "76fa81d6fd35da3f3ec646563a9e802d2ff6bfa19adeb8da2eaaa8c4fa83cc4b",
-    "backend/localforge/models/domain.py": "dda31f284789ca9f1775e3ec5843546ca987bdbf51cc533ca763a372d1d55bd6",
+    "backend/localforge/models/domain.py": "8577f6f2c5a8d510015749fb87843fd5c33b03afb7aa0b6cbdcd8fadf0e17983",
     "backend/localforge/pr_factory/local.py": "240c56a205d08101408279e5f8d9f000311c96da3fbdf094429265daa0ddbe49",
     "backend/localforge/runtime/lead_agent.py": "3a1a2baea520274db7df10dd44206e2ac1bcfe1dc6b3b7a0b70f2726317023bf",
     "backend/localforge/pipeline/engine.py": "aff76535a140e33309a786c55c9d89d0e074fea654c7711b5840f19d1ab3c83b",
@@ -45,9 +45,9 @@
     "backend/tests/test_gitops.py": "785f4762e53b6694cd36f72d212c1706ef5501cf2f8e5446cf6ef60f54edd6e6",
     "backend/tests/test_scheduler.py": "4701af1d51f791a03fb637e9d8723d8c0157b4801f90e414a9a1fb6d24514584",
     "backend/tests/test_phase27_unattended.py": "0d919b769dae55f9d009a017dfe747b311bdb2f49db4ff91eafa06181f8823c5",
-    "docs/compliance_backlog_V6-1.md": "8626b252374722e672d98d2a33cbca26438b20339e122533a7ffea22293b2456",
+    "docs/compliance_backlog_V6-1.md": "12de8cc6bd8c2bbaa135fcdd5a7c27b5ec4ff6d50158b0ebf691f1c02dd68cb1",
     "backend/localforge/services/task.py": "152429170d4b8187659651c74437a43d6b6a2de100ece852fdedcaad826a5848",
-    "CHANGELOG.md": "2c8126d8a486f8ad948b6de28fc1aa3318fe2b6f12e3dc64ddbf547d2dbe5ccf",
+    "CHANGELOG.md": "be6683a44b96deb26623d27fdf1018e1fe5f2edcd609b98e63994d9f15b726f2",
     "backend/tests/test_release_truth.py": "bb2e9dd34a157a297734d5f6f5d67b4c35bcabcc508b56a51850cc1c09df5792"
   }
 }

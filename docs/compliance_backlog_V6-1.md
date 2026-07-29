@@ -574,7 +574,7 @@ Make concurrent execution deterministic and restart-safe.
 - [x] Add bounded FIFO waiting with timeout and cancellation.
 - [x] Persist the wait-for graph.
 - [x] Detect deadlock cycles and choose a deterministic victim.
-- [ ] Escalate repeated contention instead of busy-waiting.
+- [x] Escalate repeated contention instead of busy-waiting.
 
 ### V61C-503 — Complete worktree lifecycle
 

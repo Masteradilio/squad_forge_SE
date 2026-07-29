@@ -14,7 +14,7 @@ from localforge.storage.orm import Base, SchemaVersionORM
 
 logger = logging.getLogger(__name__)
 
-CURRENT_VERSION = 18
+CURRENT_VERSION = 19
 
 
 class UnsupportedSchemaVersionError(RuntimeError):
@@ -366,9 +366,11 @@ async def bootstrap_database(db_manager: DatabaseManager) -> int:
                                 blocking_lease_id INTEGER REFERENCES path_leases(id) ON DELETE SET NULL,
                                 status VARCHAR(50) NOT NULL DEFAULT 'WAITING',
                                 queue_position INTEGER NOT NULL DEFAULT 1,
+                                contention_count INTEGER NOT NULL DEFAULT 1,
                                 requested_at DATETIME,
                                 expires_at DATETIME NOT NULL,
                                 resolved_at DATETIME,
+                                escalated_at DATETIME,
                                 reason TEXT
                             )
                             """
@@ -380,6 +382,21 @@ async def bootstrap_database(db_manager: DatabaseManager) -> int:
                             "ON path_lease_waits(project_id, status, normalized_target_path, requested_at)"
                         )
                     )
+
+                if current_version < 19:
+                    wait_columns = await conn.execute(text("PRAGMA table_info(path_lease_waits)"))
+                    wait_column_names = {str(row[1]) for row in wait_columns.fetchall()}
+                    if "contention_count" not in wait_column_names:
+                        await conn.execute(
+                            text(
+                                "ALTER TABLE path_lease_waits "
+                                "ADD COLUMN contention_count INTEGER NOT NULL DEFAULT 1"
+                            )
+                        )
+                    if "escalated_at" not in wait_column_names:
+                        await conn.execute(
+                            text("ALTER TABLE path_lease_waits ADD COLUMN escalated_at DATETIME")
+                        )
 
             # Phase 10 / Schema v15 Migration: Memory provenance columns and memory_relations table
             if current_version < 15:

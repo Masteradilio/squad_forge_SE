@@ -194,6 +194,7 @@ class PathLeaseService:
         *,
         blocking_lease_id: int | None = None,
         timeout_seconds: int = 300,
+        escalation_threshold: int = 3,
         repository_root: str | None = None,
     ) -> domain.PathLeaseWait:
         """Persist a FIFO wait edge and mark a deterministic deadlock victim for 2-cycles."""
@@ -214,6 +215,16 @@ class PathLeaseService:
         existing_result = await self.session.execute(existing_stmt)
         existing_wait = existing_result.scalar_one_or_none()
         if existing_wait is not None:
+            existing_wait.contention_count += 1
+            if existing_wait.contention_count >= escalation_threshold:
+                existing_wait.status = PathLeaseWaitStatus.ESCALATED.value
+                existing_wait.resolved_at = now
+                existing_wait.escalated_at = now
+                existing_wait.reason = (
+                    "Repeated PathLease contention exceeded threshold; "
+                    "escalating instead of busy-waiting."
+                )
+            await self.session.flush()
             return existing_wait.to_domain()
 
         queue_stmt = select(PathLeaseWaitORM).where(

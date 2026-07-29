@@ -261,6 +261,48 @@ async def test_r5_path_lease_wait_timeout_is_persisted(db_manager) -> None:
 
 
 @pytest.mark.asyncio
+async def test_r5_path_lease_repeated_contention_escalates(db_manager) -> None:
+    async with UnitOfWork(db_manager) as uow:
+        assert uow.path_leases is not None
+        project_id, _, task_run_id = await _create_project_task_run(uow, key="R5-E")
+
+        first_wait = await uow.path_leases.enqueue_wait(
+            project_id=project_id,
+            task_run_id=task_run_id,
+            owner_id="agent-b",
+            target_path="src/contended.ts",
+            blocking_owner_id="agent-a",
+            timeout_seconds=60,
+            escalation_threshold=3,
+        )
+        second_wait = await uow.path_leases.enqueue_wait(
+            project_id=project_id,
+            task_run_id=task_run_id,
+            owner_id="agent-b",
+            target_path="src/contended.ts",
+            blocking_owner_id="agent-a",
+            timeout_seconds=60,
+            escalation_threshold=3,
+        )
+        escalated_wait = await uow.path_leases.enqueue_wait(
+            project_id=project_id,
+            task_run_id=task_run_id,
+            owner_id="agent-b",
+            target_path="src/contended.ts",
+            blocking_owner_id="agent-a",
+            timeout_seconds=60,
+            escalation_threshold=3,
+        )
+
+        assert first_wait.status == PathLeaseWaitStatus.WAITING
+        assert second_wait.status == PathLeaseWaitStatus.WAITING
+        assert escalated_wait.status == PathLeaseWaitStatus.ESCALATED
+        assert escalated_wait.contention_count == 3
+        assert escalated_wait.escalated_at is not None
+        assert "busy-waiting" in (escalated_wait.reason or "")
+
+
+@pytest.mark.asyncio
 async def test_r5_path_lease_deadlock_victim_is_deterministic(db_manager) -> None:
     async with UnitOfWork(db_manager) as uow:
         assert uow.path_leases is not None

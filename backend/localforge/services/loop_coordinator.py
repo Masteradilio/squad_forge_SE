@@ -20,6 +20,7 @@ from localforge.models.enums import (
 from localforge.services.audit import AuditService
 from localforge.services.circuit_breaker import CircuitBreakerService
 from localforge.services.execution import ExecutionService
+from localforge.services.external_events import validate_external_event_envelope, window_start
 from localforge.services.loop_service import LoopService
 from localforge.services.task import TaskService
 
@@ -65,8 +66,14 @@ class LoopCoordinator:
         trigger_kind: TriggerKind = TriggerKind.MANUAL,
         idempotency_key: str | None = None,
         payload: dict[str, Any] | None = None,
+        triggered_at: datetime | None = None,
     ) -> domain.LoopRun:
         """Receive a trigger, enforce idempotency, run triage, and manage lifecycle."""
+        if trigger_kind == TriggerKind.EVENT and not (
+            payload and payload.get("_external_trigger_verified") is True
+        ):
+            raise ValueError("External event triggers must use the verified event adapter")
+
         loop_def = await self.loop_service.get_loop(loop_id)
         if not loop_def:
             raise ValueError(f"Loop definition with ID {loop_id} not found")
@@ -93,7 +100,8 @@ class LoopCoordinator:
                 f"({breaker_state.value}): {breaker_reason}"
             )
 
-        key = idempotency_key or f"loop_{loop_id}_{trigger_kind}_{datetime.now(UTC).timestamp()}"
+        current_time = triggered_at or datetime.now(UTC)
+        key = idempotency_key or f"loop_{loop_id}_{trigger_kind}_{current_time.timestamp()}"
 
         # Deduplication check
         existing_run = await self.loop_service.get_loop_run_by_idempotency_key(key)
@@ -112,6 +120,7 @@ class LoopCoordinator:
             trigger_kind=trigger_kind,
             idempotency_key=key,
             triage_verdict=LoopRunVerdict.PENDING,
+            started_at=current_time,
         )
         loop_run = await self.loop_service.create_loop_run(loop_run)
 
@@ -212,6 +221,52 @@ class LoopCoordinator:
         )
 
         return loop_run
+
+    async def trigger_external_event(
+        self,
+        *,
+        loop_id: int,
+        provider: str,
+        headers: dict[str, str],
+        payload: dict[str, Any],
+        now: datetime | None = None,
+    ) -> domain.LoopRun:
+        """Validate and trigger a provider-neutral authenticated external event."""
+        loop_def = await self.loop_service.get_loop(loop_id)
+        if not loop_def:
+            raise ValueError(f"Loop definition with ID {loop_id} not found")
+        if loop_def.trigger.kind != TriggerKind.EVENT:
+            raise ValueError("External event adapter can only trigger EVENT loops")
+
+        envelope = validate_external_event_envelope(
+            loop_id=loop_id,
+            provider=provider,
+            headers=headers,
+            payload=payload,
+            safety_policy=loop_def.safety_policy,
+            now=now,
+        )
+        provider_policy = _external_provider_policy(loop_def.safety_policy, provider)
+        max_events = int(provider_policy.get("max_events_per_window") or 60)
+        replay_window = int(provider_policy.get("replay_window_seconds") or 300)
+        recent_count = await self.loop_service.count_loop_runs_since(
+            loop_id=loop_id,
+            idempotency_prefix=f"external:{loop_id}:{provider}:",
+            since=window_start(now, replay_window),
+        )
+        existing_run = await self.loop_service.get_loop_run_by_idempotency_key(
+            envelope.idempotency_key
+        )
+        if existing_run is None and recent_count >= max_events:
+            raise ValueError("External trigger rate limit exceeded for provider window.")
+
+        return await self.trigger_loop(
+            loop_id=loop_id,
+            trigger_kind=TriggerKind.EVENT,
+            idempotency_key=envelope.idempotency_key,
+            payload=envelope.payload,
+            triggered_at=now,
+        )
 
     async def _create_task_for_loop_item(
         self,
@@ -393,3 +448,12 @@ class LoopCoordinator:
             await self._update_loop_snapshot(run.loop_id, active_run_id=None)
 
         return updated_run
+
+
+def _external_provider_policy(safety_policy: dict[str, Any], provider: str) -> dict[str, Any]:
+    external = safety_policy.get("external_triggers")
+    if isinstance(external, dict):
+        provider_policy = external.get(provider)
+        if isinstance(provider_policy, dict):
+            return provider_policy
+    return safety_policy

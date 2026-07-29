@@ -6,7 +6,7 @@
     {
       "command": "python scripts/check_release_truth.py",
       "exit_code": 0,
-      "summary": "Historical V6.1 manifest INVALID, 250 unresolved backlog checkboxes recorded, phase backlog status generated, release identity conventions validated, no final accepted manifests, and no stable claim leaks outside backlog allowlist"
+      "summary": "Historical V6.1 manifest INVALID, 244 unresolved backlog checkboxes recorded, phase backlog status generated, release identity conventions validated, no final accepted manifests, and no stable claim leaks outside backlog allowlist"
     },
     {
       "command": "python -m pytest backend/tests/test_release_truth.py backend/tests/test_compliance_evidence.py -q",
@@ -21,6 +21,6 @@
   ],
   "remaining_gates": [
     "R0 remains EVIDENCE_READY until reviewed merge, exact-head CI, and final post-merge ACCEPTED evidence exist",
-    "250 mandatory compliance backlog checkboxes remain unresolved"
+    "244 mandatory compliance backlog checkboxes remain unresolved"
   ]
 }

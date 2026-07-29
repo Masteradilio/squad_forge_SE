@@ -135,6 +135,10 @@ class LoopTriggerRequest(BaseModel):
     payload: dict[str, Any] = Field(default_factory=dict)
 
 
+class ExternalLoopEventRequest(BaseModel):
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
 class CircuitBreakerResetRequest(BaseModel):
     scope: str
     target_id: str

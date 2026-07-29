@@ -484,11 +484,11 @@ ownership, idempotency, cancellation, and restart recovery.
 
 ### V61C-401 — Implement authenticated external triggers
 
-- [ ] Add provider-neutral webhook/event adapters.
-- [ ] Verify signatures or credentials before accepting external events.
-- [ ] Persist stable provider event IDs and idempotency keys.
-- [ ] Sanitize untrusted text without relying on string replacement alone.
-- [ ] Apply rate limits, bounded payload sizes, and replay windows.
+- [x] Add provider-neutral webhook/event adapters.
+- [x] Verify signatures or credentials before accepting external events.
+- [x] Persist stable provider event IDs and idempotency keys.
+- [x] Sanitize untrusted text without relying on string replacement alone.
+- [x] Apply rate limits, bounded payload sizes, and replay windows.
 
 ### V61C-402 — Persist triage and actionable work
 
@@ -513,15 +513,16 @@ ownership, idempotency, cancellation, and restart recovery.
 - [x] Fake-clock interval and cron execution.
 - [x] Two coordinators cannot claim the same trigger.
 - [ ] Restart before/after triage and task creation does not duplicate work.
-- [ ] Authenticated webhook replay is deduplicated.
+- [x] Authenticated webhook replay is deduplicated.
 - [ ] Kill cancels actual controlled worker processes and releases resources.
 - [ ] Recovery reconciles orphaned LoopRun and Scheduler state.
 
 ### Phase R4 exit gate
 
 - [ ] All trigger kinds execute durably.
-  - Candidate R4 implementation executes manual, interval, and cron through
-    durable loop records; authenticated external-event execution remains open.
+  - Candidate R4 implementation executes manual, interval, cron, and
+    authenticated external events through durable loop records; full R4
+    lifecycle ownership acceptance remains open.
 - [ ] No fake actionable default remains.
 - [ ] Lifecycle actions affect the complete ownership tree.
 

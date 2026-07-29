@@ -46,6 +46,10 @@ All notable changes to LocalForge OS will be documented in this file.
   `LoopCoordinator.trigger_due_schedules()`.
 - Hardened due-schedule claiming with a database compare-and-swap fence so
   stale concurrent coordinators cannot claim the same trigger.
+- Added authenticated provider-neutral external loop events with signature or
+  bearer-token verification, stable provider event idempotency keys, bounded
+  payloads, replay windows, provider rate limits, recursive untrusted-text
+  sanitization, and a guard that rejects direct unverified `EVENT` triggers.
 - Added Phase R5 candidate evidence under
   `docs/e2e/v6_2_compliance/phase_R5/`.
 - Added persisted runner lease fencing metadata to dispatch logs and path lease

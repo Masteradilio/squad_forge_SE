@@ -1,6 +1,6 @@
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Header, HTTPException, status
 
-from localforge.api.schemas import LoopCreateRequest, LoopTriggerRequest
+from localforge.api.schemas import ExternalLoopEventRequest, LoopCreateRequest, LoopTriggerRequest
 from localforge.models import domain
 from localforge.models.enums import AutonomyLevel, ExecutionStrategy, LoopStatus, TriggerKind
 from localforge.storage import UnitOfWork, db_manager
@@ -130,6 +130,39 @@ async def run_loop_now(loop_id: int, req: LoopTriggerRequest | None = None) -> d
                 trigger_kind=trigger_k,
                 idempotency_key=key,
                 payload=payload,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/loops/{loop_id}/external-events/{provider}")
+async def receive_external_loop_event(
+    loop_id: int,
+    provider: str,
+    req: ExternalLoopEventRequest,
+    x_localforge_event_id: str = Header(...),
+    x_localforge_timestamp: str = Header(...),
+    x_localforge_signature: str | None = Header(None),
+    authorization: str | None = Header(None),
+) -> domain.LoopRun:
+    """Receive a provider-neutral authenticated external loop event."""
+    headers = {
+        "x-localforge-event-id": x_localforge_event_id,
+        "x-localforge-timestamp": x_localforge_timestamp,
+    }
+    if x_localforge_signature is not None:
+        headers["x-localforge-signature"] = x_localforge_signature
+    if authorization is not None:
+        headers["authorization"] = authorization
+
+    async with UnitOfWork(db_manager) as uow:
+        assert uow.loop_coordinator is not None
+        try:
+            return await uow.loop_coordinator.trigger_external_event(
+                loop_id=loop_id,
+                provider=provider,
+                headers=headers,
+                payload=req.payload,
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc

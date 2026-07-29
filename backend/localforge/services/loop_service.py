@@ -3,7 +3,7 @@ import logging
 from datetime import UTC, datetime
 from typing import Any, cast
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -156,6 +156,22 @@ class LoopService:
         result = await self.session.execute(stmt)
         orm_obj = result.scalar_one_or_none()
         return orm_obj.to_domain() if orm_obj else None
+
+    async def count_loop_runs_since(
+        self,
+        *,
+        loop_id: int,
+        idempotency_prefix: str,
+        since: datetime,
+    ) -> int:
+        """Count persisted loop runs in a provider/rate-limit window."""
+        stmt = select(func.count(LoopRunORM.id)).where(
+            LoopRunORM.loop_id == loop_id,
+            LoopRunORM.idempotency_key.like(f"{idempotency_prefix}%"),
+            LoopRunORM.started_at >= since,
+        )
+        result = await self.session.execute(stmt)
+        return int(result.scalar_one())
 
     async def update_loop_run(self, loop_run: domain.LoopRun) -> domain.LoopRun:
         """Update an existing LoopRun."""

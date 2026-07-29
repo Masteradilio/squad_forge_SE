@@ -15,25 +15,24 @@
   "verdict": "EVIDENCE_READY",
   "known_limitations": [
     "Candidate evidence is not final release acceptance.",
-    "True multi-process atomic claim fencing remains required.",
-    "Authenticated webhook/event adapter behavior remains required.",
+    "Full triage persistence and retry identity remain required.",
     "Full pause/kill/recovery ownership cascade remains required."
   ],
   "commands": [
     {
-      "command": "python -m pytest backend/tests/test_phase_r4_loop_runtime.py backend/tests/test_phase6_loop_control_plane.py -q",
+      "command": "python -m pytest backend\\tests\\test_phase6_loop_control_plane.py backend\\tests\\test_phase_r4_loop_runtime.py -q",
       "exit_code": 0
     },
     {
-      "command": "python -m mypy backend/localforge/models/loop.py backend/localforge/services/loop_runtime.py backend/localforge/services/loop_service.py backend/localforge/services/loop_coordinator.py backend/tests/test_phase_r4_loop_runtime.py",
+      "command": "python -m mypy backend\\localforge\\services\\external_events.py backend\\localforge\\services\\loop_service.py backend\\localforge\\services\\loop_coordinator.py backend\\localforge\\api\\routes\\loops.py backend\\localforge\\api\\schemas.py backend\\tests\\test_phase6_loop_control_plane.py",
       "exit_code": 0
     },
     {
-      "command": "python -m ruff check backend/localforge/services/loop_runtime.py backend/localforge/services/loop_service.py backend/localforge/services/loop_coordinator.py backend/tests/test_phase_r4_loop_runtime.py",
+      "command": "python -m ruff check backend\\localforge\\services\\external_events.py backend\\localforge\\services\\loop_service.py backend\\localforge\\services\\loop_coordinator.py backend\\localforge\\api\\routes\\loops.py backend\\localforge\\api\\schemas.py backend\\tests\\test_phase6_loop_control_plane.py",
       "exit_code": 0
     }
   ],
-  "manifest_sha256": "ce6a8d8a7df6b6a266a42e126f4cbf79e1587ad888e3aa8483db1b7bfc86f079",
+  "manifest_sha256": "bd3b2888cd5685fa192b1fd42223de551593195d7c60d908e76ba6c2fa9a9868",
   "environment": {
     "os": "windows-local-and-github-actions-matrix",
     "python": "3.11-local / 3.12-ci",
@@ -44,11 +43,16 @@
     "Candidate evidence remains EVIDENCE_READY until reviewed PR, merge commit, exact-head CI, owner-approved tag, and final release validation exist."
   ],
   "input_hashes": {
-    "docs/e2e/v6_2_compliance/phase_R4/acceptance_report.md": "9341254961261ae8e9b8fb7b792ff28cf6858a69eea8d4ef26c60636aae293d6",
-    "docs/e2e/v6_2_compliance/phase_R4/known_limitations.md": "3de0c09626611313b7fd0d9789edd810ef9c48f7f0e1d8c97f3fd1025bd315c6",
-    "backend/localforge/services/loop_service.py": "01147991f99514ffdf8d19fe8207eb7089921c15ba98331ada4b6b589f2a0869",
+    "docs/e2e/v6_2_compliance/phase_R4/acceptance_report.md": "ac74dfa0af486f3df534d1b2297977c27ca9dcf693812c784fe55e1386ee101e",
+    "docs/e2e/v6_2_compliance/phase_R4/known_limitations.md": "e09da3d480b52cb6d74b4670ee542292bde2e681cc5fe6c9dbc1ee225089c9c2",
+    "backend/localforge/services/external_events.py": "1fb880552168098b2d39c5568bc11ad7c09032a1414a4a6e3b4b4017cfb84a77",
+    "backend/localforge/services/loop_service.py": "04e8aebacb1b3788b2f80f362334a419665a06479fc46d76764a56d920c1b661",
+    "backend/localforge/services/loop_coordinator.py": "19282f39ba124ba76eae3af2d16a6e5f9fa8e3f94b70dc9184b074ec711452b7",
+    "backend/localforge/api/routes/loops.py": "341b126e8c4087423c8a9c9af5fb54f8ff40408f90f3e3bc888a3b3286bbd946",
+    "backend/localforge/api/schemas.py": "2db44bea65f86d2fa6c0150a95d60cdff8ca45bec8e621c093249064120718e5",
+    "backend/tests/test_phase6_loop_control_plane.py": "63718ae3850beca45b5fc1fcc850dd4a3365dec844bef987d1e16073603f50c9",
     "backend/tests/test_phase_r4_loop_runtime.py": "7041c5efdface23058b2be1d4ce966ae028e16cdc9088f3f901685d14f6f5832",
-    "docs/compliance_backlog_V6-1.md": "bcef3cbfe3055ece4b5c04e708b1eeae496b910d469e97818b9caf57c24b6aa1",
-    "CHANGELOG.md": "1f464c46aa3e5e822a339a41bacc074d697f9da89a383e8830c553c6e7f829e7"
+    "docs/compliance_backlog_V6-1.md": "da657db57f662303e5a2605ac0d479d33b34301a0afd82051c3ca96bc2d296e8",
+    "CHANGELOG.md": "517137138ce5944fa2c9402f66156ffe39c4796a2a873cb294c9805371f7eb34"
   }
 }

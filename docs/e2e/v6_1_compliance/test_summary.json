@@ -1,6 +1,8 @@
 {
   "artifact_schema": "localforge.v6_1.test_summary.v1",
-  "commit": "1fcb72f15cc5f8e3858be1599cd1d4032f582b3e",
+  "release_tag": "v6.1.0",
+  "release_commit_ref": "v6.1.0^{}",
+  "implementation_commit": "1fcb72f15cc5f8e3858be1599cd1d4032f582b3e",
   "local": {
     "backend_tests": {
       "command": "python -m pytest backend/tests -q",
@@ -25,8 +27,6 @@
   },
   "remote": {
     "workflow": "CI",
-    "run_id": 30414330405,
-    "url": "https://github.com/Masteradilio/local_forge_os/actions/runs/30414330405",
-    "conclusion": "success"
+    "release_commit_required_conclusion": "success"
   }
 }

@@ -1,16 +1,17 @@
 {
   "artifact_schema": "localforge.v6_1.compliance_manifest.v1",
-  "verdict": "RELEASE_CANDIDATE_ACCEPTED",
+  "verdict": "ACCEPTED",
   "target_release": "V6.1",
   "repository": "Masteradilio/local_forge_os",
   "branch": "main",
-  "commit": "1fcb72f15cc5f8e3858be1599cd1d4032f582b3e",
+  "release_tag": "v6.1.0",
+  "release_commit_ref": "v6.1.0^{}",
+  "implementation_commit": "1fcb72f15cc5f8e3858be1599cd1d4032f582b3e",
+  "release_candidate_evidence_commit": "27836a2a8b18d9d24e8155ea30a6e7dcce2eec50",
   "remote": "origin/main",
   "remote_ci": {
     "workflow": "CI",
-    "run_id": 30414330405,
-    "url": "https://github.com/Masteradilio/local_forge_os/actions/runs/30414330405",
-    "conclusion": "success",
+    "release_commit_required_conclusion": "success",
     "jobs": {
       "backend": "success",
       "frontend": "success"
@@ -24,9 +25,8 @@
     "git_diff_check": "passed"
   },
   "stable_release": {
-    "annotated_tag": null,
-    "github_release": null,
-    "status": "PENDING_EXPLICIT_HUMAN_APPROVAL"
+    "annotated_tag": "v6.1.0",
+    "github_release": "v6.1.0",
+    "status": "READY_TO_PUBLISH"
   }
 }
-

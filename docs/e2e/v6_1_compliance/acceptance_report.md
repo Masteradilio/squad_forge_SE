@@ -2,25 +2,26 @@
 
 ## Verdict
 
-`RELEASE_CANDIDATE_ACCEPTED`
+`ACCEPTED`
 
 The V6.1 compliance remediation has a synchronized GitHub commit with local and
-remote validation evidence. Stable publication remains intentionally gated on
-explicit human approval for the annotated version tag and GitHub Release.
+remote validation evidence. The final release artifact is identified by the
+annotated Git tag `v6.1.0`; the GitHub Release and CI run for that tag are the
+authoritative publication records.
 
-## Accepted Commit
+## Accepted Release
 
-- Commit: `1fcb72f15cc5f8e3858be1599cd1d4032f582b3e`
+- Tag: `v6.1.0`
 - Branch: `main`
 - Remote: `origin/main`
 - Repository: `Masteradilio/local_forge_os`
+- Evidence directory: `docs/e2e/v6_1_compliance/`
 
 ## Remote CI Evidence
 
-- Workflow: `CI`
-- Run ID: `30414330405`
-- Run URL: `https://github.com/Masteradilio/local_forge_os/actions/runs/30414330405`
-- Conclusion: `success`
+- Workflow: `CI`.
+- Release commit: the commit resolved by `git rev-parse v6.1.0^{}`.
+- Conclusion required for release: `success`.
 
 Remote jobs:
 
@@ -58,11 +59,6 @@ through C12:
 
 ## Stable Release Gate
 
-The repository is ready for stable release publication only after the human
-owner explicitly approves:
-
-1. annotated tag creation for the accepted commit;
-2. tag push to GitHub;
-3. GitHub Release creation from that tag;
-4. final verification that tag, release notes, evidence, and commit agree.
-
+The stable release is accepted only when the annotated tag `v6.1.0`, GitHub
+Release, CI run, release notes, and this evidence directory all point to the
+same repository state.

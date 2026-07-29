@@ -6,10 +6,9 @@ across a specialized agent squad, executes tasks in isolated Git worktrees,
 validates outputs through deterministic gates, performs bounded self-healing,
 and prepares pull requests for human review.
 
-Current status: V6.1 is a **release candidate accepted by local gates and
-GitHub Actions**. Stable release publication is intentionally pending explicit
-human approval for the annotated version tag and GitHub Release required by
-`docs/compliance_backlog_V6.md`.
+Current status: V6.1 is an **accepted supervised-production-ready stable
+release** published through the annotated tag `v6.1.0`, GitHub Actions, and the
+evidence chain in `docs/e2e/v6_1_compliance/`.
 
 The V6 target contract and architectural specifications are documented in
 `docs/LocalForge_OS_PRD.md`, `docs/MASTER_BACKLOG_V6.md`, and

@@ -4,7 +4,7 @@
 >
 > Target release: V6.1
 >
-> Status: Release candidate accepted; stable release publication pending explicit human approval
+> Status: Accepted; stable release publication tracked by tag `v6.1.0`
 >
 > Created: 2026-07-28
 >
@@ -86,9 +86,9 @@ Actions:
 - CI verdict: backend and frontend jobs passed.
 - Immutable evidence: `docs/e2e/v6_1_compliance/`.
 
-The codebase is a V6.1 release candidate accepted by local and remote gates.
-Stable release publication remains pending because Phase C12 requires explicit
-human approval before creating the annotated version tag and GitHub Release.
+The codebase is accepted for V6.1 stable publication. The final release is
+identified by the annotated Git tag `v6.1.0`; the GitHub Release and CI run for
+the tagged commit are the publication records.
 
 ## 2. Audit Findings This Backlog Must Close
 
@@ -1145,11 +1145,11 @@ No new product feature may be added in this phase.
 - [x] Merge without auto-merge or synchronize the owner-approved commit without
       auto-merge.
 - [x] Verify local and remote `main`.
-- [ ] Create an annotated version tag only after explicit human approval.
-- [ ] Push the tag.
-- [ ] Create the GitHub Release from the accepted tag.
-- [ ] Link release notes to immutable evidence.
-- [ ] Verify package, CHANGELOG, tag, GitHub Release, and evidence all identify
+- [x] Create an annotated version tag only after explicit human approval.
+- [x] Push the tag.
+- [x] Create the GitHub Release from the accepted tag.
+- [x] Link release notes to immutable evidence.
+- [x] Verify package, CHANGELOG, tag, GitHub Release, and evidence all identify
       the same commit.
 
 **Phase C12 exit gate**
@@ -1162,8 +1162,8 @@ No new product feature may be added in this phase.
 - [x] Deep Swarm status matches measured evidence and remains gated.
 - [x] Quickstart commands are corrected for supported setup.
 - [x] Repository is clean and synchronized.
-- [ ] Version tag and GitHub Release point to the accepted commit.
-- [ ] LocalForge may be described as a supervised-production-ready stable
+- [x] Version tag and GitHub Release point to the accepted commit.
+- [x] LocalForge may be described as a supervised-production-ready stable
       release.
 
 ---

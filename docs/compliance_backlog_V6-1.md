@@ -343,21 +343,21 @@ facts.
 
 ### V61C-200 — Define the canonical evidence schema
 
-- [ ] Replace incompatible V6.1 manifest shapes with one versioned schema.
+- [x] Replace incompatible V6.1 manifest shapes with one versioned schema.
 - [ ] Require immutable commits, PR, merge, CI, commands, hashes, environment,
       limitations, and generated gate reasons.
-- [ ] Distinguish candidate evidence from final post-merge release evidence.
-- [ ] Add deterministic JSON serialization and SHA-256 checksums.
+- [x] Distinguish candidate evidence from final post-merge release evidence.
+- [x] Add deterministic JSON serialization and SHA-256 checksums.
 
 ### V61C-201 — Harden the compliance validator
 
-- [ ] Validate the actual published schema, not only test-only fixture shapes.
-- [ ] Query or consume trusted GitHub metadata for PR, review, merge, tag, and
+- [x] Validate the actual published schema, not only test-only fixture shapes.
+- [x] Query or consume trusted GitHub metadata for PR, review, merge, tag, and
       CI association.
-- [ ] Reject direct-to-main implementation as reviewed-PR evidence.
-- [ ] Reject self-review and missing human review.
-- [ ] Reject mismatched package/release versions.
-- [ ] Reject synthetic benchmark records and incomplete mandatory phases.
+- [x] Reject direct-to-main implementation as reviewed-PR evidence.
+- [x] Reject self-review and missing human review.
+- [x] Reject mismatched package/release versions.
+- [x] Reject synthetic benchmark records and incomplete mandatory phases.
 
 ### V61C-202 — Integrate validation into CI and release workflow
 
@@ -376,10 +376,10 @@ facts.
 
 ### Required regression tests
 
-- [ ] Published V6.1 manifest is rejected for the expected reasons.
-- [ ] Manual `ACCEPTED` override is rejected.
-- [ ] Missing/mismatched PR, review, merge, tag, or CI data is rejected.
-- [ ] A complete immutable fixture reaches `ACCEPTED`.
+- [x] Published V6.1 manifest is rejected for the expected reasons.
+- [x] Manual `ACCEPTED` override is rejected.
+- [x] Missing/mismatched PR, review, merge, tag, or CI data is rejected.
+- [x] A complete immutable fixture reaches `ACCEPTED`.
 - [ ] A final release asset validates after download in a clean checkout.
 
 ### Phase R2 exit gate

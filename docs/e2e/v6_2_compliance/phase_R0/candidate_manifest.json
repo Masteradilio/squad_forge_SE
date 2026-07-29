@@ -3,7 +3,12 @@
   "release_version": "6.2.0",
   "release_tag": "v6.2.0",
   "phase": "R0",
-  "task_ids": ["V61C-000", "V61C-001", "V61C-002", "V61C-003"],
+  "task_ids": [
+    "V61C-000",
+    "V61C-001",
+    "V61C-002",
+    "V61C-003"
+  ],
   "source_commit": "e2cc2a32fb0c1bb97dbb8fa54f5c9468398b636e",
   "parent_commit": "27836a2a8b18d9d24e8155ea30a6e7dcce2eec50",
   "verdict": "EVIDENCE_READY",
@@ -28,5 +33,6 @@
       "command": "git diff --check",
       "exit_code": 0
     }
-  ]
+  ],
+  "manifest_sha256": "640505c3ba2bbf2a4727fd24561c84076ae547be78f4f8d06bc6bf3d5cef13d4"
 }

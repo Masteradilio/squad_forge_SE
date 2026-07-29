@@ -12,7 +12,10 @@ from localforge.services.compliance_evidence import (
     EMPTY_SHA256,
     EVIDENCE_READY,
     INVALID,
+    V62_CANDIDATE_SCHEMA,
+    V62_FINAL_SCHEMA,
     ComplianceEvidenceValidator,
+    manifest_sha256,
 )
 
 
@@ -32,7 +35,7 @@ def _write_manifest(path: Path, payload: dict[str, object]) -> None:
 
 def _base_manifest(source_commit: str) -> dict[str, object]:
     return {
-        "schema_version": "v6-compliance-manifest-1",
+        "schema_version": V62_CANDIDATE_SCHEMA,
         "phase": "phase_C0",
         "task_ids": ["V6C-004"],
         "source_commit": source_commit,
@@ -138,6 +141,75 @@ def test_compliance_evidence_accepts_immutable_fixture(tmp_path: Path) -> None:
     manifest = _base_manifest(commit)
     manifest.update(
         {
+            "schema_version": V62_FINAL_SCHEMA,
+            "verdict": ACCEPTED,
+            "release_version": "6.2.0",
+            "release_tag": "v6.2.0",
+            "reviewed_pr_number": 13,
+            "merge_commit": commit,
+            "ci_run_url": "https://github.com/Masteradilio/local_forge_os/actions/runs/1",
+            "human_reviewed": True,
+            "mandatory_phases": {"R0": ACCEPTED, "R1": ACCEPTED, "R2": ACCEPTED},
+            "github_metadata": {
+                "pr_number": 13,
+                "author_login": "automation",
+                "reviewer_login": "owner",
+                "head_commit": commit,
+                "merge_commit": commit,
+                "ci_run_url": "https://github.com/Masteradilio/local_forge_os/actions/runs/1",
+                "ci_conclusion": "success",
+                "human_reviewed": True,
+                "direct_to_main": False,
+                "release_tag": "v6.2.0",
+            },
+        }
+    )
+    _write_manifest(manifest_path, manifest)
+
+    result = ComplianceEvidenceValidator(Path.cwd()).validate_manifest(manifest_path)
+
+    assert result.verdict == ACCEPTED
+    assert result.accepted is True
+
+
+def test_compliance_evidence_rejects_unknown_schema(tmp_path: Path) -> None:
+    manifest_path = tmp_path / "manifest.json"
+    manifest = _base_manifest(_head_commit())
+    manifest["schema_version"] = "localforge.v6_2.ad_hoc_manifest.v1"
+    _write_manifest(manifest_path, manifest)
+
+    result = ComplianceEvidenceValidator(Path.cwd()).validate_manifest(manifest_path)
+
+    assert result.verdict == INVALID
+    assert any("canonical V6.2 evidence schema" in reason for reason in result.reasons)
+
+
+def test_compliance_evidence_validates_manifest_checksum(tmp_path: Path) -> None:
+    manifest_path = tmp_path / "manifest.json"
+    manifest = _base_manifest(_head_commit())
+    manifest["manifest_sha256"] = "0" * 64
+    _write_manifest(manifest_path, manifest)
+
+    result = ComplianceEvidenceValidator(Path.cwd()).validate_manifest(manifest_path)
+
+    assert result.verdict == INVALID
+    assert any("checksum mismatch" in reason for reason in result.reasons)
+
+    manifest["manifest_sha256"] = manifest_sha256(manifest)
+    _write_manifest(manifest_path, manifest)
+
+    result = ComplianceEvidenceValidator(Path.cwd()).validate_manifest(manifest_path)
+
+    assert result.verdict == EVIDENCE_READY
+
+
+def test_compliance_evidence_rejects_accepted_without_github_metadata(tmp_path: Path) -> None:
+    manifest_path = tmp_path / "manifest.json"
+    commit = _head_commit()
+    manifest = _base_manifest(commit)
+    manifest.update(
+        {
+            "schema_version": V62_FINAL_SCHEMA,
             "verdict": ACCEPTED,
             "release_version": "6.2.0",
             "release_tag": "v6.2.0",
@@ -151,8 +223,83 @@ def test_compliance_evidence_accepts_immutable_fixture(tmp_path: Path) -> None:
 
     result = ComplianceEvidenceValidator(Path.cwd()).validate_manifest(manifest_path)
 
-    assert result.verdict == ACCEPTED
-    assert result.accepted is True
+    assert result.verdict == INVALID
+    assert any("trusted github_metadata" in reason for reason in result.reasons)
+
+
+def test_compliance_evidence_rejects_candidate_schema_accepted_override(tmp_path: Path) -> None:
+    manifest_path = tmp_path / "manifest.json"
+    commit = _head_commit()
+    manifest = _base_manifest(commit)
+    manifest.update(
+        {
+            "verdict": ACCEPTED,
+            "release_version": "6.2.0",
+            "release_tag": "v6.2.0",
+            "reviewed_pr_number": 13,
+            "merge_commit": commit,
+            "ci_run_url": "https://github.com/Masteradilio/local_forge_os/actions/runs/1",
+            "human_reviewed": True,
+            "mandatory_phases": {"R0": ACCEPTED, "R1": ACCEPTED, "R2": ACCEPTED},
+            "github_metadata": {
+                "pr_number": 13,
+                "author_login": "automation",
+                "reviewer_login": "owner",
+                "head_commit": commit,
+                "merge_commit": commit,
+                "ci_run_url": "https://github.com/Masteradilio/local_forge_os/actions/runs/1",
+                "ci_conclusion": "success",
+                "human_reviewed": True,
+                "direct_to_main": False,
+                "release_tag": "v6.2.0",
+            },
+        }
+    )
+    _write_manifest(manifest_path, manifest)
+
+    result = ComplianceEvidenceValidator(Path.cwd()).validate_manifest(manifest_path)
+
+    assert result.verdict == INVALID
+    assert any("final V6.2 evidence schema" in reason for reason in result.reasons)
+
+
+def test_compliance_evidence_rejects_direct_main_and_self_review(tmp_path: Path) -> None:
+    manifest_path = tmp_path / "manifest.json"
+    commit = _head_commit()
+    manifest = _base_manifest(commit)
+    manifest.update(
+        {
+            "schema_version": V62_FINAL_SCHEMA,
+            "verdict": ACCEPTED,
+            "release_version": "6.2.0",
+            "release_tag": "v6.2.0",
+            "reviewed_pr_number": 13,
+            "merge_commit": commit,
+            "ci_run_url": "https://github.com/Masteradilio/local_forge_os/actions/runs/1",
+            "human_reviewed": True,
+            "mandatory_phases": {"R0": ACCEPTED, "R1": EVIDENCE_READY},
+            "github_metadata": {
+                "pr_number": 13,
+                "author_login": "owner",
+                "reviewer_login": "owner",
+                "head_commit": commit,
+                "merge_commit": commit,
+                "ci_run_url": "https://github.com/Masteradilio/local_forge_os/actions/runs/1",
+                "ci_conclusion": "success",
+                "human_reviewed": True,
+                "direct_to_main": True,
+                "release_tag": "v6.2.0",
+            },
+        }
+    )
+    _write_manifest(manifest_path, manifest)
+
+    result = ComplianceEvidenceValidator(Path.cwd()).validate_manifest(manifest_path)
+
+    assert result.verdict == INVALID
+    assert any("direct-to-main" in reason for reason in result.reasons)
+    assert any("self-review" in reason for reason in result.reasons)
+    assert any("mandatory phases are incomplete" in reason for reason in result.reasons)
 
 
 def test_compliance_evidence_without_review_is_evidence_ready(tmp_path: Path) -> None:
@@ -193,3 +340,13 @@ def test_compliance_evidence_import_has_no_service_storage_cycle() -> None:
 
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "ComplianceEvidenceValidator"
+
+
+def test_v62_candidate_manifests_validate_against_canonical_schema() -> None:
+    validator = ComplianceEvidenceValidator(Path.cwd())
+    manifest_paths = sorted(Path("docs/e2e/v6_2_compliance").glob("phase_R*/candidate_manifest.json"))
+
+    assert manifest_paths
+    for manifest_path in manifest_paths:
+        result = validator.validate_manifest(manifest_path)
+        assert result.verdict == EVIDENCE_READY, (manifest_path, result.reasons)

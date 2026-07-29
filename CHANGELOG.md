@@ -23,6 +23,10 @@ All notable changes to LocalForge OS will be documented in this file.
   `docs/e2e/v6_2_compliance/phase_R1/`.
 - Added release-integrity checks for version consistency, public import matrix,
   clean wheel installation, and SQLite backup/restore migration behavior.
+- Added Phase R2 candidate evidence under
+  `docs/e2e/v6_2_compliance/phase_R2/`.
+- Added deterministic manifest checksum helpers and canonical V6.2 evidence
+  schema enforcement.
 
 #### Fixed
 - Removed the clean-interpreter import cycle exposed by importing
@@ -30,6 +34,9 @@ All notable changes to LocalForge OS will be documented in this file.
   public boundary lazy.
 - Changed schema bootstrap to fail safely when a database reports a future
   schema version instead of silently treating it as supported.
+- Hardened accepted evidence validation to reject candidate-schema acceptance,
+  missing trusted GitHub metadata, direct-to-main evidence, self-review, and
+  mismatched PR/CI/merge/tag metadata.
 
 ### V6.1 Compliance Closure - 2026-07-28
 

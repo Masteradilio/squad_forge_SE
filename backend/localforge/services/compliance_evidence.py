@@ -3,6 +3,7 @@
 import hashlib
 import json
 import subprocess
+from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -14,6 +15,25 @@ ACCEPTED = "ACCEPTED"
 EVIDENCE_READY = "EVIDENCE_READY"
 INVALID = "INVALID"
 DISPUTED = "DISPUTED"
+V62_CANDIDATE_SCHEMA = "localforge.v6_2.candidate_manifest.v1"
+V62_FINAL_SCHEMA = "localforge.v6_2.final_manifest.v1"
+SUPPORTED_V62_SCHEMAS = {V62_CANDIDATE_SCHEMA, V62_FINAL_SCHEMA}
+
+
+def canonical_json_bytes(payload: dict[str, Any]) -> bytes:
+    return json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+
+
+def manifest_sha256(payload: dict[str, Any]) -> str:
+    comparable = deepcopy(payload)
+    comparable.pop("manifest_sha256", None)
+    comparable.pop("checksum_sha256", None)
+    return hashlib.sha256(canonical_json_bytes(comparable)).hexdigest()
 
 
 @dataclass(frozen=True)
@@ -45,6 +65,8 @@ class ComplianceEvidenceValidator:
             reasons.append("historical V6.1 evidence is disputed and cannot be ACCEPTED")
         elif not schema_values:
             reasons.append("manifest must declare schema_version or artifact_schema")
+        elif not any(schema_version in SUPPORTED_V62_SCHEMAS for schema_version in schema_values):
+            reasons.append("manifest must use the canonical V6.2 evidence schema")
 
         manifest_version = str(manifest.get("release_version") or manifest.get("target_release") or "")
         if manifest_version and manifest_version not in {VERSION, f"V{VERSION}"}:
@@ -68,6 +90,7 @@ class ComplianceEvidenceValidator:
         if corpus_hash == EMPTY_SHA256:
             reasons.append("corpus hash must not be the SHA-256 of empty content")
 
+        reasons.extend(self._validate_manifest_checksum(manifest))
         reasons.extend(self._validate_input_hashes(manifest))
         reasons.extend(self._validate_commands(manifest))
 
@@ -76,7 +99,11 @@ class ComplianceEvidenceValidator:
 
         requested_verdict = str(manifest.get("verdict", ""))
         if requested_verdict == ACCEPTED:
+            reasons.extend(self._validate_mandatory_phase_status(manifest))
+            if V62_FINAL_SCHEMA not in schema_values:
+                reasons.append("ACCEPTED requires the canonical final V6.2 evidence schema")
             reasons.extend(self._validate_accepted_release_fields(manifest))
+            reasons.extend(self._validate_github_metadata(manifest))
 
         if reasons:
             return ComplianceEvidenceResult(verdict=INVALID, reasons=reasons)
@@ -102,6 +129,43 @@ class ComplianceEvidenceValidator:
             if actual_hash != expected_hash:
                 reasons.append(f"input hash mismatch for {raw_path}")
         return reasons
+
+    def _validate_manifest_checksum(self, manifest: dict[str, Any]) -> list[str]:
+        expected = manifest.get("manifest_sha256") or manifest.get("checksum_sha256")
+        if expected is None:
+            return []
+        if not isinstance(expected, str) or len(expected) != 64:
+            return ["manifest checksum must be a SHA-256 hex string"]
+        actual = manifest_sha256(manifest)
+        if expected != actual:
+            return ["manifest checksum mismatch"]
+        return []
+
+    @staticmethod
+    def _validate_mandatory_phase_status(manifest: dict[str, Any]) -> list[str]:
+        phases = manifest.get("mandatory_phases")
+        if phases is None:
+            return ["ACCEPTED requires mandatory phase status evidence"]
+
+        incomplete: list[str] = []
+        if isinstance(phases, dict):
+            for phase_name, status in phases.items():
+                if status != ACCEPTED:
+                    incomplete.append(str(phase_name))
+        elif isinstance(phases, list):
+            for index, phase in enumerate(phases):
+                if not isinstance(phase, dict):
+                    incomplete.append(f"index {index}")
+                    continue
+                phase_name = str(phase.get("phase") or phase.get("name") or f"index {index}")
+                if phase.get("status") != ACCEPTED and phase.get("verdict") != ACCEPTED:
+                    incomplete.append(phase_name)
+        else:
+            return ["mandatory_phases must be an object or list"]
+
+        if incomplete:
+            return [f"mandatory phases are incomplete: {', '.join(incomplete)}"]
+        return []
 
     def _validate_commands(self, manifest: dict[str, Any]) -> list[str]:
         commands = manifest.get("commands")
@@ -145,6 +209,33 @@ class ComplianceEvidenceValidator:
             reasons.append("ACCEPTED requires a GitHub Actions ci_run_url")
         if str(manifest.get("release_tag", "")) != RELEASE_TAG:
             reasons.append(f"ACCEPTED requires release_tag {RELEASE_TAG}")
+        return reasons
+
+    def _validate_github_metadata(self, manifest: dict[str, Any]) -> list[str]:
+        metadata = manifest.get("github_metadata")
+        if not isinstance(metadata, dict):
+            return ["ACCEPTED requires trusted github_metadata"]
+
+        reasons: list[str] = []
+        reviewed_pr_number = manifest.get("reviewed_pr_number")
+        if metadata.get("pr_number") != reviewed_pr_number:
+            reasons.append("github_metadata.pr_number must match reviewed_pr_number")
+        if metadata.get("merge_commit") != manifest.get("merge_commit"):
+            reasons.append("github_metadata.merge_commit must match merge_commit")
+        if metadata.get("head_commit") != manifest.get("source_commit"):
+            reasons.append("github_metadata.head_commit must match source_commit")
+        if metadata.get("ci_run_url") != manifest.get("ci_run_url"):
+            reasons.append("github_metadata.ci_run_url must match ci_run_url")
+        if metadata.get("ci_conclusion") != "success":
+            reasons.append("github_metadata.ci_conclusion must be success")
+        if metadata.get("direct_to_main") is True:
+            reasons.append("direct-to-main implementation cannot be reviewed PR evidence")
+        if metadata.get("human_reviewed") is not True:
+            reasons.append("github_metadata.human_reviewed must be true")
+        if metadata.get("reviewer_login") and metadata.get("reviewer_login") == metadata.get("author_login"):
+            reasons.append("self-review cannot satisfy human review evidence")
+        if metadata.get("release_tag") != manifest.get("release_tag"):
+            reasons.append("github_metadata.release_tag must match release_tag")
         return reasons
 
     @staticmethod

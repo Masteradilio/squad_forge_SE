@@ -1,0 +1,27 @@
+{
+  "schema_version": "localforge.v6_2.candidate_manifest.v1",
+  "release_version": "6.2.0",
+  "release_tag": "v6.2.0",
+  "phase": "R2",
+  "task_ids": [
+    "V61C-200",
+    "V61C-201",
+    "V61C-202",
+    "V61C-203"
+  ],
+  "source_commit": "6f421ef05e337abf9852aefa612ca899c4f9ca26",
+  "candidate_branch": "codex/v62-truth-reset-foundation",
+  "reviewed_pr_number": 14,
+  "verdict": "EVIDENCE_READY",
+  "known_limitations": [
+    "Candidate evidence is not final release acceptance.",
+    "Live GitHub metadata querying, branch protection enforcement, final release assets, and post-merge validation remain required."
+  ],
+  "commands": [
+    {
+      "command": "python -m pytest backend/tests/test_compliance_evidence.py -q",
+      "exit_code": 0
+    }
+  ],
+  "manifest_sha256": "0adbb604b77f5fbe46f4deea4aa2f03f42bba7770e02a54a441e74b9f4a5fd57"
+}

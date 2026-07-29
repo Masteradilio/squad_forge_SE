@@ -3,6 +3,8 @@ import subprocess
 from pathlib import Path
 from typing import Any, cast
 
+import pytest
+
 import scripts.check_release_truth as release_truth
 
 
@@ -10,11 +12,29 @@ def test_release_truth_script_passes_current_repository() -> None:
     report = release_truth.build_report(Path.cwd())
     historical_manifest = cast(dict[str, Any], report["historical_v61_manifest"])
     backlog = cast(dict[str, Any], report["backlog"])
+    audit_of_audit = cast(dict[str, Any], report["audit_of_audit"])
 
     assert report["passed"] is True
     assert historical_manifest["verdict"] == "INVALID"
     assert backlog["unresolved_checkbox_count"] > 0
     assert report["accepted_final_manifests"] == []
+    assert audit_of_audit["passed"] is True
+    assert audit_of_audit["missing_ids"] == []
+    assert audit_of_audit["missing_sections"] == []
+
+
+def test_release_truth_requires_audit_of_audit_matrix(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    report_path = tmp_path / "audit_of_audit.md"
+    report_path.write_text("AOA-01 only\n", encoding="utf-8")
+    monkeypatch.setattr(release_truth, "AOA_REPORT", Path("audit_of_audit.md"))
+
+    status = release_truth.audit_of_audit_status(tmp_path)
+    missing_ids = cast(list[str], status["missing_ids"])
+    missing_sections = cast(list[str], status["missing_sections"])
+
+    assert status["passed"] is False
+    assert "AOA-12" in missing_ids
+    assert "## AOA Findings Matrix" in missing_sections
 
 
 def test_release_truth_detects_stable_claim_leak(tmp_path: Path) -> None:

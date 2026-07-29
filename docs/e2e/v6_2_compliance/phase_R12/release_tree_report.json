@@ -1,8 +1,9 @@
 {
   "checksums": {
     "docs/e2e/v6_2_compliance/phase_R0/acceptance_report.md": "92370200562db531e18e7df0c1cee4338b47ba9d7d18b91c82987c4e9ae04272",
-    "docs/e2e/v6_2_compliance/phase_R0/candidate_manifest.json": "2ca80bb3d2636c3e4bb23ff97d444cdb0bb3c001b14c3a12e6409539acb37c19",
+    "docs/e2e/v6_2_compliance/phase_R0/candidate_manifest.json": "897fea1a80278cd8e8c1d84d2d752c285695e3d08a6f0049bc632fe2104fb0c2",
     "docs/e2e/v6_2_compliance/phase_R0/known_limitations.md": "6077cfea65275b046651e5dfc6eff09bd3c46816cb75cf84393a804588930d04",
+    "docs/e2e/v6_2_compliance/phase_R0/test_summary.json": "bb84ca93e817f8526741ec1fbd5eefff6973bbb3f6a6485e40b855016fa0723c",
     "docs/e2e/v6_2_compliance/phase_R1/acceptance_report.md": "efa6d6b5a57aa9e8b805eae76c0a6269fb36f1d70ebcf5e26fb872c70a326f6f",
     "docs/e2e/v6_2_compliance/phase_R1/candidate_manifest.json": "9ca3b44057046c24d2b757ab827c6ecacc6851aea40224935f23c4140053e2bc",
     "docs/e2e/v6_2_compliance/phase_R1/known_limitations.md": "3ba5468f79a7da1e1a395cafe6c4b9251e493231f2eee3bd6637fa0f5615f451",
@@ -48,5 +49,5 @@
   "findings": [],
   "schema_version": "localforge.v6_2.release_tree_report.v1",
   "scope": "docs/e2e/v6_2_compliance",
-  "tracked_files": 44
+  "tracked_files": 45
 }

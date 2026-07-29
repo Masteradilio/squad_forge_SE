@@ -232,50 +232,50 @@ make the ten audited defects reproducible.
 
 ### V61C-000 — Publish the audit-of-audit record
 
-- [ ] Add an immutable audit report mapping AOA-01 through AOA-12 to exact
+- [x] Add an immutable audit report mapping AOA-01 through AOA-12 to exact
       files, lines, commands, and observed results.
-- [ ] Record `e2cc2a32fb0c1bb97dbb8fa54f5c9468398b636e` as the audited baseline.
-- [ ] Record the successful V6.1 CI separately from the failed compliance
+- [x] Record `e2cc2a32fb0c1bb97dbb8fa54f5c9468398b636e` as the audited baseline.
+- [x] Record the successful V6.1 CI separately from the failed compliance
       verdict.
-- [ ] Preserve the original release and evidence for historical traceability.
+- [x] Preserve the original release and evidence for historical traceability.
 
 ### V61C-001 — Correct current product status
 
-- [ ] Replace “accepted supervised-production-ready stable release” with
+- [x] Replace “accepted supervised-production-ready stable release” with
       truthful experimental/partial wording in README and release-facing docs.
-- [ ] Mark the V6.1 acceptance report and manifest as historical disputed
+- [x] Mark the V6.1 acceptance report and manifest as historical disputed
       evidence without rewriting the `v6.1.0` tag.
-- [ ] Add the validator's exact V6.1 rejection reasons.
-- [ ] State which features are real, partial, simulated, or experimental.
+- [x] Add the validator's exact V6.1 rejection reasons.
+- [x] State which features are real, partial, simulated, or experimental.
 
 ### V61C-002 — Reconcile backlog truth
 
-- [ ] Remove the contradiction between 470 unchecked items and the accepted
+- [x] Remove the contradiction between 470 unchecked items and the accepted
       closure block.
-- [ ] Preserve completed work as implementation history, not compliance proof.
+- [x] Preserve completed work as implementation history, not compliance proof.
 - [ ] Generate backlog status from validated task evidence where practical.
-- [ ] Prevent a final release verdict while mandatory checkboxes or phase
+- [x] Prevent a final release verdict while mandatory checkboxes or phase
       records remain unresolved.
 
 ### V61C-003 — Establish the next release identity
 
 - [ ] Approve the next version with the owner; default recommendation is
       `6.2.0`.
-- [ ] Document that `v6.1.0` will not be moved or replaced.
+- [x] Document that `v6.1.0` will not be moved or replaced.
 - [ ] Define candidate and stable tag conventions.
 
 ### Required regression tests
 
-- [ ] Current V6.1 manifest returns `INVALID`.
-- [ ] A release summary cannot claim stable acceptance from a green CI result
+- [x] Current V6.1 manifest returns `INVALID`.
+- [x] A release summary cannot claim stable acceptance from a green CI result
       alone.
-- [ ] An unresolved mandatory task prevents final acceptance.
+- [x] An unresolved mandatory task prevents final acceptance.
 
 ### Phase R0 exit gate
 
 - [ ] Product status is truthful everywhere.
-- [ ] The baseline audit is immutable and reproducible.
-- [ ] No new stable-release claim exists.
+- [x] The baseline audit is immutable and reproducible.
+- [x] No new stable-release claim exists.
 
 ---
 

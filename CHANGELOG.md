@@ -138,6 +138,10 @@ All notable changes to LocalForge OS will be documented in this file.
 - Added a release-truth CI guardrail that rejects stale stable-release claims,
   verifies historical V6.1 evidence remains invalid, and blocks final accepted
   manifests while mandatory compliance tasks remain open.
+- Added an immutable Phase R0 audit-of-audit matrix mapping AOA-01 through
+  AOA-12 to exact files, lines, reproduction commands, and observed results,
+  with release-truth validation enforcing the matrix before candidate evidence
+  can pass.
 
 ### V6.1 Compliance Closure - 2026-07-28
 

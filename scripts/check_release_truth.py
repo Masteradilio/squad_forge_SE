@@ -17,11 +17,13 @@ from localforge.services.compliance_evidence import ACCEPTED, INVALID, Complianc
 
 BACKLOG_PATH = Path("docs/compliance_backlog_V6-1.md")
 HISTORICAL_V61_MANIFEST = Path("docs/e2e/v6_1_compliance/manifest.json")
+AOA_REPORT = Path("docs/e2e/v6_2_compliance/phase_R0/audit_of_audit.md")
 FORBIDDEN_STABLE_PHRASE = "supervised-production-ready stable release"
 STABLE_PHRASE_ALLOWLIST = {
     "docs/compliance_backlog_V6.md",
     "docs/compliance_backlog_V6-1.md",
 }
+AOA_IDS = {f"AOA-{index:02d}" for index in range(1, 13)}
 
 
 def open_backlog_checkboxes(backlog_path: Path) -> list[dict[str, object]]:
@@ -78,6 +80,42 @@ def accepted_final_manifests(root: Path) -> list[dict[str, object]]:
     return accepted
 
 
+def audit_of_audit_status(root: Path) -> dict[str, object]:
+    report_path = root / AOA_REPORT
+    if not report_path.is_file():
+        return {
+            "path": AOA_REPORT.as_posix(),
+            "passed": False,
+            "missing_ids": sorted(AOA_IDS),
+            "missing_sections": ["file is missing"],
+        }
+
+    text = report_path.read_text(encoding="utf-8")
+    missing_ids = sorted(aoa_id for aoa_id in AOA_IDS if aoa_id not in text)
+    required_sections = [
+        "## Baseline",
+        "## Reproduction Commands",
+        "## AOA Findings Matrix",
+        "## Canonical Rejection Reasons for V6.1",
+        "## Product Status Classification",
+    ]
+    missing_sections = [section for section in required_sections if section not in text]
+    required_fragments = [
+        "docs/compliance_backlog_V6-1.md:70",
+        "docs/compliance_backlog_V6-1.md:81",
+        "e2cc2a32fb0c1bb97dbb8fa54f5c9468398b636e",
+        "python scripts/check_release_truth.py --output artifacts/release-truth-local.json",
+        "historical V6.1 evidence is disputed and cannot be ACCEPTED",
+    ]
+    missing_sections.extend(fragment for fragment in required_fragments if fragment not in text)
+    return {
+        "path": AOA_REPORT.as_posix(),
+        "passed": not missing_ids and not missing_sections,
+        "missing_ids": missing_ids,
+        "missing_sections": missing_sections,
+    }
+
+
 def build_report(root: Path) -> dict[str, object]:
     validator = ComplianceEvidenceValidator(root)
     backlog_path = root / BACKLOG_PATH
@@ -85,6 +123,7 @@ def build_report(root: Path) -> dict[str, object]:
     unresolved = open_backlog_checkboxes(backlog_path)
     final_accepted = accepted_final_manifests(root)
     phrase_leaks = stable_claim_leaks(root)
+    aoa_report = audit_of_audit_status(root)
 
     findings: list[str] = []
     if v61_result.verdict != INVALID:
@@ -93,6 +132,8 @@ def build_report(root: Path) -> dict[str, object]:
         findings.append("final ACCEPTED manifests are forbidden while the compliance backlog has unresolved tasks")
     if phrase_leaks:
         findings.append("stable production claim phrase appears outside allowed backlog documents")
+    if not aoa_report["passed"]:
+        findings.append("audit-of-audit report must map AOA-01 through AOA-12 to reproducible evidence")
 
     return {
         "schema_version": "localforge.v6_2.release_truth_check.v1",
@@ -110,6 +151,7 @@ def build_report(root: Path) -> dict[str, object]:
         },
         "accepted_final_manifests": final_accepted,
         "stable_claim_leaks": phrase_leaks,
+        "audit_of_audit": aoa_report,
     }
 
 

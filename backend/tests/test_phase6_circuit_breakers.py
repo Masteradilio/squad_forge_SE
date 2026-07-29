@@ -3,9 +3,14 @@ from localforge.models import domain
 from localforge.models.enums import (
     CircuitScope,
     CircuitState,
+    LeaseReleaseReason,
     LoopRunStatus,
     ProgressSignal,
+    RunnerLane,
+    RunStatus,
+    TaskRunStatus,
     TriggerKind,
+    WorktreeAttemptStatus,
 )
 from localforge.services.fingerprint import (
     evaluate_attempt_progress,
@@ -226,6 +231,11 @@ async def test_kill_loop_run(db_manager) -> None:
         assert uow.projects is not None
         assert uow.loops is not None
         assert uow.loop_coordinator is not None
+        assert uow.tasks is not None
+        assert uow.executions is not None
+        assert uow.path_leases is not None
+        assert uow.runner_pool is not None
+        assert uow.worktrees is not None
 
         proj = domain.Project(name="Kill Test", root_path="E:/tmp/kill_test", default_branch="main")
         project = await uow.projects.create_project(proj)
@@ -251,6 +261,48 @@ async def test_kill_loop_run(db_manager) -> None:
         )
 
         assert run.id is not None
+        assert run.scheduler_run_id is not None
+        assert run.triage_task_ids
+
+        task_run = await uow.tasks.create_task_run(
+            domain.TaskRun(
+                run_id=run.scheduler_run_id,
+                task_id=run.triage_task_ids[0],
+                status=TaskRunStatus.RUNNING,
+            )
+        )
+        assert task_run.id is not None
+        lease, _, _ = await uow.path_leases.acquire_lease(
+            project_id=proj_id,
+            task_run_id=task_run.id,
+            owner_id="loop-worker",
+            target_path="src/killable.py",
+        )
+        assert lease is not None
+        worktree_manifest = await uow.worktrees.create_attempt_manifest(
+            project_id=proj_id,
+            task_id=run.triage_task_ids[0],
+            task_run_id=task_run.id,
+            worktree_path="E:/tmp/kill_test/.localforge/worktrees/kill-item",
+            branch_name="lf/kill-item",
+            source_commit="abc123",
+            owner_agent_id="loop-worker",
+        )
+        assert worktree_manifest.status == WorktreeAttemptStatus.ACTIVE
+
+        await uow.runner_pool.register_runner(
+            runner_id="runner-kill",
+            name="Kill Runner",
+            lane=RunnerLane.INLINE,
+            max_concurrency=1,
+        )
+        _, dispatch_status, dispatch_log = await uow.runner_pool.dispatch_task(
+            project_id=proj_id,
+            task_run_id=task_run.id,
+            required_lane=RunnerLane.INLINE,
+        )
+        assert dispatch_status == "SUCCESS"
+        assert dispatch_log.selected_runner_id == "runner-kill"
 
         # Kill run
         killed_run = await uow.loop_coordinator.kill_loop_run(
@@ -259,3 +311,34 @@ async def test_kill_loop_run(db_manager) -> None:
         assert killed_run.status == LoopRunStatus.CANCELLED
 
         assert "Killed by user_admin" in (killed_run.error_message or "")
+
+        scheduler_run = await uow.executions.get_run(run.scheduler_run_id)
+        assert scheduler_run is not None
+        assert scheduler_run.status == RunStatus.CANCELLED
+
+        cancelled_task_run = await uow.tasks.get_task_run(task_run.id)
+        assert cancelled_task_run is not None
+        assert cancelled_task_run.status == TaskRunStatus.CANCELLED
+
+        active_leases = await uow.path_leases.list_active_leases(proj_id)
+        assert active_leases == []
+        released_lease = await uow.path_leases.release_lease(
+            lease.id or 0, LeaseReleaseReason.CANCELLED
+        )
+        assert released_lease is not None
+        assert released_lease.release_reason == LeaseReleaseReason.CANCELLED
+
+        runner_state = (await uow.runner_pool.list_runners())[0]
+        assert runner_state.active_tasks_count == 0
+        dispatch_logs = await uow.runner_pool.list_dispatch_logs_for_task_run(task_run.id)
+        assert dispatch_logs[0].dispatch_status == "CANCELLED"
+        cancelled_manifest = await uow.worktrees.get_manifest_by_task_run(task_run.id)
+        assert cancelled_manifest is not None
+        assert cancelled_manifest.status == WorktreeAttemptStatus.CANCELLED
+
+        killed_again = await uow.loop_coordinator.kill_loop_run(
+            run.id, actor_id="user_admin", reason="Emergency stop"
+        )
+        assert killed_again.status == LoopRunStatus.CANCELLED
+        runner_state_after_repeat = (await uow.runner_pool.list_runners())[0]
+        assert runner_state_after_repeat.active_tasks_count == 0

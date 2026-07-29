@@ -291,6 +291,49 @@ class RunnerPoolService:
         await self.session.flush()
         return orm_runner.to_domain()
 
+    async def cancel_runner_leases_for_task_run(self, task_run_id: int) -> int:
+        """Cancel any active runner reservations for a task run.
+
+        This is used by lifecycle kill/recovery paths where the original worker may no longer
+        be alive to return its fenced lease token. Dispatch logs are marked terminal so repeated
+        reconciliation calls do not decrement runner capacity more than once.
+        """
+        stmt = select(RunnerDispatchLogORM).where(
+            RunnerDispatchLogORM.task_run_id == task_run_id,
+            RunnerDispatchLogORM.dispatch_status == "SUCCESS",
+            RunnerDispatchLogORM.selected_runner_id.is_not(None),
+        )
+        result = await self.session.execute(stmt)
+        active_logs = result.scalars().all()
+        if not active_logs:
+            return 0
+
+        released_count = 0
+        for log in active_logs:
+            if log.selected_runner_id is None:
+                continue
+            runner_stmt = select(RunnerPoolStateORM).where(
+                RunnerPoolStateORM.runner_id == log.selected_runner_id
+            )
+            runner_result = await self.session.execute(runner_stmt)
+            runner = runner_result.scalar_one_or_none()
+            if runner is not None and runner.active_tasks_count > 0:
+                runner.active_tasks_count -= 1
+                if (
+                    runner.health_state == RunnerHealthState.BUSY.value
+                    and runner.active_tasks_count < runner.max_concurrency
+                ):
+                    runner.health_state = RunnerHealthState.READY.value
+            log.dispatch_status = "CANCELLED"
+            log.rejection_reasons_json = {
+                **(log.rejection_reasons_json if isinstance(log.rejection_reasons_json, dict) else {}),
+                "lifecycle": "Cancelled by loop lifecycle cascade.",
+            }
+            released_count += 1
+
+        await self.session.flush()
+        return released_count
+
     async def heartbeat_runner_lease(
         self,
         runner_id: str,

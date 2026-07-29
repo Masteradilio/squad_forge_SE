@@ -77,6 +77,19 @@ class WorktreeService:
         await self.session.flush()
         return orm_obj.to_domain()
 
+    async def cancel_manifests_for_task_run(self, task_run_id: int) -> int:
+        """Mark active worktree attempt manifests for a task run as cancelled."""
+        stmt = select(WorktreeAttemptManifestORM).where(
+            WorktreeAttemptManifestORM.task_run_id == task_run_id,
+            WorktreeAttemptManifestORM.status == WorktreeAttemptStatus.ACTIVE.value,
+        )
+        result = await self.session.execute(stmt)
+        manifests = result.scalars().all()
+        for manifest in manifests:
+            manifest.status = WorktreeAttemptStatus.CANCELLED.value
+        await self.session.flush()
+        return len(manifests)
+
     async def reconcile_worktree_manifests(self, project_id: int) -> dict[str, Any]:
         """Reconcile manifests with actual physical filesystem state (Report-only).
 

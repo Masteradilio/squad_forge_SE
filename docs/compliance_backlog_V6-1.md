@@ -505,6 +505,12 @@ ownership, idempotency, cancellation, and restart recovery.
 - [x] Pause prevents new dispatch without corrupting active work.
 - [ ] Kill cancels active work, terminates bounded subprocesses, releases
       resources, and records incomplete artifacts.
+  - Candidate implementation now cancels the associated Scheduler Run, cancels
+    pending/running TaskRuns, releases PathLeases, releases RunnerPool
+    reservations, marks worktree attempt manifests `CANCELLED`, and proves
+    repeated kill idempotency for those persisted owners. Controlled worker
+    subprocess termination, external action reservations, and incomplete
+    artifact capture remain open.
 - [ ] Restart reconciliation recovers or safely fails every orphaned owner.
 - [ ] Repeated pause/kill/recovery calls are idempotent.
 
@@ -515,6 +521,9 @@ ownership, idempotency, cancellation, and restart recovery.
 - [x] Restart before/after triage and task creation does not duplicate work.
 - [x] Authenticated webhook replay is deduplicated.
 - [ ] Kill cancels actual controlled worker processes and releases resources.
+  - Persisted scheduler, task-run, RunnerPool, PathLease, and worktree-manifest
+    resource release is covered by
+    `backend/tests/test_phase6_circuit_breakers.py::test_kill_loop_run`.
 - [ ] Recovery reconciles orphaned LoopRun and Scheduler state.
 
 ### Phase R4 exit gate

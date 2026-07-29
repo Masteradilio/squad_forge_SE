@@ -53,6 +53,10 @@ All notable changes to LocalForge OS will be documented in this file.
 - Added schema version 17 for persisted loop triage input, classification,
   decision text, and scheduler task IDs; restart recovery now reuses persisted
   triage identity and no longer invents default actionable loop items.
+- Added a persisted kill cascade for loop runs that cancels the associated
+  scheduler run and active task runs, releases PathLeases and RunnerPool
+  reservations, marks worktree attempt manifests `CANCELLED`, and keeps repeated
+  kill calls idempotent over those persisted owners.
 - Added Phase R5 candidate evidence under
   `docs/e2e/v6_2_compliance/phase_R5/`.
 - Added persisted runner lease fencing metadata to dispatch logs and path lease

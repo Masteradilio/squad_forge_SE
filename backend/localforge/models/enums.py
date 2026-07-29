@@ -287,6 +287,7 @@ class WorktreeAttemptStatus(StrEnum):
     MERGED = "MERGED"
     STALE = "STALE"
     CLEANED = "CLEANED"
+    CANCELLED = "CANCELLED"
 
 
 class LeaseReleaseReason(StrEnum):

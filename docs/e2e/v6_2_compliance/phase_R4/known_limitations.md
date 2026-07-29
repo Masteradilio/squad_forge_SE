@@ -9,6 +9,10 @@
 - LoopRun triage input, classification, decision, and scheduler task IDs are
   persisted through schema version 17; restart recovery reuses that identity
   instead of inventing default actionable work.
-- Pause prevents new due-schedule claims; kill/restart cascade over scheduler
-  runs, task runs, subprocesses, RunnerPool leases, PathLeases, worktrees, and
-  external reservations remains incomplete.
+- Pause prevents new due-schedule claims; kill now cancels the persisted
+  scheduler run and pending/running task runs, releases PathLeases and
+  RunnerPool reservations, marks worktree attempt manifests `CANCELLED`, and is
+  idempotent for repeated kill calls over those persisted owners.
+- The remaining kill/restart lifecycle cascade is still incomplete for actual
+  controlled worker subprocess termination, external action reservations,
+  incomplete artifact capture, and full orphan-owner restart reconciliation.

@@ -9,11 +9,13 @@ from localforge.models.enums import (
     AuditEventActorType,
     AuditEventType,
     CircuitScope,
+    LeaseReleaseReason,
     LoopRunStatus,
     LoopRunVerdict,
     LoopStatus,
     RunMode,
     RunStatus,
+    TaskRunStatus,
     TaskStatus,
     TriggerKind,
 )
@@ -22,7 +24,10 @@ from localforge.services.circuit_breaker import CircuitBreakerService
 from localforge.services.execution import ExecutionService
 from localforge.services.external_events import validate_external_event_envelope, window_start
 from localforge.services.loop_service import LoopService
+from localforge.services.path_lease import PathLeaseService
+from localforge.services.runner_pool import RunnerPoolService
 from localforge.services.task import TaskService
+from localforge.services.worktree import WorktreeService
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +45,9 @@ class LoopCoordinator:
         self.audit_service = AuditService(session)
         self.circuit_breaker_service = CircuitBreakerService(session)
         self.task_service = TaskService(session)
+        self.path_lease_service = PathLeaseService(session)
+        self.runner_pool_service = RunnerPoolService(session)
+        self.worktree_service = WorktreeService(session)
 
     async def trigger_due_schedules(
         self, project_id: int, *, now: datetime | None = None, limit: int = 50
@@ -450,13 +458,40 @@ class LoopCoordinator:
         actor_id: str = "user",
         reason: str = "Manual kill requested",
     ) -> domain.LoopRun:
-        """Kill an active or triaging Loop Run, stopping execution and logging audit evidence."""
+        """Kill an active or triaging Loop Run and cascade cancellation to owned work."""
         run = await self.loop_service.get_loop_run(run_id)
         if not run:
             raise ValueError(f"LoopRun with ID {run_id} not found")
 
+        now = datetime.now(UTC)
+        if run.scheduler_run_id is not None:
+            scheduler_run = await self.execution_service.get_run(run.scheduler_run_id)
+            if scheduler_run and scheduler_run.status not in (
+                RunStatus.CANCELLED,
+                RunStatus.COMPLETED,
+                RunStatus.FAILED,
+            ):
+                scheduler_run.status = RunStatus.CANCELLED
+                scheduler_run.ended_at = now
+                scheduler_run.summary = f"Cancelled by LoopRun {run_id}: {reason}"
+                await self.execution_service.update_run(scheduler_run)
+
+            task_runs = await self.task_service.list_runs_for_run(run.scheduler_run_id)
+            for task_run in task_runs:
+                if task_run.status in (TaskRunStatus.PENDING, TaskRunStatus.RUNNING):
+                    task_run.status = TaskRunStatus.CANCELLED
+                    task_run.ended_at = now
+                    task_run.final_summary = f"Cancelled by LoopRun {run_id}: {reason}"
+                    await self.task_service.update_task_run(task_run)
+                if task_run.id is not None:
+                    await self.path_lease_service.release_all_leases_for_run(
+                        task_run.id, LeaseReleaseReason.CANCELLED
+                    )
+                    await self.runner_pool_service.cancel_runner_leases_for_task_run(task_run.id)
+                    await self.worktree_service.cancel_manifests_for_task_run(task_run.id)
+
         run.status = LoopRunStatus.CANCELLED
-        run.completed_at = datetime.now(UTC)
+        run.completed_at = now
         run.error_message = f"Killed by {actor_id}: {reason}"
         updated_run = await self.loop_service.update_loop_run(run)
 

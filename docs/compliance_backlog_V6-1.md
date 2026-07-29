@@ -847,11 +847,11 @@ bounded beyond the happy path.
 
 - [ ] Document trusted actors, untrusted inputs, secrets, protected resources,
       and external capabilities.
-- [ ] Add API authentication/authorization appropriate to local and hosted
+- [x] Add API authentication/authorization appropriate to local and hosted
       modes.
 - [ ] Restrict CORS, payload sizes, filesystem roots, network access, and
       subprocess environment.
-- [ ] Redact secrets from prompts, logs, artifacts, audit records, and demo
+- [x] Redact secrets from prompts, logs, artifacts, audit records, and demo
       exports.
 - [ ] Add dependency, secret, and static-security scans to release CI.
 
@@ -860,7 +860,7 @@ bounded beyond the happy path.
 - [ ] Emit structured logs with project/run/task/attempt/correlation IDs.
 - [ ] Add metrics for queue depth, dispatch latency, active workers, failures,
       retries, breaker state, lease contention, costs, and readiness outcomes.
-- [ ] Add health, readiness, and dependency diagnostics.
+- [x] Add health, readiness, and dependency diagnostics.
 - [ ] Define audit retention/export and personally identifiable information
       handling.
 - [ ] Provide an operator view for active loops, workers, leases, and blockers.
@@ -892,7 +892,7 @@ bounded beyond the happy path.
 
 ### Required regression tests
 
-- [ ] Authentication and authorization negative cases.
+- [x] Authentication and authorization negative cases.
 - [ ] Prompt-injection, path traversal, command-injection, SSRF, secret
       redaction, and oversized-payload tests.
 - [ ] Dependency and secret scans have blocking release thresholds.

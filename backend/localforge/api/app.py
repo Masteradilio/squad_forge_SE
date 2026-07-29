@@ -10,7 +10,7 @@ from typing import Any
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import ValidationError
 
 from localforge import __version__
@@ -63,7 +63,12 @@ from localforge.pipeline import RolePipelineEngine
 from localforge.prd import import_prd
 from localforge.quality.discovery import TestCommandDiscovery
 from localforge.safety.runner import run_safe_command
-from localforge.services.audit import redact_secrets
+from localforge.services.security_controls import (
+    SecurityPolicy,
+    enforce_api_auth,
+    enforce_payload_size,
+    redact_secrets,
+)
 from localforge.skills import SkillDefinition, SkillRegistry
 from localforge.storage import DatabaseManager, UnitOfWork
 from localforge.storage import db_manager as default_db_manager
@@ -79,6 +84,7 @@ def create_app(
     manager = db_manager or default_db_manager
     app = FastAPI(title="LocalForge OS API", version=__version__)
     app.state.event_bus = EventBus(db_manager=manager)
+    app.state.security_policy = SecurityPolicy.from_environment()
 
     allowed_origins_raw = os.getenv("LOCALFORGE_ALLOWED_ORIGINS")
     if allowed_origins_raw:
@@ -100,8 +106,16 @@ def create_app(
     app.add_middleware(GZipMiddleware, minimum_size=1000)
 
     @app.middleware("http")
-    async def add_security_headers(request: Request, call_next: Any) -> Response:
+    async def enforce_security_controls(request: Request, call_next: Any) -> Response:
+        try:
+            enforce_payload_size(request, app.state.security_policy)
+            enforce_api_auth(request, app.state.security_policy)
+        except HTTPException as exc:
+            return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
+        correlation_id = request.headers.get("x-correlation-id") or f"lf-{datetime.now(UTC).timestamp():.6f}"
         response = await call_next(request)
+        response.headers.setdefault("X-Correlation-ID", correlation_id)
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("Referrer-Policy", "no-referrer")
@@ -114,6 +128,17 @@ def create_app(
     @app.get("/health")
     async def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.get("/ready")
+    async def readiness() -> dict[str, Any]:
+        policy = app.state.security_policy
+        return {
+            "status": "ready",
+            "version": __version__,
+            "database_configured": manager is not None,
+            "auth_required": bool(policy.api_token),
+            "max_body_bytes": policy.max_body_bytes,
+        }
 
     app.include_router(loops_router)
     app.include_router(circuit_breakers_router)

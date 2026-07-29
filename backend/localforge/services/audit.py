@@ -1,40 +1,11 @@
-import os
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from localforge.models import domain
+from localforge.services.security_controls import redact_secrets_recursive
 from localforge.storage.orm import ArtifactORM, AuditEventORM, PolicyORM
-
-
-def redact_secrets(text: str) -> str:
-    """Scan and redact known sensitive tokens from text."""
-    if not text:
-        return text
-
-    sensitive_vars = [
-        "LOCALFORGE_GITHUB_TOKEN",
-        "LOCALFORGE_MODEL_API_KEY",
-        "GITHUB_TOKEN",
-    ]
-    redacted = text
-    for var in sensitive_vars:
-        val = os.getenv(var)
-        if val and len(val.strip()) > 3:
-            redacted = redacted.replace(val, "[REDACTED]")
-    return redacted
-
-
-def redact_secrets_recursive(val: Any) -> Any:
-    """Recursively traverse data structures to redact secrets in strings."""
-    if isinstance(val, str):
-        return redact_secrets(val)
-    elif isinstance(val, dict):
-        return {k: redact_secrets_recursive(v) for k, v in val.items()}
-    elif isinstance(val, list):
-        return [redact_secrets_recursive(item) for item in val]
-    return val
 
 
 class AuditService:
@@ -49,7 +20,10 @@ class AuditService:
 
         This service enforces that audit events are append-only.
         """
-        event.payload_redacted = redact_secrets_recursive(event.payload_redacted)
+        event.payload_redacted = cast(
+            dict[str, Any],
+            redact_secrets_recursive(event.payload_redacted),
+        )
         orm_obj = AuditEventORM.from_domain(event)
         self.session.add(orm_obj)
         await self.session.flush()
@@ -198,7 +172,10 @@ class AuditService:
         for event_orm in events:
             event = event_orm.to_domain()
             # Redact event payload before exporting (as double-safety check)
-            event.payload_redacted = redact_secrets_recursive(event.payload_redacted)
+            event.payload_redacted = cast(
+                dict[str, Any],
+                redact_secrets_recursive(event.payload_redacted),
+            )
 
             artifacts_list: list[dict[str, Any]] = []
 

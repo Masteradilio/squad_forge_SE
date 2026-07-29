@@ -64,6 +64,11 @@ All notable changes to LocalForge OS will be documented in this file.
   holdout flags, task-run/artifact bindings, model/provider metadata,
   environment fingerprints, cost/tokens/duration measurements, and corpus file
   hashing.
+- Added Phase R10 candidate evidence under
+  `docs/e2e/v6_2_compliance/phase_R10/`.
+- Added reusable security controls for optional API bearer-token auth, request
+  payload ceilings, secret redaction, and root-constrained path validation.
+- Added `/ready` diagnostics and request correlation IDs to the FastAPI app.
 
 #### Fixed
 - Removed the clean-interpreter import cycle exposed by importing
@@ -99,6 +104,9 @@ All notable changes to LocalForge OS will be documented in this file.
 - Hardened strategy comparison so unfair corpus/budget/environment mismatches
   invalidate comparison evidence and unavailable cost/token/duration values
   remain explicit `UNKNOWN` measurements.
+- Hardened API operation so configured bearer-token auth and oversized payload
+  rejection fail closed while preserving unauthenticated local development by
+  default.
 
 ### V6.1 Compliance Closure - 2026-07-28
 

@@ -4,8 +4,9 @@
     "docs/e2e/v6_2_compliance/phase_R0/candidate_manifest.json": "758c1e7fb8f23fcf53386a4f55fad6e798f177e4ce73e2dcb4f36eeb11021885",
     "docs/e2e/v6_2_compliance/phase_R0/known_limitations.md": "6077cfea65275b046651e5dfc6eff09bd3c46816cb75cf84393a804588930d04",
     "docs/e2e/v6_2_compliance/phase_R1/acceptance_report.md": "efa6d6b5a57aa9e8b805eae76c0a6269fb36f1d70ebcf5e26fb872c70a326f6f",
-    "docs/e2e/v6_2_compliance/phase_R1/candidate_manifest.json": "1cc13b8479ef0c5f1bfe04ff2b883b012e75d005b1b89e1ce1e2c6c509465e64",
+    "docs/e2e/v6_2_compliance/phase_R1/candidate_manifest.json": "c6cf45ac823ab99a7b4f89992da48f63b213727ce7e9d103f8b728dc83129415",
     "docs/e2e/v6_2_compliance/phase_R1/known_limitations.md": "3ba5468f79a7da1e1a395cafe6c4b9251e493231f2eee3bd6637fa0f5615f451",
+    "docs/e2e/v6_2_compliance/phase_R1/test_summary.json": "0353e68321f9dfb7b11e00073f05f8193840cbebb6c05beec318129fe540f5a9",
     "docs/e2e/v6_2_compliance/phase_R10/acceptance_report.md": "969aeaaf0a3bd7fb341988c77e1f56f68ba041504d8b539b43687789268d6f2e",
     "docs/e2e/v6_2_compliance/phase_R10/candidate_manifest.json": "6830baed17fc5599f728fb11519baa0350e36e42df7c034aa35ba4f95aea1216",
     "docs/e2e/v6_2_compliance/phase_R10/known_limitations.md": "b70a1b2c94ced9df85f1a59a955d00e64ed734afcf564000d86da57954f32298",
@@ -16,9 +17,11 @@
     "docs/e2e/v6_2_compliance/phase_R11/known_limitations.md": "5a2e69e30b2bcfba54b7f9181657f25ceb5c69e64a511e3ad843f28801a5b4e2",
     "docs/e2e/v6_2_compliance/phase_R12/acceptance_report.md": "36b6db886cb328ecb80a6f3ef984cf74cf72eafe3a72dcba289100ac6ff5a960",
     "docs/e2e/v6_2_compliance/phase_R12/known_limitations.md": "092e15475c86a5f6850e78dddd1aa68f45df0fb6142e8cbd7e8e4b93068b9e53",
+    "docs/e2e/v6_2_compliance/phase_R12/test_summary.json": "2bcd03b7d1be8753ddfc24adb5b327d170c0c8d6349f0be4c26edf219f5d09e8",
     "docs/e2e/v6_2_compliance/phase_R2/acceptance_report.md": "71fcc45948287f58f19dd72d41d1ac4e6ad492d4523e39279b465489aa0ebe2b",
-    "docs/e2e/v6_2_compliance/phase_R2/candidate_manifest.json": "53e3f38642ca3e508d2bc70ad00de3fab6239cbd9fafe4ac849c443bae53aff0",
+    "docs/e2e/v6_2_compliance/phase_R2/candidate_manifest.json": "4a45b38f758ce5182bc4b7ec7da1d8e6143f856c88096265a463930e57ef7795",
     "docs/e2e/v6_2_compliance/phase_R2/known_limitations.md": "f263f950516d991f121b97b8fe44882045c5f51786fb7d830fb3665baf975c66",
+    "docs/e2e/v6_2_compliance/phase_R2/test_summary.json": "04c9c6d3ee07d5213290ec0a8cb0d8e428f3b7e805fa89a44e4af25276c1fae2",
     "docs/e2e/v6_2_compliance/phase_R3/acceptance_report.md": "38f25390a212aa40a5bd293075ce9e394909b1580467ccc20af2ac0dc539b54a",
     "docs/e2e/v6_2_compliance/phase_R3/candidate_manifest.json": "8b9356efb43d545f19d9e40e54be91970b2e70b48293801df75371d26dd5aadb",
     "docs/e2e/v6_2_compliance/phase_R3/known_limitations.md": "50011d7c22a3c90878c1c672b7b7a1e331e13cbb9a7c9e33aad96e14ba13341a",
@@ -45,5 +48,5 @@
   "findings": [],
   "schema_version": "localforge.v6_2.release_tree_report.v1",
   "scope": "docs/e2e/v6_2_compliance",
-  "tracked_files": 41
+  "tracked_files": 44
 }

@@ -16,16 +16,17 @@
   "reviewed_pr_number": 14,
   "verdict": "EVIDENCE_READY",
   "input_hashes": {
-    ".github/workflows/ci.yml": "d2dcb2d140897346d849134cad7e8e5e328760f7dd9000378adc1e700671eb7c",
-    "backend/localforge/services/release_audit.py": "73e8b9d1c7740de0f68024ec2e179a8167b538ec7194d8368fddd0a8030bcdb1",
+    ".github/workflows/ci.yml": "e4717032a6be354cd43b34b95d1e4b9973b00d00a18f0fe157295f2a8939cdd3",
+    "backend/localforge/services/release_audit.py": "a7b39a6d29917086ddc263f12f9c109da7d6c51b7da7f237b8188402b6ee98da",
+    "backend/localforge/services/file_hashes.py": "f0015dce9e0312685674b59a96236e55f4bc0347d100e847fac7685406f435f1",
     "scripts/check_release_tree.py": "a79ffb6a7d3ed274f96025125d50d8092c7d87ff63d10227c45eeeefdda6e00d",
     "scripts/check_candidate_evidence.py": "01a686a60ffd063f5abccbb7f554d10ae03adce75c3c654b784769e49efe8803",
     "scripts/check_clean_package_install.py": "a7cb4635f5e1447c9f0ed8b8e5f5586aa625f6268141daeabd357163c2326bb7",
     "backend/tests/test_phase_r12_release_audit.py": "a286de18bdbe68cc64a7c74a7e4d2f54f53957947d0293774e3217b881fc779f",
     "docs/e2e/v6_2_compliance/phase_R12/acceptance_report.md": "36b6db886cb328ecb80a6f3ef984cf74cf72eafe3a72dcba289100ac6ff5a960",
-    "docs/e2e/v6_2_compliance/phase_R12/test_summary.json": "b2f5712659a0c8cc956b6922dfdaf3d85fb63712a82e6353d42ea9fa02273116",
+    "docs/e2e/v6_2_compliance/phase_R12/test_summary.json": "2bcd03b7d1be8753ddfc24adb5b327d170c0c8d6349f0be4c26edf219f5d09e8",
     "docs/e2e/v6_2_compliance/phase_R12/known_limitations.md": "092e15475c86a5f6850e78dddd1aa68f45df0fb6142e8cbd7e8e4b93068b9e53",
-    "docs/e2e/v6_2_compliance/phase_R12/release_tree_report.json": "aa8995ec271352a0fd5e13b2f3868b1424925984db7d04300b8ddfa37a6383e5"
+    "docs/e2e/v6_2_compliance/phase_R12/release_tree_report.json": "f12e3395bcac3dfa6abfd7d80b6e9a03a46afafbe7945a421e03f0cb97dd5322"
   },
   "known_limitations": [
     "Candidate evidence is not final release acceptance.",
@@ -49,5 +50,5 @@
       "exit_code": 0
     }
   ],
-  "manifest_sha256": "a106659e81599809711a052149bbd85b4ea8744b566ed154e43a3e49fc3ef14e"
+  "manifest_sha256": "7805be77705b7d6b1b55aee24c7152aeab8ceb158a48d5cd6084e9c70b905de1"
 }

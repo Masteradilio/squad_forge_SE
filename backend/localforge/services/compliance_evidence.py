@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from localforge.services.file_hashes import stable_file_sha256
 from localforge.version import RELEASE_TAG, VERSION
 
 EMPTY_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
@@ -121,11 +122,12 @@ class ComplianceEvidenceValidator:
             return ["input_hashes must be an object when provided"]
 
         for raw_path, expected_hash in input_hashes.items():
-            path = self.repo_root / str(raw_path)
+            candidate_path = Path(str(raw_path))
+            path = candidate_path if candidate_path.is_absolute() else self.repo_root / candidate_path
             if not path.is_file():
                 reasons.append(f"hashed input is missing: {raw_path}")
                 continue
-            actual_hash = hashlib.sha256(path.read_bytes()).hexdigest()
+            actual_hash = stable_file_sha256(path)
             if actual_hash != expected_hash:
                 reasons.append(f"input hash mismatch for {raw_path}")
         return reasons

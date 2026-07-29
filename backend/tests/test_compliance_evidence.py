@@ -17,6 +17,7 @@ from localforge.services.compliance_evidence import (
     ComplianceEvidenceValidator,
     manifest_sha256,
 )
+from localforge.services.file_hashes import stable_file_sha256
 
 
 def _head_commit() -> str:
@@ -86,6 +87,21 @@ def test_compliance_evidence_rejects_empty_or_mismatched_hash(tmp_path: Path) ->
     assert result.verdict == INVALID
     assert any("empty content" in reason for reason in result.reasons)
     assert any("input hash mismatch" in reason for reason in result.reasons)
+
+
+def test_input_hash_validation_is_stable_across_text_line_endings(tmp_path: Path) -> None:
+    manifest_path = tmp_path / "manifest.json"
+    tracked_input = tmp_path / "input.txt"
+    tracked_input.write_bytes(b"first\nsecond\n")
+    expected_hash = stable_file_sha256(tracked_input)
+    tracked_input.write_bytes(b"first\r\nsecond\r\n")
+    manifest = _base_manifest(_head_commit())
+    manifest["input_hashes"] = {str(tracked_input): expected_hash}
+    _write_manifest(manifest_path, manifest)
+
+    result = ComplianceEvidenceValidator(Path.cwd()).validate_manifest(manifest_path)
+
+    assert result.verdict == EVIDENCE_READY
 
 
 def test_compliance_evidence_prevents_manual_accepted_override(tmp_path: Path) -> None:

@@ -1,12 +1,13 @@
 """Release tree inventory, checksum, and sanitization helpers."""
 
-import hashlib
 import re
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from pydantic import BaseModel, Field
+
+from localforge.services.file_hashes import stable_file_sha256
 
 SECRET_TEXT_PATTERNS = (
     re.compile(r"(?i)(api[_-]?key|secret|password|token)\s*[:=]\s*['\"]?[A-Za-z0-9_\-./:=+]{12,}"),
@@ -79,7 +80,7 @@ class ReleaseTreeAuditor:
                 findings.append(f"forbidden tracked runtime/binary artifact: {relative}")
                 continue
             content = file_path.read_bytes()
-            checksums[relative] = hashlib.sha256(content).hexdigest()
+            checksums[relative] = stable_file_sha256(file_path)
             if len(content) <= self.max_text_bytes and _looks_text(file_path):
                 text = content.decode("utf-8", errors="ignore")
                 if any(pattern.search(text) for pattern in SECRET_TEXT_PATTERNS):

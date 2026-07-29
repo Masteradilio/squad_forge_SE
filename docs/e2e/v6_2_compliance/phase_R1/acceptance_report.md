@@ -26,8 +26,9 @@ post-merge evidence is generated from GitHub state.
 | --- | --- |
 | Canonical version source | `backend/localforge/version.py` drives backend/API/CLI, and `scripts/check_version_consistency.py` fails on package or frontend drift. |
 | Import hygiene | `localforge.services` and `localforge.storage` now use lazy public boundaries; `scripts/check_import_matrix.py` imports public modules in a clean interpreter. |
-| Clean install | `backend/tests/test_phase_r1_release_integrity.py` builds a wheel, installs it into an isolated venv without repository `PYTHONPATH`, and verifies import and CLI version smoke. |
+| Clean install | `backend/tests/test_phase_r1_release_integrity.py` and `scripts/check_clean_package_install.py` build both sdist and wheel, reject wheels that package backend tests, install the wheel into an isolated venv without repository `PYTHONPATH`, and verify import, CLI version, and CLI help smoke. |
 | Migration and backup safety | `backup_sqlite_database`, `restore_sqlite_database`, and future-schema rejection are covered by legacy SQLite fixture tests. |
+| Cross-platform package CI | `.github/workflows/ci.yml` runs package smoke validation on `ubuntu-latest` and `windows-latest` and uploads the JSON result as a workflow artifact. |
 
 ## Validation Commands
 
@@ -43,6 +44,12 @@ exit code 0
 
 python scripts/check_version_consistency.py
 exit code 0
+
+python scripts/check_clean_package_install.py
+exit code 0
+
+python -m pytest backend/tests/test_phase_r1_release_integrity.py -q
+8 passed in 11.89s
 
 python -m mypy backend/localforge/storage/bootstrap.py backend/localforge/storage/__init__.py backend/tests/test_phase_r1_release_integrity.py
 Success: no issues found in 3 source files

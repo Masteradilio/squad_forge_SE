@@ -123,6 +123,16 @@ All notable changes to LocalForge OS will be documented in this file.
   manifest checksums are stable across Windows and Linux.
 - Fixed R12 release-tree evidence generation to write LF-normalized JSON and
   exclude its own generated control files from the audited checksum inventory.
+- Added CI-backed V6.2 candidate evidence validation and uploaded validator
+  output for compliance PRs, with all 13 candidate manifests validating as
+  `EVIDENCE_READY`.
+- Added cross-platform package smoke validation that builds sdist/wheel,
+  clean-installs the wheel on Linux and Windows CI, verifies CLI/import smoke,
+  and rejects wheels that accidentally package backend tests.
+- Modernized package license metadata to SPDX form and excluded backend tests
+  from release wheels.
+- Recorded local package-smoke and backend regression evidence for R1/R2/R12,
+  including `334 passed` for `backend/tests`.
 
 ### V6.1 Compliance Closure - 2026-07-28
 

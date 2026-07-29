@@ -19,6 +19,9 @@ Implemented controls:
   V6.2 compliance evidence scope.
 - Added regression tests proving clean scopes pass and tracked secrets,
   personal paths, and runtime databases are rejected.
+- Added CI package smoke and candidate-evidence JSON outputs as workflow
+  artifacts, covering clean-install and validator-output retention before
+  final release asset generation.
 
 Validation commands:
 
@@ -27,6 +30,8 @@ python -m pytest backend/tests/test_phase_r12_release_audit.py -q
 python -m mypy backend/localforge/services/release_audit.py scripts/check_release_tree.py backend/tests/test_phase_r12_release_audit.py
 python -m ruff check backend/localforge/services/release_audit.py scripts/check_release_tree.py backend/tests/test_phase_r12_release_audit.py
 python scripts/check_release_tree.py --root . --scope docs/e2e/v6_2_compliance --output docs/e2e/v6_2_compliance/phase_R12/release_tree_report.json
+python scripts/check_clean_package_install.py
+python scripts/check_candidate_evidence.py
 ```
 
 Observed results:
@@ -36,4 +41,5 @@ Observed results:
 - `All checks passed!`
 - Release-tree report generation completed with exit code 0 for the compliance
   evidence scope.
-
+- Package smoke completed with exit code 0 on Windows local validation.
+- Candidate evidence validation completed with exit code 0.

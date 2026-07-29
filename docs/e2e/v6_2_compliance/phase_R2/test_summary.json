@@ -1,0 +1,31 @@
+{
+  "schema_version": "localforge.v6_2.test_summary.v1",
+  "phase": "R2",
+  "status": "EVIDENCE_READY",
+  "commands": [
+    {
+      "command": "python scripts/check_candidate_evidence.py",
+      "exit_code": 0,
+      "summary": "13 candidate manifests validated as EVIDENCE_READY"
+    },
+    {
+      "command": "python -m pytest backend/tests/test_phase_r1_release_integrity.py backend/tests/test_compliance_evidence.py backend/tests/test_phase_r12_release_audit.py -q",
+      "exit_code": 0,
+      "summary": "25 passed in 13.85s"
+    },
+    {
+      "command": "python -m mypy backend scripts/check_candidate_evidence.py scripts/check_clean_package_install.py",
+      "exit_code": 0,
+      "summary": "Success: no issues found in 224 source files"
+    },
+    {
+      "command": "python -m ruff check scripts/check_candidate_evidence.py scripts/check_clean_package_install.py backend/tests/test_phase_r1_release_integrity.py",
+      "exit_code": 0,
+      "summary": "All checks passed"
+    }
+  ],
+  "remaining_gates": [
+    "Final release asset re-download validation remains a post-merge R12 gate",
+    "Branch protection or ruleset enforcement still depends on repository owner controls"
+  ]
+}

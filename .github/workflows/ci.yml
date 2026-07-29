@@ -31,10 +31,47 @@ jobs:
         run: localforge --version
       - name: Run Ruff
         run: ruff check backend
+      - name: Validate version consistency
+        run: python scripts/check_version_consistency.py
+      - name: Validate import matrix
+        run: python scripts/check_import_matrix.py
+      - name: Validate V6.2 candidate evidence
+        run: python scripts/check_candidate_evidence.py --output artifacts/candidate-evidence.json
+      - name: Upload candidate evidence validator output
+        uses: actions/upload-artifact@v4
+        with:
+          name: candidate-evidence-${{ github.job }}
+          path: artifacts/candidate-evidence.json
+          if-no-files-found: error
       - name: Run backend tests
         run: python -m pytest backend/tests -q
       - name: Run mypy
         run: mypy backend
+
+  package-smoke:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install build frontend-free packaging dependency
+        run: python -m pip install build
+      - name: Build sdist/wheel and clean-install package
+        run: python scripts/check_clean_package_install.py --output artifacts/package-smoke-${{ matrix.os }}.json
+      - name: Upload package smoke output
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-smoke-${{ matrix.os }}
+          path: artifacts/package-smoke-${{ matrix.os }}.json
+          if-no-files-found: error
 
   frontend:
     runs-on: ubuntu-latest

@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=75", "wheel"]
+requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,12 +8,12 @@ version = "6.2.0"
 description = "Economy-aware control plane for auditable software-engineering agents"
 readme = "README.md"
 requires-python = ">=3.11"
-license = { file = "LICENSE" }
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [{ name = "Adilio Farias" }]
 keywords = ["ai-agents", "software-engineering", "local-models", "llm", "automation"]
 classifiers = [
   "Development Status :: 4 - Beta",
-  "License :: OSI Approved :: MIT License",
   "Operating System :: OS Independent",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
@@ -44,6 +44,7 @@ dev = [
   "mypy>=1.11,<2.0",
   "types-PyYAML>=6.0,<7.0",
   "pre-commit>=3.8,<4.0",
+  "build>=1.2,<2.0",
 ]
 
 [project.scripts]
@@ -55,6 +56,7 @@ Issues = "https://github.com/Masteradilio/local_forge_os/issues"
 
 [tool.setuptools.packages.find]
 where = ["backend"]
+exclude = ["tests", "tests.*"]
 
 [tool.pytest.ini_options]
 testpaths = ["backend/tests"]

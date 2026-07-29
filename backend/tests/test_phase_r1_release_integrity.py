@@ -5,6 +5,7 @@ import sqlite3
 import subprocess
 import sys
 import venv
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -17,6 +18,8 @@ from localforge.storage.bootstrap import (
 )
 from localforge.storage.database import DatabaseManager
 from sqlalchemy import text
+
+import scripts.check_clean_package_install as package_smoke
 
 
 def _run(command: list[str], *, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
@@ -47,6 +50,98 @@ def test_public_import_matrix_runs_in_clean_interpreter() -> None:
     assert "localforge.services.compliance_evidence" in payload["imported"]
 
 
+def test_candidate_evidence_check_script_accepts_committed_manifests() -> None:
+    result = _run([sys.executable, "scripts/check_candidate_evidence.py"])
+
+    assert result.returncode == 0, result.stderr or result.stdout
+    payload = json.loads(result.stdout)
+    assert payload["passed"] is True
+    assert payload["manifest_count"] >= 12
+
+
+def test_package_smoke_script_reports_failed_build(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    def fake_run(
+        command: list[str],
+        *,
+        cwd: Path | None = None,
+        env: dict[str, str] | None = None,
+        capture_output: bool = True,
+        text: bool = True,
+        check: bool = False,
+        encoding: str = "utf-8",
+        errors: str = "replace",
+    ) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(command, 2, "", "build failed")
+
+    monkeypatch.setattr(package_smoke.subprocess, "run", fake_run)
+
+    assert package_smoke.main([]) == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["passed"] is False
+    assert payload["commands"][0]["exit_code"] == 2
+
+
+def test_package_smoke_script_discovers_single_sdist_and_wheel(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    dist_dir_holder: dict[str, Path] = {}
+
+    class FakeTemporaryDirectory:
+        def __init__(self, prefix: str) -> None:
+            self.path = tmp_path / prefix.rstrip("-")
+
+        def __enter__(self) -> str:
+            self.path.mkdir(parents=True, exist_ok=True)
+            return str(self.path)
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+    def fake_run(
+        command: list[str],
+        *,
+        cwd: Path | None = None,
+        env: dict[str, str] | None = None,
+        capture_output: bool = True,
+        text: bool = True,
+        check: bool = False,
+        encoding: str = "utf-8",
+        errors: str = "replace",
+    ) -> subprocess.CompletedProcess[str]:
+        if "-m" in command and "build" in command:
+            outdir = Path(command[command.index("--outdir") + 1])
+            dist_dir_holder["path"] = outdir
+            outdir.mkdir(parents=True, exist_ok=True)
+            with zipfile.ZipFile(outdir / "localforge_os-6.2.0-py3-none-any.whl", "w") as wheel_archive:
+                wheel_archive.writestr("localforge/__init__.py", "")
+            (outdir / "localforge_os-6.2.0.tar.gz").write_text("sdist", encoding="utf-8")
+        return subprocess.CompletedProcess(command, 0, "ok", "")
+
+    class FakeEnvBuilder:
+        def __init__(self, *, with_pip: bool, system_site_packages: bool) -> None:
+            self.with_pip = with_pip
+            self.system_site_packages = system_site_packages
+
+        def create(self, venv_dir: Path) -> None:
+            scripts_dir = venv_dir / ("Scripts" if sys.platform == "win32" else "bin")
+            scripts_dir.mkdir(parents=True, exist_ok=True)
+            (scripts_dir / ("python.exe" if sys.platform == "win32" else "python")).write_text("", encoding="utf-8")
+
+    monkeypatch.setattr(package_smoke.tempfile, "TemporaryDirectory", FakeTemporaryDirectory)
+    monkeypatch.setattr(package_smoke.subprocess, "run", fake_run)
+    monkeypatch.setattr(package_smoke.venv, "EnvBuilder", FakeEnvBuilder)
+    monkeypatch.setattr(package_smoke.shutil, "rmtree", lambda *args, **kwargs: None)
+
+    assert package_smoke.main([]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["passed"] is True
+    assert payload["artifacts"] == [
+        "localforge_os-6.2.0-py3-none-any.whl",
+        "localforge_os-6.2.0.tar.gz",
+    ]
+    assert dist_dir_holder["path"].name == "dist"
+
+
 def test_wheel_install_cli_and_import_smoke_without_pythonpath(tmp_path: Path) -> None:
     wheelhouse = tmp_path / "wheelhouse"
     result = _run([sys.executable, "-m", "pip", "wheel", ".", "--no-deps", "-w", str(wheelhouse)])
@@ -54,6 +149,8 @@ def test_wheel_install_cli_and_import_smoke_without_pythonpath(tmp_path: Path) -
 
     wheels = sorted(wheelhouse.glob("localforge_os-6.2.0-*.whl"))
     assert len(wheels) == 1
+    with zipfile.ZipFile(wheels[0]) as wheel_archive:
+        assert not any(name.startswith("tests/") for name in wheel_archive.namelist())
 
     venv_dir = tmp_path / "install-env"
     venv.EnvBuilder(with_pip=True, system_site_packages=True).create(venv_dir)

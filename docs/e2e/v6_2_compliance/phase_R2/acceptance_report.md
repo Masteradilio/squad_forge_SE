@@ -22,12 +22,22 @@ assets, and the final manifest schema.
 | Trusted GitHub metadata contract | `ACCEPTED` requires consistent `github_metadata` for PR number, head commit, merge commit, CI URL/conclusion, release tag, human review, and direct-main status. |
 | Self-review and direct-main rejection | Validator tests reject direct-to-main implementation evidence and self-review evidence. |
 | Real manifest validation | Current V6.2 candidate manifests under `docs/e2e/v6_2_compliance/phase_R*/candidate_manifest.json` validate as `EVIDENCE_READY`. |
+| CI candidate evidence validation | `scripts/check_candidate_evidence.py` validates every committed V6.2 candidate manifest and `.github/workflows/ci.yml` uploads the JSON validator output for compliance PR heads. |
 
 ## Validation Commands
 
 ```text
 python -m pytest backend/tests/test_compliance_evidence.py -q
 15 passed in 1.57s
+
+python scripts/check_candidate_evidence.py
+exit code 0
+
+python -m mypy scripts/check_candidate_evidence.py
+Success: no issues found
+
+python -m ruff check scripts/check_candidate_evidence.py
+All checks passed!
 ```
 
 ## Remote CI Context

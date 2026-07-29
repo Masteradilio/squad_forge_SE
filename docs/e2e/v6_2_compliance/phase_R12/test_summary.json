@@ -1,0 +1,36 @@
+{
+  "schema_version": "localforge.v6_2.test_summary.v1",
+  "phase": "R12",
+  "status": "EVIDENCE_READY",
+  "commands": [
+    {
+      "command": "python scripts/check_release_tree.py --root . --scope docs/e2e/v6_2_compliance --output docs/e2e/v6_2_compliance/phase_R12/release_tree_report.json",
+      "exit_code": 0,
+      "summary": "Release-tree report generated for V6.2 compliance evidence scope"
+    },
+    {
+      "command": "python scripts/check_clean_package_install.py",
+      "exit_code": 0,
+      "summary": "Package smoke passed on Windows local validation with sdist, wheel, isolated install, import, version, and CLI help checks"
+    },
+    {
+      "command": "python scripts/check_candidate_evidence.py",
+      "exit_code": 0,
+      "summary": "13 candidate manifests validated as EVIDENCE_READY"
+    },
+    {
+      "command": "python -m pytest backend/tests/test_phase_r1_release_integrity.py backend/tests/test_compliance_evidence.py backend/tests/test_phase_r12_release_audit.py -q",
+      "exit_code": 0,
+      "summary": "25 passed in 13.85s"
+    },
+    {
+      "command": "python -m pytest backend/tests -q",
+      "exit_code": 0,
+      "summary": "334 passed in 49.18s"
+    }
+  ],
+  "remaining_gates": [
+    "Fresh Linux and Windows package smoke must pass in GitHub Actions",
+    "Final ACCEPTED evidence, release tag, release assets, SBOM, and re-download validation remain post-merge gates"
+  ]
+}

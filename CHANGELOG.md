@@ -50,6 +50,9 @@ All notable changes to LocalForge OS will be documented in this file.
   bearer-token verification, stable provider event idempotency keys, bounded
   payloads, replay windows, provider rate limits, recursive untrusted-text
   sanitization, and a guard that rejects direct unverified `EVENT` triggers.
+- Added schema version 17 for persisted loop triage input, classification,
+  decision text, and scheduler task IDs; restart recovery now reuses persisted
+  triage identity and no longer invents default actionable loop items.
 - Added Phase R5 candidate evidence under
   `docs/e2e/v6_2_compliance/phase_R5/`.
 - Added persisted runner lease fencing metadata to dispatch logs and path lease

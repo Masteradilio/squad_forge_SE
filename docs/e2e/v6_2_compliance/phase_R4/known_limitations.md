@@ -6,6 +6,9 @@
 - Authenticated provider-neutral external events now require signed or bearer
   credentials, bounded payloads, replay windows, provider rate limits, stable
   provider event IDs, and persisted idempotency keys.
+- LoopRun triage input, classification, decision, and scheduler task IDs are
+  persisted through schema version 17; restart recovery reuses that identity
+  instead of inventing default actionable work.
 - Pause prevents new due-schedule claims; kill/restart cascade over scheduler
   runs, task runs, subprocesses, RunnerPool leases, PathLeases, worktrees, and
   external reservations remains incomplete.

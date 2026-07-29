@@ -485,7 +485,10 @@ async def test_loop_coordinator_pause_and_resume(db_manager) -> None:
             loop_id=created_loop.id,  # type: ignore[arg-type]
             trigger_kind=TriggerKind.MANUAL,
             idempotency_key="pause_key_001",
-            payload={"force_actionable": True},
+            payload={
+                "force_actionable": True,
+                "items": [{"external_id": "pause-item", "title": "Pause test item"}],
+            },
         )
         assert run.status == LoopRunStatus.RUNNING
 
@@ -536,6 +539,10 @@ async def test_loop_coordinator_restart_recovery(db_manager) -> None:
             trigger_kind=TriggerKind.CRON,
             idempotency_key="interrupted_key_999",
             triage_verdict=LoopRunVerdict.PENDING,
+            triage_input={
+                "force_actionable": True,
+                "items": [{"external_id": "restart-item", "title": "Recover persisted item"}],
+            },
         )
         await uow.loops.create_loop_run(interrupted_run)
 
@@ -543,4 +550,50 @@ async def test_loop_coordinator_restart_recovery(db_manager) -> None:
         recovered = await uow.loop_coordinator.recover_pending_loops(project.id)  # type: ignore[arg-type]
         assert len(recovered) == 1
         assert recovered[0].idempotency_key == "interrupted_key_999"
-        assert recovered[0].status in (LoopRunStatus.NO_OP, LoopRunStatus.RUNNING)
+        assert recovered[0].status == LoopRunStatus.RUNNING
+        assert recovered[0].triage_classification == "ACTIONABLE"
+        assert recovered[0].triage_task_ids
+        second_recovery = await uow.loop_coordinator.recover_pending_loops(project.id)  # type: ignore[arg-type]
+        assert len(second_recovery) == 1
+        assert second_recovery[0].triage_task_ids == recovered[0].triage_task_ids
+        items = await uow.loops.list_items_for_run(recovered[0].id or 0)
+        assert len(items) == 1
+
+
+@pytest.mark.asyncio
+async def test_loop_coordinator_does_not_invent_actionable_items(db_manager) -> None:
+    """R4: force_actionable without concrete items is persisted as NO_OP, not fake work."""
+    async with UnitOfWork(db_manager) as uow:
+        assert uow.projects is not None
+        assert uow.loops is not None
+        assert uow.loop_coordinator is not None
+        assert uow.tasks is not None
+
+        project = await uow.projects.create_project(
+            domain.Project(
+                name="No Fake Actionable",
+                root_path="E:/tmp/no_fake_actionable",
+                default_branch="main",
+            )
+        )
+        loop_def = await uow.loops.create_loop(
+            domain.LoopDefinition(
+                project_id=project.id,  # type: ignore[arg-type]
+                name="No Fake Loop",
+                repository_path="E:/tmp/no_fake_actionable",
+            )
+        )
+
+        run = await uow.loop_coordinator.trigger_loop(
+            loop_id=loop_def.id or 0,
+            trigger_kind=TriggerKind.MANUAL,
+            idempotency_key="no_fake_actionable",
+            payload={"force_actionable": True},
+        )
+
+        assert run.status == LoopRunStatus.NO_OP
+        assert run.triage_classification == "NO_OP"
+        assert run.triage_decision == "force_actionable supplied without concrete items."
+        assert run.triage_input == {"force_actionable": True}
+        assert run.scheduler_run_id is None
+        assert await uow.tasks.list_tasks_for_project(project.id or 0) == []

@@ -4,12 +4,13 @@
 
 `EVIDENCE_READY`
 
-Phase R4 adds a schedule runtime for interval and cron loops plus a verified
-external-event adapter. It validates schedules, defines timezone behavior,
-persists schedule state in `LoopTrigger.metadata`, claims due schedules once,
-and lets the coordinator execute claimed schedules through the durable
-`trigger_loop()` path. External events now enter through
-`LoopCoordinator.trigger_external_event()` or the dedicated webhook route.
+Phase R4 adds a schedule runtime for interval and cron loops, a verified
+external-event adapter, and persisted triage/recovery state for loop runs. It
+validates schedules, defines timezone behavior, persists schedule state in
+`LoopTrigger.metadata`, claims due schedules once, and lets the coordinator
+execute claimed schedules through the durable `trigger_loop()` path. External
+events now enter through `LoopCoordinator.trigger_external_event()` or the
+dedicated webhook route.
 
 This is candidate evidence only. Final R4 acceptance still requires provider
 complete kill cascade over worker subprocesses/resources and restart
@@ -32,23 +33,24 @@ reconciliation of the entire ownership tree.
 | External replay idempotency | Stable idempotency keys use `external:{loop_id}:{provider}:{event_id}` and replay returns the persisted `LoopRun` without duplicate tasks. |
 | Untrusted payload sanitization | External payload text is recursively control-character stripped, prompt-injection phrases are removed, HTML is escaped, and field/string lengths are bounded before triage/task creation. |
 | EVENT bypass guard | Direct `TriggerKind.EVENT` calls to `trigger_loop()` are rejected unless they carry the internal verified-envelope marker produced by the adapter. |
+| Persisted triage evidence | `LoopRun` now stores triage input, classification, decision text, and resulting scheduler task IDs through schema version 17. |
+| No fake actionable default | `force_actionable` without concrete items is persisted as `NO_OP` and creates no scheduler run or synthetic task. |
+| Restart/retry identity | Recovery reuses `LoopRun.triage_input`, stable item idempotency keys, existing scheduler task IDs, and does not duplicate work after task creation. |
 
 ## Validation Commands
 
 ```text
 python -m pytest backend/tests/test_phase_r4_loop_runtime.py backend/tests/test_phase6_loop_control_plane.py -q
-17 passed in 1.11s
+18 passed in 1.32s
 
-python -m mypy backend/localforge/services/external_events.py backend/localforge/services/loop_service.py backend/localforge/services/loop_coordinator.py backend/localforge/api/routes/loops.py backend/localforge/api/schemas.py backend/tests/test_phase6_loop_control_plane.py
-Success: no issues found in 6 source files
+python -m mypy backend/localforge/models/loop.py backend/localforge/storage/orm.py backend/localforge/storage/bootstrap.py backend/localforge/services/loop_service.py backend/localforge/services/loop_coordinator.py backend/tests/test_phase6_loop_control_plane.py backend/tests/test_phase6_circuit_breakers.py
+Success: no issues found in 7 source files
 
-python -m ruff check backend/localforge/services/external_events.py backend/localforge/services/loop_service.py backend/localforge/services/loop_coordinator.py backend/localforge/api/routes/loops.py backend/localforge/api/schemas.py backend/tests/test_phase6_loop_control_plane.py
+python -m ruff check backend/localforge/models/loop.py backend/localforge/storage/orm.py backend/localforge/storage/bootstrap.py backend/localforge/services/loop_service.py backend/localforge/services/loop_coordinator.py backend/tests/test_phase6_loop_control_plane.py backend/tests/test_phase6_circuit_breakers.py
 All checks passed!
 ```
 
 ## Remaining Acceptance Requirements
 
-- Restart before/after triage is idempotent for existing run/item identity, but
-  full ownership-tree reconciliation remains open.
 - Kill does not yet terminate actual controlled worker subprocesses or release
   every RunnerPool, PathLease, worktree, and external action reservation.

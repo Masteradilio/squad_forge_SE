@@ -14,7 +14,7 @@ from localforge.storage.orm import Base, SchemaVersionORM
 
 logger = logging.getLogger(__name__)
 
-CURRENT_VERSION = 16
+CURRENT_VERSION = 17
 
 
 class UnsupportedSchemaVersionError(RuntimeError):
@@ -316,6 +316,39 @@ async def bootstrap_database(db_manager: DatabaseManager) -> int:
                     if "heartbeat_at" not in dispatch_column_names:
                         await conn.execute(
                             text("ALTER TABLE runner_dispatch_logs ADD COLUMN heartbeat_at DATETIME")
+                        )
+
+                if current_version < 17:
+                    loop_run_columns = await conn.execute(text("PRAGMA table_info(loop_runs)"))
+                    loop_run_column_names = {str(row[1]) for row in loop_run_columns.fetchall()}
+                    if "triage_input_json" not in loop_run_column_names:
+                        await conn.execute(
+                            text(
+                                "ALTER TABLE loop_runs "
+                                "ADD COLUMN triage_input_json JSON NOT NULL DEFAULT '{}'"
+                            )
+                        )
+                    if "triage_classification" not in loop_run_column_names:
+                        await conn.execute(
+                            text(
+                                "ALTER TABLE loop_runs "
+                                "ADD COLUMN triage_classification VARCHAR(50) "
+                                "NOT NULL DEFAULT 'PENDING'"
+                            )
+                        )
+                    if "triage_decision" not in loop_run_column_names:
+                        await conn.execute(
+                            text(
+                                "ALTER TABLE loop_runs "
+                                "ADD COLUMN triage_decision TEXT NOT NULL DEFAULT 'PENDING'"
+                            )
+                        )
+                    if "triage_task_ids_json" not in loop_run_column_names:
+                        await conn.execute(
+                            text(
+                                "ALTER TABLE loop_runs "
+                                "ADD COLUMN triage_task_ids_json JSON NOT NULL DEFAULT '[]'"
+                            )
                         )
 
             # Phase 10 / Schema v15 Migration: Memory provenance columns and memory_relations table

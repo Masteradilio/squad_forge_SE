@@ -244,7 +244,10 @@ async def test_kill_loop_run(db_manager) -> None:
             loop_id=created_loop.id,  # type: ignore[arg-type]
             trigger_kind=TriggerKind.MANUAL,
             idempotency_key="kill_key_001",
-            payload={"force_actionable": True},
+            payload={
+                "force_actionable": True,
+                "items": [{"external_id": "kill-item", "title": "Kill test item"}],
+            },
         )
 
         assert run.id is not None

@@ -55,6 +55,10 @@ class LoopRun(BaseModel):
     triage_verdict: LoopRunVerdict = LoopRunVerdict.PENDING
     scheduler_run_id: int | None = None
     items_processed: int = 0
+    triage_input: dict[str, Any] = Field(default_factory=dict)
+    triage_classification: str = "PENDING"
+    triage_decision: str = "PENDING"
+    triage_task_ids: list[int] = Field(default_factory=list)
     cost_usd: float = 0.0
     started_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     completed_at: datetime | None = None

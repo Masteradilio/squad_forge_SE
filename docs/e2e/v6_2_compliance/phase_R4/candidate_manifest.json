@@ -15,7 +15,6 @@
   "verdict": "EVIDENCE_READY",
   "known_limitations": [
     "Candidate evidence is not final release acceptance.",
-    "Full triage persistence and retry identity remain required.",
     "Full pause/kill/recovery ownership cascade remains required."
   ],
   "commands": [
@@ -24,15 +23,19 @@
       "exit_code": 0
     },
     {
-      "command": "python -m mypy backend\\localforge\\services\\external_events.py backend\\localforge\\services\\loop_service.py backend\\localforge\\services\\loop_coordinator.py backend\\localforge\\api\\routes\\loops.py backend\\localforge\\api\\schemas.py backend\\tests\\test_phase6_loop_control_plane.py",
+      "command": "python -m pytest backend\\tests\\test_phase6_loop_control_plane.py backend\\tests\\test_phase_r4_loop_runtime.py backend\\tests\\test_phase6_circuit_breakers.py backend\\tests\\test_phase_r1_release_integrity.py -q",
       "exit_code": 0
     },
     {
-      "command": "python -m ruff check backend\\localforge\\services\\external_events.py backend\\localforge\\services\\loop_service.py backend\\localforge\\services\\loop_coordinator.py backend\\localforge\\api\\routes\\loops.py backend\\localforge\\api\\schemas.py backend\\tests\\test_phase6_loop_control_plane.py",
+      "command": "python -m mypy backend\\localforge\\models\\loop.py backend\\localforge\\storage\\orm.py backend\\localforge\\storage\\bootstrap.py backend\\localforge\\services\\external_events.py backend\\localforge\\services\\loop_service.py backend\\localforge\\services\\loop_coordinator.py backend\\localforge\\api\\routes\\loops.py backend\\localforge\\api\\schemas.py backend\\tests\\test_phase6_loop_control_plane.py backend\\tests\\test_phase6_circuit_breakers.py",
+      "exit_code": 0
+    },
+    {
+      "command": "python -m ruff check backend\\localforge\\models\\loop.py backend\\localforge\\storage\\orm.py backend\\localforge\\storage\\bootstrap.py backend\\localforge\\services\\external_events.py backend\\localforge\\services\\loop_service.py backend\\localforge\\services\\loop_coordinator.py backend\\localforge\\api\\routes\\loops.py backend\\localforge\\api\\schemas.py backend\\tests\\test_phase6_loop_control_plane.py backend\\tests\\test_phase6_circuit_breakers.py",
       "exit_code": 0
     }
   ],
-  "manifest_sha256": "bd3b2888cd5685fa192b1fd42223de551593195d7c60d908e76ba6c2fa9a9868",
+  "manifest_sha256": "00496f74cca4387b904e76cca971e2b5140ef352ceb3a56d480d61199f390a7c",
   "environment": {
     "os": "windows-local-and-github-actions-matrix",
     "python": "3.11-local / 3.12-ci",
@@ -43,16 +46,20 @@
     "Candidate evidence remains EVIDENCE_READY until reviewed PR, merge commit, exact-head CI, owner-approved tag, and final release validation exist."
   ],
   "input_hashes": {
-    "docs/e2e/v6_2_compliance/phase_R4/acceptance_report.md": "ac74dfa0af486f3df534d1b2297977c27ca9dcf693812c784fe55e1386ee101e",
-    "docs/e2e/v6_2_compliance/phase_R4/known_limitations.md": "e09da3d480b52cb6d74b4670ee542292bde2e681cc5fe6c9dbc1ee225089c9c2",
+    "docs/e2e/v6_2_compliance/phase_R4/acceptance_report.md": "b4580574492788a99ed875c5dd6b074196fc3148fe9997d37b4a7d65766629e8",
+    "docs/e2e/v6_2_compliance/phase_R4/known_limitations.md": "0cc752ccc4ca2c9f00d9db2f087a541f352bbad5f15e7f9c7d6320792fd8713d",
+    "backend/localforge/models/loop.py": "63de4375594e4770d80b7675e5ff8468905593d2896d4e40aba8160510d1cd0d",
+    "backend/localforge/storage/orm.py": "c25a5711eb42a3a714f87db2f1a45604e1d264f7399189bffa40d2d0424ab99e",
+    "backend/localforge/storage/bootstrap.py": "c24257063d6948e4f1a3695a06b22b7683e3b3e2d4795c548b404dc57b3ac79e",
     "backend/localforge/services/external_events.py": "1fb880552168098b2d39c5568bc11ad7c09032a1414a4a6e3b4b4017cfb84a77",
-    "backend/localforge/services/loop_service.py": "04e8aebacb1b3788b2f80f362334a419665a06479fc46d76764a56d920c1b661",
-    "backend/localforge/services/loop_coordinator.py": "19282f39ba124ba76eae3af2d16a6e5f9fa8e3f94b70dc9184b074ec711452b7",
+    "backend/localforge/services/loop_service.py": "5ef7cbb95896e9e061331ae98b62b8d399891c73254be6f6080116ce1badb2c1",
+    "backend/localforge/services/loop_coordinator.py": "e1c3b446c81ab9c70fba0dfbef88fe0cd7d9dee755444c27f4ef43f93cb6ff78",
     "backend/localforge/api/routes/loops.py": "341b126e8c4087423c8a9c9af5fb54f8ff40408f90f3e3bc888a3b3286bbd946",
     "backend/localforge/api/schemas.py": "2db44bea65f86d2fa6c0150a95d60cdff8ca45bec8e621c093249064120718e5",
-    "backend/tests/test_phase6_loop_control_plane.py": "63718ae3850beca45b5fc1fcc850dd4a3365dec844bef987d1e16073603f50c9",
+    "backend/tests/test_phase6_loop_control_plane.py": "85888bff53728f9de3050e6c4f798f860a3d228838755a72edfa6d6574873fd3",
+    "backend/tests/test_phase6_circuit_breakers.py": "59871be8598a63a97e33688b72859cf84e53c1ebd1d803aaf004c1d287934b7f",
     "backend/tests/test_phase_r4_loop_runtime.py": "7041c5efdface23058b2be1d4ce966ae028e16cdc9088f3f901685d14f6f5832",
-    "docs/compliance_backlog_V6-1.md": "da657db57f662303e5a2605ac0d479d33b34301a0afd82051c3ca96bc2d296e8",
-    "CHANGELOG.md": "517137138ce5944fa2c9402f66156ffe39c4796a2a873cb294c9805371f7eb34"
+    "docs/compliance_backlog_V6-1.md": "16c525e5760223044a91df528a4f6344bebf31f5703b25a986e703d2cedb59da",
+    "CHANGELOG.md": "36d7818bff703bfdb4d5f583d318d101aafb49150f64d0c437ec4ecd62232d3e"
   }
 }

@@ -194,6 +194,10 @@ class LoopService:
 
         orm_obj.scheduler_run_id = loop_run.scheduler_run_id
         orm_obj.items_processed = loop_run.items_processed
+        orm_obj.triage_input_json = loop_run.triage_input
+        orm_obj.triage_classification = loop_run.triage_classification
+        orm_obj.triage_decision = loop_run.triage_decision
+        orm_obj.triage_task_ids_json = loop_run.triage_task_ids
         orm_obj.cost_usd = loop_run.cost_usd
         orm_obj.completed_at = loop_run.completed_at
         orm_obj.error_message = loop_run.error_message

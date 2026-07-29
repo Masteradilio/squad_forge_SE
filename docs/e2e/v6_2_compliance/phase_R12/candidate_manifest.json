@@ -27,7 +27,7 @@
     "docs/e2e/v6_2_compliance/phase_R12/acceptance_report.md": "36b6db886cb328ecb80a6f3ef984cf74cf72eafe3a72dcba289100ac6ff5a960",
     "docs/e2e/v6_2_compliance/phase_R12/test_summary.json": "6d7d3cf11ed94beb0779ac6e2131518900728a607e820a80b0f41d8ace9b5a6c",
     "docs/e2e/v6_2_compliance/phase_R12/known_limitations.md": "092e15475c86a5f6850e78dddd1aa68f45df0fb6142e8cbd7e8e4b93068b9e53",
-    "docs/e2e/v6_2_compliance/phase_R12/release_tree_report.json": "69b3da7fad56eda9581b162b3f097c1e45dbcea3d81ad04d1f2cb4d49fe1077e"
+    "docs/e2e/v6_2_compliance/phase_R12/release_tree_report.json": "90249621a3a70ac6198e982fca5858d97257cb3f6c36e4519cda652e3046ee02"
   },
   "known_limitations": [
     "Candidate evidence is not final release acceptance.",
@@ -51,7 +51,7 @@
       "exit_code": 0
     }
   ],
-  "manifest_sha256": "d510e8a9a97ab3957ab9fab52f5f8c07e64eea376e8861882999d280879f41db",
+  "manifest_sha256": "48f0140c3d7aaa202662fbb87f93f08142b65069d9963378e74119162cdf12c1",
   "environment": {
     "os": "windows-local-and-github-actions-matrix",
     "python": "3.11-local / 3.12-ci",

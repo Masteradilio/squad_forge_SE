@@ -1036,6 +1036,12 @@ class LoopRunORM(Base):
         ForeignKey("runs.id", ondelete="SET NULL"), nullable=True
     )
     items_processed: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    triage_input_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    triage_classification: Mapped[str] = mapped_column(
+        String(50), default="PENDING", nullable=False
+    )
+    triage_decision: Mapped[str] = mapped_column(Text, default="PENDING", nullable=False)
+    triage_task_ids_json: Mapped[list[int]] = mapped_column(JSON, default=list, nullable=False)
     cost_usd: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     started_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -1051,6 +1057,10 @@ class LoopRunORM(Base):
             triage_verdict=enums.LoopRunVerdict(self.triage_verdict),
             scheduler_run_id=self.scheduler_run_id,
             items_processed=self.items_processed,
+            triage_input=self.triage_input_json,
+            triage_classification=self.triage_classification,
+            triage_decision=self.triage_decision,
+            triage_task_ids=self.triage_task_ids_json,
             cost_usd=self.cost_usd,
             started_at=self.started_at,
             completed_at=self.completed_at,
@@ -1072,6 +1082,10 @@ class LoopRunORM(Base):
             else str(d.triage_verdict),
             scheduler_run_id=d.scheduler_run_id,
             items_processed=d.items_processed,
+            triage_input_json=d.triage_input,
+            triage_classification=d.triage_classification,
+            triage_decision=d.triage_decision,
+            triage_task_ids_json=d.triage_task_ids,
             cost_usd=d.cost_usd,
             started_at=d.started_at,
             completed_at=d.completed_at,

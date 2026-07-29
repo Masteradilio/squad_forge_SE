@@ -120,6 +120,7 @@ class LoopCoordinator:
             trigger_kind=trigger_kind,
             idempotency_key=key,
             triage_verdict=LoopRunVerdict.PENDING,
+            triage_input=payload or {},
             started_at=current_time,
         )
         loop_run = await self.loop_service.create_loop_run(loop_run)
@@ -130,97 +131,11 @@ class LoopCoordinator:
             details=f"Loop {loop_id} triggered via {trigger_kind} (key: {key})",
         )
 
-        # Run cheap triage
-        if payload and "detector_error" in payload:
-            error_message = str(payload["detector_error"])
-            loop_run.status = LoopRunStatus.FAILED
-            loop_run.triage_verdict = LoopRunVerdict.FAILED
-            loop_run.error_message = f"Detector failed: {error_message}"
-            loop_run.completed_at = datetime.now(UTC)
-            loop_run = await self.loop_service.update_loop_run(loop_run)
-            await self._log_audit_event(
-                project_id=loop_def.project_id,
-                details=f"Loop {loop_id} detector failed: {error_message[:500]}",
-            )
-            await self._update_loop_snapshot(loop_id, active_run_id=None)
-            return loop_run
-
-        is_actionable, items = await self._run_cheap_triage(loop_def, payload)
-
-        if not is_actionable:
-            # Triage verdict: NO_OP
-            loop_run.status = LoopRunStatus.NO_OP
-            loop_run.triage_verdict = LoopRunVerdict.NO_OP
-            loop_run.completed_at = datetime.now(UTC)
-            loop_run = await self.loop_service.update_loop_run(loop_run)
-
-            await self._log_audit_event(
-                project_id=loop_def.project_id,
-                details=(
-                    f"Loop {loop_id} run {loop_run.id} triaged as NO_OP. No scheduler run created."
-                ),
-            )
-
-            # Update snapshot
-            await self._update_loop_snapshot(loop_id, active_run_id=None)
-            return loop_run
-
-        # Triage verdict: ACTIONABLE -> Create scheduler Run
-        loop_run.triage_verdict = LoopRunVerdict.ACTIONABLE
-        loop_run.status = LoopRunStatus.RUNNING
-
-        new_run = domain.Run(
-            project_id=loop_def.project_id,
-            mode=RunMode.UNATTENDED,
-            status=RunStatus.PENDING,
-            initiated_by="loop_coordinator",
+        return await self._complete_loop_run_triage(
+            loop_def=loop_def,
+            loop_run=loop_run,
+            payload=payload,
         )
-
-        scheduler_run = await self.execution_service.create_run(new_run)
-        loop_run.scheduler_run_id = scheduler_run.id
-
-        # Persist actionable items
-        processed_count = 0
-        for item_data in items:
-            item_key = f"{key}_item_{item_data.get('external_id', processed_count)}"
-            existing_item = await self.loop_service.get_loop_item_by_idempotency_key(item_key)
-            if not existing_item:
-                item = domain.LoopItem(
-                    loop_run_id=loop_run.id,  # type: ignore[arg-type]
-                    external_id=str(item_data.get("external_id", processed_count)),
-                    title=str(item_data.get("title", f"Loop Item {processed_count}")),
-                    payload=item_data,
-                    status="ACTIONABLE",
-                    idempotency_key=item_key,
-                )
-                created_item = await self.loop_service.create_loop_item(item)
-                created_task = await self._create_task_for_loop_item(
-                    loop_def=loop_def,
-                    item=created_item,
-                    ordinal=processed_count,
-                )
-                created_item.scheduler_task_id = created_task.id
-                created_item.status = "TASK_CREATED"
-                await self.loop_service.update_loop_item(created_item)
-                processed_count += 1
-
-        loop_run.items_processed = processed_count
-        loop_run = await self.loop_service.update_loop_run(loop_run)
-
-        # Update loop status & snapshot
-        await self.loop_service.update_loop_status(loop_id, status=LoopStatus.RUNNING)
-        await self._update_loop_snapshot(loop_id, active_run_id=loop_run.id)
-
-        await self._log_audit_event(
-            project_id=loop_def.project_id,
-            details=(
-                f"Loop {loop_id} run {loop_run.id} created scheduler Run "
-                f"{scheduler_run.id} with {processed_count} actionable items."
-            ),
-            execution_id=scheduler_run.id,
-        )
-
-        return loop_run
 
     async def trigger_external_event(
         self,
@@ -311,27 +226,137 @@ class LoopCoordinator:
             )
         )
 
+    async def _complete_loop_run_triage(
+        self,
+        *,
+        loop_def: domain.LoopDefinition,
+        loop_run: domain.LoopRun,
+        payload: dict[str, Any] | None,
+    ) -> domain.LoopRun:
+        loop_run.triage_input = payload or {}
+        if payload and "detector_error" in payload:
+            error_message = str(payload["detector_error"])
+            loop_run.status = LoopRunStatus.FAILED
+            loop_run.triage_verdict = LoopRunVerdict.FAILED
+            loop_run.triage_classification = "FAILED"
+            loop_run.triage_decision = f"Detector failed: {error_message}"
+            loop_run.error_message = loop_run.triage_decision
+            loop_run.completed_at = datetime.now(UTC)
+            loop_run = await self.loop_service.update_loop_run(loop_run)
+            await self._log_audit_event(
+                project_id=loop_def.project_id,
+                details=f"Loop {loop_def.id} detector failed: {error_message[:500]}",
+            )
+            await self._update_loop_snapshot(loop_def.id or 0, active_run_id=None)
+            return loop_run
+
+        is_actionable, items, decision = await self._run_cheap_triage(loop_def, payload)
+        loop_run.triage_decision = decision
+
+        if not is_actionable:
+            loop_run.status = LoopRunStatus.NO_OP
+            loop_run.triage_verdict = LoopRunVerdict.NO_OP
+            loop_run.triage_classification = "NO_OP"
+            loop_run.completed_at = datetime.now(UTC)
+            loop_run = await self.loop_service.update_loop_run(loop_run)
+            await self._log_audit_event(
+                project_id=loop_def.project_id,
+                details=(
+                    f"Loop {loop_def.id} run {loop_run.id} triaged as NO_OP. "
+                    "No scheduler run created."
+                ),
+            )
+            await self._update_loop_snapshot(loop_def.id or 0, active_run_id=None)
+            return loop_run
+
+        loop_run.triage_verdict = LoopRunVerdict.ACTIONABLE
+        loop_run.triage_classification = "ACTIONABLE"
+        loop_run.status = LoopRunStatus.RUNNING
+
+        if loop_run.scheduler_run_id is None:
+            scheduler_run = await self.execution_service.create_run(
+                domain.Run(
+                    project_id=loop_def.project_id,
+                    mode=RunMode.UNATTENDED,
+                    status=RunStatus.PENDING,
+                    initiated_by="loop_coordinator",
+                )
+            )
+            loop_run.scheduler_run_id = scheduler_run.id
+
+        processed_count = 0
+        task_ids: list[int] = []
+        for item_data in items:
+            external_id = str(item_data.get("external_id") or f"item_{processed_count + 1}")
+            item_key = f"{loop_run.idempotency_key}_item_{external_id}"
+            existing_item = await self.loop_service.get_loop_item_by_idempotency_key(item_key)
+            if existing_item:
+                if existing_item.scheduler_task_id is not None:
+                    task_ids.append(existing_item.scheduler_task_id)
+                processed_count += 1
+                continue
+            item = domain.LoopItem(
+                loop_run_id=loop_run.id,  # type: ignore[arg-type]
+                external_id=external_id,
+                title=str(item_data.get("title") or f"Loop Item {processed_count + 1}"),
+                payload=item_data,
+                status="ACTIONABLE",
+                idempotency_key=item_key,
+            )
+            created_item = await self.loop_service.create_loop_item(item)
+            created_task = await self._create_task_for_loop_item(
+                loop_def=loop_def,
+                item=created_item,
+                ordinal=processed_count,
+            )
+            created_item.scheduler_task_id = created_task.id
+            created_item.status = "TASK_CREATED"
+            await self.loop_service.update_loop_item(created_item)
+            if created_task.id is not None:
+                task_ids.append(created_task.id)
+            processed_count += 1
+
+        loop_run.items_processed = processed_count
+        loop_run.triage_task_ids = task_ids
+        loop_run = await self.loop_service.update_loop_run(loop_run)
+
+        await self.loop_service.update_loop_status(loop_def.id or 0, status=LoopStatus.RUNNING)
+        await self._update_loop_snapshot(loop_def.id or 0, active_run_id=loop_run.id)
+        await self._log_audit_event(
+            project_id=loop_def.project_id,
+            details=(
+                f"Loop {loop_def.id} run {loop_run.id} created scheduler Run "
+                f"{loop_run.scheduler_run_id} with {processed_count} actionable items."
+            ),
+            execution_id=loop_run.scheduler_run_id,
+        )
+        return loop_run
+
     async def _run_cheap_triage(
         self, loop_def: domain.LoopDefinition, payload: dict[str, Any] | None
-    ) -> tuple[bool, list[dict[str, Any]]]:
+    ) -> tuple[bool, list[dict[str, Any]], str]:
         """Perform a low-cost triage step to evaluate if actionable work exists.
 
-        Returns (is_actionable, items_list).
+        Returns (is_actionable, items_list, decision).
         """
         if payload and payload.get("force_actionable"):
-            items = payload.get("items", [{"external_id": "item_1", "title": "Manual Action Item"}])
-            return True, items
+            items = payload.get("items")
+            if isinstance(items, list) and items:
+                return True, items, "Payload explicitly requested actionable items."
+            return False, [], "force_actionable supplied without concrete items."
 
         if payload and payload.get("force_noop"):
-            return False, []
+            return False, [], "Payload explicitly requested no-op."
 
         # Default triage logic: if payload has items, it's actionable; otherwise inspect detector
         if payload and "items" in payload:
             items = payload["items"]
-            return len(items) > 0, items
+            if isinstance(items, list) and items:
+                return True, items, "Payload contained concrete items."
+            return False, [], "Payload contained no concrete items."
 
         # Production-safe default: no detector/payload means no actionable work.
-        return False, []
+        return False, [], "No detector evidence or payload items were provided."
 
     async def recover_pending_loops(self, project_id: int) -> list[domain.LoopRun]:
         """Scan and recover any pending or running loop runs after process restart."""
@@ -344,16 +369,13 @@ class LoopCoordinator:
                 if run.status in (LoopRunStatus.TRIAGING, LoopRunStatus.RUNNING):
                     logger.info(f"Recovering pending loop run {run.id} for loop {loop_def.id}")
                     if run.status == LoopRunStatus.TRIAGING:
-                        # Re-run triage
-                        is_actionable, items = await self._run_cheap_triage(loop_def, None)
-                        if not is_actionable:
-                            run.status = LoopRunStatus.NO_OP
-                            run.triage_verdict = LoopRunVerdict.NO_OP
-                            run.completed_at = datetime.now(UTC)
-                        else:
-                            run.status = LoopRunStatus.RUNNING
-                            run.triage_verdict = LoopRunVerdict.ACTIONABLE
-                    run = await self.loop_service.update_loop_run(run)
+                        run = await self._complete_loop_run_triage(
+                            loop_def=loop_def,
+                            loop_run=run,
+                            payload=run.triage_input,
+                        )
+                    else:
+                        run = await self.loop_service.update_loop_run(run)
                     recovered_runs.append(run)
 
         return recovered_runs

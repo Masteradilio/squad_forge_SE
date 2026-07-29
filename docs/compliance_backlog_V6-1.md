@@ -492,10 +492,10 @@ ownership, idempotency, cancellation, and restart recovery.
 
 ### V61C-402 — Persist triage and actionable work
 
-- [ ] Remove default fake actionable items.
-- [ ] Persist triage input, classification, decision, and resulting task IDs.
-- [ ] Make retries reuse the same persisted identity.
-- [ ] Ensure actionable items enter the canonical Scheduler path.
+- [x] Remove default fake actionable items.
+- [x] Persist triage input, classification, decision, and resulting task IDs.
+- [x] Make retries reuse the same persisted identity.
+- [x] Ensure actionable items enter the canonical Scheduler path.
 
 ### V61C-403 — Implement full pause, kill, and recovery cascade
 
@@ -512,7 +512,7 @@ ownership, idempotency, cancellation, and restart recovery.
 
 - [x] Fake-clock interval and cron execution.
 - [x] Two coordinators cannot claim the same trigger.
-- [ ] Restart before/after triage and task creation does not duplicate work.
+- [x] Restart before/after triage and task creation does not duplicate work.
 - [x] Authenticated webhook replay is deduplicated.
 - [ ] Kill cancels actual controlled worker processes and releases resources.
 - [ ] Recovery reconciles orphaned LoopRun and Scheduler state.
@@ -523,7 +523,7 @@ ownership, idempotency, cancellation, and restart recovery.
   - Candidate R4 implementation executes manual, interval, cron, and
     authenticated external events through durable loop records; full R4
     lifecycle ownership acceptance remains open.
-- [ ] No fake actionable default remains.
+- [x] No fake actionable default remains.
 - [ ] Lifecycle actions affect the complete ownership tree.
 
 ---

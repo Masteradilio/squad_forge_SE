@@ -530,25 +530,27 @@ Make concurrent execution deterministic and restart-safe.
 
 ### V61C-500 — Harden RunnerPool reservation
 
-- [ ] Preserve atomic capacity reservation across concurrent schedulers.
-- [ ] Add lease identity, heartbeat, expiry, and owner fencing tokens.
-- [ ] Prevent a stale process from releasing or using a newer owner's lease.
+- [x] Preserve atomic capacity reservation across concurrent schedulers.
+- [x] Add lease identity, heartbeat, expiry, and owner fencing tokens.
+- [x] Prevent a stale process from releasing or using a newer owner's lease.
 - [ ] Implement bounded backpressure and fairness.
 - [ ] Reconcile capacity from persisted task-run truth after restart.
 
 ### V61C-501 — Make PathLease acquisition race-safe
 
-- [ ] Normalize Windows/Linux paths, separators, case rules, symlinks, and
-      repository boundaries.
-- [ ] Enforce overlap conflicts atomically at the database/transaction layer.
-- [ ] Prevent two sessions from acquiring overlapping paths after identical
-      pre-checks.
-- [ ] Associate every write lease with task run, attempt, worktree, and fencing
+- [x] Normalize Windows/Linux paths, separators, and case rules.
+- [ ] Normalize symlinks and enforce repository-boundary canonicalization.
+- [x] Enforce exact-path conflicts through a database active-lease key.
+- [ ] Enforce parent/child overlap conflicts atomically at the
+      database/transaction layer.
+- [x] Prevent two sessions from acquiring the exact same normalized path after
+      identical pre-checks.
+- [x] Associate every write lease with task run, attempt, worktree, and fencing
       token.
 
 ### V61C-502 — Add renewal, wait, and deadlock behavior
 
-- [ ] Implement lease renewal/heartbeat.
+- [x] Implement lease renewal/heartbeat.
 - [ ] Add bounded FIFO waiting with timeout and cancellation.
 - [ ] Persist the wait-for graph.
 - [ ] Detect deadlock cycles and choose a deterministic victim.
@@ -566,9 +568,10 @@ Make concurrent execution deterministic and restart-safe.
 ### Required regression tests
 
 - [ ] Concurrent database sessions race for the same path.
-- [ ] Parent/child, case, separator, symlink, and directory overlap conflicts.
-- [ ] Renewal prevents premature takeover.
-- [ ] Expired leases can be safely reclaimed with fencing.
+- [x] Case, separator, exact-path, and directory overlap conflicts.
+- [ ] Symlink and repository-boundary overlap conflicts.
+- [x] Renewal prevents premature takeover.
+- [x] Expired leases can be safely reclaimed with fencing.
 - [ ] Deadlock victim selection is deterministic.
 - [ ] Kill and restart release/reconcile all owned resources.
 - [ ] Real temporary Git worktree lifecycle is inspected on disk.
@@ -576,7 +579,8 @@ Make concurrent execution deterministic and restart-safe.
 ### Phase R5 exit gate
 
 - [ ] No silent path collision is possible in supported databases.
-- [ ] Stale owners cannot mutate after lease loss.
+- [x] Stale owners cannot release runner/path leases after lease loss when
+      fencing tokens are used.
 - [ ] Resource state survives and reconciles after restart.
 
 ---

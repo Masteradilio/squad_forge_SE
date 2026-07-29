@@ -14,7 +14,7 @@ from localforge.storage.orm import Base, SchemaVersionORM
 
 logger = logging.getLogger(__name__)
 
-CURRENT_VERSION = 15
+CURRENT_VERSION = 16
 
 
 class UnsupportedSchemaVersionError(RuntimeError):
@@ -227,6 +227,96 @@ async def bootstrap_database(db_manager: DatabaseManager) -> int:
                             "(plan_id, graph_version)"
                         )
                     )
+                if current_version < 16:
+                    path_columns = await conn.execute(text("PRAGMA table_info(path_leases)"))
+                    path_column_names = {str(row[1]) for row in path_columns.fetchall()}
+                    if "normalized_target_path" not in path_column_names:
+                        await conn.execute(
+                            text(
+                                "ALTER TABLE path_leases "
+                                "ADD COLUMN normalized_target_path TEXT NOT NULL DEFAULT ''"
+                            )
+                        )
+                        await conn.execute(
+                            text(
+                                "UPDATE path_leases "
+                                "SET normalized_target_path = replace(target_path, '\\', '/')"
+                            )
+                        )
+                    if "active_conflict_key" not in path_column_names:
+                        await conn.execute(
+                            text("ALTER TABLE path_leases ADD COLUMN active_conflict_key TEXT")
+                        )
+                        await conn.execute(
+                            text(
+                                "UPDATE path_leases "
+                                "SET active_conflict_key = normalized_target_path "
+                                "WHERE release_reason IS NULL"
+                            )
+                        )
+                    if "heartbeat_at" not in path_column_names:
+                        await conn.execute(
+                            text("ALTER TABLE path_leases ADD COLUMN heartbeat_at DATETIME")
+                        )
+                        await conn.execute(
+                            text("UPDATE path_leases SET heartbeat_at = created_at")
+                        )
+                    if "attempt_number" not in path_column_names:
+                        await conn.execute(
+                            text(
+                                "ALTER TABLE path_leases "
+                                "ADD COLUMN attempt_number INTEGER NOT NULL DEFAULT 1"
+                            )
+                        )
+                    if "worktree_path" not in path_column_names:
+                        await conn.execute(
+                            text("ALTER TABLE path_leases ADD COLUMN worktree_path TEXT")
+                        )
+                    if "fencing_token" not in path_column_names:
+                        await conn.execute(
+                            text(
+                                "ALTER TABLE path_leases "
+                                "ADD COLUMN fencing_token VARCHAR(255) NOT NULL DEFAULT ''"
+                            )
+                        )
+                        await conn.execute(
+                            text(
+                                "UPDATE path_leases "
+                                "SET fencing_token = 'legacy-path-lease-' || id "
+                                "WHERE fencing_token = ''"
+                            )
+                        )
+                    await conn.execute(
+                        text(
+                            "CREATE UNIQUE INDEX IF NOT EXISTS "
+                            "uq_path_lease_active_exact "
+                            "ON path_leases (project_id, active_conflict_key)"
+                        )
+                    )
+
+                    dispatch_columns = await conn.execute(
+                        text("PRAGMA table_info(runner_dispatch_logs)")
+                    )
+                    dispatch_column_names = {str(row[1]) for row in dispatch_columns.fetchall()}
+                    if "lease_token" not in dispatch_column_names:
+                        await conn.execute(
+                            text("ALTER TABLE runner_dispatch_logs ADD COLUMN lease_token VARCHAR(255)")
+                        )
+                    if "lease_owner_id" not in dispatch_column_names:
+                        await conn.execute(
+                            text(
+                                "ALTER TABLE runner_dispatch_logs "
+                                "ADD COLUMN lease_owner_id VARCHAR(255)"
+                            )
+                        )
+                    if "lease_expires_at" not in dispatch_column_names:
+                        await conn.execute(
+                            text("ALTER TABLE runner_dispatch_logs ADD COLUMN lease_expires_at DATETIME")
+                        )
+                    if "heartbeat_at" not in dispatch_column_names:
+                        await conn.execute(
+                            text("ALTER TABLE runner_dispatch_logs ADD COLUMN heartbeat_at DATETIME")
+                        )
 
             # Phase 10 / Schema v15 Migration: Memory provenance columns and memory_relations table
             if current_version < 15:

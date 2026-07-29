@@ -27,6 +27,7 @@ class GovernedExecutionResult:
     task_run: domain.TaskRun
     runner_context: RunnerContext | None = None
     selected_runner_id: str | None = None
+    runner_lease_token: str | None = None
     dispatch_status: str | None = None
     rejection_reasons: dict[str, str] | None = None
     final_summary: str | None = None
@@ -58,10 +59,11 @@ class GovernedExecutionService:
 
         if request.task_run.id is None:
             raise ValueError("Governed execution requires a persisted TaskRun.")
+        task_run_id = request.task_run.id
 
         selected_runner, dispatch_status, dispatch_log = await uow.runner_pool.dispatch_task(
             project_id=request.project_id,
-            task_run_id=request.task_run.id,
+            task_run_id=task_run_id,
             required_lane=request.required_lane,
             required_tools=list(request.required_tools),
             required_task_type=request.required_task_type,
@@ -90,7 +92,12 @@ class GovernedExecutionService:
                 uow=uow,
             )
         except Exception as exc:
-            await uow.runner_pool.release_runner_lease(selected_runner.runner_id, success=False)
+            await uow.runner_pool.release_runner_lease(
+                selected_runner.runner_id,
+                success=False,
+                task_run_id=task_run_id,
+                lease_token=dispatch_log.lease_token,
+            )
             request.task_run.status = TaskRunStatus.FAILED
             request.task_run.final_summary = f"Runner setup failed: {exc!r}"
             await uow.tasks.update_task_run(request.task_run)
@@ -100,6 +107,7 @@ class GovernedExecutionService:
                 status="FAILED_CLOSED",
                 task_run=request.task_run,
                 selected_runner_id=selected_runner.runner_id,
+                runner_lease_token=dispatch_log.lease_token,
                 dispatch_status=dispatch_status,
                 final_summary=request.task_run.final_summary,
             )
@@ -113,6 +121,7 @@ class GovernedExecutionService:
             task_run=request.task_run,
             runner_context=runner_context,
             selected_runner_id=selected_runner.runner_id,
+            runner_lease_token=dispatch_log.lease_token,
             dispatch_status=dispatch_status,
         )
 

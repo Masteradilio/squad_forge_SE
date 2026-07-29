@@ -422,6 +422,8 @@ class Scheduler:
                                 await uow.runner_pool.release_runner_lease(
                                     governed_result.selected_runner_id,
                                     success=True,
+                                    task_run_id=task_run.id,
+                                    lease_token=governed_result.runner_lease_token,
                                 )
                         except Exception as e:
                             logger.error(
@@ -462,6 +464,8 @@ class Scheduler:
                                 await uow.runner_pool.release_runner_lease(
                                     governed_result.selected_runner_id,
                                     success=False,
+                                    task_run_id=task_run.id,
+                                    lease_token=governed_result.runner_lease_token,
                                 )
                             continue
 

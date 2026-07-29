@@ -39,6 +39,13 @@ All notable changes to LocalForge OS will be documented in this file.
   schedule validation, timezone-aware UTC persistence, misfire policy handling,
   stable idempotency keys, and due-schedule execution through
   `LoopCoordinator.trigger_due_schedules()`.
+- Added Phase R5 candidate evidence under
+  `docs/e2e/v6_2_compliance/phase_R5/`.
+- Added persisted runner lease fencing metadata to dispatch logs and path lease
+  ownership metadata covering normalized target path, active conflict key,
+  heartbeat, attempt number, worktree path, and fencing token.
+- Added R5 regression coverage for runner stale-token rejection, path lease
+  renewal, exact-path reclaim, and path separator/case normalization.
 
 #### Fixed
 - Removed the clean-interpreter import cycle exposed by importing
@@ -58,6 +65,11 @@ All notable changes to LocalForge OS will be documented in this file.
   typed readiness evidence contract instead of unstructured payloads.
 - Hardened loop scheduling so paused/disabled loops are not claimed and
   repeated due-schedule scans do not duplicate interval or cron loop runs.
+- Hardened governed scheduler runner release paths to pass the dispatch lease
+  token, preventing stale owners from releasing a newer runner reservation.
+- Hardened path lease release/renewal so only the current owner with the
+  matching fencing token can mutate lease state, and released leases clear their
+  active conflict key for safe later reacquisition.
 
 ### V6.1 Compliance Closure - 2026-07-28
 

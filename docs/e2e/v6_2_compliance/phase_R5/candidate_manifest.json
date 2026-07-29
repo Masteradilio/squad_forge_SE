@@ -1,0 +1,41 @@
+{
+  "schema_version": "localforge.v6_2.candidate_manifest.v1",
+  "release_version": "6.2.0",
+  "release_tag": "v6.2.0",
+  "phase": "R5",
+  "task_ids": [
+    "V61C-500",
+    "V61C-501",
+    "V61C-502",
+    "V61C-503"
+  ],
+  "source_commit": "1d1b390",
+  "candidate_branch": "codex/v62-truth-reset-foundation",
+  "reviewed_pr_number": 14,
+  "verdict": "EVIDENCE_READY",
+  "known_limitations": [
+    "Candidate evidence is not final release acceptance.",
+    "Parent/child overlap conflicts still need database-level atomic exclusion.",
+    "FIFO wait queues and deadlock victim selection remain open.",
+    "Full real-Git worktree lifecycle validation remains open."
+  ],
+  "commands": [
+    {
+      "command": "python -m pytest backend/tests/test_phase_r5_coordination.py backend/tests/test_phase6_runner_pool_governance.py backend/tests/test_phase6_worktrees_path_intents.py -q",
+      "exit_code": 0
+    },
+    {
+      "command": "python -m pytest backend/tests/test_phase_r5_coordination.py backend/tests/test_phase6_runner_pool_governance.py backend/tests/test_phase6_worktrees_path_intents.py backend/tests/test_storage.py backend/tests/test_phase_r1_release_integrity.py -q",
+      "exit_code": 0
+    },
+    {
+      "command": "python -m mypy backend/localforge/models/domain.py backend/localforge/storage/orm.py backend/localforge/storage/bootstrap.py backend/localforge/services/path_lease.py backend/localforge/services/runner_pool.py backend/localforge/services/governed_execution.py backend/localforge/services/scheduler.py backend/tests/test_phase_r5_coordination.py",
+      "exit_code": 0
+    },
+    {
+      "command": "python -m ruff check backend/localforge/storage/orm.py backend/localforge/storage/bootstrap.py backend/localforge/services/path_lease.py backend/localforge/services/runner_pool.py backend/localforge/services/governed_execution.py backend/localforge/services/scheduler.py backend/tests/test_phase_r5_coordination.py",
+      "exit_code": 0
+    }
+  ],
+  "manifest_sha256": "55755f24897f2ab2af24b78366dae0aaab1b898ef39e55773b1389f63b1169ed"
+}

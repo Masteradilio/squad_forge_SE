@@ -1364,6 +1364,9 @@ class WorktreeAttemptManifestORM(Base):
 
 class PathLeaseORM(Base):
     __tablename__ = "path_leases"
+    __table_args__ = (
+        UniqueConstraint("project_id", "active_conflict_key", name="uq_path_lease_active_exact"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     project_id: Mapped[int] = mapped_column(
@@ -1374,9 +1377,15 @@ class PathLeaseORM(Base):
     )
     owner_id: Mapped[str] = mapped_column(String(255), nullable=False)
     target_path: Mapped[str] = mapped_column(Text, nullable=False)
+    normalized_target_path: Mapped[str] = mapped_column(Text, nullable=False)
+    active_conflict_key: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_directory: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     ttl_seconds: Mapped[int] = mapped_column(Integer, default=3600, nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    heartbeat_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    attempt_number: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    worktree_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    fencing_token: Mapped[str] = mapped_column(String(255), nullable=False)
     release_reason: Mapped[str | None] = mapped_column(String(50), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
 
@@ -1387,9 +1396,14 @@ class PathLeaseORM(Base):
             task_run_id=self.task_run_id,
             owner_id=self.owner_id,
             target_path=self.target_path,
+            normalized_target_path=self.normalized_target_path,
             is_directory=self.is_directory,
             ttl_seconds=self.ttl_seconds,
             expires_at=self.expires_at,
+            heartbeat_at=self.heartbeat_at,
+            attempt_number=self.attempt_number,
+            worktree_path=self.worktree_path,
+            fencing_token=self.fencing_token,
             release_reason=enums.LeaseReleaseReason(self.release_reason)
             if self.release_reason
             else None,
@@ -1404,9 +1418,17 @@ class PathLeaseORM(Base):
             task_run_id=d.task_run_id,
             owner_id=d.owner_id,
             target_path=d.target_path,
+            normalized_target_path=d.normalized_target_path or d.target_path,
+            active_conflict_key=(d.normalized_target_path or d.target_path)
+            if d.release_reason is None
+            else None,
             is_directory=d.is_directory,
             ttl_seconds=d.ttl_seconds,
             expires_at=d.expires_at,
+            heartbeat_at=d.heartbeat_at,
+            attempt_number=d.attempt_number,
+            worktree_path=d.worktree_path,
+            fencing_token=d.fencing_token,
             release_reason=d.release_reason.value
             if isinstance(d.release_reason, enums.LeaseReleaseReason)
             else d.release_reason,
@@ -1482,6 +1504,10 @@ class RunnerDispatchLogORM(Base):
         ForeignKey("task_runs.id", ondelete="CASCADE"), nullable=False
     )
     selected_runner_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    lease_token: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    lease_owner_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     dispatch_status: Mapped[str] = mapped_column(String(50), default="SUCCESS", nullable=False)
     ranking_scores_json: Mapped[Any] = mapped_column(JSON, default=dict, nullable=False)
     rejection_reasons_json: Mapped[Any] = mapped_column(JSON, default=dict, nullable=False)
@@ -1493,6 +1519,10 @@ class RunnerDispatchLogORM(Base):
             project_id=self.project_id,
             task_run_id=self.task_run_id,
             selected_runner_id=self.selected_runner_id,
+            lease_token=self.lease_token,
+            lease_owner_id=self.lease_owner_id,
+            lease_expires_at=self.lease_expires_at,
+            heartbeat_at=self.heartbeat_at,
             dispatch_status=self.dispatch_status,
             ranking_scores_json=self.ranking_scores_json
             if isinstance(self.ranking_scores_json, dict)
@@ -1510,6 +1540,10 @@ class RunnerDispatchLogORM(Base):
             project_id=d.project_id,
             task_run_id=d.task_run_id,
             selected_runner_id=d.selected_runner_id,
+            lease_token=d.lease_token,
+            lease_owner_id=d.lease_owner_id,
+            lease_expires_at=d.lease_expires_at,
+            heartbeat_at=d.heartbeat_at,
             dispatch_status=d.dispatch_status,
             ranking_scores_json=d.ranking_scores_json,
             rejection_reasons_json=d.rejection_reasons_json,

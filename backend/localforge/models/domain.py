@@ -630,9 +630,14 @@ class PathLease(BaseModel):
     task_run_id: int
     owner_id: str
     target_path: str
+    normalized_target_path: str | None = None
     is_directory: bool = False
     ttl_seconds: int = 3600
     expires_at: datetime = Field(default_factory=utc_now)
+    heartbeat_at: datetime = Field(default_factory=utc_now)
+    attempt_number: int = 1
+    worktree_path: str | None = None
+    fencing_token: str
     release_reason: LeaseReleaseReason | None = None
     created_at: datetime = Field(default_factory=utc_now)
 
@@ -673,6 +678,10 @@ class RunnerDispatchLog(BaseModel):
     project_id: int
     task_run_id: int
     selected_runner_id: str | None = None
+    lease_token: str | None = None
+    lease_owner_id: str | None = None
+    lease_expires_at: datetime | None = None
+    heartbeat_at: datetime | None = None
     dispatch_status: str = "SUCCESS"  # SUCCESS, NO_COMPATIBLE_RUNNER, BACKPRESSURE_LIMITED
     ranking_scores_json: dict[str, float] = Field(default_factory=dict)
     rejection_reasons_json: dict[str, str] = Field(default_factory=dict)

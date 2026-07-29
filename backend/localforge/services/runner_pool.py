@@ -1,4 +1,6 @@
 import logging
+from datetime import UTC, datetime, timedelta
+from uuid import uuid4
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,6 +10,12 @@ from localforge.models.enums import RunnerHealthState, RunnerLane
 from localforge.storage.orm import RunnerDispatchLogORM, RunnerPoolStateORM
 
 logger = logging.getLogger(__name__)
+
+
+def _as_aware_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
 
 
 class RunnerPoolService:
@@ -87,6 +95,7 @@ class RunnerPoolService:
         required_lane: RunnerLane | None = None,
         required_tools: list[str] | None = None,
         required_task_type: str | None = None,
+        lease_ttl_seconds: int = 3600,
     ) -> tuple[domain.RunnerPoolState | None, str, domain.RunnerDispatchLog]:
         """Perform deterministic, capability-aware dispatch for a task run.
 
@@ -207,10 +216,16 @@ class RunnerPoolService:
             orm_runner.health_state = RunnerHealthState.BUSY.value
 
         dispatch_status = "SUCCESS"
+        now = datetime.now(UTC)
+        lease_token = str(uuid4())
         log_domain = domain.RunnerDispatchLog(
             project_id=project_id,
             task_run_id=task_run_id,
             selected_runner_id=winning_runner.runner_id,
+            lease_token=lease_token,
+            lease_owner_id=winning_runner.runner_id,
+            lease_expires_at=now + timedelta(seconds=lease_ttl_seconds),
+            heartbeat_at=now,
             dispatch_status=dispatch_status,
             ranking_scores_json=ranking_scores,
             rejection_reasons_json=rejection_reasons,
@@ -222,7 +237,12 @@ class RunnerPoolService:
         return orm_runner.to_domain(), dispatch_status, orm_log.to_domain()
 
     async def release_runner_lease(
-        self, runner_id: str, success: bool = True
+        self,
+        runner_id: str,
+        success: bool = True,
+        *,
+        task_run_id: int | None = None,
+        lease_token: str | None = None,
     ) -> domain.RunnerPoolState:
         """Release concurrency lease and update historical outcome metrics."""
         stmt = select(RunnerPoolStateORM).where(RunnerPoolStateORM.runner_id == runner_id)
@@ -230,6 +250,29 @@ class RunnerPoolService:
         orm_runner = res.scalar_one_or_none()
         if not orm_runner:
             raise ValueError(f"Runner '{runner_id}' not found.")
+
+        if lease_token is not None:
+            if task_run_id is None:
+                raise ValueError("task_run_id is required when releasing by lease token.")
+            log_stmt = (
+                select(RunnerDispatchLogORM)
+                .where(
+                    RunnerDispatchLogORM.task_run_id == task_run_id,
+                    RunnerDispatchLogORM.selected_runner_id == runner_id,
+                    RunnerDispatchLogORM.dispatch_status == "SUCCESS",
+                )
+                .order_by(RunnerDispatchLogORM.created_at.desc())
+            )
+            log_result = await self.session.execute(log_stmt)
+            lease_log = log_result.scalars().first()
+            now = datetime.now(UTC)
+            if lease_log is None or lease_log.lease_token != lease_token:
+                raise ValueError("Runner lease token does not match the active owner.")
+            if (
+                lease_log.lease_expires_at is not None
+                and _as_aware_utc(lease_log.lease_expires_at) <= now
+            ):
+                raise ValueError("Runner lease token has expired.")
 
         if orm_runner.active_tasks_count > 0:
             orm_runner.active_tasks_count -= 1
@@ -247,6 +290,34 @@ class RunnerPoolService:
 
         await self.session.flush()
         return orm_runner.to_domain()
+
+    async def heartbeat_runner_lease(
+        self,
+        runner_id: str,
+        *,
+        task_run_id: int,
+        lease_token: str,
+        lease_ttl_seconds: int = 3600,
+    ) -> domain.RunnerDispatchLog | None:
+        """Refresh a runner dispatch lease only for the current fenced owner."""
+        now = datetime.now(UTC)
+        stmt = (
+            select(RunnerDispatchLogORM)
+            .where(
+                RunnerDispatchLogORM.task_run_id == task_run_id,
+                RunnerDispatchLogORM.selected_runner_id == runner_id,
+                RunnerDispatchLogORM.lease_token == lease_token,
+            )
+            .order_by(RunnerDispatchLogORM.created_at.desc())
+        )
+        result = await self.session.execute(stmt)
+        orm_log = result.scalars().first()
+        if orm_log is None:
+            return None
+        orm_log.heartbeat_at = now
+        orm_log.lease_expires_at = now + timedelta(seconds=lease_ttl_seconds)
+        await self.session.flush()
+        return orm_log.to_domain()
 
     async def reconcile_leaked_leases(self) -> int:
         """Reconcile leaked leases after daemon restart by resetting active task counts."""

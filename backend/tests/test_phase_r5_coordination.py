@@ -1,3 +1,4 @@
+import asyncio
 import os
 from datetime import UTC, datetime, timedelta
 
@@ -16,6 +17,8 @@ from localforge.services.path_lease import (
     normalize_lease_path,
 )
 from localforge.storage import UnitOfWork
+from localforge.storage.bootstrap import bootstrap_database
+from localforge.storage.database import DatabaseManager
 from localforge.storage.orm import RunnerPoolStateORM
 from sqlalchemy import select
 
@@ -155,6 +158,61 @@ async def test_r5_path_lease_acquire_rejects_repository_boundary_escape(db_manag
         assert lease is None
         assert conflict_owner is None
         assert "outside repository root" in message
+
+
+@pytest.mark.asyncio
+async def test_r5_parent_child_path_race_is_serialized_by_database(tmp_path) -> None:
+    db_file = tmp_path / "r5-path-race.db"
+    manager = DatabaseManager(f"sqlite+aiosqlite:///{db_file.as_posix()}")
+    await bootstrap_database(manager)
+    try:
+        async with UnitOfWork(manager) as uow:
+            project_id, _, first_run_id = await _create_project_task_run(uow, key="R5-RACE-A")
+            assert uow.tasks is not None
+            task = await uow.tasks.create_task(
+                domain.Task(
+                    project_id=project_id,
+                    key="R5-RACE-B",
+                    title="Race B",
+                    description="child contender",
+                )
+            )
+            assert task.id is not None
+            second_run = await uow.tasks.create_task_run(
+                domain.TaskRun(run_id=1, task_id=task.id)
+            )
+            assert second_run.id is not None
+            second_run_id = second_run.id
+
+        async def acquire(owner_id: str, task_run_id: int, target_path: str):
+            async with UnitOfWork(manager) as uow:
+                assert uow.path_leases is not None
+                return await uow.path_leases.acquire_lease(
+                    project_id=project_id,
+                    task_run_id=task_run_id,
+                    owner_id=owner_id,
+                    target_path=target_path,
+                    ttl_seconds=60,
+                )
+
+        first, second = await asyncio.gather(
+            acquire("owner-parent", first_run_id, "src"),
+            acquire("owner-child", second_run_id, "src/components/board.ts"),
+        )
+
+        leases = [first[0], second[0]]
+        conflicts = [first[1], second[1]]
+        messages = [first[2], second[2]]
+        assert sum(lease is not None for lease in leases) == 1
+        assert sum(conflict is not None for conflict in conflicts) == 1
+        assert any("overlaps with active lease" in message for message in messages)
+
+        async with UnitOfWork(manager) as uow:
+            assert uow.path_leases is not None
+            active = await uow.path_leases.list_active_leases(project_id)
+            assert len(active) == 1
+    finally:
+        await manager.close()
 
 
 @pytest.mark.asyncio

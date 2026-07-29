@@ -65,6 +65,9 @@ All notable changes to LocalForge OS will be documented in this file.
 - Added persisted runner lease fencing metadata to dispatch logs and path lease
   ownership metadata covering normalized target path, active conflict key,
   heartbeat, attempt number, worktree path, and fencing token.
+- Added schema version 20 with a project-scoped PathLease namespace mutex so
+  parent/child write lease acquisitions are serialized at the database
+  transaction layer before overlap checks.
 - Hardened RunnerPool restart reconciliation so active capacity is rebuilt from
   successful dispatch logs joined to active TaskRuns, instead of resetting
   runner capacity blindly after restart.

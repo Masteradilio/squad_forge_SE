@@ -1447,7 +1447,16 @@ class PathLeaseORM(Base):
             if isinstance(d.release_reason, enums.LeaseReleaseReason)
             else d.release_reason,
             created_at=d.created_at,
-        )
+          )
+
+
+class PathLeaseProjectLockORM(Base):
+    __tablename__ = "path_lease_project_locks"
+
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), primary_key=True
+    )
+    touched_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
 
 
 class PathLeaseWaitORM(Base):

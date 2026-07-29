@@ -4,13 +4,13 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path, PurePosixPath
 from uuid import uuid4
 
-from sqlalchemy import select
+from sqlalchemy import select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from localforge.models import domain
 from localforge.models.enums import LeaseReleaseReason, PathLeaseWaitStatus
-from localforge.storage.orm import PathLeaseORM, PathLeaseWaitORM
+from localforge.storage.orm import PathLeaseORM, PathLeaseProjectLockORM, PathLeaseWaitORM
 
 logger = logging.getLogger(__name__)
 
@@ -95,6 +95,7 @@ class PathLeaseService:
             msg = str(exc)
             logger.warning(msg)
             return None, None, msg
+        await self._acquire_project_namespace_lock(project_id, now)
         # Fetch active, unexpired leases for the same project
         stmt = select(PathLeaseORM).where(
             PathLeaseORM.project_id == project_id,
@@ -142,6 +143,31 @@ class PathLeaseService:
             logger.warning(msg)
             return None, None, msg
         return orm_obj.to_domain(), None, f"Lease acquired for '{target_path}'."
+
+    async def _acquire_project_namespace_lock(self, project_id: int, now: datetime) -> None:
+        """Serialize lease namespace checks for one project inside the DB transaction."""
+        touched_at = now.replace(tzinfo=None)
+        bind = self.session.get_bind()
+        if bind.dialect.name == "sqlite":
+            await self.session.execute(
+                text(
+                    "INSERT OR IGNORE INTO path_lease_project_locks "
+                    "(project_id, touched_at) VALUES (:project_id, :touched_at)"
+                ),
+                {"project_id": project_id, "touched_at": touched_at},
+            )
+        else:
+            lock_row = await self.session.get(PathLeaseProjectLockORM, project_id)
+            if lock_row is None:
+                self.session.add(
+                    PathLeaseProjectLockORM(project_id=project_id, touched_at=touched_at)
+                )
+                await self.session.flush()
+        await self.session.execute(
+            update(PathLeaseProjectLockORM)
+            .where(PathLeaseProjectLockORM.project_id == project_id)
+            .values(touched_at=touched_at)
+        )
 
     async def acquire_or_wait(
         self,

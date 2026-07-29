@@ -1,9 +1,9 @@
 # Phase R5 Known Limitations
 
 - This is candidate evidence, not final release acceptance.
-- Exact normalized path races are protected by an active conflict key, but
-  parent/child overlap conflicts are not yet enforced by a database exclusion
-  constraint across concurrent transactions.
+- Exact normalized path races are protected by an active conflict key.
+  Parent/child overlap races are serialized with a project-scoped database
+  namespace mutex before overlap checks run.
 - Path normalization covers separators, Windows case behavior, repository-root
   canonicalization, and symlink escape rejection where the host permits symlink
   creation.
@@ -21,3 +21,5 @@
   worktrees are retained for diagnostics and marked `REJECTED`; successful or
   cancelled terminal cleanup removes the directory and marks manifests
   `CLEANED`.
+- Complete kill/restart reconciliation across every owned runner, lease,
+  worktree, and task-run resource remains open.

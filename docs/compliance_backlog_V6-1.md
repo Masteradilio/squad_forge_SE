@@ -561,7 +561,7 @@ Make concurrent execution deterministic and restart-safe.
 - [x] Normalize Windows/Linux paths, separators, and case rules.
 - [x] Normalize symlinks and enforce repository-boundary canonicalization.
 - [x] Enforce exact-path conflicts through a database active-lease key.
-- [ ] Enforce parent/child overlap conflicts atomically at the
+- [x] Enforce parent/child overlap conflicts atomically at the
       database/transaction layer.
 - [x] Prevent two sessions from acquiring the exact same normalized path after
       identical pre-checks.
@@ -587,7 +587,7 @@ Make concurrent execution deterministic and restart-safe.
 
 ### Required regression tests
 
-- [ ] Concurrent database sessions race for the same path.
+- [x] Concurrent database sessions race for the same path.
 - [x] Case, separator, exact-path, and directory overlap conflicts.
 - [x] Symlink and repository-boundary overlap conflicts.
 - [x] Renewal prevents premature takeover.
@@ -601,7 +601,7 @@ Make concurrent execution deterministic and restart-safe.
 
 ### Phase R5 exit gate
 
-- [ ] No silent path collision is possible in supported databases.
+- [x] No silent path collision is possible in supported databases.
 - [x] Stale owners cannot release runner/path leases after lease loss when
       fencing tokens are used.
 - [ ] Resource state survives and reconciles after restart.

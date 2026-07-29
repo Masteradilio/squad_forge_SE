@@ -7,16 +7,17 @@
 Phase R5 adds candidate hardening for RunnerPool and PathLease coordination.
 It introduces persisted fencing tokens, lease heartbeat/expiry metadata,
 task-run/worktree attempt attribution for path leases, exact-path active
-conflict protection, and service-level path normalization for separators and
-case handling plus repository-boundary canonicalization. It also persists
+conflict protection, transaction-scoped project namespace locking, and
+service-level path normalization for separators and case handling plus
+repository-boundary canonicalization. It also persists
 PathLease wait-for edges with bounded timeouts, cancellation, FIFO queue
 position, repeated-contention escalation, and deterministic two-owner deadlock
 victim selection. Governed task startup now binds the runner worktree, branch,
 and immutable source commit into a persisted `WorktreeAttemptManifest`; worktree
 validation now rejects dirty or target-drifted manifests.
 
-This is candidate evidence only. Final R5 acceptance still requires
-database-level parent/child overlap fencing across concurrent transactions.
+This is candidate evidence only. Final R5 acceptance still requires restart
+resource reconciliation coverage across all owned resources.
 
 ## Implemented Controls
 
@@ -30,6 +31,7 @@ database-level parent/child overlap fencing across concurrent transactions.
 | Path normalization | `normalize_lease_path()` canonicalizes separators and Windows case before overlap checks. |
 | Repository-boundary canonicalization | `canonicalize_repository_relative_path()` resolves targets through the repository root, follows available symlinks, rejects paths that escape the root, and is enforced by `PathLeaseService.acquire_lease(repository_root=...)`. |
 | Exact active conflict key | `PathLeaseORM` stores `active_conflict_key` under a project-scoped uniqueness constraint and clears it on release. |
+| Transactional namespace mutex | `PathLeaseProjectLockORM` serializes PathLease acquisition for each project before overlap checks, preventing concurrent parent/child acquisitions from passing identical pre-check windows. |
 | Path lease fencing | `PathLease` now records `fencing_token`, heartbeat, attempt number, and worktree path. |
 | Path lease renewal | `renew_lease()` extends an active lease only when owner and fencing token match. |
 | Expired lease reclaim | Expired/released active keys can be reclaimed by a new fenced owner. |
@@ -47,6 +49,21 @@ database-level parent/child overlap fencing across concurrent transactions.
 ```text
 python -m pytest backend\tests\test_phase_r5_coordination.py backend\tests\test_phase6_runner_pool_governance.py backend\tests\test_phase6_worktrees_path_intents.py -q
 19 passed, 1 skipped in 2.38s
+
+python -m pytest backend\tests\test_phase_r5_coordination.py::test_r5_parent_child_path_race_is_serialized_by_database -q
+1 passed in 0.28s
+
+python -m pytest backend\tests\test_phase_r5_coordination.py backend\tests\test_phase6_worktrees_path_intents.py backend\tests\test_phase6_runner_pool_governance.py -q
+20 passed, 1 skipped in 2.40s
+
+python -m mypy backend\localforge\services\path_lease.py backend\localforge\storage\orm.py backend\localforge\storage\bootstrap.py backend\tests\test_phase_r5_coordination.py
+Success: no issues found in 4 source files
+
+python -m ruff check backend\localforge\services\path_lease.py backend\localforge\storage\orm.py backend\localforge\storage\bootstrap.py backend\tests\test_phase_r5_coordination.py
+All checks passed!
+
+python -m pytest backend\tests\test_storage.py -q
+2 passed in 0.08s
 
 python -m pytest backend/tests/test_phase_r5_coordination.py backend/tests/test_phase6_runner_pool_governance.py backend/tests/test_phase6_worktrees_path_intents.py backend/tests/test_storage.py backend/tests/test_phase_r1_release_integrity.py -q
 17 passed in 12.39s
@@ -93,8 +110,8 @@ python -m pytest backend\tests\test_audit_store.py backend\tests\test_gitops.py 
 
 ## Remaining Acceptance Requirements
 
-- Parent/child overlap conflicts are still enforced by service-level checks,
-  not by an atomic database exclusion constraint.
+- Parent/child overlap conflicts are serialized at the database transaction
+  layer with a project namespace mutex before service-level overlap checks.
 - Repository-boundary canonicalization and symlink escape rejection are covered
   where the host permits symlink creation.
 - FIFO wait queues, timeout/cancellation, persisted wait-for graph, and
@@ -108,3 +125,5 @@ python -m pytest backend\tests\test_audit_store.py backend\tests\test_gitops.py 
   orphan cleanup that preserves unregistered user-owned paths are covered.
   Failed worktrees are retained for diagnostics while successful/cancelled
   terminal cleanup removes directories and records `CLEANED`.
+- Full kill/restart release and reconciliation across every owned resource
+  remains open.

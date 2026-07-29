@@ -14,7 +14,7 @@ from localforge.storage.orm import Base, SchemaVersionORM
 
 logger = logging.getLogger(__name__)
 
-CURRENT_VERSION = 19
+CURRENT_VERSION = 20
 
 
 class UnsupportedSchemaVersionError(RuntimeError):

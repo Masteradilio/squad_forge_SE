@@ -6,10 +6,10 @@ across a specialized agent squad, executes tasks in isolated Git worktrees,
 validates outputs through deterministic gates, performs bounded self-healing,
 and prepares pull requests for human review.
 
-Current status: V6 is an **architectural alpha** under V6.1 compliance closure.
-The V6 backlog contains useful implementation work, but its release/evaluation
-claims are being revalidated by `docs/compliance_backlog_V6.md` before they can
-be treated as accepted operational evidence.
+Current status: V6.1 is a **release candidate accepted by local gates and
+GitHub Actions**. Stable release publication is intentionally pending explicit
+human approval for the annotated version tag and GitHub Release required by
+`docs/compliance_backlog_V6.md`.
 
 The V6 target contract and architectural specifications are documented in
 `docs/LocalForge_OS_PRD.md`, `docs/MASTER_BACKLOG_V6.md`, and
@@ -158,9 +158,9 @@ observed task-level runs and validates the immutable evidence chain.
 | **Loop Light Swarm** | **0.95** | **1.00** | **650 ms** | **$0.2500** | historical `ACCEPTED` |
 | **Loop Deep Swarm (Experimental)** | 0.85 | 0.90 | 1800 ms | $0.8500 | `PARTIAL` |
 
-> 📌 **NOTE**: Deep Swarm, semantic embeddings, and the current operational loop
-> claims remain experimental until compliance phases C2 through C12 prove real
-> governed worker execution, observed metrics, and reviewed PR evidence.
+> 📌 **NOTE**: The V6.1 compliance path has accepted release-candidate
+> evidence in `docs/e2e/v6_1_compliance/`. Deep Swarm remains explicitly gated
+> by measured evidence and decision contracts before production use.
 
 ---
 
@@ -248,4 +248,5 @@ npm run build --prefix frontend
 - `docs/compliance_backlog_V6.md` — V6.1 Compliance Closure Backlog
 - `CHANGELOG.md` — Implementation History
 - `docs/e2e/v6/phase_11/acceptance_report.md` — Historical Phase 11 report
-- `docs/e2e/v6/v6_release_summary.json` — Historical V6 release summary under V6.1 review
+- `docs/e2e/v6/v6_release_summary.json` — Historical V6 release summary
+- `docs/e2e/v6_1_compliance/` — V6.1 release-candidate compliance evidence

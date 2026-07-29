@@ -1,0 +1,32 @@
+{
+  "artifact_schema": "localforge.v6_1.test_summary.v1",
+  "commit": "1fcb72f15cc5f8e3858be1599cd1d4032f582b3e",
+  "local": {
+    "backend_tests": {
+      "command": "python -m pytest backend/tests -q",
+      "result": "294 passed"
+    },
+    "backend_types": {
+      "command": "python -m mypy backend",
+      "result": "success for 209 source files"
+    },
+    "backend_lint": {
+      "command": "python -m ruff check backend",
+      "result": "passed"
+    },
+    "frontend_build": {
+      "command": "npm run build --prefix frontend",
+      "result": "passed"
+    },
+    "diff_hygiene": {
+      "command": "git diff --check",
+      "result": "passed"
+    }
+  },
+  "remote": {
+    "workflow": "CI",
+    "run_id": 30414330405,
+    "url": "https://github.com/Masteradilio/local_forge_os/actions/runs/30414330405",
+    "conclusion": "success"
+  }
+}

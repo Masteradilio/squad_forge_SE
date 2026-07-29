@@ -1,0 +1,32 @@
+{
+  "artifact_schema": "localforge.v6_1.compliance_manifest.v1",
+  "verdict": "RELEASE_CANDIDATE_ACCEPTED",
+  "target_release": "V6.1",
+  "repository": "Masteradilio/local_forge_os",
+  "branch": "main",
+  "commit": "1fcb72f15cc5f8e3858be1599cd1d4032f582b3e",
+  "remote": "origin/main",
+  "remote_ci": {
+    "workflow": "CI",
+    "run_id": 30414330405,
+    "url": "https://github.com/Masteradilio/local_forge_os/actions/runs/30414330405",
+    "conclusion": "success",
+    "jobs": {
+      "backend": "success",
+      "frontend": "success"
+    }
+  },
+  "local_gates": {
+    "pytest_backend": "294 passed",
+    "mypy_backend": "success for 209 source files",
+    "ruff_backend": "passed",
+    "frontend_build": "passed",
+    "git_diff_check": "passed"
+  },
+  "stable_release": {
+    "annotated_tag": null,
+    "github_release": null,
+    "status": "PENDING_EXPLICIT_HUMAN_APPROVAL"
+  }
+}
+

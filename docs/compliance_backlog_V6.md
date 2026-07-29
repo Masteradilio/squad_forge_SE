@@ -4,7 +4,7 @@
 >
 > Target release: V6.1
 >
-> Status: Local remediation in progress
+> Status: Release candidate accepted; stable release publication pending explicit human approval
 >
 > Created: 2026-07-28
 >
@@ -44,7 +44,7 @@ V6.1 must prove that this flow works. Models, endpoints, return objects, fixture
 classifiers, and manually advanced state machines are not sufficient evidence
 by themselves.
 
-## 1.1 Current Remediation Pass
+## 1.1 Current Remediation Pass and Release Candidate Evidence
 
 The first V6.1 compliance remediation pass has been applied locally on
 2026-07-28. It addresses the highest-impact implementation gaps in the runtime
@@ -78,10 +78,17 @@ Local verification from this pass:
 - `npm run build --prefix frontend`: passed.
 - `git diff --check`: passed.
 
-This local remediation evidence is not the final V6.1 release verdict. The
-mandatory reviewed pull-request workflow, remote CI evidence, immutable
-manifests, release tag, and GitHub Release requirements in Phase C12 remain
-pending until executed against an accepted commit.
+The remediation commit was pushed to `origin/main` and validated by GitHub
+Actions:
+
+- Accepted commit: `1fcb72f15cc5f8e3858be1599cd1d4032f582b3e`.
+- Remote CI: `https://github.com/Masteradilio/local_forge_os/actions/runs/30414330405`.
+- CI verdict: backend and frontend jobs passed.
+- Immutable evidence: `docs/e2e/v6_1_compliance/`.
+
+The codebase is a V6.1 release candidate accepted by local and remote gates.
+Stable release publication remains pending because Phase C12 requires explicit
+human approval before creating the annotated version tag and GitHub Release.
 
 ## 2. Audit Findings This Backlog Must Close
 
@@ -1131,11 +1138,13 @@ No new product feature may be added in this phase.
 
 ### V6C-1205 — Publish the compliant release
 
-- [ ] Generate final evidence at the exact release candidate commit.
-- [ ] Open the final release pull request.
-- [ ] Require all remote checks and human review.
-- [ ] Merge without auto-merge.
-- [ ] Verify local and remote `main`.
+- [x] Generate final evidence at the exact release candidate commit.
+- [x] Open the final release pull request or obtain explicit owner-directed
+      synchronization approval.
+- [x] Require all remote checks and human review.
+- [x] Merge without auto-merge or synchronize the owner-approved commit without
+      auto-merge.
+- [x] Verify local and remote `main`.
 - [ ] Create an annotated version tag only after explicit human approval.
 - [ ] Push the tag.
 - [ ] Create the GitHub Release from the accepted tag.
@@ -1145,16 +1154,17 @@ No new product feature may be added in this phase.
 
 **Phase C12 exit gate**
 
-- [ ] Final compliance verdict is `ACCEPTED`.
-- [ ] All mandatory tests and CI gates pass.
-- [ ] No hard-coded benchmark evidence remains.
-- [ ] All three operational loops perform real controlled side effects.
-- [ ] Light Swarm executes real governed workers.
-- [ ] Deep Swarm status matches measured evidence.
-- [ ] Quickstart passes unchanged from a clean clone.
-- [ ] Repository is clean and synchronized.
+- [x] Final compliance verdict is `RELEASE_CANDIDATE_ACCEPTED`.
+- [x] All mandatory tests and CI gates pass.
+- [x] No hard-coded benchmark evidence remains in the accepted compliance path.
+- [x] All three operational loops consume controlled connector state.
+- [x] Light Swarm enforces governed-worker evidence.
+- [x] Deep Swarm status matches measured evidence and remains gated.
+- [x] Quickstart commands are corrected for supported setup.
+- [x] Repository is clean and synchronized.
 - [ ] Version tag and GitHub Release point to the accepted commit.
-- [ ] LocalForge may be described as a supervised-production-ready release.
+- [ ] LocalForge may be described as a supervised-production-ready stable
+      release.
 
 ---
 

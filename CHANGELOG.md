@@ -64,6 +64,12 @@ All notable changes to LocalForge OS will be documented in this file.
 - `python -m ruff check backend` passed.
 - `npm run build --prefix frontend` passed.
 - `git diff --check` passed.
+- Remote GitHub Actions CI passed for commit
+  `1fcb72f15cc5f8e3858be1599cd1d4032f582b3e`
+  (`https://github.com/Masteradilio/local_forge_os/actions/runs/30414330405`).
+- Added V6.1 release-candidate evidence under
+  `docs/e2e/v6_1_compliance/`; stable tag and GitHub Release publication remain
+  gated on explicit human approval.
 
 ## [6.0.0] - 2026-07-28
 

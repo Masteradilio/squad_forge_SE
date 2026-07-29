@@ -9,6 +9,9 @@
 - Lease renewal and fencing exist, but bounded FIFO waiting, persisted wait-for
   graph, timeout cancellation, and deterministic deadlock victim selection
   remain open.
+- RunnerPool restart reconciliation now rebuilds active capacity from persisted
+  successful dispatch logs joined to active TaskRuns; bounded backpressure and
+  fairness queues remain open.
 - Worktree attempt manifests still track existing paths and stale paths, but a
   full real-Git worktree lifecycle with base-commit drift checks and diagnostic
   retention policy remains open.

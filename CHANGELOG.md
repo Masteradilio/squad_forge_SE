@@ -65,6 +65,9 @@ All notable changes to LocalForge OS will be documented in this file.
 - Added persisted runner lease fencing metadata to dispatch logs and path lease
   ownership metadata covering normalized target path, active conflict key,
   heartbeat, attempt number, worktree path, and fencing token.
+- Hardened RunnerPool restart reconciliation so active capacity is rebuilt from
+  successful dispatch logs joined to active TaskRuns, instead of resetting
+  runner capacity blindly after restart.
 - Added R5 regression coverage for runner stale-token rejection, path lease
   renewal, exact-path reclaim, and path separator/case normalization.
 - Added Phase R6 candidate evidence under

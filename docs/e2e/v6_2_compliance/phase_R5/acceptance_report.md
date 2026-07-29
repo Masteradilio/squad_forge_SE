@@ -22,6 +22,7 @@ worktree lifecycle reconciliation.
 | Runner lease identity | `RunnerDispatchLog` now records `lease_token`, `lease_owner_id`, `lease_expires_at`, and `heartbeat_at`. |
 | Runner owner fencing | `release_runner_lease()` rejects stale tokens when a newer successful reservation exists for the task run and runner. |
 | Runner heartbeat | `heartbeat_runner_lease()` refreshes the persisted heartbeat and expiry only for the current fenced owner. |
+| Runner restart reconciliation | `reconcile_leaked_leases()` rebuilds `active_tasks_count` from successful dispatch logs joined to active `TaskRun` rows instead of resetting capacity blindly. |
 | Path normalization | `normalize_lease_path()` canonicalizes separators and Windows case before overlap checks. |
 | Exact active conflict key | `PathLeaseORM` stores `active_conflict_key` under a project-scoped uniqueness constraint and clears it on release. |
 | Path lease fencing | `PathLease` now records `fencing_token`, heartbeat, attempt number, and worktree path. |
@@ -31,16 +32,16 @@ worktree lifecycle reconciliation.
 ## Validation Commands
 
 ```text
-python -m pytest backend/tests/test_phase_r5_coordination.py backend/tests/test_phase6_runner_pool_governance.py backend/tests/test_phase6_worktrees_path_intents.py -q
-10 passed in 0.57s
+python -m pytest backend\tests\test_phase_r5_coordination.py backend\tests\test_phase6_runner_pool_governance.py backend\tests\test_phase6_worktrees_path_intents.py -q
+11 passed in 1.08s
 
 python -m pytest backend/tests/test_phase_r5_coordination.py backend/tests/test_phase6_runner_pool_governance.py backend/tests/test_phase6_worktrees_path_intents.py backend/tests/test_storage.py backend/tests/test_phase_r1_release_integrity.py -q
 17 passed in 12.39s
 
-python -m mypy backend/localforge/models/domain.py backend/localforge/storage/orm.py backend/localforge/storage/bootstrap.py backend/localforge/services/path_lease.py backend/localforge/services/runner_pool.py backend/localforge/services/governed_execution.py backend/localforge/services/scheduler.py backend/tests/test_phase_r5_coordination.py
-Success: no issues found in 8 source files
+python -m mypy backend\localforge\services\runner_pool.py backend\tests\test_phase_r5_coordination.py backend\tests\test_phase6_runner_pool_governance.py
+Success: no issues found in 3 source files
 
-python -m ruff check backend/localforge/storage/orm.py backend/localforge/storage/bootstrap.py backend/localforge/services/path_lease.py backend/localforge/services/runner_pool.py backend/localforge/services/governed_execution.py backend/localforge/services/scheduler.py backend/tests/test_phase_r5_coordination.py
+python -m ruff check backend\localforge\services\runner_pool.py backend\tests\test_phase_r5_coordination.py backend\tests\test_phase6_runner_pool_governance.py
 All checks passed!
 ```
 
@@ -51,7 +52,7 @@ All checks passed!
 - Symlink resolution and repository-boundary canonicalization remain open.
 - FIFO wait queues, cancellation, persisted wait-for graph, and deterministic
   deadlock victim selection remain open.
-- Restart reconciliation still resets runner capacity; it does not yet rebuild
-  capacity from persisted task-run truth.
+- RunnerPool restart reconciliation now rebuilds capacity from persisted
+  task-run truth; bounded backpressure/fairness remains open.
 - Real Git worktree creation, branch/base-commit drift validation, and failed
   worktree retention policy remain open.

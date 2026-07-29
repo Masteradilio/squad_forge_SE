@@ -6,8 +6,8 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from localforge.models import domain
-from localforge.models.enums import RunnerHealthState, RunnerLane
-from localforge.storage.orm import RunnerDispatchLogORM, RunnerPoolStateORM
+from localforge.models.enums import RunnerHealthState, RunnerLane, TaskRunStatus
+from localforge.storage.orm import RunnerDispatchLogORM, RunnerPoolStateORM, TaskRunORM
 
 logger = logging.getLogger(__name__)
 
@@ -363,16 +363,31 @@ class RunnerPoolService:
         return orm_log.to_domain()
 
     async def reconcile_leaked_leases(self) -> int:
-        """Reconcile leaked leases after daemon restart by resetting active task counts."""
-        stmt = select(RunnerPoolStateORM).where(RunnerPoolStateORM.active_tasks_count > 0)
+        """Reconcile runner capacity from persisted active task-run truth."""
+        stmt = select(RunnerPoolStateORM)
         res = await self.session.execute(stmt)
         runners = res.scalars().all()
         count = 0
-        for r in runners:
-            r.active_tasks_count = 0
-            if r.health_state == RunnerHealthState.BUSY.value:
-                r.health_state = RunnerHealthState.READY.value
-            count += 1
+        active_statuses = {TaskRunStatus.PENDING.value, TaskRunStatus.RUNNING.value}
+        for runner in runners:
+            log_stmt = (
+                select(RunnerDispatchLogORM)
+                .join(TaskRunORM, TaskRunORM.id == RunnerDispatchLogORM.task_run_id)
+                .where(
+                    RunnerDispatchLogORM.selected_runner_id == runner.runner_id,
+                    RunnerDispatchLogORM.dispatch_status == "SUCCESS",
+                    TaskRunORM.status.in_(active_statuses),
+                )
+            )
+            log_result = await self.session.execute(log_stmt)
+            active_count = len(log_result.scalars().all())
+            if runner.active_tasks_count != active_count:
+                runner.active_tasks_count = active_count
+                count += 1
+            if runner.active_tasks_count >= runner.max_concurrency:
+                runner.health_state = RunnerHealthState.BUSY.value
+            elif runner.health_state == RunnerHealthState.BUSY.value:
+                runner.health_state = RunnerHealthState.READY.value
 
         await self.session.flush()
         return count

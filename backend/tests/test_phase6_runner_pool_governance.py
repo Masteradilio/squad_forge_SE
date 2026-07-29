@@ -1,6 +1,6 @@
 import pytest
 from localforge.models import domain
-from localforge.models.enums import RunnerHealthState, RunnerLane
+from localforge.models.enums import RunnerHealthState, RunnerLane, TaskRunStatus
 from localforge.storage import UnitOfWork
 
 
@@ -134,7 +134,7 @@ async def test_concurrency_lease_release_and_restart_reconciliation(db_manager) 
         await uow.runner_pool.register_runner("runner_iso_1", "Iso 1", RunnerLane.ISOLATED, caps, 1)
 
         # 1st dispatch -> succeeds and exhausts capacity
-        runner1, status1, _ = await uow.runner_pool.dispatch_task(
+        runner1, status1, first_log = await uow.runner_pool.dispatch_task(
             project_id=project.id,
             task_run_id=task_run.id,
             required_lane=RunnerLane.ISOLATED,
@@ -155,11 +155,23 @@ async def test_concurrency_lease_release_and_restart_reconciliation(db_manager) 
             "runner_iso_1", ""
         )
 
-        # Simulate daemon restart reconciliation -> resets active task count to 0
+        # Restart reconciliation preserves capacity for still-active task runs.
         reconciled_count = await uow.runner_pool.reconcile_leaked_leases()
-        assert reconciled_count == 1
+        assert reconciled_count == 0
+        still_busy = (await uow.runner_pool.list_runners())[0]
+        assert still_busy.active_tasks_count == 1
+        assert still_busy.health_state == RunnerHealthState.BUSY
 
-        # 3rd dispatch after restart -> succeeds again
+        task_run.status = TaskRunStatus.COMPLETED
+        await uow.tasks.update_task_run(task_run)
+        assert first_log.lease_token is not None
+        await uow.runner_pool.release_runner_lease(
+            "runner_iso_1",
+            task_run_id=task_run.id,
+            lease_token=first_log.lease_token,
+        )
+
+        # 3rd dispatch after task completion and fenced release -> succeeds again
         runner3, status3, _ = await uow.runner_pool.dispatch_task(
             project_id=project.id,
             task_run_id=task_run.id,

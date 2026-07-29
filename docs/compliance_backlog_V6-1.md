@@ -554,7 +554,7 @@ Make concurrent execution deterministic and restart-safe.
 - [x] Add lease identity, heartbeat, expiry, and owner fencing tokens.
 - [x] Prevent a stale process from releasing or using a newer owner's lease.
 - [ ] Implement bounded backpressure and fairness.
-- [ ] Reconcile capacity from persisted task-run truth after restart.
+- [x] Reconcile capacity from persisted task-run truth after restart.
 
 ### V61C-501 — Make PathLease acquisition race-safe
 
@@ -594,6 +594,9 @@ Make concurrent execution deterministic and restart-safe.
 - [x] Expired leases can be safely reclaimed with fencing.
 - [ ] Deadlock victim selection is deterministic.
 - [ ] Kill and restart release/reconcile all owned resources.
+  - RunnerPool restart reconciliation now rebuilds active capacity from
+    persisted successful dispatch logs joined to active TaskRuns, rather than
+    resetting capacity blindly.
 - [ ] Real temporary Git worktree lifecycle is inspected on disk.
 
 ### Phase R5 exit gate

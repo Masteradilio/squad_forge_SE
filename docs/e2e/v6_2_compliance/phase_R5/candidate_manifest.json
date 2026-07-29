@@ -35,9 +35,21 @@
     {
       "command": "python -m ruff check backend/localforge/storage/orm.py backend/localforge/storage/bootstrap.py backend/localforge/services/path_lease.py backend/localforge/services/runner_pool.py backend/localforge/services/governed_execution.py backend/localforge/services/scheduler.py backend/tests/test_phase_r5_coordination.py",
       "exit_code": 0
+    },
+    {
+      "command": "python -m pytest backend\\tests\\test_phase_r5_coordination.py backend\\tests\\test_phase6_runner_pool_governance.py backend\\tests\\test_phase6_worktrees_path_intents.py -q",
+      "exit_code": 0
+    },
+    {
+      "command": "python -m mypy backend\\localforge\\services\\runner_pool.py backend\\tests\\test_phase_r5_coordination.py backend\\tests\\test_phase6_runner_pool_governance.py",
+      "exit_code": 0
+    },
+    {
+      "command": "python -m ruff check backend\\localforge\\services\\runner_pool.py backend\\tests\\test_phase_r5_coordination.py backend\\tests\\test_phase6_runner_pool_governance.py",
+      "exit_code": 0
     }
   ],
-  "manifest_sha256": "15a2594fc03a020255d09d58059fc9f172922f0961112b9ef068c71e1d9d6f13",
+  "manifest_sha256": "079dc336650aabe8b65f8744f13483a95237aa3852361e6740657d98b36847f4",
   "environment": {
     "os": "windows-local-and-github-actions-matrix",
     "python": "3.11-local / 3.12-ci",
@@ -48,7 +60,12 @@
     "Candidate evidence remains EVIDENCE_READY until reviewed PR, merge commit, exact-head CI, owner-approved tag, and final release validation exist."
   ],
   "input_hashes": {
-    "docs/e2e/v6_2_compliance/phase_R5/acceptance_report.md": "c440c7b7e20a3e7b80cd62d007d0c05fb980ee386dbb5470bf20a50d0d2121da",
-    "docs/e2e/v6_2_compliance/phase_R5/known_limitations.md": "1a8349674ccf9ec2ac99d41e37f020202a9d5fcd06511c817c215bab804a73d5"
+    "docs/e2e/v6_2_compliance/phase_R5/acceptance_report.md": "738ab800bcd026c02308546bb87dd10760858883a66c444432a50fc0d04091ff",
+    "docs/e2e/v6_2_compliance/phase_R5/known_limitations.md": "27b76a51cad9ef792e08b0233ef7d84a765b189c4731996b0e6642badf155e16",
+    "backend/localforge/services/runner_pool.py": "2b2f486c24cdece628dd32cf640ae779acd5454597982a3fdde186fc38be84c9",
+    "backend/tests/test_phase_r5_coordination.py": "8ffdf2f6053036e9585739dfa2ddfc749105ced444c89c434ea05f0f7fdf6593",
+    "backend/tests/test_phase6_runner_pool_governance.py": "3bc524aaf4f3aef1312e992bad810f951d59a8e117ce08b557ccce9abe993bbf",
+    "docs/compliance_backlog_V6-1.md": "f98f3b396f46bd6f00023a1d496b1845805ed3a3f9ced75c9406cb267a67744e",
+    "CHANGELOG.md": "44362217afa36bd81197373553480ceb523e619e52b840b284196d413f25dc7c"
   }
 }

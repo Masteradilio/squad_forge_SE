@@ -2,9 +2,11 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from localforge.models import domain
-from localforge.models.enums import LeaseReleaseReason, RunnerLane
+from localforge.models.enums import LeaseReleaseReason, RunnerHealthState, RunnerLane, TaskRunStatus
 from localforge.services.path_lease import is_path_overlapping, normalize_lease_path
 from localforge.storage import UnitOfWork
+from localforge.storage.orm import RunnerPoolStateORM
+from sqlalchemy import select
 
 
 async def _create_project_task_run(uow: UnitOfWork, *, key: str = "R5-1") -> tuple[int, int, int]:
@@ -174,3 +176,61 @@ async def test_r5_runner_stale_fencing_token_cannot_release_newer_reservation(db
             lease_token=second_log.lease_token,
         )
         assert current is not None
+
+
+@pytest.mark.asyncio
+async def test_r5_runner_restart_reconciles_capacity_from_task_run_truth(db_manager) -> None:
+    async with UnitOfWork(db_manager) as uow:
+        assert uow.runner_pool is not None
+        assert uow.tasks is not None
+        assert uow.session is not None
+        project_id, _, task_run_id = await _create_project_task_run(uow, key="R5-4")
+        second_task = await uow.tasks.create_task(
+            domain.Task(
+                project_id=project_id,
+                key="R5-4B",
+                title="R5 second task",
+                description="Completed task should not consume runner capacity",
+            )
+        )
+        assert second_task.id is not None
+        completed_task_run = await uow.tasks.create_task_run(
+            domain.TaskRun(
+                run_id=1,
+                task_id=second_task.id,
+                status=TaskRunStatus.COMPLETED,
+                ended_at=datetime.now(UTC),
+            )
+        )
+        assert completed_task_run.id is not None
+
+        caps = domain.RunnerCapability(lane=RunnerLane.INLINE, max_concurrency=2)
+        await uow.runner_pool.register_runner(
+            "runner-reconcile", "Runner Reconcile", RunnerLane.INLINE, caps, 2
+        )
+        await uow.runner_pool.dispatch_task(
+            project_id=project_id,
+            task_run_id=task_run_id,
+            required_lane=RunnerLane.INLINE,
+        )
+        await uow.runner_pool.dispatch_task(
+            project_id=project_id,
+            task_run_id=completed_task_run.id,
+            required_lane=RunnerLane.INLINE,
+        )
+
+        result = await uow.session.execute(
+            select(RunnerPoolStateORM).where(RunnerPoolStateORM.runner_id == "runner-reconcile")
+        )
+        runner_orm = result.scalar_one_or_none()
+        assert runner_orm is not None
+        runner_orm.active_tasks_count = 0
+        runner_orm.health_state = RunnerHealthState.READY.value
+        await uow.session.flush()
+
+        changed = await uow.runner_pool.reconcile_leaked_leases()
+        runner_state = (await uow.runner_pool.list_runners())[0]
+
+        assert changed == 1
+        assert runner_state.active_tasks_count == 1
+        assert runner_state.health_state == RunnerHealthState.READY

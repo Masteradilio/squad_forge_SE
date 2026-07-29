@@ -21,5 +21,8 @@
   worktrees are retained for diagnostics and marked `REJECTED`; successful or
   cancelled terminal cleanup removes the directory and marks manifests
   `CLEANED`.
-- Complete kill/restart reconciliation across every owned runner, lease,
-  worktree, and task-run resource remains open.
+- Restart recovery now safely fails orphaned active Scheduler TaskRuns and
+  releases their persisted RunnerPool reservations, PathLeases, and
+  WorktreeAttemptManifests idempotently. Controlled subprocess termination and
+  external action reservation handling remain tracked in the broader R4
+  lifecycle scope.

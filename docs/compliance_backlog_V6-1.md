@@ -593,10 +593,12 @@ Make concurrent execution deterministic and restart-safe.
 - [x] Renewal prevents premature takeover.
 - [x] Expired leases can be safely reclaimed with fencing.
 - [x] Deadlock victim selection is deterministic.
-- [ ] Kill and restart release/reconcile all owned resources.
+- [x] Kill and restart release/reconcile all owned resources.
   - RunnerPool restart reconciliation now rebuilds active capacity from
     persisted successful dispatch logs joined to active TaskRuns, rather than
-    resetting capacity blindly.
+    resetting capacity blindly. Loop restart recovery now safely fails orphaned
+    Scheduler TaskRuns and releases their RunnerPool reservations, PathLeases,
+    and WorktreeAttemptManifests idempotently.
 - [x] Real temporary Git worktree lifecycle is inspected on disk.
 
 ### Phase R5 exit gate
@@ -604,7 +606,7 @@ Make concurrent execution deterministic and restart-safe.
 - [x] No silent path collision is possible in supported databases.
 - [x] Stale owners cannot release runner/path leases after lease loss when
       fencing tokens are used.
-- [ ] Resource state survives and reconciles after restart.
+- [x] Resource state survives and reconciles after restart.
 
 ---
 

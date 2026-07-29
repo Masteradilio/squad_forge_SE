@@ -6,10 +6,14 @@ import pytest
 from localforge.models import domain
 from localforge.models.enums import (
     LeaseReleaseReason,
+    LoopRunStatus,
     PathLeaseWaitStatus,
     RunnerHealthState,
     RunnerLane,
+    RunStatus,
     TaskRunStatus,
+    TriggerKind,
+    WorktreeAttemptStatus,
 )
 from localforge.services.path_lease import (
     canonicalize_repository_relative_path,
@@ -493,6 +497,111 @@ async def test_r5_runner_restart_reconciles_capacity_from_task_run_truth(db_mana
         assert changed == 1
         assert runner_state.active_tasks_count == 1
         assert runner_state.health_state == RunnerHealthState.READY
+
+
+@pytest.mark.asyncio
+async def test_r5_loop_restart_reconciles_scheduler_owned_resources(db_manager) -> None:
+    async with UnitOfWork(db_manager) as uow:
+        assert uow.projects is not None
+        assert uow.loops is not None
+        assert uow.loop_coordinator is not None
+        assert uow.tasks is not None
+        assert uow.path_leases is not None
+        assert uow.runner_pool is not None
+        assert uow.worktrees is not None
+
+        project = await uow.projects.create_project(
+            domain.Project(name="R5 Restart", root_path="E:/tmp/r5-restart", default_branch="main")
+        )
+        assert project.id is not None
+        loop_def = await uow.loops.create_loop(
+            domain.LoopDefinition(
+                project_id=project.id,
+                name="R5 restart loop",
+                repository_path=project.root_path,
+            )
+        )
+        assert loop_def.id is not None
+        loop_run = await uow.loop_coordinator.trigger_loop(
+            loop_id=loop_def.id,
+            trigger_kind=TriggerKind.MANUAL,
+            idempotency_key="r5-restart-reconcile",
+            payload={
+                "force_actionable": True,
+                "items": [{"external_id": "resource", "title": "Own resources"}],
+            },
+        )
+        assert loop_run.id is not None
+        assert loop_run.scheduler_run_id is not None
+        assert loop_run.triage_task_ids
+        task_run = await uow.tasks.create_task_run(
+            domain.TaskRun(
+                run_id=loop_run.scheduler_run_id,
+                task_id=loop_run.triage_task_ids[0],
+                status=TaskRunStatus.RUNNING,
+            )
+        )
+        assert task_run.id is not None
+        lease, _, _ = await uow.path_leases.acquire_lease(
+            project_id=project.id,
+            task_run_id=task_run.id,
+            owner_id="restart-worker",
+            target_path="src/restart.py",
+            fencing_token="restart-token",
+        )
+        assert lease is not None
+        await uow.worktrees.create_attempt_manifest(
+            project_id=project.id,
+            task_id=loop_run.triage_task_ids[0],
+            task_run_id=task_run.id,
+            worktree_path="E:/tmp/r5-restart/.localforge/worktrees/restart",
+            branch_name="lf/restart",
+            source_commit="abc123",
+            owner_agent_id="restart-worker",
+        )
+        await uow.runner_pool.register_runner(
+            runner_id="runner-restart",
+            name="Restart Runner",
+            lane=RunnerLane.INLINE,
+            max_concurrency=1,
+        )
+        _, dispatch_status, _ = await uow.runner_pool.dispatch_task(
+            project_id=project.id,
+            task_run_id=task_run.id,
+            required_lane=RunnerLane.INLINE,
+        )
+        assert dispatch_status == "SUCCESS"
+
+    async with UnitOfWork(db_manager) as uow:
+        assert uow.loop_coordinator is not None
+        recovered = await uow.loop_coordinator.recover_pending_loops(project.id)
+        assert len(recovered) == 1
+        assert recovered[0].status == LoopRunStatus.FAILED
+        assert "orphaned scheduler work" in (recovered[0].error_message or "")
+
+        assert uow.executions is not None
+        assert uow.tasks is not None
+        assert uow.path_leases is not None
+        assert uow.runner_pool is not None
+        assert uow.worktrees is not None
+        scheduler_run = await uow.executions.get_run(loop_run.scheduler_run_id)
+        assert scheduler_run is not None
+        assert scheduler_run.status == RunStatus.FAILED
+        reconciled_task_run = await uow.tasks.get_task_run(task_run.id)
+        assert reconciled_task_run is not None
+        assert reconciled_task_run.status == TaskRunStatus.FAILED
+        assert "failed safely" in (reconciled_task_run.final_summary or "")
+        assert await uow.path_leases.list_active_leases(project.id) == []
+        runner_state = (await uow.runner_pool.list_runners())[0]
+        assert runner_state.active_tasks_count == 0
+        manifest = await uow.worktrees.get_manifest_by_task_run(task_run.id)
+        assert manifest is not None
+        assert manifest.status == WorktreeAttemptStatus.CANCELLED
+
+    async with UnitOfWork(db_manager) as uow:
+        assert uow.loop_coordinator is not None
+        repeated = await uow.loop_coordinator.recover_pending_loops(project.id)
+        assert repeated == []
 
 
 @pytest.mark.asyncio

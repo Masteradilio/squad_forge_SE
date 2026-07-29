@@ -427,7 +427,67 @@ class LoopCoordinator:
             run.completed_at = scheduler_run.ended_at or now
             return await self.loop_service.update_loop_run(run)
 
+        reconciliation = await self._reconcile_scheduler_run_owned_resources(
+            scheduler_run_id=run.scheduler_run_id,
+            reason=f"Restart reconciliation for LoopRun {run.id}",
+            now=now,
+        )
+        if reconciliation["task_runs_failed"] > 0 or reconciliation["resources_released"] > 0:
+            scheduler_run.status = RunStatus.FAILED
+            scheduler_run.ended_at = now
+            scheduler_run.summary = (
+                "Restart reconciliation safely failed orphaned scheduler work: "
+                f"{reconciliation['task_runs_failed']} task runs failed, "
+                f"{reconciliation['resources_released']} resources released."
+            )
+            await self.execution_service.update_run(scheduler_run)
+            run.status = LoopRunStatus.FAILED
+            run.completed_at = now
+            run.error_message = scheduler_run.summary
+            return await self.loop_service.update_loop_run(run)
+
         return await self.loop_service.update_loop_run(run)
+
+    async def _reconcile_scheduler_run_owned_resources(
+        self,
+        *,
+        scheduler_run_id: int,
+        reason: str,
+        now: datetime | None = None,
+    ) -> dict[str, int]:
+        """Safely fail orphaned scheduler task runs and release persisted resources."""
+        effective_now = now or datetime.now(UTC)
+        task_runs = await self.task_service.list_runs_for_run(scheduler_run_id)
+        active_statuses = {TaskRunStatus.PENDING, TaskRunStatus.RUNNING}
+        failed_count = 0
+        resources_released = 0
+
+        for task_run in task_runs:
+            if task_run.id is None or task_run.status not in active_statuses:
+                continue
+            task_run.status = TaskRunStatus.FAILED
+            task_run.ended_at = effective_now
+            task_run.final_summary = (
+                f"{reason}: active task run had no live worker after restart and was "
+                "failed safely before resource reconciliation."
+            )
+            await self.task_service.update_task_run(task_run)
+            failed_count += 1
+            resources_released += await self.path_lease_service.release_all_leases_for_run(
+                task_run.id, LeaseReleaseReason.CANCELLED
+            )
+            resources_released += await self.runner_pool_service.cancel_runner_leases_for_task_run(
+                task_run.id
+            )
+            resources_released += await self.worktree_service.cancel_manifests_for_task_run(
+                task_run.id
+            )
+
+        resources_released += await self.runner_pool_service.reconcile_leaked_leases()
+        return {
+            "task_runs_failed": failed_count,
+            "resources_released": resources_released,
+        }
 
     async def pause_loop(self, loop_id: int) -> domain.LoopDefinition:
         """Pause a loop definition and mark active runs as PAUSED."""

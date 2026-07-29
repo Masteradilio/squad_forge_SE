@@ -9,7 +9,7 @@
     "V61C-502",
     "V61C-503"
   ],
-  "source_commit": "a94d76d",
+  "source_commit": "f6a876369e32d90c51fad0e14981a0ffcae464fb",
   "candidate_branch": "codex/v62-truth-reset-foundation",
   "reviewed_pr_number": 14,
   "verdict": "EVIDENCE_READY",
@@ -152,9 +152,21 @@
     {
       "command": ".\\.codex_venv\\Scripts\\python.exe -m ruff check backend\\localforge\\services\\path_lease.py backend\\localforge\\storage\\orm.py backend\\localforge\\storage\\bootstrap.py backend\\tests\\test_phase_r5_coordination.py",
       "exit_code": 0
+    },
+    {
+      "command": ".\\.codex_venv\\Scripts\\python.exe -m pytest backend\\tests\\test_phase_r5_coordination.py::test_r5_loop_restart_reconciles_scheduler_owned_resources -q",
+      "exit_code": 0
+    },
+    {
+      "command": ".\\.codex_venv\\Scripts\\python.exe -m mypy backend\\localforge\\services\\loop_coordinator.py backend\\tests\\test_phase_r5_coordination.py",
+      "exit_code": 0
+    },
+    {
+      "command": ".\\.codex_venv\\Scripts\\python.exe -m ruff check backend\\localforge\\services\\loop_coordinator.py backend\\tests\\test_phase_r5_coordination.py",
+      "exit_code": 0
     }
   ],
-  "manifest_sha256": "31c40c569b0da6b21442be2fe1e393c67d2cbe31139a96c4b2bc1da9f158e979",
+  "manifest_sha256": "2c631b5542b968b61462f2299cc26a9e73aa7e9cbeb0dc7b0b6cae0edce17f3c",
   "environment": {
     "os": "windows-local-and-github-actions-matrix",
     "python": "3.11-local / 3.12-ci",
@@ -165,13 +177,13 @@
     "Candidate evidence remains EVIDENCE_READY until reviewed PR, merge commit, exact-head CI, owner-approved tag, and final release validation exist."
   ],
   "input_hashes": {
-    "docs/e2e/v6_2_compliance/phase_R5/acceptance_report.md": "c05f95bd07ab52c77d8fa7e3ce1831b8a7b9879b5d62dd1dc09eefd3c008495a",
-    "docs/e2e/v6_2_compliance/phase_R5/known_limitations.md": "ed1043e5b141e8afbad27afdebc0f840807d005a95ef175bf0e9c212216e0f4a",
+    "docs/e2e/v6_2_compliance/phase_R5/acceptance_report.md": "1e56fbf7396605bc18cbad9e0c9d8e83237f31e6bf5146efa751c0857f97cb86",
+    "docs/e2e/v6_2_compliance/phase_R5/known_limitations.md": "e4f915425f6f6232a1160b02930a0677f6c9df0b07aaa00fb6a3ee84d6e0bddf",
     "backend/localforge/services/runner_pool.py": "6d0b668b763cab92f8c91677b50d121e4a6e52cb020cfa6db721bc16263e2786",
-    "backend/tests/test_phase_r5_coordination.py": "02230df61f97eb94744c0163edbbedbd7d690abce775775a0bcab4395fa1e8de",
+    "backend/tests/test_phase_r5_coordination.py": "853a6fb5584e7cf341bc722b14bc0c39db7540385195d717928e8b1f530db7aa",
     "backend/tests/test_phase6_runner_pool_governance.py": "52089e8a35d82fd9ca4fa70e63c2f5041d990b805630b80e8e6785dbf9b5adae",
-    "docs/compliance_backlog_V6-1.md": "12e63a872e18773d3f9e222c11d1e0b3cc6c5f1bf1f0ec578036f44e850b5937",
-    "CHANGELOG.md": "fd74e82abea067fb3e4419cb4768403284331b31cb56c01b9bbf0a5d7e7d690a",
+    "docs/compliance_backlog_V6-1.md": "72ef3975e5dd557f02f6cbad835ec689c94386a5491fe0f14f9cb653653e1b57",
+    "CHANGELOG.md": "fd97a16b1fcb02d5fc95e6531a7a56723efbbace80e9fd704557705923681f68",
     "backend/localforge/services/path_lease.py": "8dd2df535a48eb76b334b8711e8e951aa199f807ea89686ae8d555b5d47657f5",
     "backend/localforge/models/enums.py": "8ad6bca9afbf41c5c75c442b8b88bd5363332b191f3f93c555cd6b519635b583",
     "backend/localforge/models/domain.py": "8577f6f2c5a8d510015749fb87843fd5c33b03afb7aa0b6cbdcd8fadf0e17983",
@@ -185,6 +197,7 @@
     "backend/tests/test_gitops.py": "785f4762e53b6694cd36f72d212c1706ef5501cf2f8e5446cf6ef60f54edd6e6",
     "backend/localforge/services/worktree.py": "f6190dd9d4d5ff6f77450f44db648b8c581284c8dc6f536bf2045c290197e895",
     "backend/tests/test_phase6_worktrees_path_intents.py": "cf670c1da32915d80deb4856c36deb3f0f63779576685dd75ae6413461ea18f4",
-    "backend/tests/test_audit_store.py": "dc1c4401fd92be91d90440c92bcfaf7d4fa09f7180966e1f607c76e8944f5ca8"
+    "backend/tests/test_audit_store.py": "dc1c4401fd92be91d90440c92bcfaf7d4fa09f7180966e1f607c76e8944f5ca8",
+    "backend/localforge/services/loop_coordinator.py": "193f5afeca041f2b08c340b34338fb2a99805a7653377c2a4238614465b9ce6b"
   }
 }

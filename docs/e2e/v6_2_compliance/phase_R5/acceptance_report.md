@@ -14,10 +14,13 @@ PathLease wait-for edges with bounded timeouts, cancellation, FIFO queue
 position, repeated-contention escalation, and deterministic two-owner deadlock
 victim selection. Governed task startup now binds the runner worktree, branch,
 and immutable source commit into a persisted `WorktreeAttemptManifest`; worktree
-validation now rejects dirty or target-drifted manifests.
+validation now rejects dirty or target-drifted manifests. Restart recovery now
+safely fails orphaned scheduler task runs and idempotently releases their
+RunnerPool reservations, PathLeases, and WorktreeAttemptManifests.
 
-This is candidate evidence only. Final R5 acceptance still requires restart
-resource reconciliation coverage across all owned resources.
+This is candidate evidence only. R5 coordination invariants are implemented and
+covered by focused regression tests; final release acceptance still depends on
+the broader reviewed-merge, tag, clean-checkout, and release-asset gates.
 
 ## Implemented Controls
 
@@ -43,6 +46,7 @@ resource reconciliation coverage across all owned resources.
 | Cleanliness and target drift validation | `WorktreeService.validate_repository_state()` checks `git status --porcelain`, current `HEAD`, project default branch commit, and persisted source commit, rejecting dirty or drifted manifests. |
 | Manifest-led orphan cleanup | `WorktreeManager.cleanup_orphan_worktrees()` removes only non-active worktree directories that are registered in `WorktreeAttemptManifest`; unregistered physical directories under `.localforge/worktrees` are preserved as user-owned/diagnostic paths. |
 | Failed-worktree diagnostic retention | `WorktreeManager.cleanup_worktree()` retains `FAILED_SAFE` worktrees for post-failure diagnosis and marks their manifests `REJECTED`; successful/cancelled cleanup removes the directory and marks manifests `CLEANED`. |
+| Restart owned-resource reconciliation | `LoopCoordinator.recover_pending_loops()` now fails orphaned active Scheduler TaskRuns after restart, cancels their RunnerPool reservations, releases PathLeases, cancels WorktreeAttemptManifests, marks the Scheduler Run failed, and leaves repeated recovery idempotent. |
 
 ## Validation Commands
 
@@ -106,6 +110,18 @@ python -m pytest backend\tests\test_audit_store.py::test_failed_safe_worktree_is
 
 python -m pytest backend\tests\test_audit_store.py backend\tests\test_gitops.py backend\tests\test_scheduler.py::test_scheduler_uses_runner_pool_to_prepare_task_execution -q
 11 passed in 3.76s
+
+python -m pytest backend\tests\test_phase_r5_coordination.py::test_r5_loop_restart_reconciles_scheduler_owned_resources -q
+1 passed in 0.30s
+
+python -m pytest backend\tests\test_phase_r5_coordination.py -q
+14 passed, 1 skipped in 1.13s
+
+python -m mypy backend\localforge\services\loop_coordinator.py backend\tests\test_phase_r5_coordination.py
+Success: no issues found in 2 source files
+
+python -m ruff check backend\localforge\services\loop_coordinator.py backend\tests\test_phase_r5_coordination.py
+All checks passed!
 ```
 
 ## Remaining Acceptance Requirements
@@ -125,5 +141,7 @@ python -m pytest backend\tests\test_audit_store.py backend\tests\test_gitops.py 
   orphan cleanup that preserves unregistered user-owned paths are covered.
   Failed worktrees are retained for diagnostics while successful/cancelled
   terminal cleanup removes directories and records `CLEANED`.
-- Full kill/restart release and reconciliation across every owned resource
-  remains open.
+- Restart reconciliation now covers persisted Scheduler TaskRuns, RunnerPool
+  reservations, PathLeases, and WorktreeAttemptManifests. Broader R4 lifecycle
+  acceptance still tracks controlled subprocess termination and external action
+  reservations outside the R5 coordination layer.

@@ -52,7 +52,7 @@
       "exit_code": 0
     }
   ],
-  "manifest_sha256": "f167ad81364f8816da5236ef0dd94587b43e0bfa96f462b109fe7aa8aa9c739c",
+  "manifest_sha256": "8baf7ca5abb13716175d6bdfe9d0e439bc2e78f8b99bec3e3b224893f0dfbebe",
   "environment": {
     "os": "windows-local-and-github-actions-matrix",
     "python": "3.11-local / 3.12-ci",
@@ -70,14 +70,14 @@
     "backend/localforge/storage/bootstrap.py": "c5126584b6cd35c54d817e452afd6abbd997344da8f3a8f4dd9f2f102d4bc933",
     "backend/localforge/services/external_events.py": "1fb880552168098b2d39c5568bc11ad7c09032a1414a4a6e3b4b4017cfb84a77",
     "backend/localforge/services/loop_service.py": "5ef7cbb95896e9e061331ae98b62b8d399891c73254be6f6080116ce1badb2c1",
-    "backend/localforge/services/loop_coordinator.py": "1b6ad14c63b7a0d3b2ca8cc35f4c01cbdc01ae323564149aff9fd0b40b243697",
+    "backend/localforge/services/loop_coordinator.py": "193f5afeca041f2b08c340b34338fb2a99805a7653377c2a4238614465b9ce6b",
     "backend/localforge/api/routes/loops.py": "341b126e8c4087423c8a9c9af5fb54f8ff40408f90f3e3bc888a3b3286bbd946",
     "backend/localforge/api/schemas.py": "2db44bea65f86d2fa6c0150a95d60cdff8ca45bec8e621c093249064120718e5",
     "backend/tests/test_phase6_loop_control_plane.py": "3e8625dd59d8d2598ddd5034c34c74ee7056b396028644b0eba4a096ff254224",
     "backend/tests/test_phase6_circuit_breakers.py": "f9fada8b824fbb79d0a7dec665844e732ab1438c42a1229eb1653c960b3d3c02",
     "backend/tests/test_phase_r4_loop_runtime.py": "7041c5efdface23058b2be1d4ce966ae028e16cdc9088f3f901685d14f6f5832",
-    "docs/compliance_backlog_V6-1.md": "12e63a872e18773d3f9e222c11d1e0b3cc6c5f1bf1f0ec578036f44e850b5937",
-    "CHANGELOG.md": "fd74e82abea067fb3e4419cb4768403284331b31cb56c01b9bbf0a5d7e7d690a",
+    "docs/compliance_backlog_V6-1.md": "72ef3975e5dd557f02f6cbad835ec689c94386a5491fe0f14f9cb653653e1b57",
+    "CHANGELOG.md": "fd97a16b1fcb02d5fc95e6531a7a56723efbbace80e9fd704557705923681f68",
     "backend/localforge/models/enums.py": "8ad6bca9afbf41c5c75c442b8b88bd5363332b191f3f93c555cd6b519635b583",
     "backend/localforge/services/runner_pool.py": "6d0b668b763cab92f8c91677b50d121e4a6e52cb020cfa6db721bc16263e2786",
     "backend/localforge/services/worktree.py": "f6190dd9d4d5ff6f77450f44db648b8c581284c8dc6f536bf2045c290197e895"

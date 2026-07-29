@@ -559,7 +559,7 @@ Make concurrent execution deterministic and restart-safe.
 ### V61C-501 — Make PathLease acquisition race-safe
 
 - [x] Normalize Windows/Linux paths, separators, and case rules.
-- [ ] Normalize symlinks and enforce repository-boundary canonicalization.
+- [x] Normalize symlinks and enforce repository-boundary canonicalization.
 - [x] Enforce exact-path conflicts through a database active-lease key.
 - [ ] Enforce parent/child overlap conflicts atomically at the
       database/transaction layer.
@@ -589,7 +589,7 @@ Make concurrent execution deterministic and restart-safe.
 
 - [ ] Concurrent database sessions race for the same path.
 - [x] Case, separator, exact-path, and directory overlap conflicts.
-- [ ] Symlink and repository-boundary overlap conflicts.
+- [x] Symlink and repository-boundary overlap conflicts.
 - [x] Renewal prevents premature takeover.
 - [x] Expired leases can be safely reclaimed with fencing.
 - [ ] Deadlock victim selection is deterministic.

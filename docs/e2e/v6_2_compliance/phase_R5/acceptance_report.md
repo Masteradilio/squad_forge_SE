@@ -8,7 +8,7 @@ Phase R5 adds candidate hardening for RunnerPool and PathLease coordination.
 It introduces persisted fencing tokens, lease heartbeat/expiry metadata,
 task-run/worktree attempt attribution for path leases, exact-path active
 conflict protection, and service-level path normalization for separators and
-case handling.
+case handling plus repository-boundary canonicalization.
 
 This is candidate evidence only. Final R5 acceptance still requires
 database-level parent/child overlap fencing across concurrent transactions,
@@ -25,6 +25,7 @@ worktree lifecycle reconciliation.
 | Runner bounded backpressure | Capacity saturation now records `BACKPRESSURE_LIMITED` with deterministic queue position and bounded queue limit metadata, while full queues produce `BACKPRESSURE_QUEUE_FULL` instead of masquerading as incompatible runners. |
 | Runner restart reconciliation | `reconcile_leaked_leases()` rebuilds `active_tasks_count` from successful dispatch logs joined to active `TaskRun` rows instead of resetting capacity blindly. |
 | Path normalization | `normalize_lease_path()` canonicalizes separators and Windows case before overlap checks. |
+| Repository-boundary canonicalization | `canonicalize_repository_relative_path()` resolves targets through the repository root, follows available symlinks, rejects paths that escape the root, and is enforced by `PathLeaseService.acquire_lease(repository_root=...)`. |
 | Exact active conflict key | `PathLeaseORM` stores `active_conflict_key` under a project-scoped uniqueness constraint and clears it on release. |
 | Path lease fencing | `PathLease` now records `fencing_token`, heartbeat, attempt number, and worktree path. |
 | Path lease renewal | `renew_lease()` extends an active lease only when owner and fencing token match. |
@@ -34,15 +35,15 @@ worktree lifecycle reconciliation.
 
 ```text
 python -m pytest backend\tests\test_phase_r5_coordination.py backend\tests\test_phase6_runner_pool_governance.py backend\tests\test_phase6_worktrees_path_intents.py -q
-12 passed in 1.01s
+14 passed, 1 skipped in 1.18s
 
 python -m pytest backend/tests/test_phase_r5_coordination.py backend/tests/test_phase6_runner_pool_governance.py backend/tests/test_phase6_worktrees_path_intents.py backend/tests/test_storage.py backend/tests/test_phase_r1_release_integrity.py -q
 17 passed in 12.39s
 
-python -m mypy backend\localforge\services\runner_pool.py backend\tests\test_phase_r5_coordination.py backend\tests\test_phase6_runner_pool_governance.py
-Success: no issues found in 3 source files
+python -m mypy backend\localforge\services\path_lease.py backend\tests\test_phase_r5_coordination.py
+Success: no issues found in 2 source files
 
-python -m ruff check backend\localforge\services\runner_pool.py backend\tests\test_phase_r5_coordination.py backend\tests\test_phase6_runner_pool_governance.py
+python -m ruff check backend\localforge\services\path_lease.py backend\tests\test_phase_r5_coordination.py
 All checks passed!
 ```
 
@@ -50,7 +51,8 @@ All checks passed!
 
 - Parent/child overlap conflicts are still enforced by service-level checks,
   not by an atomic database exclusion constraint.
-- Symlink resolution and repository-boundary canonicalization remain open.
+- Repository-boundary canonicalization and symlink escape rejection are covered
+  where the host permits symlink creation.
 - FIFO wait queues, cancellation, persisted wait-for graph, and deterministic
   deadlock victim selection remain open.
 - RunnerPool backpressure is bounded and reported separately from permanent

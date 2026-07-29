@@ -71,6 +71,9 @@ All notable changes to LocalForge OS will be documented in this file.
 - Added bounded RunnerPool backpressure reporting: saturated compatible runners
   now produce `BACKPRESSURE_LIMITED` with deterministic queue position, and full
   queues produce `BACKPRESSURE_QUEUE_FULL`.
+- Added repository-boundary canonicalization for PathLease acquisition, rejecting
+  traversal or symlink-resolved targets outside the repository root when a root
+  is supplied.
 - Added R5 regression coverage for runner stale-token rejection, path lease
   renewal, exact-path reclaim, and path separator/case normalization.
 - Added Phase R6 candidate evidence under

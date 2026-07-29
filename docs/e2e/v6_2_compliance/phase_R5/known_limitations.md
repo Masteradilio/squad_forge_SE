@@ -4,8 +4,9 @@
 - Exact normalized path races are protected by an active conflict key, but
   parent/child overlap conflicts are not yet enforced by a database exclusion
   constraint across concurrent transactions.
-- Path normalization covers separators and Windows case behavior; symlink
-  resolution and repository-boundary canonicalization remain open.
+- Path normalization covers separators, Windows case behavior, repository-root
+  canonicalization, and symlink escape rejection where the host permits symlink
+  creation.
 - Lease renewal and fencing exist, but bounded FIFO waiting, persisted wait-for
   graph, timeout cancellation, and deterministic deadlock victim selection
   remain open.

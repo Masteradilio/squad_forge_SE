@@ -1,7 +1,7 @@
 import logging
 import posixpath
 from datetime import UTC, datetime, timedelta
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 from uuid import uuid4
 
 from sqlalchemy import select
@@ -44,6 +44,22 @@ def is_path_overlapping(path_a: str, path_b: str) -> bool:
     return norm_b.startswith(norm_a_dir) or norm_a.startswith(norm_b_dir)
 
 
+def canonicalize_repository_relative_path(target_path: str, repository_root: str) -> str:
+    """Resolve a target path through the repository root and reject boundary escape."""
+    root = Path(repository_root).resolve(strict=False)
+    target = Path(target_path)
+    if not target.is_absolute():
+        target = root / target
+    resolved_target = target.resolve(strict=False)
+    try:
+        relative = resolved_target.relative_to(root)
+    except ValueError as exc:
+        raise ValueError(
+            f"PathIntent boundary violation: target '{target_path}' resolves outside repository root."
+        ) from exc
+    return normalize_lease_path(relative.as_posix())
+
+
 class PathLeaseService:
     """Service layer managing PathIntent write leases, overlap detection, TTLs, and deadlock resolution."""
 
@@ -61,6 +77,7 @@ class PathLeaseService:
         attempt_number: int = 1,
         worktree_path: str | None = None,
         fencing_token: str | None = None,
+        repository_root: str | None = None,
     ) -> tuple[domain.PathLease | None, str | None, str]:
         """Attempt to acquire an exclusive write lease for a target path.
 
@@ -68,7 +85,16 @@ class PathLeaseService:
             (lease: PathLease | None, conflict_owner_id: str | None, message: str)
         """
         now = datetime.now(UTC)
-        normalized_target_path = normalize_lease_path(target_path)
+        try:
+            normalized_target_path = (
+                canonicalize_repository_relative_path(target_path, repository_root)
+                if repository_root is not None
+                else normalize_lease_path(target_path)
+            )
+        except ValueError as exc:
+            msg = str(exc)
+            logger.warning(msg)
+            return None, None, msg
         # Fetch active, unexpired leases for the same project
         stmt = select(PathLeaseORM).where(
             PathLeaseORM.project_id == project_id,

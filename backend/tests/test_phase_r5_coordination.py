@@ -1,9 +1,14 @@
+import os
 from datetime import UTC, datetime, timedelta
 
 import pytest
 from localforge.models import domain
 from localforge.models.enums import LeaseReleaseReason, RunnerHealthState, RunnerLane, TaskRunStatus
-from localforge.services.path_lease import is_path_overlapping, normalize_lease_path
+from localforge.services.path_lease import (
+    canonicalize_repository_relative_path,
+    is_path_overlapping,
+    normalize_lease_path,
+)
 from localforge.storage import UnitOfWork
 from localforge.storage.orm import RunnerPoolStateORM
 from sqlalchemy import select
@@ -31,6 +36,35 @@ def test_r5_path_normalization_handles_separators_and_case() -> None:
     )
     assert is_path_overlapping("Backend\\LocalForge", "backend/localforge/api/app.py") is True
     assert is_path_overlapping("backend/localforge/api", "backend/localforge/cli") is False
+
+
+def test_r5_repository_boundary_canonicalization_rejects_traversal(tmp_path) -> None:
+    repo_root = tmp_path / "repo"
+    outside = tmp_path / "outside"
+    repo_root.mkdir()
+    outside.mkdir()
+
+    assert (
+        canonicalize_repository_relative_path("src/../src/app.py", str(repo_root))
+        == "src/app.py"
+    )
+    with pytest.raises(ValueError, match="outside repository root"):
+        canonicalize_repository_relative_path("../outside/app.py", str(repo_root))
+
+
+def test_r5_repository_boundary_canonicalization_rejects_symlink_escape(tmp_path) -> None:
+    repo_root = tmp_path / "repo"
+    outside = tmp_path / "outside"
+    repo_root.mkdir()
+    outside.mkdir()
+    link_path = repo_root / "external"
+    try:
+        os.symlink(outside, link_path, target_is_directory=True)
+    except OSError as exc:
+        pytest.skip(f"symlink creation is unavailable in this environment: {exc}")
+
+    with pytest.raises(ValueError, match="outside repository root"):
+        canonicalize_repository_relative_path("external/file.py", str(repo_root))
 
 
 @pytest.mark.asyncio
@@ -94,6 +128,27 @@ async def test_r5_path_lease_fencing_renewal_and_reacquire(db_manager) -> None:
         assert reacquired is not None
         assert reacquire_conflict is None
         assert reacquired.fencing_token == "token-b"
+
+
+@pytest.mark.asyncio
+async def test_r5_path_lease_acquire_rejects_repository_boundary_escape(db_manager, tmp_path) -> None:
+    async with UnitOfWork(db_manager) as uow:
+        assert uow.path_leases is not None
+        project_id, _, task_run_id = await _create_project_task_run(uow, key="R5-B")
+        repo_root = tmp_path / "repo"
+        repo_root.mkdir()
+
+        lease, conflict_owner, message = await uow.path_leases.acquire_lease(
+            project_id=project_id,
+            task_run_id=task_run_id,
+            owner_id="agent-boundary",
+            target_path="../outside.py",
+            repository_root=str(repo_root),
+        )
+
+        assert lease is None
+        assert conflict_owner is None
+        assert "outside repository root" in message
 
 
 @pytest.mark.asyncio

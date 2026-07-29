@@ -23,6 +23,7 @@ from localforge.models.enums import (
     MemoryRecordKind,
     MemoryRelationType,
     MemoryValidityStatus,
+    PathLeaseWaitStatus,
     ProgressSignal,
     RunMode,
     RunnerHealthState,
@@ -664,6 +665,25 @@ class PathLease(BaseModel):
     fencing_token: str
     release_reason: LeaseReleaseReason | None = None
     created_at: datetime = Field(default_factory=utc_now)
+
+
+class PathLeaseWait(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int | None = None
+    project_id: int
+    task_run_id: int
+    owner_id: str
+    target_path: str
+    normalized_target_path: str
+    blocking_owner_id: str | None = None
+    blocking_lease_id: int | None = None
+    status: PathLeaseWaitStatus = PathLeaseWaitStatus.WAITING
+    queue_position: int = 1
+    requested_at: datetime = Field(default_factory=utc_now)
+    expires_at: datetime = Field(default_factory=utc_now)
+    resolved_at: datetime | None = None
+    reason: str | None = None
 
 
 class RunnerCapability(BaseModel):

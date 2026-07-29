@@ -1450,6 +1450,68 @@ class PathLeaseORM(Base):
         )
 
 
+class PathLeaseWaitORM(Base):
+    __tablename__ = "path_lease_waits"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
+    task_run_id: Mapped[int] = mapped_column(
+        ForeignKey("task_runs.id", ondelete="CASCADE"), nullable=False
+    )
+    owner_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    target_path: Mapped[str] = mapped_column(Text, nullable=False)
+    normalized_target_path: Mapped[str] = mapped_column(Text, nullable=False)
+    blocking_owner_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    blocking_lease_id: Mapped[int | None] = mapped_column(
+        ForeignKey("path_leases.id", ondelete="SET NULL"), nullable=True
+    )
+    status: Mapped[str] = mapped_column(String(50), default="WAITING", nullable=False)
+    queue_position: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    requested_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    def to_domain(self) -> domain.PathLeaseWait:
+        return domain.PathLeaseWait(
+            id=self.id,
+            project_id=self.project_id,
+            task_run_id=self.task_run_id,
+            owner_id=self.owner_id,
+            target_path=self.target_path,
+            normalized_target_path=self.normalized_target_path,
+            blocking_owner_id=self.blocking_owner_id,
+            blocking_lease_id=self.blocking_lease_id,
+            status=enums.PathLeaseWaitStatus(self.status),
+            queue_position=self.queue_position,
+            requested_at=self.requested_at,
+            expires_at=self.expires_at,
+            resolved_at=self.resolved_at,
+            reason=self.reason,
+        )
+
+    @classmethod
+    def from_domain(cls, d: domain.PathLeaseWait) -> "PathLeaseWaitORM":
+        return cls(
+            id=d.id,
+            project_id=d.project_id,
+            task_run_id=d.task_run_id,
+            owner_id=d.owner_id,
+            target_path=d.target_path,
+            normalized_target_path=d.normalized_target_path,
+            blocking_owner_id=d.blocking_owner_id,
+            blocking_lease_id=d.blocking_lease_id,
+            status=d.status.value if isinstance(d.status, enums.PathLeaseWaitStatus) else d.status,
+            queue_position=d.queue_position,
+            requested_at=d.requested_at,
+            expires_at=d.expires_at,
+            resolved_at=d.resolved_at,
+            reason=d.reason,
+        )
+
+
 class RunnerPoolStateORM(Base):
     __tablename__ = "runner_pool_states"
 

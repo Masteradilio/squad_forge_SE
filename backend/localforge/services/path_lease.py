@@ -9,8 +9,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from localforge.models import domain
-from localforge.models.enums import LeaseReleaseReason
-from localforge.storage.orm import PathLeaseORM
+from localforge.models.enums import LeaseReleaseReason, PathLeaseWaitStatus
+from localforge.storage.orm import PathLeaseORM, PathLeaseWaitORM
 
 logger = logging.getLogger(__name__)
 
@@ -142,6 +142,180 @@ class PathLeaseService:
             logger.warning(msg)
             return None, None, msg
         return orm_obj.to_domain(), None, f"Lease acquired for '{target_path}'."
+
+    async def acquire_or_wait(
+        self,
+        project_id: int,
+        task_run_id: int,
+        owner_id: str,
+        target_path: str,
+        is_directory: bool = False,
+        ttl_seconds: int = 3600,
+        wait_timeout_seconds: int = 300,
+        attempt_number: int = 1,
+        worktree_path: str | None = None,
+        fencing_token: str | None = None,
+        repository_root: str | None = None,
+    ) -> tuple[domain.PathLease | None, domain.PathLeaseWait | None, str]:
+        """Acquire a path lease or persist a bounded wait-for edge when it is blocked."""
+        lease, conflict_owner, message = await self.acquire_lease(
+            project_id=project_id,
+            task_run_id=task_run_id,
+            owner_id=owner_id,
+            target_path=target_path,
+            is_directory=is_directory,
+            ttl_seconds=ttl_seconds,
+            attempt_number=attempt_number,
+            worktree_path=worktree_path,
+            fencing_token=fencing_token,
+            repository_root=repository_root,
+        )
+        if lease is not None or conflict_owner is None:
+            return lease, None, message
+
+        wait = await self.enqueue_wait(
+            project_id=project_id,
+            task_run_id=task_run_id,
+            owner_id=owner_id,
+            target_path=target_path,
+            blocking_owner_id=conflict_owner,
+            timeout_seconds=wait_timeout_seconds,
+            repository_root=repository_root,
+        )
+        return None, wait, message
+
+    async def enqueue_wait(
+        self,
+        project_id: int,
+        task_run_id: int,
+        owner_id: str,
+        target_path: str,
+        blocking_owner_id: str,
+        *,
+        blocking_lease_id: int | None = None,
+        timeout_seconds: int = 300,
+        repository_root: str | None = None,
+    ) -> domain.PathLeaseWait:
+        """Persist a FIFO wait edge and mark a deterministic deadlock victim for 2-cycles."""
+        now = datetime.now(UTC)
+        normalized_target_path = (
+            canonicalize_repository_relative_path(target_path, repository_root)
+            if repository_root is not None
+            else normalize_lease_path(target_path)
+        )
+        await self.expire_waits(now=now)
+
+        existing_stmt = select(PathLeaseWaitORM).where(
+            PathLeaseWaitORM.project_id == project_id,
+            PathLeaseWaitORM.owner_id == owner_id,
+            PathLeaseWaitORM.normalized_target_path == normalized_target_path,
+            PathLeaseWaitORM.status == PathLeaseWaitStatus.WAITING.value,
+        )
+        existing_result = await self.session.execute(existing_stmt)
+        existing_wait = existing_result.scalar_one_or_none()
+        if existing_wait is not None:
+            return existing_wait.to_domain()
+
+        queue_stmt = select(PathLeaseWaitORM).where(
+            PathLeaseWaitORM.project_id == project_id,
+            PathLeaseWaitORM.normalized_target_path == normalized_target_path,
+            PathLeaseWaitORM.status == PathLeaseWaitStatus.WAITING.value,
+        )
+        queue_result = await self.session.execute(queue_stmt)
+        queue_position = len(queue_result.scalars().all()) + 1
+
+        wait = PathLeaseWaitORM.from_domain(
+            domain.PathLeaseWait(
+                project_id=project_id,
+                task_run_id=task_run_id,
+                owner_id=owner_id,
+                target_path=target_path,
+                normalized_target_path=normalized_target_path,
+                blocking_owner_id=blocking_owner_id,
+                blocking_lease_id=blocking_lease_id,
+                queue_position=queue_position,
+                requested_at=now,
+                expires_at=now + timedelta(seconds=timeout_seconds),
+                reason=f"Waiting for path lease held by '{blocking_owner_id}'.",
+            )
+        )
+        self.session.add(wait)
+        await self.session.flush()
+
+        cycle_stmt = select(PathLeaseWaitORM).where(
+            PathLeaseWaitORM.project_id == project_id,
+            PathLeaseWaitORM.owner_id == blocking_owner_id,
+            PathLeaseWaitORM.blocking_owner_id == owner_id,
+            PathLeaseWaitORM.status == PathLeaseWaitStatus.WAITING.value,
+        )
+        cycle_result = await self.session.execute(cycle_stmt)
+        peer_wait = cycle_result.scalar_one_or_none()
+        if peer_wait is not None:
+            victim = max(owner_id, blocking_owner_id)
+            victim_wait = wait if wait.owner_id == victim else peer_wait
+            victim_wait.status = PathLeaseWaitStatus.DEADLOCK_VICTIM.value
+            victim_wait.resolved_at = now
+            victim_wait.reason = (
+                "Deadlock detected in path lease wait-for graph; "
+                f"'{victim}' selected as deterministic victim."
+            )
+            await self.session.flush()
+
+        return wait.to_domain()
+
+    async def cancel_wait(
+        self,
+        wait_id: int,
+        *,
+        owner_id: str | None = None,
+        reason: str = "Wait cancelled.",
+    ) -> domain.PathLeaseWait | None:
+        """Cancel a pending path lease wait edge."""
+        stmt = select(PathLeaseWaitORM).where(
+            PathLeaseWaitORM.id == wait_id,
+            PathLeaseWaitORM.status == PathLeaseWaitStatus.WAITING.value,
+        )
+        if owner_id is not None:
+            stmt = stmt.where(PathLeaseWaitORM.owner_id == owner_id)
+        result = await self.session.execute(stmt)
+        wait = result.scalar_one_or_none()
+        if wait is None:
+            return None
+        wait.status = PathLeaseWaitStatus.CANCELLED.value
+        wait.resolved_at = datetime.now(UTC)
+        wait.reason = reason
+        await self.session.flush()
+        return wait.to_domain()
+
+    async def expire_waits(self, *, now: datetime | None = None) -> int:
+        """Mark overdue wait edges as timed out."""
+        effective_now = now or datetime.now(UTC)
+        stmt = select(PathLeaseWaitORM).where(
+            PathLeaseWaitORM.status == PathLeaseWaitStatus.WAITING.value,
+            PathLeaseWaitORM.expires_at <= effective_now,
+        )
+        result = await self.session.execute(stmt)
+        waits = result.scalars().all()
+        for wait in waits:
+            wait.status = PathLeaseWaitStatus.TIMED_OUT.value
+            wait.resolved_at = effective_now
+            wait.reason = "Path lease wait timed out."
+        await self.session.flush()
+        return len(waits)
+
+    async def list_waits_for_project(
+        self,
+        project_id: int,
+        *,
+        status: PathLeaseWaitStatus | None = None,
+    ) -> list[domain.PathLeaseWait]:
+        """List persisted path lease wait edges for a project."""
+        stmt = select(PathLeaseWaitORM).where(PathLeaseWaitORM.project_id == project_id)
+        if status is not None:
+            stmt = stmt.where(PathLeaseWaitORM.status == status.value)
+        stmt = stmt.order_by(PathLeaseWaitORM.requested_at, PathLeaseWaitORM.id)
+        result = await self.session.execute(stmt)
+        return [wait.to_domain() for wait in result.scalars().all()]
 
     async def release_lease(
         self,

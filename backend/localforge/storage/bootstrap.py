@@ -14,7 +14,7 @@ from localforge.storage.orm import Base, SchemaVersionORM
 
 logger = logging.getLogger(__name__)
 
-CURRENT_VERSION = 17
+CURRENT_VERSION = 18
 
 
 class UnsupportedSchemaVersionError(RuntimeError):
@@ -350,6 +350,36 @@ async def bootstrap_database(db_manager: DatabaseManager) -> int:
                                 "ADD COLUMN triage_task_ids_json JSON NOT NULL DEFAULT '[]'"
                             )
                         )
+
+                if current_version < 18:
+                    await conn.execute(
+                        text(
+                            """
+                            CREATE TABLE IF NOT EXISTS path_lease_waits (
+                                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                                task_run_id INTEGER NOT NULL REFERENCES task_runs(id) ON DELETE CASCADE,
+                                owner_id VARCHAR(255) NOT NULL,
+                                target_path TEXT NOT NULL,
+                                normalized_target_path TEXT NOT NULL,
+                                blocking_owner_id VARCHAR(255),
+                                blocking_lease_id INTEGER REFERENCES path_leases(id) ON DELETE SET NULL,
+                                status VARCHAR(50) NOT NULL DEFAULT 'WAITING',
+                                queue_position INTEGER NOT NULL DEFAULT 1,
+                                requested_at DATETIME,
+                                expires_at DATETIME NOT NULL,
+                                resolved_at DATETIME,
+                                reason TEXT
+                            )
+                            """
+                        )
+                    )
+                    await conn.execute(
+                        text(
+                            "CREATE INDEX IF NOT EXISTS ix_path_lease_waits_active "
+                            "ON path_lease_waits(project_id, status, normalized_target_path, requested_at)"
+                        )
+                    )
 
             # Phase 10 / Schema v15 Migration: Memory provenance columns and memory_relations table
             if current_version < 15:

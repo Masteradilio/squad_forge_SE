@@ -8,12 +8,13 @@ Phase R5 adds candidate hardening for RunnerPool and PathLease coordination.
 It introduces persisted fencing tokens, lease heartbeat/expiry metadata,
 task-run/worktree attempt attribution for path leases, exact-path active
 conflict protection, and service-level path normalization for separators and
-case handling plus repository-boundary canonicalization.
+case handling plus repository-boundary canonicalization. It also persists
+PathLease wait-for edges with bounded timeouts, cancellation, FIFO queue
+position, and deterministic two-owner deadlock victim selection.
 
 This is candidate evidence only. Final R5 acceptance still requires
 database-level parent/child overlap fencing across concurrent transactions,
-bounded FIFO waiting, persisted wait-for graph deadlock detection, and full
-worktree lifecycle reconciliation.
+repeated-contention escalation, and full worktree lifecycle reconciliation.
 
 ## Implemented Controls
 
@@ -30,12 +31,14 @@ worktree lifecycle reconciliation.
 | Path lease fencing | `PathLease` now records `fencing_token`, heartbeat, attempt number, and worktree path. |
 | Path lease renewal | `renew_lease()` extends an active lease only when owner and fencing token match. |
 | Expired lease reclaim | Expired/released active keys can be reclaimed by a new fenced owner. |
+| Path lease wait graph | `PathLeaseWaitORM` persists bounded wait-for edges with queue position, expiry, cancellation, and status. |
+| Deadlock victim selection | `enqueue_wait()` detects two-owner wait cycles and marks the lexicographically deterministic victim as `DEADLOCK_VICTIM`. |
 
 ## Validation Commands
 
 ```text
 python -m pytest backend\tests\test_phase_r5_coordination.py backend\tests\test_phase6_runner_pool_governance.py backend\tests\test_phase6_worktrees_path_intents.py -q
-14 passed, 1 skipped in 1.18s
+17 passed, 1 skipped in 1.35s
 
 python -m pytest backend/tests/test_phase_r5_coordination.py backend/tests/test_phase6_runner_pool_governance.py backend/tests/test_phase6_worktrees_path_intents.py backend/tests/test_storage.py backend/tests/test_phase_r1_release_integrity.py -q
 17 passed in 12.39s
@@ -45,6 +48,9 @@ Success: no issues found in 2 source files
 
 python -m ruff check backend\localforge\services\path_lease.py backend\tests\test_phase_r5_coordination.py
 All checks passed!
+
+python -m pytest backend\tests\test_phase_r5_coordination.py -q
+11 passed, 1 skipped in 1.30s
 ```
 
 ## Remaining Acceptance Requirements
@@ -53,9 +59,10 @@ All checks passed!
   not by an atomic database exclusion constraint.
 - Repository-boundary canonicalization and symlink escape rejection are covered
   where the host permits symlink creation.
-- FIFO wait queues, cancellation, persisted wait-for graph, and deterministic
-  deadlock victim selection remain open.
+- FIFO wait queues, timeout/cancellation, persisted wait-for graph, and
+  deterministic two-owner deadlock victim selection are covered by R5
+  regression tests; repeated contention escalation remains open.
 - RunnerPool backpressure is bounded and reported separately from permanent
-  incompatibility; persisted FIFO wait queues remain part of V61C-502.
+  incompatibility.
 - Real Git worktree creation, branch/base-commit drift validation, and failed
   worktree retention policy remain open.

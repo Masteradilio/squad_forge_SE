@@ -7,13 +7,13 @@
 - Path normalization covers separators, Windows case behavior, repository-root
   canonicalization, and symlink escape rejection where the host permits symlink
   creation.
-- Lease renewal and fencing exist, but bounded FIFO waiting, persisted wait-for
-  graph, timeout cancellation, and deterministic deadlock victim selection
-  remain open.
+- Lease renewal and fencing exist. Bounded FIFO waiting, persisted wait-for
+  graph, timeout cancellation, and deterministic two-owner deadlock victim
+  selection are now candidate-implemented; repeated contention escalation is
+  still open.
 - RunnerPool restart reconciliation now rebuilds active capacity from persisted
   successful dispatch logs joined to active TaskRuns. Capacity saturation is
-  reported as bounded backpressure with deterministic queue position, but a
-  persisted FIFO wait-for graph remains open under V61C-502.
+  reported as bounded backpressure with deterministic queue position.
 - Worktree attempt manifests still track existing paths and stale paths, but a
   full real-Git worktree lifecycle with base-commit drift checks and diagnostic
   retention policy remains open.

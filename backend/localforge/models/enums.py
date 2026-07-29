@@ -298,6 +298,14 @@ class LeaseReleaseReason(StrEnum):
     DEADLOCK_VICTIM = "DEADLOCK_VICTIM"
 
 
+class PathLeaseWaitStatus(StrEnum):
+    WAITING = "WAITING"
+    ACQUIRED = "ACQUIRED"
+    TIMED_OUT = "TIMED_OUT"
+    CANCELLED = "CANCELLED"
+    DEADLOCK_VICTIM = "DEADLOCK_VICTIM"
+
+
 class RunnerHealthState(StrEnum):
     READY = "READY"
     BUSY = "BUSY"

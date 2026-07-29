@@ -3,7 +3,13 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from localforge.models import domain
-from localforge.models.enums import LeaseReleaseReason, RunnerHealthState, RunnerLane, TaskRunStatus
+from localforge.models.enums import (
+    LeaseReleaseReason,
+    PathLeaseWaitStatus,
+    RunnerHealthState,
+    RunnerLane,
+    TaskRunStatus,
+)
 from localforge.services.path_lease import (
     canonicalize_repository_relative_path,
     is_path_overlapping,
@@ -185,6 +191,104 @@ async def test_r5_expired_path_lease_can_be_reclaimed_with_new_fencing(db_manage
         assert reclaimed is not None
         assert conflict_owner is None
         assert reclaimed.fencing_token == "new-token"
+
+
+@pytest.mark.asyncio
+async def test_r5_path_lease_wait_is_persisted_fifo_and_cancellable(db_manager) -> None:
+    async with UnitOfWork(db_manager) as uow:
+        assert uow.path_leases is not None
+        project_id, _, task_run_id = await _create_project_task_run(uow, key="R5-W")
+        lease, _, _ = await uow.path_leases.acquire_lease(
+            project_id=project_id,
+            task_run_id=task_run_id,
+            owner_id="agent-a",
+            target_path="src/board.ts",
+            fencing_token="owner-token",
+        )
+        assert lease is not None
+
+        blocked, wait, msg = await uow.path_leases.acquire_or_wait(
+            project_id=project_id,
+            task_run_id=task_run_id,
+            owner_id="agent-b",
+            target_path="src/board.ts",
+            wait_timeout_seconds=30,
+            fencing_token="waiter-token",
+        )
+
+        assert blocked is None
+        assert wait is not None
+        assert wait.status == PathLeaseWaitStatus.WAITING
+        assert wait.blocking_owner_id == "agent-a"
+        assert wait.queue_position == 1
+        assert "overlaps with active lease" in msg
+
+        waits = await uow.path_leases.list_waits_for_project(
+            project_id,
+            status=PathLeaseWaitStatus.WAITING,
+        )
+        assert [queued.owner_id for queued in waits] == ["agent-b"]
+
+        cancelled = await uow.path_leases.cancel_wait(
+            wait.id or 0,
+            owner_id="agent-b",
+            reason="Test cancellation.",
+        )
+        assert cancelled is not None
+        assert cancelled.status == PathLeaseWaitStatus.CANCELLED
+
+
+@pytest.mark.asyncio
+async def test_r5_path_lease_wait_timeout_is_persisted(db_manager) -> None:
+    async with UnitOfWork(db_manager) as uow:
+        assert uow.path_leases is not None
+        project_id, _, task_run_id = await _create_project_task_run(uow, key="R5-T")
+        wait = await uow.path_leases.enqueue_wait(
+            project_id=project_id,
+            task_run_id=task_run_id,
+            owner_id="agent-b",
+            target_path="src/late.ts",
+            blocking_owner_id="agent-a",
+            timeout_seconds=-1,
+        )
+        assert wait.status == PathLeaseWaitStatus.WAITING
+
+        expired_count = await uow.path_leases.expire_waits()
+        assert expired_count == 1
+        waits = await uow.path_leases.list_waits_for_project(project_id)
+        assert waits[0].status == PathLeaseWaitStatus.TIMED_OUT
+        assert waits[0].resolved_at is not None
+
+
+@pytest.mark.asyncio
+async def test_r5_path_lease_deadlock_victim_is_deterministic(db_manager) -> None:
+    async with UnitOfWork(db_manager) as uow:
+        assert uow.path_leases is not None
+        project_id, _, task_run_id = await _create_project_task_run(uow, key="R5-D")
+
+        first = await uow.path_leases.enqueue_wait(
+            project_id=project_id,
+            task_run_id=task_run_id,
+            owner_id="agent-a",
+            target_path="src/a.ts",
+            blocking_owner_id="agent-b",
+            timeout_seconds=60,
+        )
+        second = await uow.path_leases.enqueue_wait(
+            project_id=project_id,
+            task_run_id=task_run_id,
+            owner_id="agent-b",
+            target_path="src/b.ts",
+            blocking_owner_id="agent-a",
+            timeout_seconds=60,
+        )
+
+        assert first.status == PathLeaseWaitStatus.WAITING
+        assert second.status == PathLeaseWaitStatus.DEADLOCK_VICTIM
+        waits = await uow.path_leases.list_waits_for_project(project_id)
+        victim_wait = next(wait for wait in waits if wait.owner_id == "agent-b")
+        assert victim_wait.status == PathLeaseWaitStatus.DEADLOCK_VICTIM
+        assert "Deadlock detected" in (victim_wait.reason or "")
 
 
 @pytest.mark.asyncio

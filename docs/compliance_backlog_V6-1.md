@@ -571,9 +571,9 @@ Make concurrent execution deterministic and restart-safe.
 ### V61C-502 — Add renewal, wait, and deadlock behavior
 
 - [x] Implement lease renewal/heartbeat.
-- [ ] Add bounded FIFO waiting with timeout and cancellation.
-- [ ] Persist the wait-for graph.
-- [ ] Detect deadlock cycles and choose a deterministic victim.
+- [x] Add bounded FIFO waiting with timeout and cancellation.
+- [x] Persist the wait-for graph.
+- [x] Detect deadlock cycles and choose a deterministic victim.
 - [ ] Escalate repeated contention instead of busy-waiting.
 
 ### V61C-503 — Complete worktree lifecycle
@@ -592,7 +592,7 @@ Make concurrent execution deterministic and restart-safe.
 - [x] Symlink and repository-boundary overlap conflicts.
 - [x] Renewal prevents premature takeover.
 - [x] Expired leases can be safely reclaimed with fencing.
-- [ ] Deadlock victim selection is deterministic.
+- [x] Deadlock victim selection is deterministic.
 - [ ] Kill and restart release/reconcile all owned resources.
   - RunnerPool restart reconciliation now rebuilds active capacity from
     persisted successful dispatch logs joined to active TaskRuns, rather than

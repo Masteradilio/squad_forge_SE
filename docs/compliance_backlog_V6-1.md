@@ -400,30 +400,37 @@ audited, fail-closed gate.
 
 ### V61C-300 — Define typed readiness evidence
 
-- [ ] Add a versioned `PRReadyEvidence` contract.
+- [x] Add a versioned `PRReadyEvidence` contract.
 - [ ] Require task/run identity, source commit, worktree/branch, diff hash,
       test commands and results, typed handoffs, maker identity, independent
       checker identity, risk verdict, safety verdict, and pre-PR gate result.
 - [ ] Reject unknown, stale, cross-task, or mismatched evidence.
+  - Candidate R3 implementation rejects unknown, cross-task, branch/worktree
+    mismatches and unknown artifact paths; stale source/target commit evidence
+    remains open.
 - [ ] Bind evidence to the exact source and target commits.
 
 ### V61C-301 — Make one transition authoritative
 
-- [ ] Prevent generic `update_task_status()` from accepting `PR_READY`.
-- [ ] Route all readiness transitions through one server-owned service.
+- [x] Prevent generic `update_task_status()` from accepting `PR_READY`.
+- [x] Route all readiness transitions through one server-owned service.
 - [ ] Remove direct readiness assignment from Pipeline, Light Swarm, Deep
       Swarm, API, CLI, fixtures, and recovery paths.
-- [ ] Make the transition atomic with evidence persistence.
-- [ ] Make readiness idempotent for the same evidence and reject conflicting
+- [x] Make the transition atomic with evidence persistence.
+- [x] Make readiness idempotent for the same evidence and reject conflicting
       replay.
 
 ### V61C-302 — Enforce independent checking
 
 - [ ] Prohibit maker and checker from sharing identity or attempt ownership.
+  - Candidate R3 implementation prohibits identical maker/checker identities;
+    attempt ownership validation remains open.
 - [ ] Require checker execution after the final maker commit.
 - [ ] Invalidate checker evidence when source, dependency, test, or target
       branch state changes.
 - [ ] Require MechanicalPrePRGate success after checker approval.
+  - Candidate R3 implementation requires `pre_pr_gate.passed == true`; explicit
+    ordering after checker approval remains open.
 
 ### V61C-303 — Close ActionGateway bypasses
 
@@ -437,13 +444,15 @@ audited, fail-closed gate.
 
 ### Required regression tests
 
-- [ ] Empty or arbitrary dictionaries cannot satisfy `PRReadyEvidence`.
-- [ ] Generic status APIs cannot reach `PR_READY`.
-- [ ] Same maker/checker identity is rejected.
+- [x] Empty or arbitrary dictionaries cannot satisfy `PRReadyEvidence`.
+- [x] Generic status APIs cannot reach `PR_READY`.
+- [x] Same maker/checker identity is rejected.
 - [ ] Stale evidence is rejected after source or target branch changes.
 - [ ] Missing tests, diff, handoff, checker, or pre-PR gate blocks readiness.
+  - Candidate R3 implementation covers missing tests, checker, pre-PR gate, and
+    persisted artifacts; diff and typed handoff requirements remain open.
 - [ ] Every mutation surface has a negative bypass test.
-- [ ] A valid controlled task reaches `PR_READY` exactly once.
+- [x] A valid controlled task reaches `PR_READY` exactly once.
 
 ### Phase R3 exit gate
 

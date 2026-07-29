@@ -1,0 +1,37 @@
+{
+  "schema_version": "localforge.v6_2.candidate_manifest.v1",
+  "release_version": "6.2.0",
+  "release_tag": "v6.2.0",
+  "phase": "R3",
+  "task_ids": [
+    "V61C-300",
+    "V61C-301",
+    "V61C-302",
+    "V61C-303"
+  ],
+  "source_commit": "d92bb475ef7efe9fa38843a19a9dd191a4241995",
+  "candidate_branch": "codex/v62-truth-reset-foundation",
+  "reviewed_pr_number": 14,
+  "verdict": "EVIDENCE_READY",
+  "known_limitations": [
+    "Candidate evidence is not final release acceptance.",
+    "Source and target commit binding is not complete.",
+    "Full mutation-surface ActionGateway inventory remains required.",
+    "Stale evidence invalidation remains required."
+  ],
+  "commands": [
+    {
+      "command": "python -m pytest backend/tests/test_services.py backend/tests/test_gitops.py backend/tests/test_scheduler.py backend/tests/test_phase27_unattended.py -q",
+      "exit_code": 0
+    },
+    {
+      "command": "python -m mypy backend/localforge/models/domain.py backend/localforge/services/task.py backend/localforge/pr_factory/local.py backend/localforge/runtime/lead_agent.py backend/localforge/pipeline/engine.py backend/tests/test_services.py backend/tests/test_gitops.py backend/tests/test_scheduler.py backend/tests/test_phase27_unattended.py",
+      "exit_code": 0
+    },
+    {
+      "command": "python -m ruff check backend/localforge/models/domain.py backend/localforge/services/task.py backend/localforge/pr_factory/local.py backend/localforge/runtime/lead_agent.py backend/localforge/pipeline/engine.py backend/tests/test_services.py backend/tests/test_gitops.py backend/tests/test_scheduler.py backend/tests/test_phase27_unattended.py",
+      "exit_code": 0
+    }
+  ],
+  "manifest_sha256": "ff36d00d16c63254dea238a6e8727e38914a5a70dfcb62ef31deec078ffd716f"
+}

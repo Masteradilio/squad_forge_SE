@@ -63,6 +63,8 @@ async def test_project_service(db_session: AsyncSession):
 async def test_task_service_and_state_machine(db_session: AsyncSession):
     proj_service = ProjectService(db_session)
     task_service = TaskService(db_session)
+    exec_service = ExecutionService(db_session)
+    audit_service = AuditService(db_session)
 
     # Setup Project
     proj = await proj_service.create_project(
@@ -110,12 +112,125 @@ async def test_task_service_and_state_machine(db_session: AsyncSession):
     await task_service.update_task_status(task.id, TaskStatus.REVIEWING)
     with pytest.raises(ValueError, match="mark_pr_ready"):
         await task_service.update_task_status(task.id, TaskStatus.PR_READY)
-    pr_ready = await task_service.mark_pr_ready(
-        task.id,
-        gate_evidence={"source": "unit_test", "task_run_id": 1},
+    run = await exec_service.create_run(
+        domain.Run(project_id=proj.id, mode=RunMode.UNATTENDED, initiated_by="test")
     )
+    assert run.id is not None
+    task_run = await task_service.create_task_run(
+        domain.TaskRun(
+            run_id=run.id,
+            task_id=task.id,
+            worktree_path="/tmp/lf-100",
+            branch_name="localforge/lf-100",
+        )
+    )
+    assert task_run.id is not None
+    artifact = await audit_service.create_artifact(
+        domain.Artifact(
+            task_run_id=task_run.id,
+            type=ArtifactType.PR,
+            path=".localforge/artifacts/runs/1/tasks/lf-100/pr.md",
+            content_hash="a" * 64,
+        )
+    )
+    gate_evidence = {
+        "source": "unit_test",
+        "task_run_id": task_run.id,
+        "maker_id": "maker",
+        "checker_id": "checker",
+        "pre_pr_gate": {"passed": True},
+        "checks_executed": ["pytest"],
+        "artifact_paths": [artifact.path],
+        "branch_name": task_run.branch_name,
+        "worktree_path": task_run.worktree_path,
+    }
+    pr_ready = await task_service.mark_pr_ready(task.id, gate_evidence=gate_evidence)
     assert pr_ready.status == TaskStatus.PR_READY
     assert pr_ready.metadata["pr_ready_gate"]["passed"] is True
+    evidence = pr_ready.metadata["pr_ready_gate"]["evidence"]
+    assert evidence["schema"] == "localforge.pr_ready_evidence.v1"
+    assert evidence["artifact_paths"] == [artifact.path]
+    assert await task_service.mark_pr_ready(task.id, gate_evidence=gate_evidence) == pr_ready
+    conflicting_evidence = {**gate_evidence, "source": "conflicting"}
+    with pytest.raises(ValueError, match="already been recorded"):
+        await task_service.mark_pr_ready(task.id, gate_evidence=conflicting_evidence)
+
+
+@pytest.mark.asyncio
+async def test_pr_ready_rejects_untyped_or_spoofed_evidence(db_session: AsyncSession):
+    proj_service = ProjectService(db_session)
+    task_service = TaskService(db_session)
+    exec_service = ExecutionService(db_session)
+    audit_service = AuditService(db_session)
+
+    proj = await proj_service.create_project(
+        domain.Project(name="LF Test", root_path="/t", default_branch="m")
+    )
+    assert proj.id is not None
+    task = await task_service.create_task(
+        domain.Task(project_id=proj.id, key="LF-101", title="Task", description="Desc")
+    )
+    assert task.id is not None
+    run = await exec_service.create_run(
+        domain.Run(project_id=proj.id, mode=RunMode.UNATTENDED, initiated_by="test")
+    )
+    assert run.id is not None
+    task_run = await task_service.create_task_run(
+        domain.TaskRun(
+            run_id=run.id,
+            task_id=task.id,
+            worktree_path="/tmp/lf-101",
+            branch_name="localforge/lf-101",
+        )
+    )
+    assert task_run.id is not None
+    await audit_service.create_artifact(
+        domain.Artifact(
+            task_run_id=task_run.id,
+            type=ArtifactType.PR,
+            path=".localforge/artifacts/runs/1/tasks/lf-101/pr.md",
+            content_hash="b" * 64,
+        )
+    )
+    for status in (
+        TaskStatus.READY,
+        TaskStatus.CLAIMED,
+        TaskStatus.PLANNING,
+        TaskStatus.IMPLEMENTING,
+        TaskStatus.TESTING,
+        TaskStatus.REVIEWING,
+    ):
+        await task_service.update_task_status(task.id, status)
+
+    with pytest.raises(ValueError):
+        await task_service.mark_pr_ready(
+            task.id,
+            gate_evidence={"source": "unit_test", "task_run_id": task_run.id},
+        )
+    with pytest.raises(ValueError, match="independent"):
+        await task_service.mark_pr_ready(
+            task.id,
+            gate_evidence={
+                "source": "unit_test",
+                "task_run_id": task_run.id,
+                "maker_id": "same",
+                "checker_id": "same",
+                "pre_pr_gate": {"passed": True},
+                "checks_executed": ["pytest"],
+            },
+        )
+    with pytest.raises(ValueError, match="pre_pr_gate"):
+        await task_service.mark_pr_ready(
+            task.id,
+            gate_evidence={
+                "source": "unit_test",
+                "task_run_id": task_run.id,
+                "maker_id": "maker",
+                "checker_id": "checker",
+                "pre_pr_gate": {"passed": False},
+                "checks_executed": ["pytest"],
+            },
+        )
 
 
 @pytest.mark.asyncio

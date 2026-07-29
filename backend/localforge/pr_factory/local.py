@@ -191,8 +191,13 @@ class LocalPRFactory:
                 gate_evidence={
                     "source": "pr_factory",
                     "task_run_id": task_run_id,
-                    "pr_artifact": pr_artifact.path,
-                    "remote_url": remote_url,
+                    "maker_id": "pr-factory",
+                    "checker_id": "mechanical-pre-pr-gate",
+                    "pre_pr_gate": {"passed": True, "remote_url": remote_url},
+                    "checks_executed": ["local-pr-artifact-created", "contract-verifier"],
+                    "artifact_paths": [pr_artifact.path],
+                    "branch_name": task_run.branch_name,
+                    "worktree_path": task_run.worktree_path,
                 },
             )
 

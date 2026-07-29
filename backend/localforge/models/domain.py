@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from localforge.models.enums import (
     ActionApprovalStatus,
@@ -161,6 +161,52 @@ class TaskRun(BaseModel):
     started_at: datetime = Field(default_factory=utc_now)
     ended_at: datetime | None = None
     final_summary: str | None = None
+
+
+class PRReadyEvidence(BaseModel):
+    """Typed, server-owned evidence contract required before a task can become PR_READY."""
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    evidence_schema: str = Field(default="localforge.pr_ready_evidence.v1", alias="schema")
+    source: str
+    task_run_id: int
+    maker_id: str
+    checker_id: str
+    pre_pr_gate: dict[str, Any]
+    checks_executed: list[str]
+    artifact_paths: list[str] = Field(default_factory=list)
+    branch_name: str | None = None
+    worktree_path: str | None = None
+    source_commit: str | None = None
+    target_commit: str | None = None
+    diff_hash: str | None = None
+
+    @field_validator("source", "maker_id", "checker_id")
+    @classmethod
+    def _require_non_empty_text(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("value must be non-empty")
+        return normalized
+
+    @field_validator("checks_executed")
+    @classmethod
+    def _require_checks(cls, value: list[str]) -> list[str]:
+        checks = [item.strip() for item in value if item.strip()]
+        if not checks:
+            raise ValueError("at least one deterministic check is required")
+        return checks
+
+    @model_validator(mode="after")
+    def _validate_contract(self) -> "PRReadyEvidence":
+        if self.evidence_schema != "localforge.pr_ready_evidence.v1":
+            raise ValueError("unsupported PR_READY evidence schema")
+        if self.maker_id == self.checker_id:
+            raise ValueError("maker_id and checker_id must be independent")
+        if self.pre_pr_gate.get("passed") is not True:
+            raise ValueError("pre_pr_gate.passed must be true")
+        return self
 
 
 class Handoff(BaseModel):

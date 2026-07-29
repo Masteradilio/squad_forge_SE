@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from localforge.models import domain
 from localforge.models.enums import AuditEventActorType, AuditEventType, TaskStatus
-from localforge.storage.orm import AuditEventORM, EpicORM, TaskORM, TaskRunORM
+from localforge.storage.orm import ArtifactORM, AuditEventORM, EpicORM, TaskORM, TaskRunORM
 
 # Explicit task status state machine
 VALID_TRANSITIONS: dict[TaskStatus, set[TaskStatus]] = {
@@ -192,15 +192,63 @@ class TaskService:
             raise ValueError(f"Task with ID {task_id} not found")
         if not gate_evidence:
             raise ValueError("PR_READY transition requires explicit gate evidence")
+        evidence = await self._validate_pr_ready_evidence(task_id, gate_evidence)
+        normalized_evidence = evidence.model_dump(mode="json", by_alias=True)
+        if task.status == TaskStatus.PR_READY:
+            existing_gate = (task.metadata or {}).get("pr_ready_gate")
+            existing_evidence = (
+                existing_gate.get("evidence") if isinstance(existing_gate, dict) else None
+            )
+            if isinstance(existing_evidence, dict) and existing_evidence == normalized_evidence:
+                return task
+            raise ValueError("PR_READY transition has already been recorded for this task")
+
         metadata = dict(task.metadata or {})
         metadata["pr_ready_gate"] = {
             "passed": True,
-            "evidence": gate_evidence,
+            "evidence": normalized_evidence,
         }
         task.metadata = metadata
         task.updated_at = domain.utc_now()
         await self.update_task(task)
         return await self._update_task_status(task_id, TaskStatus.PR_READY, allow_pr_ready=True)
+
+    async def _validate_pr_ready_evidence(
+        self, task_id: int, gate_evidence: dict[str, object]
+    ) -> domain.PRReadyEvidence:
+        evidence = domain.PRReadyEvidence.model_validate(gate_evidence)
+        task_run = await self.get_task_run(evidence.task_run_id)
+        if task_run is None:
+            raise ValueError(f"TaskRun with ID {evidence.task_run_id} not found")
+        if task_run.task_id != task_id:
+            raise ValueError("PR_READY evidence task_run_id does not belong to task")
+        if evidence.branch_name and evidence.branch_name != task_run.branch_name:
+            raise ValueError("PR_READY evidence branch_name does not match task run")
+        if evidence.worktree_path and evidence.worktree_path != task_run.worktree_path:
+            raise ValueError("PR_READY evidence worktree_path does not match task run")
+
+        result = await self.session.execute(
+            select(ArtifactORM)
+            .where(ArtifactORM.task_run_id == evidence.task_run_id)
+            .order_by(ArtifactORM.created_at)
+        )
+        artifacts = result.scalars().all()
+        if not artifacts:
+            raise ValueError("PR_READY evidence requires at least one persisted artifact")
+        artifact_paths = [artifact.path for artifact in artifacts]
+        if evidence.artifact_paths:
+            missing = sorted(set(evidence.artifact_paths) - set(artifact_paths))
+            if missing:
+                raise ValueError(f"PR_READY evidence references unknown artifact paths: {missing}")
+            artifact_paths = evidence.artifact_paths
+
+        return evidence.model_copy(
+            update={
+                "artifact_paths": artifact_paths,
+                "branch_name": evidence.branch_name or task_run.branch_name,
+                "worktree_path": evidence.worktree_path or task_run.worktree_path,
+            }
+        )
 
     async def update_task(self, task: domain.Task) -> domain.Task:
         """Update general task fields (except status validation)."""

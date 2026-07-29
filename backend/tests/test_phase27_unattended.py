@@ -13,8 +13,10 @@ from localforge.llm.context import (
 from localforge.llm.openai_compatible import OpenAICompatibleProvider
 from localforge.models import domain
 from localforge.models.enums import (
+    ArtifactType,
     AuditEventActorType,
     AuditEventType,
+    RunMode,
     RunStatus,
     TaskRunStatus,
     TaskStatus,
@@ -80,9 +82,52 @@ async def transition_task_to(uow: UnitOfWork, task_id: int, target_status: TaskS
 
     for status in ladder[current_index + 1 : target_index + 1]:
         if status == TaskStatus.PR_READY:
+            assert uow.executions is not None
+            assert uow.audits is not None
+            task = await uow.tasks.get_task(task_id)
+            assert task is not None
+            runs = await uow.tasks.list_runs_for_task(task_id)
+            if runs:
+                task_run = runs[0]
+            else:
+                run = await uow.executions.create_run(
+                    domain.Run(
+                        project_id=task.project_id,
+                        mode=RunMode.UNATTENDED,
+                        initiated_by="test",
+                    )
+                )
+                assert run.id is not None
+                task_run = await uow.tasks.create_task_run(
+                    domain.TaskRun(
+                        run_id=run.id,
+                        task_id=task_id,
+                        worktree_path="/tmp/phase27",
+                        branch_name=f"localforge/{task.key.lower()}",
+                    )
+                )
+            assert task_run.id is not None
+            artifact = await uow.audits.create_artifact(
+                domain.Artifact(
+                    task_run_id=task_run.id,
+                    type=ArtifactType.PR,
+                    path=f".localforge/artifacts/runs/{task_run.run_id}/tasks/{task.key.lower()}/pr.md",
+                    content_hash="c" * 64,
+                )
+            )
             await uow.tasks.mark_pr_ready(
                 task_id,
-                gate_evidence={"source": "test_phase27_transition", "task_run_id": task_id},
+                gate_evidence={
+                    "source": "test_phase27_transition",
+                    "task_run_id": task_run.id,
+                    "maker_id": "phase27-test",
+                    "checker_id": "mechanical-pre-pr-gate",
+                    "pre_pr_gate": {"passed": True},
+                    "checks_executed": ["pytest"],
+                    "artifact_paths": [artifact.path],
+                    "branch_name": task_run.branch_name,
+                    "worktree_path": task_run.worktree_path,
+                },
             )
         else:
             await uow.tasks.update_task_status(task_id, status)

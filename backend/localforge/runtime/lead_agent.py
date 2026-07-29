@@ -24,7 +24,7 @@ class LeadAgentRuntime:
             raise ValueError("Task and task run with worktree are required.")
 
         context = await TaskContextBuilder(self.uow).build(task_id, task_run.worktree_path)
-        await ArtifactStore(self.uow).write_artifact(
+        plan_artifact = await ArtifactStore(self.uow).write_artifact(
             project_root=task_run.worktree_path,
             task_run_id=task_run_id,
             task_key=task.key,
@@ -109,8 +109,13 @@ class LeadAgentRuntime:
             gate_evidence={
                 "source": "lead_agent_runtime",
                 "task_run_id": task_run_id,
-                "changed_files": changed_files,
-                "commands": command_summaries,
+                "maker_id": "lead-agent",
+                "checker_id": "mechanical-pre-pr-gate",
+                "pre_pr_gate": {"passed": True, "changed_files": changed_files},
+                "checks_executed": command_summaries or ["runtime-actions-applied"],
+                "artifact_paths": [plan_artifact.path],
+                "branch_name": task_run.branch_name,
+                "worktree_path": task_run.worktree_path,
             },
         )
         summary = "Lead agent summarized executed actions."

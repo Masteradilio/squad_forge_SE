@@ -27,6 +27,12 @@ All notable changes to LocalForge OS will be documented in this file.
   `docs/e2e/v6_2_compliance/phase_R2/`.
 - Added deterministic manifest checksum helpers and canonical V6.2 evidence
   schema enforcement.
+- Added Phase R3 candidate evidence under
+  `docs/e2e/v6_2_compliance/phase_R3/`.
+- Added a typed `PRReadyEvidence` contract for the server-owned readiness
+  transition, including independent maker/checker identities, pre-PR gate
+  success, deterministic checks, branch/worktree context, and persisted
+  artifact validation.
 
 #### Fixed
 - Removed the clean-interpreter import cycle exposed by importing
@@ -39,6 +45,11 @@ All notable changes to LocalForge OS will be documented in this file.
   mismatched PR/CI/merge/tag metadata.
 - Updated GitHub Actions checkout depth so compliance tests can verify
   immutable historical commits instead of failing under shallow clones.
+- Hardened `TaskService.mark_pr_ready()` so arbitrary dictionaries, cross-task
+  task runs, missing artifacts, missing checks, self-checking, failed pre-PR
+  gates, and conflicting readiness replays cannot produce `PR_READY`.
+- Updated runtime, PR factory, and role-pipeline readiness paths to submit the
+  typed readiness evidence contract instead of unstructured payloads.
 
 ### V6.1 Compliance Closure - 2026-07-28
 

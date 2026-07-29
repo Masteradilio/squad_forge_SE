@@ -4,7 +4,7 @@ import git
 import pytest
 from localforge.gitops import GitAdapter, WorktreeManager, get_task_branch_name
 from localforge.models import domain
-from localforge.models.enums import TaskStatus
+from localforge.models.enums import ArtifactType, TaskStatus
 from localforge.storage import UnitOfWork
 
 
@@ -91,7 +91,8 @@ async def test_git_adapter_and_checkpoints(temp_git_repo, db_session):
         worktree_path=str(temp_git_repo),  # Use main repo for simple checkpoint test
         branch_name="main",
     )
-    await uow.tasks.create_task_run(task_run_data)
+    task_run = await uow.tasks.create_task_run(task_run_data)
+    assert task_run.id is not None
     await uow.session.commit()
 
     # 1. Test GitAdapter basic status
@@ -170,7 +171,8 @@ async def test_worktree_manager_setup_and_isolation(temp_git_repo, db_session):
         worktree_path=worktree_path,
         branch_name=branch_name,
     )
-    await uow.tasks.create_task_run(task_run_data)
+    task_run = await uow.tasks.create_task_run(task_run_data)
+    assert task_run.id is not None
     await uow.session.commit()
 
     # 2. Test filesystem boundary isolation:
@@ -217,9 +219,27 @@ async def test_worktree_manager_setup_and_isolation(temp_git_repo, db_session):
     await uow.tasks.update_task_status(task.id, TaskStatus.IMPLEMENTING)
     await uow.tasks.update_task_status(task.id, TaskStatus.TESTING)
     await uow.tasks.update_task_status(task.id, TaskStatus.REVIEWING)
+    artifact = await uow.audits.create_artifact(
+        domain.Artifact(
+            task_run_id=task_run.id,
+            type=ArtifactType.PR,
+            path=".localforge/artifacts/runs/1/tasks/lf-08/pr.md",
+            content_hash="a" * 64,
+        )
+    )
     await uow.tasks.mark_pr_ready(
         task.id,
-        gate_evidence={"source": "test_gitops", "task_run_id": 1},
+        gate_evidence={
+            "source": "test_gitops",
+            "task_run_id": task_run.id,
+            "maker_id": "gitops-test",
+            "checker_id": "mechanical-pre-pr-gate",
+            "pre_pr_gate": {"passed": True},
+            "checks_executed": ["pytest"],
+            "artifact_paths": [artifact.path],
+            "branch_name": task_run.branch_name,
+            "worktree_path": task_run.worktree_path,
+        },
     )
     await uow.tasks.update_task_status(task.id, TaskStatus.DONE)
     await uow.session.commit()
@@ -322,13 +342,22 @@ async def test_worktree_manager_uses_ready_dependency_branch_as_base(temp_git_re
     dep_repo.index.add(["calculator/__init__.py"])
     dep_repo.index.commit("LF-10: base scaffold")
 
-    await uow.tasks.create_task_run(
+    dep_task_run = await uow.tasks.create_task_run(
         domain.TaskRun(
             run_id=1,
             task_id=dependency.id,
             status=TaskRunStatus.COMPLETED,
             worktree_path=dep_worktree,
             branch_name=dep_branch,
+        )
+    )
+    assert dep_task_run.id is not None
+    dep_artifact = await uow.audits.create_artifact(
+        domain.Artifact(
+            task_run_id=dep_task_run.id,
+            type=ArtifactType.PR,
+            path=".localforge/artifacts/runs/1/tasks/lf-10/pr.md",
+            content_hash="b" * 64,
         )
     )
     await uow.tasks.update_task_status(dependency.id, TaskStatus.READY)
@@ -339,7 +368,17 @@ async def test_worktree_manager_uses_ready_dependency_branch_as_base(temp_git_re
     await uow.tasks.update_task_status(dependency.id, TaskStatus.REVIEWING)
     await uow.tasks.mark_pr_ready(
         dependency.id,
-        gate_evidence={"source": "test_gitops_dependency", "task_run_id": 1},
+        gate_evidence={
+            "source": "test_gitops_dependency",
+            "task_run_id": dep_task_run.id,
+            "maker_id": "gitops-test",
+            "checker_id": "mechanical-pre-pr-gate",
+            "pre_pr_gate": {"passed": True},
+            "checks_executed": ["pytest"],
+            "artifact_paths": [dep_artifact.path],
+            "branch_name": dep_task_run.branch_name,
+            "worktree_path": dep_task_run.worktree_path,
+        },
     )
     await uow.session.commit()
 

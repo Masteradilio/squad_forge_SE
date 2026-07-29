@@ -4,6 +4,7 @@ import os
 import pytest
 from localforge.models import domain
 from localforge.models.enums import (
+    ArtifactType,
     AuditEventActorType,
     AuditEventType,
     RunMode,
@@ -257,6 +258,7 @@ async def test_scheduler_uses_runner_pool_to_prepare_task_execution(
     uow.session = db_session
     uow.projects = ProjectService(db_session)
     uow.tasks = TaskService(db_session)
+    uow.audits = AuditService(db_session)
     uow.executions = ExecutionService(db_session)
 
     proj = await uow.projects.create_project(
@@ -385,12 +387,31 @@ async def test_scheduler_releases_runner_lease_after_pipeline_success(
         await self.uow.tasks.update_task_status(task_id, TaskStatus.IMPLEMENTING)
         await self.uow.tasks.update_task_status(task_id, TaskStatus.TESTING)
         await self.uow.tasks.update_task_status(task_id, TaskStatus.REVIEWING)
-        await self.uow.tasks.mark_pr_ready(
-            task_id,
-            gate_evidence={"source": "test_scheduler_pipeline", "task_run_id": task_run_id},
-        )
         task_run = await self.uow.tasks.get_task_run(task_run_id)
         assert task_run is not None
+        assert self.uow.audits is not None
+        artifact = await self.uow.audits.create_artifact(
+            domain.Artifact(
+                task_run_id=task_run_id,
+                type=ArtifactType.PR,
+                path=f".localforge/artifacts/runs/{task_run.run_id}/tasks/lf-42/pr.md",
+                content_hash="a" * 64,
+            )
+        )
+        await self.uow.tasks.mark_pr_ready(
+            task_id,
+            gate_evidence={
+                "source": "test_scheduler_pipeline",
+                "task_run_id": task_run_id,
+                "maker_id": "scheduler-test",
+                "checker_id": "mechanical-pre-pr-gate",
+                "pre_pr_gate": {"passed": True},
+                "checks_executed": ["pytest"],
+                "artifact_paths": [artifact.path],
+                "branch_name": task_run.branch_name,
+                "worktree_path": task_run.worktree_path,
+            },
+        )
         task_run.status = TaskRunStatus.COMPLETED
         await self.uow.tasks.update_task_run(task_run)
 
@@ -536,13 +557,35 @@ async def test_scheduler_lifecycle_and_parallel_limits(
 
     wt_manager = WorktreeManager(project_id=proj.id, uow=uow)
     for tid in claimed_ids:
+        runs = await uow.tasks.list_runs_for_task(tid)
+        assert runs
+        task_run = runs[0]
         # Move task status to final state (DONE) to allow cleanup
         await uow.tasks.update_task_status(tid, TaskStatus.IMPLEMENTING)
         await uow.tasks.update_task_status(tid, TaskStatus.TESTING)
         await uow.tasks.update_task_status(tid, TaskStatus.REVIEWING)
+        assert uow.audits is not None
+        artifact = await uow.audits.create_artifact(
+            domain.Artifact(
+                task_run_id=task_run.id or 0,
+                type=ArtifactType.PR,
+                path=f".localforge/artifacts/runs/{task_run.run_id}/tasks/{tid}/pr.md",
+                content_hash="b" * 64,
+            )
+        )
         await uow.tasks.mark_pr_ready(
             tid,
-            gate_evidence={"source": "test_scheduler_cleanup", "task_run_id": tid},
+            gate_evidence={
+                "source": "test_scheduler_cleanup",
+                "task_run_id": task_run.id or 0,
+                "maker_id": "scheduler-test",
+                "checker_id": "mechanical-pre-pr-gate",
+                "pre_pr_gate": {"passed": True},
+                "checks_executed": ["pytest"],
+                "artifact_paths": [artifact.path],
+                "branch_name": task_run.branch_name,
+                "worktree_path": task_run.worktree_path,
+            },
         )
         await uow.tasks.update_task_status(tid, TaskStatus.DONE)
         await uow.session.commit()

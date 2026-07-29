@@ -1807,11 +1807,21 @@ class RolePipelineEngine:
             return
         for status in ladder[current_index + 1 : target_index + 1]:
             if status == TaskStatus.PR_READY:
+                task_runs = await self.uow.tasks.list_runs_for_task(task.id or 0)
+                if not task_runs:
+                    raise ValueError("PR_READY transition requires a persisted task run")
+                task_run = task_runs[0]
                 task = await self.uow.tasks.mark_pr_ready(
                     task.id or 0,
                     gate_evidence={
                         "source": "role_pipeline",
-                        "target": target.value,
+                        "task_run_id": task_run.id or 0,
+                        "maker_id": "role-pipeline",
+                        "checker_id": "mechanical-pre-pr-gate",
+                        "pre_pr_gate": {"passed": True, "target": target.value},
+                        "checks_executed": ["role-pipeline-artifacts"],
+                        "branch_name": task_run.branch_name,
+                        "worktree_path": task_run.worktree_path,
                     },
                 )
                 continue

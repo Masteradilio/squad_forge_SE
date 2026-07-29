@@ -12,6 +12,7 @@ from localforge.services.operational_connector import (
     fetch_all_pages,
     sanitize_external_text,
 )
+from localforge.services.operational_state import OperationalIdempotencyStore
 
 logger = logging.getLogger(__name__)
 
@@ -35,8 +36,8 @@ class PRBabysitterAction(BaseModel):
 class PRBabysitterLoopService:
     """Deduplicate review comments, map small fixes, and escalate conflicts."""
 
-    def __init__(self) -> None:
-        self.processed_event_ids: set[str] = set()
+    def __init__(self, state_store: OperationalIdempotencyStore | None = None) -> None:
+        self.state_store = state_store or OperationalIdempotencyStore()
 
     def process_pr_event(
         self, event: LabeledEvent, upstream_changed: bool = False
@@ -54,7 +55,7 @@ class PRBabysitterLoopService:
         pr_id = payload.get("pr_id", 0)
 
         # 1. Deduplication check (V6-1103 regression)
-        if event.id in self.processed_event_ids:
+        if self.state_store.get("pr_babysitter_events", event.id):
             return PRBabysitterAction(
                 pr_id=pr_id,
                 event_id=event.id,
@@ -65,7 +66,7 @@ class PRBabysitterLoopService:
                 summary=f"Event {event.id} already processed — duplicate ignored.",
             )
 
-        self.processed_event_ids.add(event.id)
+        self.state_store.set("pr_babysitter_events", event.id, True)
 
         # 2. Upstream branch change check
         evidence_invalidated = False

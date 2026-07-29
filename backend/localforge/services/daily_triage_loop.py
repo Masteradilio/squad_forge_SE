@@ -14,6 +14,7 @@ from localforge.services.operational_connector import (
     fetch_all_pages,
     sanitize_external_text,
 )
+from localforge.services.operational_state import OperationalIdempotencyStore
 
 logger = logging.getLogger(__name__)
 
@@ -50,9 +51,8 @@ class TriageCritique(BaseModel):
 class DailyTriageLoopService:
     """Run report-only repository triage with zero external mutations."""
 
-    def __init__(self) -> None:
-        # Acting-on idempotency store: item_id -> TriageFinding
-        self._acting_on_store: dict[str, TriageFinding] = {}
+    def __init__(self, state_store: OperationalIdempotencyStore | None = None) -> None:
+        self.state_store = state_store or OperationalIdempotencyStore()
 
     def run_cheap_triage(self, events: list[LabeledEvent]) -> list[TriageFinding]:
         """Perform cheap deterministic L1 triage WITHOUT LLM calls (0 tokens, 0 cost).
@@ -66,9 +66,10 @@ class DailyTriageLoopService:
 
         for evt in events:
             # Check idempotency
-            if evt.id in self._acting_on_store:
+            existing = self.state_store.get("daily_triage", evt.id)
+            if isinstance(existing, dict):
                 logger.info("Idempotency match: updating acting_on state for %s", evt.id)
-                findings.append(self._acting_on_store[evt.id])
+                findings.append(TriageFinding.model_validate(existing))
                 continue
 
             # Check malicious injection guard (V6-1101 regression test)
@@ -92,7 +93,7 @@ class DailyTriageLoopService:
                     tokens_used=0,
                     cost_usd=0.0,
                 )
-                self._acting_on_store[evt.id] = finding
+                self.state_store.set("daily_triage", evt.id, finding.model_dump(mode="json"))
                 findings.append(finding)
                 continue
 
@@ -122,7 +123,7 @@ class DailyTriageLoopService:
                 tokens_used=0,
                 cost_usd=0.0,
             )
-            self._acting_on_store[evt.id] = finding
+            self.state_store.set("daily_triage", evt.id, finding.model_dump(mode="json"))
             findings.append(finding)
 
         return findings
@@ -222,4 +223,5 @@ class DailyTriageLoopService:
 
     def get_acting_on_state(self, item_id: str) -> TriageFinding | None:
         """Return persisted acting_on state for an item."""
-        return self._acting_on_store.get(item_id)
+        existing = self.state_store.get("daily_triage", item_id)
+        return TriageFinding.model_validate(existing) if isinstance(existing, dict) else None

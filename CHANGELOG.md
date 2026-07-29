@@ -54,6 +54,10 @@ All notable changes to LocalForge OS will be documented in this file.
   `docs/e2e/v6_2_compliance/phase_R7/`.
 - Added Deep Swarm mutation regression coverage requiring registered
   decision-contract evidence before agent-proposed graph expansion.
+- Added Phase R8 candidate evidence under
+  `docs/e2e/v6_2_compliance/phase_R8/`.
+- Added `OperationalIdempotencyStore` and regression coverage proving Daily
+  Triage, CI Sweeper, and PR Babysitter idempotency survives service restart.
 
 #### Fixed
 - Removed the clean-interpreter import cycle exposed by importing
@@ -83,6 +87,9 @@ All notable changes to LocalForge OS will be documented in this file.
   readiness remains owned by `TaskService.mark_pr_ready()`.
 - Hardened Deep Swarm graph mutation so agent-proposed expansion requires a
   `payload.decision_contract_id` registered in the run policy.
+- Hardened operational loops to use restart-durable idempotency state instead
+  of per-service in-memory dictionaries/sets for triage findings, CI repair
+  attempts, and PR review event deduplication.
 
 ### V6.1 Compliance Closure - 2026-07-28
 

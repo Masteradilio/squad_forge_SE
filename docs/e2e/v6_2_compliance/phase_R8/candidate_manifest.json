@@ -1,0 +1,38 @@
+{
+  "schema_version": "localforge.v6_2.candidate_manifest.v1",
+  "release_version": "6.2.0",
+  "release_tag": "v6.2.0",
+  "phase": "R8",
+  "task_ids": [
+    "V61C-800",
+    "V61C-801",
+    "V61C-802",
+    "V61C-803",
+    "V61C-804"
+  ],
+  "source_commit": "88d8bda",
+  "candidate_branch": "codex/v62-truth-reset-foundation",
+  "reviewed_pr_number": 14,
+  "verdict": "EVIDENCE_READY",
+  "known_limitations": [
+    "Candidate evidence is not final release acceptance.",
+    "Operational state is restart-durable but not database-fenced for multiple workers.",
+    "Real remote connector mutation paths and controlled fixtures remain open.",
+    "CI Sweeper and PR Babysitter still need real draft-PR mutation evidence."
+  ],
+  "commands": [
+    {
+      "command": "python -m pytest backend/tests/test_phase11_operational_loops.py -q",
+      "exit_code": 0
+    },
+    {
+      "command": "python -m mypy backend/localforge/services/operational_state.py backend/localforge/services/daily_triage_loop.py backend/localforge/services/pr_babysitter_loop.py backend/localforge/services/ci_sweeper_loop.py backend/tests/test_phase11_operational_loops.py",
+      "exit_code": 0
+    },
+    {
+      "command": "python -m ruff check backend/localforge/services/operational_state.py backend/localforge/services/daily_triage_loop.py backend/localforge/services/pr_babysitter_loop.py backend/localforge/services/ci_sweeper_loop.py backend/tests/test_phase11_operational_loops.py",
+      "exit_code": 0
+    }
+  ],
+  "manifest_sha256": "cff3e19f988ec5b78a90c0555f6bd54d21766c2ef891c7df6a62362e00b4a95e"
+}

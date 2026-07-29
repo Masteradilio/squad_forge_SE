@@ -716,8 +716,9 @@ inspectable behavior.
 
 ### V61C-801 — Make Daily Triage durable
 
-- [ ] Replace `_acting_on_store` with canonical persisted event/decision state.
-- [ ] Deduplicate across process restart and multiple workers.
+- [x] Replace `_acting_on_store` with durable event/decision state.
+- [x] Deduplicate across process restart.
+- [ ] Deduplicate across multiple workers with database transaction fencing.
 - [ ] Persist the source revision and invalidate stale classifications.
 - [ ] Prove zero external mutations in L1 mode.
 
@@ -734,7 +735,7 @@ inspectable behavior.
 
 ### V61C-803 — Make PR Babysitter perform real review work
 
-- [ ] Replace process-local `processed_event_ids` with durable idempotency.
+- [x] Replace process-local `processed_event_ids` with durable idempotency.
 - [ ] Bind comments to exact PR head SHA, path, and line.
 - [ ] Create a real worktree for eligible small fixes.
 - [ ] Apply, test, independently verify, and push/update only the draft branch.
@@ -752,7 +753,7 @@ inspectable behavior.
 
 ### Required regression tests
 
-- [ ] Idempotency survives service restart for all three loops.
+- [x] Idempotency survives service restart for all three loops.
 - [ ] Daily Triage performs no external mutation.
 - [ ] CI Sweeper changes a real temporary repository and creates one draft PR.
 - [ ] CI Sweeper cannot edit flaky/environment failures or weaken tests.

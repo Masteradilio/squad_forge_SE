@@ -11,6 +11,7 @@ from localforge.services.operational_connector import (
     fetch_all_pages,
     sanitize_external_text,
 )
+from localforge.services.operational_state import OperationalIdempotencyStore
 
 logger = logging.getLogger(__name__)
 
@@ -46,8 +47,8 @@ class CIRepairResult(BaseModel):
 class CISweeperLoopService:
     """Classify failed checks and create allowlisted draft repairs."""
 
-    def __init__(self) -> None:
-        self.fingerprint_attempt_counts: dict[str, int] = {}
+    def __init__(self, state_store: OperationalIdempotencyStore | None = None) -> None:
+        self.state_store = state_store or OperationalIdempotencyStore()
 
     def classify_ci_event(self, event: LabeledEvent) -> CIClassificationResult:
         """Classify CI failure into known failure classes."""
@@ -145,8 +146,10 @@ class CISweeperLoopService:
             )
 
         # Track attempts and enforce Circuit Breaker (V6-1102 regression)
-        attempts = self.fingerprint_attempt_counts.get(classification.failure_fingerprint, 0) + 1
-        self.fingerprint_attempt_counts[classification.failure_fingerprint] = attempts
+        attempts = self.state_store.increment(
+            "ci_sweeper_attempts",
+            classification.failure_fingerprint,
+        )
 
         if attempts > MAX_REPAIR_ATTEMPTS:
             logger.warning(

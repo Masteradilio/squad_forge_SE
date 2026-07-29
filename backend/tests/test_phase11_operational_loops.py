@@ -26,6 +26,7 @@ from localforge.services.operational_connector import (
     PullRequestRecord,
     ReviewThreadRecord,
 )
+from localforge.services.operational_state import OperationalIdempotencyStore
 from localforge.services.pr_babysitter_loop import PRBabysitterLoopService
 from localforge.services.strategy_comparator import StrategyComparatorService
 
@@ -128,6 +129,33 @@ def test_daily_triage_fetches_paginated_connector_state_and_deduplicates() -> No
     assert len(repeat) == 2
     assert all(f.acting_on for f in repeat)
     assert all("Ignore previous instructions" not in f.evidence_summary for f in findings)
+
+
+def test_operational_loop_idempotency_survives_service_restart(tmp_path) -> None:
+    state_path = tmp_path / "operational_state.json"
+    corpus_svc = EvaluationCorpusService()
+    review_event = next(e for e in corpus_svc.list_events() if e.category == "PR_REVIEW_COMMENT")
+    ci_event = next(e for e in corpus_svc.list_events() if e.category == "CI_CODE_REGRESSION")
+    issue_event = next(e for e in corpus_svc.list_events() if e.category == "ACTIONABLE_ISSUE")
+
+    daily_first = DailyTriageLoopService(OperationalIdempotencyStore(state_path))
+    daily_first.run_cheap_triage([issue_event])
+    daily_second = DailyTriageLoopService(OperationalIdempotencyStore(state_path))
+    assert daily_second.get_acting_on_state(issue_event.id) is not None
+    assert daily_second.run_cheap_triage([issue_event])[0].acting_on is True
+
+    babysitter_first = PRBabysitterLoopService(OperationalIdempotencyStore(state_path))
+    assert babysitter_first.process_pr_event(review_event).action_type == "SMALL_FIX_WORKTREE"
+    babysitter_second = PRBabysitterLoopService(OperationalIdempotencyStore(state_path))
+    duplicate_action = babysitter_second.process_pr_event(review_event)
+    assert duplicate_action.action_type == "IGNORE_DUPLICATE"
+    assert duplicate_action.deduplicated is True
+
+    sweeper_first = CISweeperLoopService(OperationalIdempotencyStore(state_path))
+    classification = sweeper_first.classify_ci_event(ci_event)
+    assert sweeper_first.execute_repair(classification).attempts_used == 1
+    sweeper_second = CISweeperLoopService(OperationalIdempotencyStore(state_path))
+    assert sweeper_second.execute_repair(classification).attempts_used == 2
 
 
 # ─────────────────────────────────────────────────────────────────────────────

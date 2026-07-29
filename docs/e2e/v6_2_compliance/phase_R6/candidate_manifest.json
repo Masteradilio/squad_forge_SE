@@ -33,5 +33,18 @@
       "exit_code": 0
     }
   ],
-  "manifest_sha256": "9f82c0336013b76d40800454e98dd878f2d81af351ac6a1c178aa1b138d0e0ec"
+  "manifest_sha256": "e1a0f4e9233ade25c1bc906179fdd84af3c904417814f7023ad743cd6c53f02c",
+  "environment": {
+    "os": "windows-local-and-github-actions-matrix",
+    "python": "3.11-local / 3.12-ci",
+    "validation_scope": "V6.2 candidate compliance evidence",
+    "ci_workflow": ".github/workflows/ci.yml"
+  },
+  "generated_gate_reasons": [
+    "Candidate evidence remains EVIDENCE_READY until reviewed PR, merge commit, exact-head CI, owner-approved tag, and final release validation exist."
+  ],
+  "input_hashes": {
+    "docs/e2e/v6_2_compliance/phase_R6/acceptance_report.md": "749bf11f69655e639db4b84a08c8ee6b45276d6b8be25ffa440a55aa93dd6af3",
+    "docs/e2e/v6_2_compliance/phase_R6/known_limitations.md": "2fc6d8b746efb043a39abb9ae2614a1178362afd2ab964ca604ae466a8b599d2"
+  }
 }

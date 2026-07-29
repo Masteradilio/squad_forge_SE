@@ -12,6 +12,7 @@ if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
 from localforge.services.compliance_evidence import EVIDENCE_READY, ComplianceEvidenceValidator  # noqa: E402
+from localforge.services.file_hashes import stable_file_sha256  # noqa: E402
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -26,12 +27,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     failed = False
 
     for manifest_path in manifest_paths:
+        manifest_payload = json.loads(manifest_path.read_text(encoding="utf-8"))
         result = validator.validate_manifest(manifest_path)
         passed = result.verdict == EVIDENCE_READY
         failed = failed or not passed
         results.append(
             {
                 "manifest": manifest_path.relative_to(ROOT).as_posix(),
+                "manifest_file_sha256": stable_file_sha256(manifest_path),
+                "manifest_sha256": str(manifest_payload.get("manifest_sha256", "")),
                 "verdict": result.verdict,
                 "passed": passed,
                 "reasons": result.reasons,

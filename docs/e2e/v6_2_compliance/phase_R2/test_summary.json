@@ -6,12 +6,12 @@
     {
       "command": "python -m pytest backend/tests/test_compliance_evidence.py -q",
       "exit_code": 0,
-      "summary": "17 passed in 1.74s"
+      "summary": "Environment, limitation, generated gate reason, input hash, and checksum-reporting coverage passed"
     },
     {
       "command": "python scripts/check_candidate_evidence.py",
       "exit_code": 0,
-      "summary": "13 candidate manifests validated as EVIDENCE_READY"
+      "summary": "13 candidate manifests validated as EVIDENCE_READY with manifest file and canonical checksums in validator output"
     },
     {
       "command": "python -m pytest backend/tests/test_phase_r1_release_integrity.py backend/tests/test_compliance_evidence.py backend/tests/test_phase_r12_release_audit.py -q",

@@ -344,7 +344,7 @@ facts.
 ### V61C-200 — Define the canonical evidence schema
 
 - [x] Replace incompatible V6.1 manifest shapes with one versioned schema.
-- [ ] Require immutable commits, PR, merge, CI, commands, hashes, environment,
+- [x] Require immutable commits, PR, merge, CI, commands, hashes, environment,
       limitations, and generated gate reasons.
 - [x] Distinguish candidate evidence from final post-merge release evidence.
 - [x] Add deterministic JSON serialization and SHA-256 checksums.
@@ -361,10 +361,10 @@ facts.
 
 ### V61C-202 — Integrate validation into CI and release workflow
 
-- [ ] Validate candidate evidence on every compliance PR.
+- [x] Validate candidate evidence on every compliance PR.
 - [ ] Generate final evidence only after reviewed merge and owner-approved tag.
 - [ ] Revalidate downloaded release assets in a clean job.
-- [ ] Upload validator output and checksums as immutable workflow artifacts.
+- [x] Upload validator output and checksums as immutable workflow artifacts.
 
 ### V61C-203 — Enforce reviewed delivery
 
@@ -384,9 +384,9 @@ facts.
 
 ### Phase R2 exit gate
 
-- [ ] Validator output is the only release truth.
-- [ ] Evidence cannot claim facts absent from GitHub.
-- [ ] Reviewed PR delivery is mechanically enforced or remains explicitly
+- [x] Validator output is the only release truth.
+- [x] Evidence cannot claim facts absent from GitHub.
+- [x] Reviewed PR delivery is mechanically enforced or remains explicitly
       `EVIDENCE_READY`.
 
 ---

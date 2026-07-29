@@ -48,13 +48,13 @@
       "exit_code": 0
     }
   ],
-  "manifest_sha256": "3ae92c6f7aa85847ddc007b0a935f125800fffc996fb208c74f0f2a6d816f31b",
+  "manifest_sha256": "0068405662c62f8a30e363db815d0b90f34e093fa46902f33ea8500a3d978835",
   "input_hashes": {
     "pyproject.toml": "4ce389aa25b157607a6b9bf42cb84f08ae342ad3e894b185c3a56252ccd09508",
     ".github/workflows/ci.yml": "463c8ac144651b84ee25d74577c464c5cf0ef467fa875bad57b351d89dd2ab53",
     "scripts/check_version_consistency.py": "3be60aed9c2962127f031d28774918340682d99247add3a4a55b064d034a9243",
     "scripts/check_import_matrix.py": "941ecca70d75ff6ba7eaccdcb7308534ff8f506ab55e5ba61b206512dccacc2a",
-    "scripts/check_candidate_evidence.py": "01a686a60ffd063f5abccbb7f554d10ae03adce75c3c654b784769e49efe8803",
+    "scripts/check_candidate_evidence.py": "32fe7422d28b433f73e00df58a3c84b0ea813e8ccae0a6e316c90649687bf34e",
     "scripts/check_clean_package_install.py": "a7cb4635f5e1447c9f0ed8b8e5f5586aa625f6268141daeabd357163c2326bb7",
     "backend/localforge/services/file_hashes.py": "f0015dce9e0312685674b59a96236e55f4bc0347d100e847fac7685406f435f1",
     "backend/tests/test_phase_r1_release_integrity.py": "a74c8109e265d3e386097d30553f55b27363cad3b23dde2dd916ce4534be1883",
@@ -63,6 +63,15 @@
     "docs/e2e/v6_2_compliance/phase_R1/known_limitations.md": "3ba5468f79a7da1e1a395cafe6c4b9251e493231f2eee3bd6637fa0f5615f451",
     "docs/demo.md": "b7e8ca3d28b575a8d4cf02521ecdbd34ff919f90f1c3bc0c5cde42343a29c388",
     "backend/tests/test_release_truth.py": "81cd15cb2fbfdba5363addb5e108d9cc8bdedcfc6aba28586531416ea0f9e445",
-    "docs/compliance_backlog_V6-1.md": "984390d99f16b5ee6535cfd76400f288b5b91612ac3422d7f49b38038339c0c2"
-  }
+    "docs/compliance_backlog_V6-1.md": "7288fc6f55d2e4d645a0693f231ae4e975618452d38a127db929e0f21a877224"
+  },
+  "environment": {
+    "os": "windows-local-and-github-actions-matrix",
+    "python": "3.11-local / 3.12-ci",
+    "validation_scope": "V6.2 candidate compliance evidence",
+    "ci_workflow": ".github/workflows/ci.yml"
+  },
+  "generated_gate_reasons": [
+    "Candidate evidence remains EVIDENCE_READY until reviewed PR, merge commit, exact-head CI, owner-approved tag, and final release validation exist."
+  ]
 }

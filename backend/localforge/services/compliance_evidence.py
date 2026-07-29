@@ -92,6 +92,7 @@ class ComplianceEvidenceValidator:
             reasons.append("corpus hash must not be the SHA-256 of empty content")
 
         reasons.extend(self._validate_manifest_checksum(manifest))
+        reasons.extend(self._validate_release_evidence_fields(manifest))
         reasons.extend(self._validate_input_hashes(manifest))
         reasons.extend(self._validate_commands(manifest))
 
@@ -143,6 +144,26 @@ class ComplianceEvidenceValidator:
         if expected != actual:
             return ["manifest checksum mismatch"]
         return []
+
+    @staticmethod
+    def _validate_release_evidence_fields(manifest: dict[str, Any]) -> list[str]:
+        reasons: list[str] = []
+        input_hashes = manifest.get("input_hashes")
+        if not isinstance(input_hashes, dict) or not input_hashes:
+            reasons.append("manifest must include input_hashes for audited files")
+
+        limitations = manifest.get("known_limitations")
+        if not isinstance(limitations, list) or not limitations:
+            reasons.append("manifest must include known_limitations")
+
+        environment = manifest.get("environment")
+        if not isinstance(environment, dict) or not environment:
+            reasons.append("manifest must include validation environment metadata")
+
+        gate_reasons = manifest.get("generated_gate_reasons")
+        if not isinstance(gate_reasons, list) or not gate_reasons:
+            reasons.append("manifest must include generated gate reasons")
+        return reasons
 
     @staticmethod
     def _validate_mandatory_phase_status(manifest: dict[str, Any]) -> list[str]:

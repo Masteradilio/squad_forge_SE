@@ -154,6 +154,9 @@ All notable changes to LocalForge OS will be documented in this file.
 - Expanded the R1 legacy SQLite migration fixture to prove backup/restore and
   schema upgrade preserve projects, runs, tasks, audit events, memory facts,
   graph mutations, path leases, and artifacts.
+- Hardened V6.2 candidate evidence so manifests must carry audited input
+  hashes, validation environment metadata, known limitations, generated gate
+  reasons, and checksum-bearing validator output uploaded by CI.
 
 ### V6.1 Compliance Closure - 2026-07-28
 

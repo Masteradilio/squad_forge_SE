@@ -40,6 +40,18 @@ def _base_manifest(source_commit: str) -> dict[str, object]:
         "phase": "phase_C0",
         "task_ids": ["V6C-004"],
         "source_commit": source_commit,
+        "known_limitations": ["fixture evidence only"],
+        "environment": {
+            "os": "test",
+            "python": "test",
+            "validation_scope": "unit fixture",
+        },
+        "generated_gate_reasons": ["fixture remains candidate until final release fields exist"],
+        "input_hashes": {
+            "backend/localforge/services/compliance_evidence.py": stable_file_sha256(
+                Path("backend/localforge/services/compliance_evidence.py")
+            )
+        },
         "commands": [
             {
                 "command": "python -m pytest backend/tests/test_compliance_evidence.py -q",
@@ -87,6 +99,26 @@ def test_compliance_evidence_rejects_empty_or_mismatched_hash(tmp_path: Path) ->
     assert result.verdict == INVALID
     assert any("empty content" in reason for reason in result.reasons)
     assert any("input hash mismatch" in reason for reason in result.reasons)
+
+
+def test_compliance_evidence_requires_environment_limitations_and_gate_reasons(
+    tmp_path: Path,
+) -> None:
+    manifest_path = tmp_path / "manifest.json"
+    manifest = _base_manifest(_head_commit())
+    manifest.pop("environment")
+    manifest.pop("known_limitations")
+    manifest.pop("generated_gate_reasons")
+    manifest.pop("input_hashes")
+    _write_manifest(manifest_path, manifest)
+
+    result = ComplianceEvidenceValidator(Path.cwd()).validate_manifest(manifest_path)
+
+    assert result.verdict == INVALID
+    assert any("validation environment metadata" in reason for reason in result.reasons)
+    assert any("known_limitations" in reason for reason in result.reasons)
+    assert any("generated gate reasons" in reason for reason in result.reasons)
+    assert any("input_hashes" in reason for reason in result.reasons)
 
 
 def test_input_hash_validation_is_stable_across_text_line_endings(tmp_path: Path) -> None:
@@ -409,3 +441,19 @@ def test_v62_candidate_manifests_validate_against_canonical_schema() -> None:
     for manifest_path in manifest_paths:
         result = validator.validate_manifest(manifest_path)
         assert result.verdict == EVIDENCE_READY, (manifest_path, result.reasons)
+
+
+def test_candidate_evidence_script_reports_manifest_checksums() -> None:
+    result = subprocess.run(
+        [sys.executable, "scripts/check_candidate_evidence.py"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr or result.stdout
+    payload = json.loads(result.stdout)
+    assert payload["results"]
+    for manifest_result in payload["results"]:
+        assert len(manifest_result["manifest_file_sha256"]) == 64
+        assert len(manifest_result["manifest_sha256"]) == 64

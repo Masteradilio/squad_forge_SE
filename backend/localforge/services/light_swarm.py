@@ -252,7 +252,7 @@ class LightSwarmService:
             elif missing_artifact:
                 run.verdict = "EVIDENCE_MISSING"
             else:
-                run.verdict = "PR_READY"
+                run.verdict = "EVIDENCE_READY"
             run.finished_at = datetime.now(UTC)
 
         await self._flush_run(run_orm, run)

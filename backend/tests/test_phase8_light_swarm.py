@@ -314,3 +314,57 @@ async def test_light_swarm_required_artifact_blocks_pr_ready(db_manager) -> None
 
         assert run.status == SwarmStatus.FAILED
         assert run.verdict == "EVIDENCE_MISSING"
+
+
+@pytest.mark.asyncio
+async def test_light_swarm_completion_aggregates_evidence_without_task_pr_ready(
+    db_manager,
+) -> None:
+    """R6: completed light-swarm evidence cannot manufacture task PR_READY."""
+    async with UnitOfWork(db_manager) as uow:
+        assert uow.projects is not None
+        assert uow.tasks is not None
+        assert uow.light_swarm is not None
+
+        proj = await uow.projects.create_project(
+            domain.Project(
+                name="Swarm Aggregation Test",
+                root_path="E:/tmp/swarm_aggregation",
+                default_branch="main",
+            )
+        )
+        assert proj.id is not None
+        task = await uow.tasks.create_task(
+            domain.Task(project_id=proj.id, key="SW-4", title="Aggregate", description="desc")
+        )
+        assert task.id is not None
+        task_run = await uow.tasks.create_task_run(domain.TaskRun(task_id=task.id, run_id=1))
+        assert task_run.id is not None
+
+        nodes = [
+            domain.SwarmNode(
+                node_id="verify",
+                node_type=SwarmNodeType.VERIFY,
+                title="Node verify",
+                description="Requires verification evidence",
+                output_artifact_type=TypedArtifactType.VERIFICATION,
+            ),
+        ]
+        plan = await uow.light_swarm.create_plan(
+            project_id=proj.id,
+            task_run_id=task_run.id,
+            nodes=nodes,
+            edges=[],
+            policy=domain.SwarmPolicy(require_independent_checker=False),
+        )
+        assert plan.id is not None
+        run = await uow.light_swarm.start_swarm(plan.id)
+        assert run.id is not None
+
+        run = await uow.light_swarm.complete_node(run.id, "verify", artifact_id=123)
+        refreshed_task = await uow.tasks.get_task(task.id)
+
+        assert run.status == SwarmStatus.COMPLETED
+        assert run.verdict == "EVIDENCE_READY"
+        assert refreshed_task is not None
+        assert refreshed_task.status.value != "PR_READY"

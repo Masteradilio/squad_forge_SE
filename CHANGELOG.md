@@ -46,6 +46,10 @@ All notable changes to LocalForge OS will be documented in this file.
   heartbeat, attempt number, worktree path, and fencing token.
 - Added R5 regression coverage for runner stale-token rejection, path lease
   renewal, exact-path reclaim, and path separator/case normalization.
+- Added Phase R6 candidate evidence under
+  `docs/e2e/v6_2_compliance/phase_R6/`.
+- Added Light Swarm regression coverage proving completed swarm aggregation
+  cannot manufacture task `PR_READY`.
 
 #### Fixed
 - Removed the clean-interpreter import cycle exposed by importing
@@ -70,6 +74,9 @@ All notable changes to LocalForge OS will be documented in this file.
 - Hardened path lease release/renewal so only the current owner with the
   matching fencing token can mutate lease state, and released leases clear their
   active conflict key for safe later reacquisition.
+- Hardened Light Swarm completion so successful aggregation returns
+  `EVIDENCE_READY` instead of the canonical task readiness status; task
+  readiness remains owned by `TaskService.mark_pr_ready()`.
 
 ### V6.1 Compliance Closure - 2026-07-28
 

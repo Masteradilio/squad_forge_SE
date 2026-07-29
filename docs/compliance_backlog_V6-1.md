@@ -619,8 +619,8 @@ Replace manually advanced swarm state with bounded governed worker execution.
 
 ### V61C-603 — Aggregate through the canonical readiness gate
 
-- [ ] Remove direct `run.verdict = "PR_READY"` behavior.
-- [ ] Aggregate evidence without changing task readiness.
+- [x] Remove direct `run.verdict = "PR_READY"` behavior.
+- [x] Aggregate evidence without changing task readiness.
 - [ ] Submit the complete typed evidence bundle to the R3 readiness service.
 - [ ] Preserve `PARTIAL`, `FAILED`, or `NEEDS_HUMAN` when a gate is missing.
 
@@ -631,13 +631,16 @@ Replace manually advanced swarm state with bounded governed worker execution.
 - [ ] Worktrees and leases exist during execution and reconcile afterward.
 - [ ] Missing artifact or same-identity checker blocks completion.
 - [ ] Pause, retry, kill, and restart operate on real attempts.
-- [ ] No public/manual status call can manufacture completion.
+- [x] No Light Swarm aggregate result can manufacture task `PR_READY`.
+- [ ] Restrict manual completion endpoints with authenticated ownership tokens.
 
 ### Phase R6 exit gate
 
 - [ ] Light Swarm performs real bounded work.
 - [ ] Every executable node uses the canonical governed path.
-- [ ] Only the canonical readiness service can produce `PR_READY`.
+- [x] Light Swarm no longer produces `PR_READY` directly.
+- [ ] Only the canonical readiness service can produce `PR_READY` across every
+      swarm/manual status surface.
 
 ---
 

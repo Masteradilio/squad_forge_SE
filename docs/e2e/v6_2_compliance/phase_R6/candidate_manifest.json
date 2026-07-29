@@ -1,0 +1,37 @@
+{
+  "schema_version": "localforge.v6_2.candidate_manifest.v1",
+  "release_version": "6.2.0",
+  "release_tag": "v6.2.0",
+  "phase": "R6",
+  "task_ids": [
+    "V61C-600",
+    "V61C-601",
+    "V61C-602",
+    "V61C-603"
+  ],
+  "source_commit": "4c57470",
+  "candidate_branch": "codex/v62-truth-reset-foundation",
+  "reviewed_pr_number": 14,
+  "verdict": "EVIDENCE_READY",
+  "known_limitations": [
+    "Candidate evidence is not final release acceptance.",
+    "Ready nodes are not yet dispatched through GovernedExecution.",
+    "Manual completion callbacks still need authenticated ownership tokens.",
+    "Typed edge artifacts and real per-node resources remain open."
+  ],
+  "commands": [
+    {
+      "command": "python -m pytest backend/tests/test_phase8_light_swarm.py -q",
+      "exit_code": 0
+    },
+    {
+      "command": "python -m mypy backend/localforge/services/light_swarm.py backend/tests/test_phase8_light_swarm.py",
+      "exit_code": 0
+    },
+    {
+      "command": "python -m ruff check backend/localforge/services/light_swarm.py backend/tests/test_phase8_light_swarm.py",
+      "exit_code": 0
+    }
+  ],
+  "manifest_sha256": "9f82c0336013b76d40800454e98dd878f2d81af351ac6a1c178aa1b138d0e0ec"
+}

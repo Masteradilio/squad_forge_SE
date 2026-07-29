@@ -40,6 +40,25 @@ class LoopCoordinator:
         self.circuit_breaker_service = CircuitBreakerService(session)
         self.task_service = TaskService(session)
 
+    async def trigger_due_schedules(
+        self, project_id: int, *, now: datetime | None = None, limit: int = 50
+    ) -> list[domain.LoopRun]:
+        """Claim and execute due interval/cron loop definitions once."""
+        claimed = await self.loop_service.claim_due_schedules(project_id, now=now, limit=limit)
+        runs: list[domain.LoopRun] = []
+        for loop_def, idempotency_key in claimed:
+            payload = loop_def.trigger.metadata.get("default_payload")
+            if not isinstance(payload, dict):
+                payload = None
+            run = await self.trigger_loop(
+                loop_id=loop_def.id or 0,
+                trigger_kind=loop_def.trigger.kind,
+                idempotency_key=idempotency_key,
+                payload=payload,
+            )
+            runs.append(run)
+        return runs
+
     async def trigger_loop(
         self,
         loop_id: int,

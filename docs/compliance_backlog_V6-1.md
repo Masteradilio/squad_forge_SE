@@ -471,11 +471,11 @@ ownership, idempotency, cancellation, and restart recovery.
 
 ### V61C-400 — Implement the schedule runtime
 
-- [ ] Parse and validate interval and cron expressions.
-- [ ] Define timezone and daylight-saving behavior.
-- [ ] Persist `next_run_at`, last trigger, trigger revision, and misfire policy.
+- [x] Parse and validate interval and cron expressions.
+- [x] Define timezone and daylight-saving behavior.
+- [x] Persist `next_run_at`, last trigger, trigger revision, and misfire policy.
 - [ ] Claim due schedules atomically across multiple coordinator processes.
-- [ ] Support bounded catch-up after downtime without duplicate execution.
+- [x] Support bounded catch-up after downtime without duplicate execution.
 
 ### V61C-401 — Implement authenticated external triggers
 
@@ -497,7 +497,7 @@ ownership, idempotency, cancellation, and restart recovery.
 - [ ] Define ownership from LoopRun to Scheduler Run, tasks, task runs, worker
       processes, RunnerPool leases, PathLeases, worktrees, and external action
       reservations.
-- [ ] Pause prevents new dispatch without corrupting active work.
+- [x] Pause prevents new dispatch without corrupting active work.
 - [ ] Kill cancels active work, terminates bounded subprocesses, releases
       resources, and records incomplete artifacts.
 - [ ] Restart reconciliation recovers or safely fails every orphaned owner.
@@ -505,7 +505,7 @@ ownership, idempotency, cancellation, and restart recovery.
 
 ### Required regression tests
 
-- [ ] Fake-clock interval and cron execution.
+- [x] Fake-clock interval and cron execution.
 - [ ] Two coordinators cannot claim the same trigger.
 - [ ] Restart before/after triage and task creation does not duplicate work.
 - [ ] Authenticated webhook replay is deduplicated.
@@ -515,6 +515,8 @@ ownership, idempotency, cancellation, and restart recovery.
 ### Phase R4 exit gate
 
 - [ ] All trigger kinds execute durably.
+  - Candidate R4 implementation executes manual, interval, and cron through
+    durable loop records; authenticated external-event execution remains open.
 - [ ] No fake actionable default remains.
 - [ ] Lifecycle actions affect the complete ownership tree.
 

@@ -33,6 +33,12 @@ All notable changes to LocalForge OS will be documented in this file.
   transition, including independent maker/checker identities, pre-PR gate
   success, deterministic checks, branch/worktree context, and persisted
   artifact validation.
+- Added Phase R4 candidate evidence under
+  `docs/e2e/v6_2_compliance/phase_R4/`.
+- Added a durable loop schedule runtime for interval and cron triggers with
+  schedule validation, timezone-aware UTC persistence, misfire policy handling,
+  stable idempotency keys, and due-schedule execution through
+  `LoopCoordinator.trigger_due_schedules()`.
 
 #### Fixed
 - Removed the clean-interpreter import cycle exposed by importing
@@ -50,6 +56,8 @@ All notable changes to LocalForge OS will be documented in this file.
   gates, and conflicting readiness replays cannot produce `PR_READY`.
 - Updated runtime, PR factory, and role-pipeline readiness paths to submit the
   typed readiness evidence contract instead of unstructured payloads.
+- Hardened loop scheduling so paused/disabled loops are not claimed and
+  repeated due-schedule scans do not duplicate interval or cron loop runs.
 
 ### V6.1 Compliance Closure - 2026-07-28
 

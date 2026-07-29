@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from localforge.models import domain
 from localforge.models.enums import LoopRunStatus, LoopRunVerdict, LoopStatus
+from localforge.services.loop_runtime import claim_schedule_metadata, initialize_schedule_metadata
 from localforge.storage.orm import (
     LoopDefinitionORM,
     LoopItemORM,
@@ -25,6 +26,12 @@ class LoopService:
 
     async def create_loop(self, loop_def: domain.LoopDefinition) -> domain.LoopDefinition:
         """Create and persist a new loop definition."""
+        loop_def = loop_def.model_copy(
+            update={
+                "trigger": initialize_schedule_metadata(loop_def.trigger),
+                "updated_at": datetime.now(UTC),
+            }
+        )
         orm_obj = LoopDefinitionORM.from_domain(loop_def)
         self.session.add(orm_obj)
         await self.session.flush()
@@ -63,6 +70,38 @@ class LoopService:
         orm_obj.updated_at = datetime.now(UTC)
         await self.session.flush()
         return orm_obj.to_domain()
+
+    async def claim_due_schedules(
+        self, project_id: int, *, now: datetime | None = None, limit: int = 50
+    ) -> list[tuple[domain.LoopDefinition, str]]:
+        """Claim due interval/cron loops by advancing trigger metadata.
+
+        Schedule state is persisted inside LoopTrigger.metadata so existing
+        databases can be upgraded without schema churn. The generated
+        idempotency key is stable for the claimed due timestamp and revision.
+        """
+        stmt = (
+            select(LoopDefinitionORM)
+            .where(
+                LoopDefinitionORM.project_id == project_id,
+                LoopDefinitionORM.enabled.is_(True),
+                LoopDefinitionORM.status.notin_([LoopStatus.PAUSED.value, LoopStatus.DISABLED.value]),
+            )
+            .order_by(LoopDefinitionORM.id.asc())
+            .limit(limit)
+        )
+        result = await self.session.execute(stmt)
+        claimed: list[tuple[domain.LoopDefinition, str]] = []
+        for orm_obj in result.scalars().all():
+            loop_def = orm_obj.to_domain()
+            updated_trigger, idempotency_key = claim_schedule_metadata(loop_def.trigger, now=now)
+            if updated_trigger is None or idempotency_key is None:
+                continue
+            orm_obj.trigger_json = updated_trigger.model_dump(mode="json")
+            orm_obj.updated_at = datetime.now(UTC)
+            await self.session.flush()
+            claimed.append((orm_obj.to_domain(), idempotency_key))
+        return claimed
 
     async def create_loop_run(self, loop_run: domain.LoopRun) -> domain.LoopRun:
         """Persist a new LoopRun."""

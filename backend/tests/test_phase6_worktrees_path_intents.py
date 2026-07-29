@@ -1,8 +1,30 @@
+import subprocess
+
 import pytest
 from localforge.models import domain
 from localforge.models.enums import LeaseReleaseReason, WorktreeAttemptStatus
 from localforge.services.path_lease import is_path_overlapping
 from localforge.storage import UnitOfWork
+
+
+def _git(cwd, *args: str) -> str:
+    result = subprocess.run(
+        ["git", "-C", str(cwd), *args],
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    return result.stdout.strip()
+
+
+def _commit_file(repo, relative_path: str, content: str, message: str) -> str:
+    target = repo / relative_path
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(content, encoding="utf-8")
+    _git(repo, "add", relative_path)
+    _git(repo, "commit", "-m", message)
+    return _git(repo, "rev-parse", "HEAD")
 
 
 def test_path_overlap_detection() -> None:
@@ -143,3 +165,60 @@ async def test_worktree_attempt_manifest_and_reconciliation(db_manager, tmp_path
         assert res["active_worktrees"] == 1
         assert res["reconciled_stale"] == 1
         assert str(ghost_dir) in res["stale_paths"]
+
+
+@pytest.mark.asyncio
+async def test_worktree_repository_state_validation_detects_cleanliness_and_drift(
+    db_manager, tmp_path
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
+    _git(repo, "config", "user.email", "test@example.com")
+    _git(repo, "config", "user.name", "Test User")
+    source_commit = _commit_file(repo, "README.md", "# Repo\n", "initial")
+    _git(repo, "branch", "-M", "main")
+
+    worktree = tmp_path / "wt"
+    subprocess.run(
+        ["git", "-C", str(repo), "worktree", "add", "-b", "feature/wt", str(worktree), "main"],
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+
+    async with UnitOfWork(db_manager) as uow:
+        assert uow.projects is not None
+        assert uow.tasks is not None
+        assert uow.worktrees is not None
+        project = await uow.projects.create_project(
+            domain.Project(name="Git WT", root_path=str(repo), default_branch="main")
+        )
+        assert project.id is not None
+        task = await uow.tasks.create_task(
+            domain.Task(project_id=project.id, key="WT-2", title="Validate", description="")
+        )
+        assert task.id is not None
+        task_run = await uow.tasks.create_task_run(domain.TaskRun(task_id=task.id, run_id=1))
+        assert task_run.id is not None
+        manifest = await uow.worktrees.create_attempt_manifest(
+            project_id=project.id,
+            task_id=task.id,
+            task_run_id=task_run.id,
+            worktree_path=str(worktree),
+            branch_name="feature/wt",
+            source_commit=source_commit,
+            owner_agent_id="runner",
+        )
+        assert manifest.id is not None
+
+        clean_result = await uow.worktrees.validate_repository_state(manifest.id)
+        assert clean_result["clean"] is True
+        assert clean_result["target_drift"] is False
+        assert clean_result["status"] == WorktreeAttemptStatus.ACTIVE.value
+
+        _commit_file(repo, "NEXT.md", "new target state\n", "advance main")
+        drift_result = await uow.worktrees.validate_repository_state(manifest.id)
+        assert drift_result["target_drift"] is True
+        assert drift_result["status"] == WorktreeAttemptStatus.REJECTED.value

@@ -16,7 +16,6 @@
   "known_limitations": [
     "Candidate evidence is not final release acceptance.",
     "Parent/child overlap conflicts still need database-level atomic exclusion.",
-    "Target-branch drift validation remains open.",
     "Failed-worktree diagnostic retention policy remains open."
   ],
   "commands": [
@@ -103,9 +102,21 @@
     {
       "command": ".\\.codex_venv\\Scripts\\python.exe -m pytest backend\\tests\\test_scheduler.py -q",
       "exit_code": 0
+    },
+    {
+      "command": ".\\.codex_venv\\Scripts\\python.exe -m pytest backend\\tests\\test_phase6_worktrees_path_intents.py -q",
+      "exit_code": 0
+    },
+    {
+      "command": ".\\.codex_venv\\Scripts\\python.exe -m mypy backend\\localforge\\services\\worktree.py backend\\tests\\test_phase6_worktrees_path_intents.py",
+      "exit_code": 0
+    },
+    {
+      "command": ".\\.codex_venv\\Scripts\\python.exe -m ruff check backend\\localforge\\services\\worktree.py backend\\tests\\test_phase6_worktrees_path_intents.py",
+      "exit_code": 0
     }
   ],
-  "manifest_sha256": "3e9777149c9876484cf3c258337d33c67ec01ac8f255708a42a5b171536c8815",
+  "manifest_sha256": "b582ffd3daa34ff7ea3d1d41ce7dadeb09b3c018a8bf7f60c28ec5684109d2a3",
   "environment": {
     "os": "windows-local-and-github-actions-matrix",
     "python": "3.11-local / 3.12-ci",
@@ -116,13 +127,13 @@
     "Candidate evidence remains EVIDENCE_READY until reviewed PR, merge commit, exact-head CI, owner-approved tag, and final release validation exist."
   ],
   "input_hashes": {
-    "docs/e2e/v6_2_compliance/phase_R5/acceptance_report.md": "3def129540b1b4e3371a1d915ba9d05cf287592dfb676fd528ca6778c5b9b1c5",
-    "docs/e2e/v6_2_compliance/phase_R5/known_limitations.md": "990f19fec1704bd777f6ce24f4bb127ab24a29cbaa3d35a0c00806f240cedbea",
+    "docs/e2e/v6_2_compliance/phase_R5/acceptance_report.md": "c09d91c6be1516bbd29116ebf1ac99f72e663f2b492b28c65a83627e401f8f4d",
+    "docs/e2e/v6_2_compliance/phase_R5/known_limitations.md": "24d322013ebe241260bc0395df988a880d6570f97efb6cc6ce1062ac4ae78b35",
     "backend/localforge/services/runner_pool.py": "6d0b668b763cab92f8c91677b50d121e4a6e52cb020cfa6db721bc16263e2786",
     "backend/tests/test_phase_r5_coordination.py": "882871b454db343ae47a4ba5fe6746ec923139a5cd76d0a90ae21abef7ae5b47",
     "backend/tests/test_phase6_runner_pool_governance.py": "52089e8a35d82fd9ca4fa70e63c2f5041d990b805630b80e8e6785dbf9b5adae",
-    "docs/compliance_backlog_V6-1.md": "97d65d90810ed125cbbeffe80fd81b32c29d903cb96ec109ed18de371e53ccd3",
-    "CHANGELOG.md": "3d5fce4c3f1cc3f2da6fde5cdd85194635fc86b26e435782bc735b489bbed996",
+    "docs/compliance_backlog_V6-1.md": "90c8e771eec60506158f70cfc461da83cd9b3e5ab62e6579dca48b475bbc9bf6",
+    "CHANGELOG.md": "817460496a4273291eb6bbc8c35bd297382718cab81e2333d122653c2e912b35",
     "backend/localforge/services/path_lease.py": "d6f63db70123b3378ce8d48cc6ff8968c3cac10cef1502b16aba0f27a9cb85cf",
     "backend/localforge/models/enums.py": "8ad6bca9afbf41c5c75c442b8b88bd5363332b191f3f93c555cd6b519635b583",
     "backend/localforge/models/domain.py": "8577f6f2c5a8d510015749fb87843fd5c33b03afb7aa0b6cbdcd8fadf0e17983",
@@ -133,6 +144,8 @@
     "backend/localforge/gitops/manager.py": "d9213a09afa56e3256b7dc801a46f13ca4bd86f646590f289d56cee554a808f0",
     "backend/localforge/services/governed_execution.py": "9265286a5ebfabe4e3ab2761e715b868e2255a77a545d8d81042d833dbefa683",
     "backend/tests/test_scheduler.py": "e7a47b49554df2cc5b75155803617d6d47c916f2dc54ca8428733537792f70c0",
-    "backend/tests/test_gitops.py": "785f4762e53b6694cd36f72d212c1706ef5501cf2f8e5446cf6ef60f54edd6e6"
+    "backend/tests/test_gitops.py": "785f4762e53b6694cd36f72d212c1706ef5501cf2f8e5446cf6ef60f54edd6e6",
+    "backend/localforge/services/worktree.py": "f6190dd9d4d5ff6f77450f44db648b8c581284c8dc6f536bf2045c290197e895",
+    "backend/tests/test_phase6_worktrees_path_intents.py": "cf670c1da32915d80deb4856c36deb3f0f63779576685dd75ae6413461ea18f4"
   }
 }

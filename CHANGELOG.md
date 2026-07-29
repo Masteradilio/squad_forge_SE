@@ -83,6 +83,9 @@ All notable changes to LocalForge OS will be documented in this file.
 - Added governed worktree attempt binding so scheduler startup persists the
   runner worktree path, branch, immutable source commit, owner runner, task run,
   and attempt number before task mutation.
+- Added worktree repository-state validation for cleanliness and target-branch
+  drift, rejecting stale manifests whose persisted source commit no longer
+  matches the project default branch.
 - Added R5 regression coverage for runner stale-token rejection, path lease
   renewal, exact-path reclaim, and path separator/case normalization.
 - Added Phase R6 candidate evidence under

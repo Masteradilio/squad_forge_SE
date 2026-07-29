@@ -15,6 +15,7 @@
   successful dispatch logs joined to active TaskRuns. Capacity saturation is
   reported as bounded backpressure with deterministic queue position.
 - Governed task startup now persists worktree path, branch, immutable source
-  commit, runner owner, task run, and attempt number. Target-branch drift
-  validation, stale worktree reconciliation without user-path deletion, and
-  failed-worktree diagnostic retention policy remain open.
+  commit, runner owner, task run, and attempt number. Repository cleanliness and
+  target-branch drift validation are candidate-implemented. Stale worktree
+  reconciliation without user-path deletion and failed-worktree diagnostic
+  retention policy remain open.

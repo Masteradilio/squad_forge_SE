@@ -12,12 +12,12 @@ case handling plus repository-boundary canonicalization. It also persists
 PathLease wait-for edges with bounded timeouts, cancellation, FIFO queue
 position, repeated-contention escalation, and deterministic two-owner deadlock
 victim selection. Governed task startup now binds the runner worktree, branch,
-and immutable source commit into a persisted `WorktreeAttemptManifest`.
+and immutable source commit into a persisted `WorktreeAttemptManifest`; worktree
+validation now rejects dirty or target-drifted manifests.
 
 This is candidate evidence only. Final R5 acceptance still requires
 database-level parent/child overlap fencing across concurrent transactions,
-target-branch drift validation, stale worktree reconciliation, and failed
-worktree retention policy.
+stale worktree reconciliation, and failed worktree retention policy.
 
 ## Implemented Controls
 
@@ -39,12 +39,13 @@ worktree retention policy.
 | Deadlock victim selection | `enqueue_wait()` detects two-owner wait cycles and marks the lexicographically deterministic victim as `DEADLOCK_VICTIM`. |
 | Governed worktree manifest | `GovernedExecutionService.start_task()` persists a `WorktreeAttemptManifest` with worktree path, branch, source commit, runner owner, task run, and attempt number when runner setup returns a source commit. |
 | Real worktree inspection | `WorktreeManager.setup_worktree_attempt()` resolves the base ref to an immutable source commit before creating the Git worktree; real temp-Git lifecycle coverage inspects the worktree on disk. |
+| Cleanliness and target drift validation | `WorktreeService.validate_repository_state()` checks `git status --porcelain`, current `HEAD`, project default branch commit, and persisted source commit, rejecting dirty or drifted manifests. |
 
 ## Validation Commands
 
 ```text
 python -m pytest backend\tests\test_phase_r5_coordination.py backend\tests\test_phase6_runner_pool_governance.py backend\tests\test_phase6_worktrees_path_intents.py -q
-18 passed, 1 skipped in 1.51s
+19 passed, 1 skipped in 2.38s
 
 python -m pytest backend/tests/test_phase_r5_coordination.py backend/tests/test_phase6_runner_pool_governance.py backend/tests/test_phase6_worktrees_path_intents.py backend/tests/test_storage.py backend/tests/test_phase_r1_release_integrity.py -q
 17 passed in 12.39s
@@ -66,6 +67,9 @@ python -m pytest backend\tests\test_scheduler.py -q
 
 python -m pytest backend\tests\test_gitops.py::test_worktree_manager_setup_and_isolation -q
 1 passed in 1.14s
+
+python -m pytest backend\tests\test_phase6_worktrees_path_intents.py -q
+4 passed in 1.33s
 ```
 
 ## Remaining Acceptance Requirements
@@ -81,5 +85,6 @@ python -m pytest backend\tests\test_gitops.py::test_worktree_manager_setup_and_i
 - RunnerPool backpressure is bounded and reported separately from permanent
   incompatibility.
 - Real Git worktree creation and branch/base-commit binding are covered.
-  Target-branch drift validation, stale worktree reconciliation without
-  user-path deletion, and failed worktree retention policy remain open.
+  Repository cleanliness and target-branch drift validation are covered. Stale
+  worktree reconciliation without user-path deletion and failed worktree
+  retention policy remain open.

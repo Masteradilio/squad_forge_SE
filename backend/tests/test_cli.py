@@ -1,4 +1,6 @@
+import json
 import os
+from pathlib import Path
 
 import localforge.storage.database as db_mod
 from localforge.cli.main import app
@@ -35,6 +37,36 @@ def test_cli_version_is_non_destructive_smoke_check():
 
     assert result.exit_code == 0
     assert result.stdout.strip() == "LocalForge OS 6.2.0"
+
+
+def test_cli_deterministic_demo_exports_replay(tmp_path: Path) -> None:
+    output = tmp_path / "demo"
+
+    result = runner.invoke(
+        app,
+        [
+            "demo",
+            "--scenario",
+            "ci-regression",
+            "--deterministic",
+            "--output",
+            str(output),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Demo status: PR_READY" in result.stdout
+    demo_json = output / "demo_run.json"
+    replay_html = output / "demo_replay.html"
+    assert demo_json.is_file()
+    assert replay_html.is_file()
+    payload = json.loads(demo_json.read_text(encoding="utf-8"))
+    assert payload["schema_version"] == "localforge.v6_2.demo_run.v1"
+    assert payload["model_calls"] == 0
+    assert payload["paid_api_calls"] == 0
+    assert payload["worker_output_mode"] == "deterministic_replay_not_live_model"
+    assert payload["status"] == "PR_READY"
+    assert "artifacts/diff.patch" in payload["checksums"]
 
 
 def test_cli_doctor():

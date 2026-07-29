@@ -916,22 +916,22 @@ project, providing API keys, or owning a GPU.
 
 ### V61C-1100 — Create a deterministic CPU-only demo scenario
 
-- [ ] Add `localforge demo --scenario ci-regression --deterministic`.
+- [x] Add `localforge demo --scenario ci-regression --deterministic`.
 - [ ] Use a disposable local Git repository, versioned event, real worktree,
       real diff, real tests, governed gates, and persisted artifacts.
-- [ ] Use clearly labeled pre-recorded worker outputs only where model
+- [x] Use clearly labeled pre-recorded worker outputs only where model
       inference is not required.
-- [ ] Do not label replayed output as a live model call.
-- [ ] Export a sanitized, schema-versioned `demo_run.json`.
+- [x] Do not label replayed output as a live model call.
+- [x] Export a sanitized, schema-versioned `demo_run.json`.
 
 ### V61C-1101 — Build an interactive evidence replay
 
-- [ ] Create a static browser experience driven by `demo_run.json`.
+- [x] Create a static browser experience driven by `demo_run.json`.
 - [ ] Show event/PRD, triage, DAG, dispatch, worktree, safety decisions,
       maker/checker handoff, tests, readiness gate, diff, and draft PR.
 - [ ] Link every displayed fact to its evidence record and source commit.
 - [ ] Make the replay deployable to GitHub Pages or equivalent static hosting.
-- [ ] Ensure no backend, GPU, provider credential, or paid request is required.
+- [x] Ensure no backend, GPU, provider credential, or paid request is required.
 
 ### V61C-1102 — Produce a concise visual walkthrough
 
@@ -963,11 +963,11 @@ project, providing API keys, or owning a GPU.
 
 ### Required regression tests
 
-- [ ] Deterministic demo completes on CPU without provider keys.
-- [ ] Demo output validates against its schema and checksums.
-- [ ] Static replay renders from the release artifact.
-- [ ] Demo contains no secret or private path.
-- [ ] Displayed events, results, and metrics match the evidence bundle.
+- [x] Deterministic demo completes on CPU without provider keys.
+- [x] Demo output validates against its schema and checksums.
+- [x] Static replay renders from the release artifact.
+- [x] Demo contains no secret or private path.
+- [x] Displayed events, results, and metrics match the evidence bundle.
 
 ### Phase R11 exit gate
 

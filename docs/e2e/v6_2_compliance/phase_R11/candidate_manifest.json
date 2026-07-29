@@ -1,0 +1,42 @@
+{
+  "schema_version": "localforge.v6_2.candidate_manifest.v1",
+  "release_version": "6.2.0",
+  "release_tag": "v6.2.0",
+  "phase": "R11",
+  "task_ids": [
+    "V61C-1100",
+    "V61C-1101",
+    "V61C-1102",
+    "V61C-1103",
+    "V61C-1104"
+  ],
+  "source_commit": "ea382ab",
+  "candidate_branch": "codex/v62-truth-reset-foundation",
+  "reviewed_pr_number": 14,
+  "verdict": "EVIDENCE_READY",
+  "input_hashes": {
+    "backend/localforge/demo.py": "8ff915ddc8bdab4e5b0e06c82fbd30c7d96817c41d518340a7b89700451222ae",
+    "backend/tests/test_phase_r11_demo.py": "f25baed46239541196c7ed59e010f3a047b546cf979d1c97c1610110cdc6674c",
+    "docs/e2e/v6_2_compliance/phase_R11/demo/demo_run.json": "2970082ea0c30587dbe71be6f612569a71149a46620026d8f9be465e75ea9081",
+    "docs/e2e/v6_2_compliance/phase_R11/demo/demo_replay.html": "369bc90f0b08a5df3fa8a5be92d7ae3a70f04e7f085e6b6e2e0e8fcc84a8f91f"
+  },
+  "known_limitations": [
+    "Candidate evidence is not final public release evidence.",
+    "Narrated video, README recruiter path, GitHub Pages deployment, and publication metadata remain open."
+  ],
+  "commands": [
+    {
+      "command": "python -m pytest backend/tests/test_phase_r11_demo.py backend/tests/test_cli.py::test_cli_deterministic_demo_exports_replay -q",
+      "exit_code": 0
+    },
+    {
+      "command": "python -m mypy backend/localforge/demo.py backend/localforge/cli/demo.py backend/localforge/cli/main.py backend/tests/test_phase_r11_demo.py backend/tests/test_cli.py",
+      "exit_code": 0
+    },
+    {
+      "command": "python -m ruff check backend/localforge/demo.py backend/localforge/cli/demo.py backend/localforge/cli/main.py backend/tests/test_phase_r11_demo.py backend/tests/test_cli.py",
+      "exit_code": 0
+    }
+  ],
+  "manifest_sha256": "ddd8de6d214a5824919af00d6aa739c46f3caba1e2f9f47325103584acc6fe42"
+}

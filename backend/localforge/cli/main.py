@@ -17,6 +17,7 @@ from localforge.cli.control import (
     tasks_app,
 )
 from localforge.cli.costs import costs_app
+from localforge.cli.demo import demo_cmd
 from localforge.cli.doctor import doctor_cmd
 from localforge.cli.import_prd import import_prd_cmd
 from localforge.cli.init import init_cmd
@@ -65,6 +66,9 @@ app.command(name="init", help="Initialize a LocalForge workspace in the current 
     init_cmd
 )
 app.command(name="doctor", help="Run system diagnostics and verify dependencies.")(doctor_cmd)
+app.command(name="demo", help="Run a deterministic CPU-only demo and export replay evidence.")(
+    demo_cmd
+)
 app.command(name="import-prd", help="Import a Markdown PRD into draft epics and tasks.")(
     import_prd_cmd
 )

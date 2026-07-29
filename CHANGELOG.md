@@ -69,6 +69,11 @@ All notable changes to LocalForge OS will be documented in this file.
 - Added reusable security controls for optional API bearer-token auth, request
   payload ceilings, secret redaction, and root-constrained path validation.
 - Added `/ready` diagnostics and request correlation IDs to the FastAPI app.
+- Added Phase R11 candidate evidence under
+  `docs/e2e/v6_2_compliance/phase_R11/`.
+- Added `localforge demo --scenario ci-regression --deterministic`, exporting a
+  sanitized CPU-only `demo_run.json`, static `demo_replay.html`, test logs,
+  diff, and draft PR artifact without model, GPU, or paid API calls.
 
 #### Fixed
 - Removed the clean-interpreter import cycle exposed by importing

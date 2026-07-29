@@ -385,7 +385,10 @@ async def test_scheduler_releases_runner_lease_after_pipeline_success(
         await self.uow.tasks.update_task_status(task_id, TaskStatus.IMPLEMENTING)
         await self.uow.tasks.update_task_status(task_id, TaskStatus.TESTING)
         await self.uow.tasks.update_task_status(task_id, TaskStatus.REVIEWING)
-        await self.uow.tasks.update_task_status(task_id, TaskStatus.PR_READY)
+        await self.uow.tasks.mark_pr_ready(
+            task_id,
+            gate_evidence={"source": "test_scheduler_pipeline", "task_run_id": task_run_id},
+        )
         task_run = await self.uow.tasks.get_task_run(task_run_id)
         assert task_run is not None
         task_run.status = TaskRunStatus.COMPLETED
@@ -537,7 +540,10 @@ async def test_scheduler_lifecycle_and_parallel_limits(
         await uow.tasks.update_task_status(tid, TaskStatus.IMPLEMENTING)
         await uow.tasks.update_task_status(tid, TaskStatus.TESTING)
         await uow.tasks.update_task_status(tid, TaskStatus.REVIEWING)
-        await uow.tasks.update_task_status(tid, TaskStatus.PR_READY)
+        await uow.tasks.mark_pr_ready(
+            tid,
+            gate_evidence={"source": "test_scheduler_cleanup", "task_run_id": tid},
+        )
         await uow.tasks.update_task_status(tid, TaskStatus.DONE)
         await uow.session.commit()
         await wt_manager.cleanup_worktree(tid)

@@ -1,6 +1,6 @@
 {
   "artifact_schema": "localforge.v6_1.compliance_manifest.v1",
-  "verdict": "ACCEPTED",
+  "verdict": "DISPUTED",
   "target_release": "V6.1",
   "repository": "Masteradilio/local_forge_os",
   "branch": "main",
@@ -27,6 +27,6 @@
   "stable_release": {
     "annotated_tag": "v6.1.0",
     "github_release": "v6.1.0",
-    "status": "READY_TO_PUBLISH"
+    "status": "HISTORICAL_DISPUTED"
   }
 }

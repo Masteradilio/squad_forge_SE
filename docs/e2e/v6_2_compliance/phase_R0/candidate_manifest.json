@@ -1,0 +1,32 @@
+{
+  "schema_version": "localforge.v6_2.candidate_manifest.v1",
+  "release_version": "6.2.0",
+  "release_tag": "v6.2.0",
+  "phase": "R0",
+  "task_ids": ["V61C-000", "V61C-001", "V61C-002", "V61C-003"],
+  "source_commit": "e2cc2a32fb0c1bb97dbb8fa54f5c9468398b636e",
+  "parent_commit": "27836a2a8b18d9d24e8155ea30a6e7dcce2eec50",
+  "verdict": "EVIDENCE_READY",
+  "known_limitations": [
+    "R0 truth reset is not final production acceptance.",
+    "Reviewed PR, remote CI for the remediation branch, and final release assets are still required."
+  ],
+  "commands": [
+    {
+      "command": "python -m pytest backend/tests/test_compliance_evidence.py backend/tests/test_bootstrap.py backend/tests/test_cli.py backend/tests/test_api_server.py backend/tests/test_services.py -q",
+      "exit_code": 0
+    },
+    {
+      "command": "python -m mypy backend/localforge/services/compliance_evidence.py backend/localforge/services/task.py backend/localforge/version.py",
+      "exit_code": 0
+    },
+    {
+      "command": "python -m ruff check backend/localforge/services/__init__.py backend/localforge/services/compliance_evidence.py backend/localforge/services/task.py backend/tests/test_compliance_evidence.py backend/tests/test_services.py backend/localforge/version.py",
+      "exit_code": 0
+    },
+    {
+      "command": "git diff --check",
+      "exit_code": 0
+    }
+  ]
+}

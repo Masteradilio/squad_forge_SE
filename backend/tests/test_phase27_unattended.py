@@ -79,7 +79,13 @@ async def transition_task_to(uow: UnitOfWork, task_id: int, target_status: TaskS
     target_index = ladder.index(target_status)
 
     for status in ladder[current_index + 1 : target_index + 1]:
-        await uow.tasks.update_task_status(task_id, status)
+        if status == TaskStatus.PR_READY:
+            await uow.tasks.mark_pr_ready(
+                task_id,
+                gate_evidence={"source": "test_phase27_transition", "task_run_id": task_id},
+            )
+        else:
+            await uow.tasks.update_task_status(task_id, status)
 
 
 def test_budgets_default_config():

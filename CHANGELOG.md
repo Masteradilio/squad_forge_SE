@@ -4,6 +4,22 @@ All notable changes to LocalForge OS will be documented in this file.
 
  ## [Unreleased]
 
+### V6.2 Compliance Remediation - 2026-07-28
+
+#### Changed
+- Reclassified V6.1 as a historical experimental release with disputed
+  compliance acceptance; production readiness now depends on
+  `docs/compliance_backlog_V6-1.md` and the next `v6.2.0` release gates.
+- Introduced `localforge.version` as the canonical product version source and
+  advanced backend/frontend package metadata to `6.2.0`.
+- Hardened `ComplianceEvidenceValidator` to reject historical V6.1 manifests,
+  synthetic benchmark observations, release-version drift, missing release
+  tags, and incomplete `ACCEPTED` evidence.
+
+#### Added
+- Added phase R0 audit-of-audit evidence under
+  `docs/e2e/v6_2_compliance/phase_R0/`.
+
 ### V6.1 Compliance Closure - 2026-07-28
 
 #### Changed

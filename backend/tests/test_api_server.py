@@ -26,7 +26,7 @@ def test_api_health_and_openapi_available(tmp_path):
         assert client.get("/health").json()["status"] == "ok"
         openapi = client.get("/openapi.json")
         assert openapi.status_code == 200
-        assert openapi.json()["info"]["version"] == "0.5.0"
+        assert openapi.json()["info"]["version"] == "6.2.0"
     finally:
         close_manager(manager)
 

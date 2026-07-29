@@ -4,7 +4,7 @@
 >
 > Target release: V6.1
 >
-> Status: Accepted; stable release publication tracked by tag `v6.1.0`
+> Status: Historical/disputed; superseded by `docs/compliance_backlog_V6-1.md`
 >
 > Created: 2026-07-28
 >
@@ -86,9 +86,9 @@ Actions:
 - CI verdict: backend and frontend jobs passed.
 - Immutable evidence: `docs/e2e/v6_1_compliance/`.
 
-The codebase is accepted for V6.1 stable publication. The final release is
-identified by the annotated Git tag `v6.1.0`; the GitHub Release and CI run for
-the tagged commit are the publication records.
+The V6.1 tag and GitHub Release are immutable historical publication records.
+They are not accepted production-compliance evidence after the audit-of-audit
+captured in `docs/compliance_backlog_V6-1.md`.
 
 ## 2. Audit Findings This Backlog Must Close
 
@@ -1154,7 +1154,7 @@ No new product feature may be added in this phase.
 
 **Phase C12 exit gate**
 
-- [x] Final compliance verdict is `RELEASE_CANDIDATE_ACCEPTED`.
+- [x] Final compliance verdict was published historically, but is now disputed.
 - [x] All mandatory tests and CI gates pass.
 - [x] No hard-coded benchmark evidence remains in the accepted compliance path.
 - [x] All three operational loops consume controlled connector state.
@@ -1162,8 +1162,8 @@ No new product feature may be added in this phase.
 - [x] Deep Swarm status matches measured evidence and remains gated.
 - [x] Quickstart commands are corrected for supported setup.
 - [x] Repository is clean and synchronized.
-- [x] Version tag and GitHub Release point to the accepted commit.
-- [x] LocalForge may be described as a supervised-production-ready stable
+- [x] Version tag and GitHub Release point to the historical commit.
+- [ ] LocalForge may be described as a supervised-production-ready stable
       release.
 
 ---

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "localforge-os"
-version = "0.5.0"
+version = "6.2.0"
 description = "Economy-aware control plane for auditable software-engineering agents"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -12,7 +12,7 @@ license = { file = "LICENSE" }
 authors = [{ name = "Adilio Farias" }]
 keywords = ["ai-agents", "software-engineering", "local-models", "llm", "automation"]
 classifiers = [
-  "Development Status :: 3 - Alpha",
+  "Development Status :: 4 - Beta",
   "License :: OSI Approved :: MIT License",
   "Operating System :: OS Independent",
   "Programming Language :: Python :: 3.11",

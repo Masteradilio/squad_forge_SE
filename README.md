@@ -6,9 +6,10 @@ across a specialized agent squad, executes tasks in isolated Git worktrees,
 validates outputs through deterministic gates, performs bounded self-healing,
 and prepares pull requests for human review.
 
-Current status: V6.1 is an **accepted supervised-production-ready stable
-release** published through the annotated tag `v6.1.0`, GitHub Actions, and the
-evidence chain in `docs/e2e/v6_1_compliance/`.
+Current status: V6.1 is a **historical experimental release with disputed
+compliance acceptance**. The next remediation line is V6.2.0, tracked by
+`docs/compliance_backlog_V6-1.md`; production readiness is not accepted until
+that backlog's validator-confirmed release gates pass.
 
 The V6 target contract and architectural specifications are documented in
 `docs/LocalForge_OS_PRD.md`, `docs/MASTER_BACKLOG_V6.md`, and
@@ -157,9 +158,9 @@ observed task-level runs and validates the immutable evidence chain.
 | **Loop Light Swarm** | **0.95** | **1.00** | **650 ms** | **$0.2500** | historical `ACCEPTED` |
 | **Loop Deep Swarm (Experimental)** | 0.85 | 0.90 | 1800 ms | $0.8500 | `PARTIAL` |
 
-> 📌 **NOTE**: The V6.1 compliance path has accepted release-candidate
-> evidence in `docs/e2e/v6_1_compliance/`. Deep Swarm remains explicitly gated
-> by measured evidence and decision contracts before production use.
+> 📌 **NOTE**: The V6.1 compliance path is historical disputed evidence in
+> `docs/e2e/v6_1_compliance/`. Deep Swarm remains explicitly gated by measured
+> evidence and decision contracts before production use.
 
 ---
 
@@ -248,4 +249,5 @@ npm run build --prefix frontend
 - `CHANGELOG.md` — Implementation History
 - `docs/e2e/v6/phase_11/acceptance_report.md` — Historical Phase 11 report
 - `docs/e2e/v6/v6_release_summary.json` — Historical V6 release summary
-- `docs/e2e/v6_1_compliance/` — V6.1 release-candidate compliance evidence
+- `docs/e2e/v6_1_compliance/` — Historical disputed V6.1 compliance evidence
+- `docs/e2e/v6_2_compliance/` — V6.2 remediation evidence

@@ -217,7 +217,10 @@ async def test_worktree_manager_setup_and_isolation(temp_git_repo, db_session):
     await uow.tasks.update_task_status(task.id, TaskStatus.IMPLEMENTING)
     await uow.tasks.update_task_status(task.id, TaskStatus.TESTING)
     await uow.tasks.update_task_status(task.id, TaskStatus.REVIEWING)
-    await uow.tasks.update_task_status(task.id, TaskStatus.PR_READY)
+    await uow.tasks.mark_pr_ready(
+        task.id,
+        gate_evidence={"source": "test_gitops", "task_run_id": 1},
+    )
     await uow.tasks.update_task_status(task.id, TaskStatus.DONE)
     await uow.session.commit()
 
@@ -334,7 +337,10 @@ async def test_worktree_manager_uses_ready_dependency_branch_as_base(temp_git_re
     await uow.tasks.update_task_status(dependency.id, TaskStatus.IMPLEMENTING)
     await uow.tasks.update_task_status(dependency.id, TaskStatus.TESTING)
     await uow.tasks.update_task_status(dependency.id, TaskStatus.REVIEWING)
-    await uow.tasks.update_task_status(dependency.id, TaskStatus.PR_READY)
+    await uow.tasks.mark_pr_ready(
+        dependency.id,
+        gate_evidence={"source": "test_gitops_dependency", "task_run_id": 1},
+    )
     await uow.session.commit()
 
     child_worktree, child_branch = await manager.setup_worktree(child.id)

@@ -108,6 +108,8 @@ async def test_task_service_and_state_machine(db_session: AsyncSession):
     await task_service.update_task_status(task.id, TaskStatus.IMPLEMENTING)
     await task_service.update_task_status(task.id, TaskStatus.TESTING)
     await task_service.update_task_status(task.id, TaskStatus.REVIEWING)
+    with pytest.raises(ValueError, match="mark_pr_ready"):
+        await task_service.update_task_status(task.id, TaskStatus.PR_READY)
     pr_ready = await task_service.mark_pr_ready(
         task.id,
         gate_evidence={"source": "unit_test", "task_run_id": 1},

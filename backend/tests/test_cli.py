@@ -34,7 +34,7 @@ def test_cli_version_is_non_destructive_smoke_check():
     result = runner.invoke(app, ["--version"])
 
     assert result.exit_code == 0
-    assert result.stdout.strip() == "LocalForge OS 0.5.0"
+    assert result.stdout.strip() == "LocalForge OS 6.2.0"
 
 
 def test_cli_doctor():

@@ -131,6 +131,18 @@ class TaskService:
 
     async def update_task_status(self, task_id: int, new_status: TaskStatus) -> domain.Task:
         """Update the status of a task after validating state transitions."""
+        if new_status == TaskStatus.PR_READY:
+            raise ValueError("Use mark_pr_ready() for the server-owned PR_READY transition")
+        return await self._update_task_status(task_id, new_status, allow_pr_ready=False)
+
+    async def _update_task_status(
+        self, task_id: int, new_status: TaskStatus, *, allow_pr_ready: bool
+    ) -> domain.Task:
+        """Update task status after validating state transitions.
+
+        PR_READY is intentionally private to mark_pr_ready(), where evidence is
+        persisted atomically before the state transition.
+        """
         result = await self.session.execute(select(TaskORM).where(TaskORM.id == task_id))
         orm_obj = result.scalar_one_or_none()
         if not orm_obj:
@@ -140,6 +152,9 @@ class TaskService:
 
         if current_status == new_status:
             return orm_obj.to_domain()
+
+        if new_status == TaskStatus.PR_READY and not allow_pr_ready:
+            raise ValueError("Use mark_pr_ready() for the server-owned PR_READY transition")
 
         allowed_next = VALID_TRANSITIONS.get(current_status, set())
         if new_status not in allowed_next:
@@ -185,7 +200,7 @@ class TaskService:
         task.metadata = metadata
         task.updated_at = domain.utc_now()
         await self.update_task(task)
-        return await self.update_task_status(task_id, TaskStatus.PR_READY)
+        return await self._update_task_status(task_id, TaskStatus.PR_READY, allow_pr_ready=True)
 
     async def update_task(self, task: domain.Task) -> domain.Task:
         """Update general task fields (except status validation)."""

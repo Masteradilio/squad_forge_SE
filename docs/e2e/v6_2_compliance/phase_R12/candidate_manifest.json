@@ -16,10 +16,10 @@
   "reviewed_pr_number": 14,
   "verdict": "EVIDENCE_READY",
   "input_hashes": {
-    "backend/localforge/services/release_audit.py": "cc8c0a8d418d6a0db81c9a6139bb027c8368f6b4cc1abc81a86805c824a72f28",
-    "scripts/check_release_tree.py": "fe824cf8197b6ed304c9b0d7aa638d65c2b1ee55425a5ef9d2f632658dae7616",
+    "backend/localforge/services/release_audit.py": "73e8b9d1c7740de0f68024ec2e179a8167b538ec7194d8368fddd0a8030bcdb1",
+    "scripts/check_release_tree.py": "a79ffb6a7d3ed274f96025125d50d8092c7d87ff63d10227c45eeeefdda6e00d",
     "backend/tests/test_phase_r12_release_audit.py": "a286de18bdbe68cc64a7c74a7e4d2f54f53957947d0293774e3217b881fc779f",
-    "docs/e2e/v6_2_compliance/phase_R12/release_tree_report.json": "765a31c9f43fe97287c0a21abe0ddbd23334067c80dd854e744f8ed01866e04d"
+    "docs/e2e/v6_2_compliance/phase_R12/release_tree_report.json": "ea5911ddd49031fd52d38ccca80ae08b16b49e2f75eba617b5ee4b2787a7e7a2"
   },
   "known_limitations": [
     "Candidate evidence is not final release acceptance.",
@@ -43,5 +43,5 @@
       "exit_code": 0
     }
   ],
-  "manifest_sha256": "93e399898dcfdcb3c205415a12afeaf5469ee1e0c4fd519a6e6357d3859ceeba"
+  "manifest_sha256": "fae05bdc398d0a89f98b7607952616d41f0d800e1021de9dc683b3fb265985b9"
 }

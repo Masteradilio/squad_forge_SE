@@ -121,6 +121,8 @@ All notable changes to LocalForge OS will be documented in this file.
   Linux CI.
 - Fixed deterministic demo evidence generation to write LF-normalized files so
   manifest checksums are stable across Windows and Linux.
+- Fixed R12 release-tree evidence generation to write LF-normalized JSON and
+  exclude its own generated control files from the audited checksum inventory.
 
 ### V6.1 Compliance Closure - 2026-07-28
 

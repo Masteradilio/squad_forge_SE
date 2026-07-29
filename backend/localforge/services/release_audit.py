@@ -62,13 +62,18 @@ class ReleaseTreeAuditor:
         }
     )
 
-    def audit(self, scope: Path | str = ".") -> ReleaseTreeReport:
+    def audit(self, scope: Path | str = ".", exclude_paths: set[str] | None = None) -> ReleaseTreeReport:
         scope_path = (self.repo_root / scope).resolve()
+        excluded_relatives = exclude_paths or set()
         files = self._tracked_files(scope_path)
         checksums: dict[str, str] = {}
         findings: list[str] = []
+        audited_files = 0
         for file_path in files:
             relative = file_path.relative_to(self.repo_root).as_posix()
+            if relative in excluded_relatives:
+                continue
+            audited_files += 1
             suffix = file_path.suffix.lower()
             if suffix in FORBIDDEN_TRACKED_SUFFIXES:
                 findings.append(f"forbidden tracked runtime/binary artifact: {relative}")
@@ -83,7 +88,7 @@ class ReleaseTreeAuditor:
                     findings.append(f"possible personal local path in tracked file: {relative}")
         return ReleaseTreeReport(
             scope=scope_path.relative_to(self.repo_root).as_posix(),
-            tracked_files=len(files),
+            tracked_files=audited_files,
             checksums=checksums,
             findings=sorted(set(findings)),
         )
@@ -124,4 +129,3 @@ def _looks_text(path: Path) -> bool:
         ".yaml",
         ".yml",
     }
-

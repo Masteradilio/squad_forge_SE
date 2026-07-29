@@ -1,5 +1,4 @@
 import logging
-import os
 import posixpath
 from datetime import UTC, datetime, timedelta
 from pathlib import PurePosixPath
@@ -20,9 +19,7 @@ def normalize_lease_path(path: str) -> str:
     """Normalize a lease path into a comparable repository-relative form."""
     normalized = posixpath.normpath(path.replace("\\", "/")).strip("/")
     normalized = str(PurePosixPath(normalized))
-    if os.name == "nt":
-        normalized = normalized.lower()
-    return normalized
+    return normalized.lower()
 
 
 def is_path_overlapping(path_a: str, path_b: str) -> bool:

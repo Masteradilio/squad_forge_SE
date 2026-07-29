@@ -512,6 +512,11 @@ ownership, idempotency, cancellation, and restart recovery.
     subprocess termination, external action reservations, and incomplete
     artifact capture remain open.
 - [ ] Restart reconciliation recovers or safely fails every orphaned owner.
+  - Candidate recovery now completes interrupted triage without duplicate tasks,
+    safely fails RUNNING LoopRuns missing their scheduler owner, and propagates
+    terminal scheduler states back to the LoopRun. Full orphan reconciliation for
+    subprocesses, worktrees on disk, leases, and external reservations remains
+    open.
 - [ ] Repeated pause/kill/recovery calls are idempotent.
 
 ### Required regression tests
@@ -524,7 +529,7 @@ ownership, idempotency, cancellation, and restart recovery.
   - Persisted scheduler, task-run, RunnerPool, PathLease, and worktree-manifest
     resource release is covered by
     `backend/tests/test_phase6_circuit_breakers.py::test_kill_loop_run`.
-- [ ] Recovery reconciles orphaned LoopRun and Scheduler state.
+- [x] Recovery reconciles orphaned LoopRun and Scheduler state.
 
 ### Phase R4 exit gate
 

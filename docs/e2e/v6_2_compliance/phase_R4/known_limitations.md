@@ -9,6 +9,9 @@
 - LoopRun triage input, classification, decision, and scheduler task IDs are
   persisted through schema version 17; restart recovery reuses that identity
   instead of inventing default actionable work.
+- Restart recovery now reconciles the LoopRun/Scheduler Run relationship:
+  missing scheduler owners safely fail, terminal scheduler states propagate back
+  to the LoopRun, and active scheduler owners remain running.
 - Pause prevents new due-schedule claims; kill now cancels the persisted
   scheduler run and pending/running task runs, releases PathLeases and
   RunnerPool reservations, marks worktree attempt manifests `CANCELLED`, and is

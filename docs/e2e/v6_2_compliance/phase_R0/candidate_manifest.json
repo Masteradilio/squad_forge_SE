@@ -34,12 +34,12 @@
       "exit_code": 0
     }
   ],
-  "manifest_sha256": "1c3f266588ba83ae9f50dcb2e28381c4ac7dc20fb012636c4cb5a694f60f65c8",
+  "manifest_sha256": "7b57bb321afca0c7df13dd29da4c91ea86476a10dc7c7a6260b2cd685a3d054d",
   "input_hashes": {
     "README.md": "231d38f5e6b992bd6c6177e2badd2de8e41e705a13c87d6dfc5c346aff7cf688",
-    "CHANGELOG.md": "bb59668de06cede7cc2048138118475db03884889076ab8c43e5d33f2f19faf3",
+    "CHANGELOG.md": "e5301bf944b07a527352480b6b952fcc32d4bcad01426698513a6207ef73dc07",
     ".github/workflows/ci.yml": "463c8ac144651b84ee25d74577c464c5cf0ef467fa875bad57b351d89dd2ab53",
-    "docs/compliance_backlog_V6-1.md": "55d944aed6a9ca56a480429dc312638680e8fc3a79657c8a8e8139212551be2a",
+    "docs/compliance_backlog_V6-1.md": "48bfc72ac142510c415c5c3c32ece331dceac94a08a0a8372641674a0507f490",
     "docs/e2e/v6_2_compliance/release_identity.md": "fbd0f56d9239886eb660c0aeac62af08c6b50391e4cf4a124b8870d59a3e50d1",
     "docs/e2e/v6_1_compliance/manifest.json": "3d6e6216d8ad510ec583def4a3658821eeead634755f3e597889807a105d4808",
     "docs/e2e/v6_2_compliance/phase_R0/acceptance_report.md": "92370200562db531e18e7df0c1cee4338b47ba9d7d18b91c82987c4e9ae04272",

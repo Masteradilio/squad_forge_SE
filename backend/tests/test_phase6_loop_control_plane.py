@@ -7,6 +7,8 @@ from localforge.models.enums import (
     LoopRunStatus,
     LoopRunVerdict,
     LoopStatus,
+    RunMode,
+    RunStatus,
     TaskStatus,
     TriggerKind,
 )
@@ -558,6 +560,98 @@ async def test_loop_coordinator_restart_recovery(db_manager) -> None:
         assert second_recovery[0].triage_task_ids == recovered[0].triage_task_ids
         items = await uow.loops.list_items_for_run(recovered[0].id or 0)
         assert len(items) == 1
+
+
+@pytest.mark.asyncio
+async def test_loop_recovery_safely_fails_missing_scheduler_owner(db_manager) -> None:
+    """R4: RUNNING LoopRuns without their scheduler owner become explicit failures."""
+    async with UnitOfWork(db_manager) as uow:
+        assert uow.projects is not None
+        assert uow.loops is not None
+        assert uow.loop_coordinator is not None
+
+        project = await uow.projects.create_project(
+            domain.Project(
+                name="Missing Scheduler Recovery",
+                root_path="E:/tmp/missing_scheduler",
+                default_branch="main",
+            )
+        )
+        loop_def = await uow.loops.create_loop(
+            domain.LoopDefinition(
+                project_id=project.id,  # type: ignore[arg-type]
+                name="Missing Scheduler Loop",
+                repository_path="E:/tmp/missing_scheduler",
+            )
+        )
+        run = await uow.loops.create_loop_run(
+            domain.LoopRun(
+                loop_id=loop_def.id or 0,
+                status=LoopRunStatus.RUNNING,
+                trigger_kind=TriggerKind.MANUAL,
+                idempotency_key="missing_scheduler_owner",
+                triage_verdict=LoopRunVerdict.ACTIONABLE,
+            )
+        )
+
+        recovered = await uow.loop_coordinator.recover_pending_loops(project.id or 0)
+
+        assert len(recovered) == 1
+        assert recovered[0].id == run.id
+        assert recovered[0].status == LoopRunStatus.FAILED
+        assert "no scheduler_run_id" in (recovered[0].error_message or "")
+
+
+@pytest.mark.asyncio
+async def test_loop_recovery_propagates_cancelled_scheduler_owner(db_manager) -> None:
+    """R4: terminal scheduler owners are reconciled back to the LoopRun state."""
+    async with UnitOfWork(db_manager) as uow:
+        assert uow.projects is not None
+        assert uow.loops is not None
+        assert uow.executions is not None
+        assert uow.loop_coordinator is not None
+
+        project = await uow.projects.create_project(
+            domain.Project(
+                name="Cancelled Scheduler Recovery",
+                root_path="E:/tmp/cancelled_scheduler",
+                default_branch="main",
+            )
+        )
+        loop_def = await uow.loops.create_loop(
+            domain.LoopDefinition(
+                project_id=project.id,  # type: ignore[arg-type]
+                name="Cancelled Scheduler Loop",
+                repository_path="E:/tmp/cancelled_scheduler",
+            )
+        )
+        scheduler_run = await uow.executions.create_run(
+            domain.Run(
+                project_id=project.id or 0,
+                mode=RunMode.UNATTENDED,
+                status=RunStatus.CANCELLED,
+                initiated_by="loop:recovery-test",
+                ended_at=datetime.now(UTC),
+                summary="Scheduler cancelled before restart.",
+            )
+        )
+        run = await uow.loops.create_loop_run(
+            domain.LoopRun(
+                loop_id=loop_def.id or 0,
+                status=LoopRunStatus.RUNNING,
+                trigger_kind=TriggerKind.MANUAL,
+                idempotency_key="cancelled_scheduler_owner",
+                triage_verdict=LoopRunVerdict.ACTIONABLE,
+                scheduler_run_id=scheduler_run.id,
+            )
+        )
+
+        recovered = await uow.loop_coordinator.recover_pending_loops(project.id or 0)
+
+        assert len(recovered) == 1
+        assert recovered[0].id == run.id
+        assert recovered[0].status == LoopRunStatus.CANCELLED
+        assert recovered[0].error_message == "Scheduler cancelled before restart."
 
 
 @pytest.mark.asyncio

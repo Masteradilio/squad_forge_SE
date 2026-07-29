@@ -37,6 +37,7 @@ reconciliation of the entire ownership tree.
 | No fake actionable default | `force_actionable` without concrete items is persisted as `NO_OP` and creates no scheduler run or synthetic task. |
 | Restart/retry identity | Recovery reuses `LoopRun.triage_input`, stable item idempotency keys, existing scheduler task IDs, and does not duplicate work after task creation. |
 | Kill persisted ownership cascade | `LoopCoordinator.kill_loop_run()` cancels the associated scheduler run, cancels pending/running task runs, releases PathLeases, releases RunnerPool reservations, marks worktree attempt manifests `CANCELLED`, and is idempotent for repeated kill calls over those persisted owners. |
+| LoopRun/Scheduler recovery | Restart recovery safely fails RUNNING LoopRuns without a scheduler owner, propagates CANCELLED/FAILED/COMPLETED scheduler terminal states back to the LoopRun, and keeps active scheduler runs RUNNING. |
 
 ## Validation Commands
 
@@ -45,12 +46,12 @@ python -m pytest backend\tests\test_phase6_circuit_breakers.py::test_kill_loop_r
 1 passed in 0.33s
 
 python -m pytest backend\tests\test_phase6_circuit_breakers.py backend\tests\test_phase6_loop_control_plane.py backend\tests\test_phase_r4_loop_runtime.py -q
-24 passed in 1.39s
+26 passed in 1.51s
 
-python -m mypy backend/localforge/models/enums.py backend/localforge/services/runner_pool.py backend/localforge/services/worktree.py backend/localforge/services/loop_coordinator.py backend/tests/test_phase6_circuit_breakers.py
-Success: no issues found in 5 source files
+python -m mypy backend\localforge\models\enums.py backend\localforge\services\runner_pool.py backend\localforge\services\worktree.py backend\localforge\services\loop_coordinator.py backend\tests\test_phase6_circuit_breakers.py backend\tests\test_phase6_loop_control_plane.py
+Success: no issues found in 6 source files
 
-python -m ruff check backend/localforge/models/enums.py backend/localforge/services/runner_pool.py backend/localforge/services/worktree.py backend/localforge/services/loop_coordinator.py backend/tests/test_phase6_circuit_breakers.py
+python -m ruff check backend\localforge\models\enums.py backend\localforge\services\runner_pool.py backend\localforge\services\worktree.py backend\localforge\services\loop_coordinator.py backend\tests\test_phase6_circuit_breakers.py backend\tests\test_phase6_loop_control_plane.py
 All checks passed!
 ```
 
@@ -61,4 +62,5 @@ All checks passed!
   subprocesses, release external action reservations, or capture incomplete
   artifacts for interrupted subprocesses.
 - Restart reconciliation still needs to recover or safely fail every orphaned
-  owner in the full lifecycle tree.
+  owner in the full lifecycle tree beyond the currently covered LoopRun and
+  Scheduler Run relationship.

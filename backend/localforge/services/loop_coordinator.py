@@ -383,10 +383,51 @@ class LoopCoordinator:
                             payload=run.triage_input,
                         )
                     else:
-                        run = await self.loop_service.update_loop_run(run)
+                        run = await self._reconcile_running_loop_run(run)
                     recovered_runs.append(run)
 
         return recovered_runs
+
+    async def _reconcile_running_loop_run(self, run: domain.LoopRun) -> domain.LoopRun:
+        """Reconcile a RUNNING loop run against its scheduler owner after restart."""
+        now = datetime.now(UTC)
+        if run.scheduler_run_id is None:
+            run.status = LoopRunStatus.FAILED
+            run.completed_at = now
+            run.error_message = "Recovery failed: RUNNING LoopRun has no scheduler_run_id."
+            return await self.loop_service.update_loop_run(run)
+
+        scheduler_run = await self.execution_service.get_run(run.scheduler_run_id)
+        if scheduler_run is None:
+            run.status = LoopRunStatus.FAILED
+            run.completed_at = now
+            run.error_message = (
+                f"Recovery failed: scheduler Run {run.scheduler_run_id} was not found."
+            )
+            return await self.loop_service.update_loop_run(run)
+
+        if scheduler_run.status == RunStatus.CANCELLED:
+            run.status = LoopRunStatus.CANCELLED
+            run.completed_at = scheduler_run.ended_at or now
+            run.error_message = (
+                scheduler_run.summary
+                or f"Recovery cancelled: scheduler Run {run.scheduler_run_id} is CANCELLED."
+            )
+            return await self.loop_service.update_loop_run(run)
+        if scheduler_run.status == RunStatus.FAILED:
+            run.status = LoopRunStatus.FAILED
+            run.completed_at = scheduler_run.ended_at or now
+            run.error_message = (
+                scheduler_run.summary
+                or f"Recovery failed: scheduler Run {run.scheduler_run_id} is FAILED."
+            )
+            return await self.loop_service.update_loop_run(run)
+        if scheduler_run.status == RunStatus.COMPLETED:
+            run.status = LoopRunStatus.COMPLETED
+            run.completed_at = scheduler_run.ended_at or now
+            return await self.loop_service.update_loop_run(run)
+
+        return await self.loop_service.update_loop_run(run)
 
     async def pause_loop(self, loop_id: int) -> domain.LoopDefinition:
         """Pause a loop definition and mark active runs as PAUSED."""

@@ -57,6 +57,9 @@ All notable changes to LocalForge OS will be documented in this file.
   scheduler run and active task runs, releases PathLeases and RunnerPool
   reservations, marks worktree attempt manifests `CANCELLED`, and keeps repeated
   kill calls idempotent over those persisted owners.
+- Added restart reconciliation for the LoopRun/Scheduler Run ownership boundary:
+  RUNNING LoopRuns without a scheduler owner now fail explicitly, and terminal
+  scheduler states propagate back to the LoopRun.
 - Added Phase R5 candidate evidence under
   `docs/e2e/v6_2_compliance/phase_R5/`.
 - Added persisted runner lease fencing metadata to dispatch logs and path lease

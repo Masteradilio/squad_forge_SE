@@ -234,3 +234,39 @@ async def test_r5_runner_restart_reconciles_capacity_from_task_run_truth(db_mana
         assert changed == 1
         assert runner_state.active_tasks_count == 1
         assert runner_state.health_state == RunnerHealthState.READY
+
+
+@pytest.mark.asyncio
+async def test_r5_runner_backpressure_is_bounded_and_fifo_reported(db_manager) -> None:
+    async with UnitOfWork(db_manager) as uow:
+        assert uow.runner_pool is not None
+        project_id, _, task_run_id = await _create_project_task_run(uow, key="R5-5")
+        caps = domain.RunnerCapability(lane=RunnerLane.INLINE, max_concurrency=1)
+        await uow.runner_pool.register_runner(
+            "runner-backpressure", "Runner Backpressure", RunnerLane.INLINE, caps, 1
+        )
+        await uow.runner_pool.dispatch_task(
+            project_id=project_id,
+            task_run_id=task_run_id,
+            required_lane=RunnerLane.INLINE,
+        )
+
+        first_waiter, first_status, first_log = await uow.runner_pool.dispatch_task(
+            project_id=project_id,
+            task_run_id=task_run_id,
+            required_lane=RunnerLane.INLINE,
+            backpressure_queue_limit=1,
+        )
+        assert first_waiter is None
+        assert first_status == "BACKPRESSURE_LIMITED"
+        assert "queue_position=1" in first_log.rejection_reasons_json.get("_backpressure", "")
+
+        second_waiter, second_status, second_log = await uow.runner_pool.dispatch_task(
+            project_id=project_id,
+            task_run_id=task_run_id,
+            required_lane=RunnerLane.INLINE,
+            backpressure_queue_limit=1,
+        )
+        assert second_waiter is None
+        assert second_status == "BACKPRESSURE_QUEUE_FULL"
+        assert "limit reached" in second_log.rejection_reasons_json.get("_backpressure", "")

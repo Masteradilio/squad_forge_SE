@@ -2,7 +2,7 @@ import logging
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from localforge.models import domain
@@ -96,6 +96,7 @@ class RunnerPoolService:
         required_tools: list[str] | None = None,
         required_task_type: str | None = None,
         lease_ttl_seconds: int = 3600,
+        backpressure_queue_limit: int = 100,
     ) -> tuple[domain.RunnerPoolState | None, str, domain.RunnerDispatchLog]:
         """Perform deterministic, capability-aware dispatch for a task run.
 
@@ -106,6 +107,7 @@ class RunnerPoolService:
         rejection_reasons: dict[str, str] = {}
         ranking_scores: dict[str, float] = {}
         eligible_runners: list[tuple[domain.RunnerPoolState, float]] = []
+        capacity_blocked_runners: list[str] = []
 
         req_tools = set(required_tools or [])
 
@@ -146,6 +148,7 @@ class RunnerPoolService:
 
             # Hard filter 5: Concurrency Capacity
             if runner.active_tasks_count >= runner.max_concurrency:
+                capacity_blocked_runners.append(runner.runner_id)
                 rejection_reasons[runner.runner_id] = (
                     "Concurrency capacity exhausted "
                     f"({runner.active_tasks_count}/{runner.max_concurrency})."
@@ -162,6 +165,21 @@ class RunnerPoolService:
 
         if not eligible_runners:
             dispatch_status = "NO_COMPATIBLE_RUNNER"
+            if capacity_blocked_runners:
+                queue_depth = await self._backpressure_queue_depth(project_id)
+                if queue_depth >= backpressure_queue_limit:
+                    dispatch_status = "BACKPRESSURE_QUEUE_FULL"
+                    rejection_reasons["_backpressure"] = (
+                        f"Backpressure queue limit reached ({queue_depth}/{backpressure_queue_limit})."
+                    )
+                else:
+                    dispatch_status = "BACKPRESSURE_LIMITED"
+                    rejection_reasons["_backpressure"] = (
+                        "Compatible runners are saturated; retry after capacity is released. "
+                        f"queue_position={queue_depth + 1}; "
+                        f"queue_limit={backpressure_queue_limit}; "
+                        f"blocked_runners={','.join(sorted(capacity_blocked_runners))}"
+                    )
             log_domain = domain.RunnerDispatchLog(
                 project_id=project_id,
                 task_run_id=task_run_id,
@@ -235,6 +253,14 @@ class RunnerPoolService:
         await self.session.flush()
 
         return orm_runner.to_domain(), dispatch_status, orm_log.to_domain()
+
+    async def _backpressure_queue_depth(self, project_id: int) -> int:
+        stmt = select(func.count(RunnerDispatchLogORM.id)).where(
+            RunnerDispatchLogORM.project_id == project_id,
+            RunnerDispatchLogORM.dispatch_status == "BACKPRESSURE_LIMITED",
+        )
+        result = await self.session.execute(stmt)
+        return int(result.scalar_one() or 0)
 
     async def release_runner_lease(
         self,

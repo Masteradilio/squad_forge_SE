@@ -22,6 +22,7 @@ worktree lifecycle reconciliation.
 | Runner lease identity | `RunnerDispatchLog` now records `lease_token`, `lease_owner_id`, `lease_expires_at`, and `heartbeat_at`. |
 | Runner owner fencing | `release_runner_lease()` rejects stale tokens when a newer successful reservation exists for the task run and runner. |
 | Runner heartbeat | `heartbeat_runner_lease()` refreshes the persisted heartbeat and expiry only for the current fenced owner. |
+| Runner bounded backpressure | Capacity saturation now records `BACKPRESSURE_LIMITED` with deterministic queue position and bounded queue limit metadata, while full queues produce `BACKPRESSURE_QUEUE_FULL` instead of masquerading as incompatible runners. |
 | Runner restart reconciliation | `reconcile_leaked_leases()` rebuilds `active_tasks_count` from successful dispatch logs joined to active `TaskRun` rows instead of resetting capacity blindly. |
 | Path normalization | `normalize_lease_path()` canonicalizes separators and Windows case before overlap checks. |
 | Exact active conflict key | `PathLeaseORM` stores `active_conflict_key` under a project-scoped uniqueness constraint and clears it on release. |
@@ -33,7 +34,7 @@ worktree lifecycle reconciliation.
 
 ```text
 python -m pytest backend\tests\test_phase_r5_coordination.py backend\tests\test_phase6_runner_pool_governance.py backend\tests\test_phase6_worktrees_path_intents.py -q
-11 passed in 1.08s
+12 passed in 1.01s
 
 python -m pytest backend/tests/test_phase_r5_coordination.py backend/tests/test_phase6_runner_pool_governance.py backend/tests/test_phase6_worktrees_path_intents.py backend/tests/test_storage.py backend/tests/test_phase_r1_release_integrity.py -q
 17 passed in 12.39s
@@ -52,7 +53,7 @@ All checks passed!
 - Symlink resolution and repository-boundary canonicalization remain open.
 - FIFO wait queues, cancellation, persisted wait-for graph, and deterministic
   deadlock victim selection remain open.
-- RunnerPool restart reconciliation now rebuilds capacity from persisted
-  task-run truth; bounded backpressure/fairness remains open.
+- RunnerPool backpressure is bounded and reported separately from permanent
+  incompatibility; persisted FIFO wait queues remain part of V61C-502.
 - Real Git worktree creation, branch/base-commit drift validation, and failed
   worktree retention policy remain open.

@@ -24,7 +24,7 @@
       "exit_code": 0
     }
   ],
-  "manifest_sha256": "0157849a710f63997fbd517ea150bc0b910a5116294a39c146cdb10f73232125",
+  "manifest_sha256": "2c15a544c5d2c0b0ef398c7f66021828e4b561790d9730a42e2ff296d4b567f5",
   "environment": {
     "os": "windows-local-and-github-actions-matrix",
     "python": "3.11-local / 3.12-ci",
@@ -45,9 +45,9 @@
     "backend/tests/test_gitops.py": "785f4762e53b6694cd36f72d212c1706ef5501cf2f8e5446cf6ef60f54edd6e6",
     "backend/tests/test_scheduler.py": "4701af1d51f791a03fb637e9d8723d8c0157b4801f90e414a9a1fb6d24514584",
     "backend/tests/test_phase27_unattended.py": "0d919b769dae55f9d009a017dfe747b311bdb2f49db4ff91eafa06181f8823c5",
-    "docs/compliance_backlog_V6-1.md": "f98f3b396f46bd6f00023a1d496b1845805ed3a3f9ced75c9406cb267a67744e",
+    "docs/compliance_backlog_V6-1.md": "5cfced678e3a7349d9c605332504af32dffd3ad619b9e53df5d1c0ccc0118a74",
     "backend/localforge/services/task.py": "152429170d4b8187659651c74437a43d6b6a2de100ece852fdedcaad826a5848",
-    "CHANGELOG.md": "44362217afa36bd81197373553480ceb523e619e52b840b284196d413f25dc7c",
+    "CHANGELOG.md": "f7bb50f42d13c3cff20bd697895c9041e33f4630a30ac4b4d1a484553a145825",
     "backend/tests/test_release_truth.py": "bb2e9dd34a157a297734d5f6f5d67b4c35bcabcc508b56a51850cc1c09df5792"
   }
 }

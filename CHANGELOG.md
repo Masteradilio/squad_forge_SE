@@ -68,6 +68,9 @@ All notable changes to LocalForge OS will be documented in this file.
 - Hardened RunnerPool restart reconciliation so active capacity is rebuilt from
   successful dispatch logs joined to active TaskRuns, instead of resetting
   runner capacity blindly after restart.
+- Added bounded RunnerPool backpressure reporting: saturated compatible runners
+  now produce `BACKPRESSURE_LIMITED` with deterministic queue position, and full
+  queues produce `BACKPRESSURE_QUEUE_FULL`.
 - Added R5 regression coverage for runner stale-token rejection, path lease
   renewal, exact-path reclaim, and path separator/case normalization.
 - Added Phase R6 candidate evidence under

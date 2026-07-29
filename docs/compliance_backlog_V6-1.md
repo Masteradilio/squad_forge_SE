@@ -553,7 +553,7 @@ Make concurrent execution deterministic and restart-safe.
 - [x] Preserve atomic capacity reservation across concurrent schedulers.
 - [x] Add lease identity, heartbeat, expiry, and owner fencing tokens.
 - [x] Prevent a stale process from releasing or using a newer owner's lease.
-- [ ] Implement bounded backpressure and fairness.
+- [x] Implement bounded backpressure and fairness.
 - [x] Reconcile capacity from persisted task-run truth after restart.
 
 ### V61C-501 — Make PathLease acquisition race-safe

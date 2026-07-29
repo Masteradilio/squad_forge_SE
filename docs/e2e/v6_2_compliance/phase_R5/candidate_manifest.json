@@ -47,9 +47,13 @@
     {
       "command": "python -m ruff check backend\\localforge\\services\\runner_pool.py backend\\tests\\test_phase_r5_coordination.py backend\\tests\\test_phase6_runner_pool_governance.py",
       "exit_code": 0
+    },
+    {
+      "command": "python -m pytest backend\\tests\\test_phase_r5_coordination.py::test_r5_runner_backpressure_is_bounded_and_fifo_reported backend\\tests\\test_phase6_runner_pool_governance.py::test_concurrency_lease_release_and_restart_reconciliation -q",
+      "exit_code": 0
     }
   ],
-  "manifest_sha256": "079dc336650aabe8b65f8744f13483a95237aa3852361e6740657d98b36847f4",
+  "manifest_sha256": "d4d0f34a87837a5651cb386079f9610582919d7ec3b7b1310128bda5c69b42dd",
   "environment": {
     "os": "windows-local-and-github-actions-matrix",
     "python": "3.11-local / 3.12-ci",
@@ -60,12 +64,12 @@
     "Candidate evidence remains EVIDENCE_READY until reviewed PR, merge commit, exact-head CI, owner-approved tag, and final release validation exist."
   ],
   "input_hashes": {
-    "docs/e2e/v6_2_compliance/phase_R5/acceptance_report.md": "738ab800bcd026c02308546bb87dd10760858883a66c444432a50fc0d04091ff",
-    "docs/e2e/v6_2_compliance/phase_R5/known_limitations.md": "27b76a51cad9ef792e08b0233ef7d84a765b189c4731996b0e6642badf155e16",
-    "backend/localforge/services/runner_pool.py": "2b2f486c24cdece628dd32cf640ae779acd5454597982a3fdde186fc38be84c9",
-    "backend/tests/test_phase_r5_coordination.py": "8ffdf2f6053036e9585739dfa2ddfc749105ced444c89c434ea05f0f7fdf6593",
-    "backend/tests/test_phase6_runner_pool_governance.py": "3bc524aaf4f3aef1312e992bad810f951d59a8e117ce08b557ccce9abe993bbf",
-    "docs/compliance_backlog_V6-1.md": "f98f3b396f46bd6f00023a1d496b1845805ed3a3f9ced75c9406cb267a67744e",
-    "CHANGELOG.md": "44362217afa36bd81197373553480ceb523e619e52b840b284196d413f25dc7c"
+    "docs/e2e/v6_2_compliance/phase_R5/acceptance_report.md": "92991b57f96c94de81f4d402de07861e4af70b54724506abf1dfa617aba59a6c",
+    "docs/e2e/v6_2_compliance/phase_R5/known_limitations.md": "a2cd7b4c314200566c0fffe345cfdc7f4296b44075fc808c23b44e41f006a4ac",
+    "backend/localforge/services/runner_pool.py": "6d0b668b763cab92f8c91677b50d121e4a6e52cb020cfa6db721bc16263e2786",
+    "backend/tests/test_phase_r5_coordination.py": "cc01814dc150369e9c733f025ef9fdcd49e2bb9527402635e6c104e6401ebc7b",
+    "backend/tests/test_phase6_runner_pool_governance.py": "52089e8a35d82fd9ca4fa70e63c2f5041d990b805630b80e8e6785dbf9b5adae",
+    "docs/compliance_backlog_V6-1.md": "5cfced678e3a7349d9c605332504af32dffd3ad619b9e53df5d1c0ccc0118a74",
+    "CHANGELOG.md": "f7bb50f42d13c3cff20bd697895c9041e33f4630a30ac4b4d1a484553a145825"
   }
 }

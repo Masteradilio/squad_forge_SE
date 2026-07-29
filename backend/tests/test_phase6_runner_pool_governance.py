@@ -150,10 +150,11 @@ async def test_concurrency_lease_release_and_restart_reconciliation(db_manager) 
             required_lane=RunnerLane.ISOLATED,
         )
         assert runner2 is None
-        assert status2 == "NO_COMPATIBLE_RUNNER"
+        assert status2 == "BACKPRESSURE_LIMITED"
         assert "Concurrency capacity exhausted" in log2.rejection_reasons_json.get(
             "runner_iso_1", ""
         )
+        assert "queue_position=1" in log2.rejection_reasons_json.get("_backpressure", "")
 
         # Restart reconciliation preserves capacity for still-active task runs.
         reconciled_count = await uow.runner_pool.reconcile_leaked_leases()

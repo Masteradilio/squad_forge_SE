@@ -16,7 +16,7 @@
   "verdict": "EVIDENCE_READY",
   "corpus_hash": "db14971b596340a196354f0b82c5b0bd5e1cf7543f255fbcb6d5fcf4ef995eb9",
   "input_hashes": {
-    "docs/e2e/v6_2_compliance/phase_R9/observed_corpus.json": "db14971b596340a196354f0b82c5b0bd5e1cf7543f255fbcb6d5fcf4ef995eb9"
+    "docs/e2e/v6_2_compliance/phase_R9/observed_corpus.json": "47d4e02770f0a4aa427018d9fb3f64350436a9aac6b9436ec25d5b1f867e0b35"
   },
   "known_limitations": [
     "Candidate evidence is not final release acceptance.",
@@ -38,5 +38,5 @@
       "exit_code": 0
     }
   ],
-  "manifest_sha256": "6c2101f5c0a219ff18529e94dbd7b1f8e1b70413ec5c5ebf85610c99763fbc67"
+  "manifest_sha256": "458b7280a8a5d3e5cf67013bc313dae8ca54ee9432a781fc1ed4e010d16288b9"
 }

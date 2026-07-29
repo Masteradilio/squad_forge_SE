@@ -27,6 +27,8 @@ jobs:
         run: python -m pip install -e ".[dev]"
       - name: Verify installed CLI
         run: localforge --version
+      - name: Run Ruff
+        run: ruff check backend
       - name: Run backend tests
         run: python -m pytest backend/tests -q
       - name: Run mypy

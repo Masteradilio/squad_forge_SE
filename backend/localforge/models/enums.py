@@ -367,18 +367,18 @@ class GraphMutationType(StrEnum):
 
 
 class GraphNodeKind(StrEnum):
-    ATOMIC = "ATOMIC"       # single-runner unit (like Phase 8 SwarmNode)
-    COMPOSITE = "COMPOSITE" # aggregates child evidence; complete when all children complete
-    CRITIQUE_GATE = "CRITIQUE_GATE"    # must receive CRITIQUE artifact to proceed
+    ATOMIC = "ATOMIC"  # single-runner unit (like Phase 8 SwarmNode)
+    COMPOSITE = "COMPOSITE"  # aggregates child evidence; complete when all children complete
+    CRITIQUE_GATE = "CRITIQUE_GATE"  # must receive CRITIQUE artifact to proceed
     VERIFICATION_GATE = "VERIFICATION_GATE"  # must receive VERIFICATION artifact → PR_READY
 
 
 class DeepSwarmStatus(StrEnum):
-    DISABLED = "DISABLED"   # default; opt-in only
+    DISABLED = "DISABLED"  # default; opt-in only
     PENDING = "PENDING"
     RUNNING = "RUNNING"
     EXPANDING = "EXPANDING"  # dynamic expansion in progress
-    STALLED = "STALLED"     # no marginal progress detected
+    STALLED = "STALLED"  # no marginal progress detected
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
     KILLED = "KILLED"
@@ -408,4 +408,3 @@ class MemoryValidityStatus(StrEnum):
     EXPIRED = "EXPIRED"
     REJECTED = "REJECTED"
     UNVERIFIED = "UNVERIFIED"
-

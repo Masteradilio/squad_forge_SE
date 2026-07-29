@@ -180,7 +180,6 @@ def test_role_pipeline_repairs_generated_pytest_failure(tmp_path):
         close_manager(manager)
 
 
-
 def test_role_pipeline_ignores_pytest_repair_that_rewrites_tests(tmp_path):
     manager = make_db_manager(tmp_path)
     try:
@@ -324,9 +323,7 @@ def test_role_pipeline_repairs_invalid_generated_python_before_pytest(tmp_path):
         data = asyncio.run(exercise())
 
         assert data["status"] == TaskStatus.PR_READY.value
-        assert "Python syntax validation failed before pytest" in str(
-            data["validation_outputs"][0]
-        )
+        assert "Python syntax validation failed before pytest" in str(data["validation_outputs"][0])
     finally:
         close_manager(manager)
 
@@ -416,7 +413,7 @@ def test_role_pipeline_sanitizes_generated_test_markdown_noise(tmp_path):
                             {
                                 "kind": "write_file",
                                 "path": "tests/test_calculator.py",
-                                "content": "```python\n;\"\"\"test module\"\"\"\nfrom calculator import add\n\n\ndef test_add():\n    assert add(2, 3) == 5\n```\n",
+                                "content": '```python\n;"""test module"""\nfrom calculator import add\n\n\ndef test_add():\n    assert add(2, 3) == 5\n```\n',
                             },
                         ]
                     }
@@ -436,9 +433,7 @@ def test_role_pipeline_sanitizes_generated_test_markdown_noise(tmp_path):
                 assert uow.tasks is not None
                 task = await uow.tasks.get_task(ids["task_id"])
                 assert task is not None
-                content = (tmp_path / "tests" / "test_calculator.py").read_text(
-                    encoding="utf-8"
-                )
+                content = (tmp_path / "tests" / "test_calculator.py").read_text(encoding="utf-8")
                 return {"status": task.status.value, "content": content}
 
         data = asyncio.run(exercise())
@@ -450,34 +445,20 @@ def test_role_pipeline_sanitizes_generated_test_markdown_noise(tmp_path):
         close_manager(manager)
 
 
-
 def test_role_pipeline_python_sanitizer_preserves_dict_closing_braces():
     engine = RolePipelineEngine.__new__(RolePipelineEngine)
 
-    sanitized = engine._sanitize_python_content(
-        "SEGMENTS = {\n"
-        "    1: ['   ', '  |', '  |'],\n"
-        "}\n"
-    )
+    sanitized = engine._sanitize_python_content("SEGMENTS = {\n    1: ['   ', '  |', '  |'],\n}\n")
 
-    assert sanitized == (
-        "SEGMENTS = {\n"
-        "    1: ['   ', '  |', '  |'],\n"
-        "}\n"
-    )
+    assert sanitized == ("SEGMENTS = {\n    1: ['   ', '  |', '  |'],\n}\n")
 
 
 def test_role_pipeline_python_sanitizer_drops_only_unmatched_lone_braces():
     engine = RolePipelineEngine.__new__(RolePipelineEngine)
 
-    sanitized = engine._sanitize_python_content(
-        "def test_ok():\n"
-        "    assert True\n"
-        "}\n"
-    )
+    sanitized = engine._sanitize_python_content("def test_ok():\n    assert True\n}\n")
 
     assert sanitized == "def test_ok():\n    assert True\n"
-
 
 
 def test_handoffs_are_consumed_once_in_priority_order(tmp_path):
@@ -488,7 +469,7 @@ def test_handoffs_are_consumed_once_in_priority_order(tmp_path):
         async def exercise() -> tuple[list[int], str]:
             async with UnitOfWork(manager) as uow:
                 assert uow.executions is not None
-                low = await uow.executions.create_handoff(
+                await uow.executions.create_handoff(
                     domain.Handoff(
                         task_run_id=ids["task_run_id"],
                         from_role=AgentRole.PLANNER,
@@ -497,7 +478,7 @@ def test_handoffs_are_consumed_once_in_priority_order(tmp_path):
                         priority=1,
                     )
                 )
-                high = await uow.executions.create_handoff(
+                await uow.executions.create_handoff(
                     domain.Handoff(
                         task_run_id=ids["task_run_id"],
                         from_role=AgentRole.SPECIFIER,
@@ -544,7 +525,9 @@ def test_model_routing_and_memory_api_persist_backups(tmp_path):
         )
         assert route.status_code == 200
         assert route.json()["model_profile_id"] == "qwen-coder"
-        assert client.get(f"/projects/{ids['project_id']}/model-routes").json()[0]["role"] == "Coder"
+        assert (
+            client.get(f"/projects/{ids['project_id']}/model-routes").json()[0]["role"] == "Coder"
+        )
 
         fact = client.post(
             f"/projects/{ids['project_id']}/memory",

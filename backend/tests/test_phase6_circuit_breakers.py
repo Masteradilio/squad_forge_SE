@@ -1,14 +1,15 @@
 import pytest
-
 from localforge.models import domain
-from localforge.models.enums import CircuitScope, CircuitState, LoopRunStatus, ProgressSignal, TriggerKind
-
+from localforge.models.enums import (
+    CircuitScope,
+    CircuitState,
+    LoopRunStatus,
+    ProgressSignal,
+    TriggerKind,
+)
 from localforge.services.fingerprint import (
-    compute_diff_signature,
-    compute_test_signature,
     evaluate_attempt_progress,
     generate_error_fingerprint,
-    normalize_error_message,
 )
 from localforge.storage import UnitOfWork
 
@@ -18,8 +19,12 @@ def test_error_normalization_and_fingerprinting() -> None:
     raw_err_1 = "ValueError: Failed at 0x7f9a8c001230 in E:\\Projetos\\local_forge_os\\test.py at 2026-07-28T01:23:45Z"
     raw_err_2 = "ValueError: Failed at 0x10b34d998000 in C:\\Users\\Adilio\\AppData\\test.py at 2026-07-28T02:00:00Z"
 
-    fp_1 = generate_error_fingerprint("ValueError", raw_err_1, "E:\\Projetos\\local_forge_os\\test.py:42")
-    fp_2 = generate_error_fingerprint("ValueError", raw_err_2, "C:\\Users\\Adilio\\AppData\\test.py:42")
+    fp_1 = generate_error_fingerprint(
+        "ValueError", raw_err_1, "E:\\Projetos\\local_forge_os\\test.py:42"
+    )
+    fp_2 = generate_error_fingerprint(
+        "ValueError", raw_err_2, "C:\\Users\\Adilio\\AppData\\test.py:42"
+    )
 
     # Hashes must match despite different memory addresses, paths, and timestamps
     assert fp_1.fingerprint_hash == fp_2.fingerprint_hash
@@ -85,7 +90,9 @@ async def test_circuit_breaker_identical_error_trip(db_manager) -> None:
         assert uow.projects is not None
         assert uow.circuit_breakers is not None
 
-        proj = domain.Project(name="CB Error Test", root_path="E:/tmp/cb_err_test", default_branch="main")
+        proj = domain.Project(
+            name="CB Error Test", root_path="E:/tmp/cb_err_test", default_branch="main"
+        )
         project = await uow.projects.create_project(proj)
         proj_id = project.id
         assert proj_id is not None
@@ -93,21 +100,29 @@ async def test_circuit_breaker_identical_error_trip(db_manager) -> None:
         fp = generate_error_fingerprint("ConnectionError", "Failed to reach model endpoint 0x123")
 
         # Record 2 failures (threshold = 3)
-        b1 = await uow.circuit_breakers.record_failure(proj_id, CircuitScope.LOOP, "loop_101", fp, max_identical=3)
+        b1 = await uow.circuit_breakers.record_failure(
+            proj_id, CircuitScope.LOOP, "loop_101", fp, max_identical=3
+        )
         assert b1.state == CircuitState.CLOSED
         assert b1.consecutive_failures == 1
 
-        b2 = await uow.circuit_breakers.record_failure(proj_id, CircuitScope.LOOP, "loop_101", fp, max_identical=3)
+        b2 = await uow.circuit_breakers.record_failure(
+            proj_id, CircuitScope.LOOP, "loop_101", fp, max_identical=3
+        )
         assert b2.state == CircuitState.CLOSED
         assert b2.consecutive_failures == 2
 
         # 3rd identical failure trips the breaker to OPEN
-        b3 = await uow.circuit_breakers.record_failure(proj_id, CircuitScope.LOOP, "loop_101", fp, max_identical=3)
+        b3 = await uow.circuit_breakers.record_failure(
+            proj_id, CircuitScope.LOOP, "loop_101", fp, max_identical=3
+        )
         assert b3.state == CircuitState.OPEN
         assert "identical failure" in (b3.reason or "")
 
         # Check breaker prevents execution
-        can_proceed, state, reason = await uow.circuit_breakers.check_breaker(proj_id, CircuitScope.LOOP, "loop_101")
+        can_proceed, state, reason = await uow.circuit_breakers.check_breaker(
+            proj_id, CircuitScope.LOOP, "loop_101"
+        )
         assert can_proceed is False
         assert state == CircuitState.OPEN
 
@@ -119,7 +134,9 @@ async def test_circuit_breaker_stagnation_trip(db_manager) -> None:
         assert uow.projects is not None
         assert uow.circuit_breakers is not None
 
-        proj = domain.Project(name="CB Stagnation Test", root_path="E:/tmp/cb_stag_test", default_branch="main")
+        proj = domain.Project(
+            name="CB Stagnation Test", root_path="E:/tmp/cb_stag_test", default_branch="main"
+        )
         project = await uow.projects.create_project(proj)
         proj_id = project.id
         assert proj_id is not None
@@ -132,9 +149,15 @@ async def test_circuit_breaker_stagnation_trip(db_manager) -> None:
             signal=ProgressSignal.STAGNATION,
         )
 
-        await uow.circuit_breakers.record_progress_signal(proj_id, CircuitScope.RUN, "run_202", stag_record, max_stagnation=3)
-        await uow.circuit_breakers.record_progress_signal(proj_id, CircuitScope.RUN, "run_202", stag_record, max_stagnation=3)
-        b3 = await uow.circuit_breakers.record_progress_signal(proj_id, CircuitScope.RUN, "run_202", stag_record, max_stagnation=3)
+        await uow.circuit_breakers.record_progress_signal(
+            proj_id, CircuitScope.RUN, "run_202", stag_record, max_stagnation=3
+        )
+        await uow.circuit_breakers.record_progress_signal(
+            proj_id, CircuitScope.RUN, "run_202", stag_record, max_stagnation=3
+        )
+        b3 = await uow.circuit_breakers.record_progress_signal(
+            proj_id, CircuitScope.RUN, "run_202", stag_record, max_stagnation=3
+        )
 
         assert b3.state == CircuitState.OPEN
         assert b3.stagnation_count == 3
@@ -150,7 +173,9 @@ async def test_circuit_breaker_reset_and_loop_coordination_block(db_manager) -> 
         assert uow.loop_coordinator is not None
         assert uow.circuit_breakers is not None
 
-        proj = domain.Project(name="CB Block Test", root_path="E:/tmp/cb_block_test", default_branch="main")
+        proj = domain.Project(
+            name="CB Block Test", root_path="E:/tmp/cb_block_test", default_branch="main"
+        )
         project = await uow.projects.create_project(proj)
         proj_id = project.id
         assert proj_id is not None
@@ -166,7 +191,9 @@ async def test_circuit_breaker_reset_and_loop_coordination_block(db_manager) -> 
 
         # Trip breaker for this loop
         fp = generate_error_fingerprint("FatalError", "Database corrupt")
-        await uow.circuit_breakers.record_failure(proj_id, CircuitScope.LOOP, str(loop_id), fp, max_identical=1)
+        await uow.circuit_breakers.record_failure(
+            proj_id, CircuitScope.LOOP, str(loop_id), fp, max_identical=1
+        )
 
         # Attempt to trigger loop -> ValueError raised due to open breaker
         with pytest.raises(ValueError, match="blocked by Circuit Breaker"):
@@ -177,7 +204,9 @@ async def test_circuit_breaker_reset_and_loop_coordination_block(db_manager) -> 
             )
 
         # Reset breaker
-        reset_b = await uow.circuit_breakers.reset_breaker(proj_id, CircuitScope.LOOP, str(loop_id), actor_id="admin")
+        reset_b = await uow.circuit_breakers.reset_breaker(
+            proj_id, CircuitScope.LOOP, str(loop_id), actor_id="admin"
+        )
         assert reset_b.state == CircuitState.CLOSED
 
         # Now trigger succeeds
@@ -221,7 +250,9 @@ async def test_kill_loop_run(db_manager) -> None:
         assert run.id is not None
 
         # Kill run
-        killed_run = await uow.loop_coordinator.kill_loop_run(run.id, actor_id="user_admin", reason="Emergency stop")
+        killed_run = await uow.loop_coordinator.kill_loop_run(
+            run.id, actor_id="user_admin", reason="Emergency stop"
+        )
         assert killed_run.status == LoopRunStatus.CANCELLED
 
         assert "Killed by user_admin" in (killed_run.error_message or "")

@@ -2,6 +2,7 @@ import os
 from dataclasses import dataclass
 
 from localforge.models import domain
+from localforge.models.enums import AuditEventActorType, AuditEventType
 from localforge.safety.kernel import is_path_safe
 from localforge.skills import SkillRegistry
 from localforge.storage import UnitOfWork
@@ -37,11 +38,26 @@ class TaskContextBuilder:
 
         policy = await self.uow.audits.get_project_policy(task.project_id, "default")
         selected_skills = SkillRegistry(project.root_path).select_for_task(task)
+        raw_relevant_files = task.metadata.get("relevant_files", [])
+        relevant_files: list[object] = (
+            raw_relevant_files if isinstance(raw_relevant_files, list) else []
+        )
+        scoped_file_paths = [item for item in relevant_files if isinstance(item, str)]
         relevant_memory: list[domain.MemoryFact] = []
         if self.uow.memory is not None:
-            relevant_memory = await self.uow.memory.retrieve_relevant(
+            relevant_memory = await self.uow.memory.retrieve_scoped(
                 task.project_id,
                 query=f"{task.key} {task.title} {task.description} {task.metadata}",
+                task_key=task.key,
+                repository=project.root_path,
+                file_paths=scoped_file_paths,
+                policy_scope=str(task.metadata.get("policy_scope") or "default"),
+            )
+            await _audit_memory_context(
+                self.uow,
+                project_id=task.project_id,
+                task_id=task.id,
+                facts=relevant_memory,
             )
         recent_comments: list[domain.TaskComment] = []
         if self.uow.coordination is not None:
@@ -49,8 +65,6 @@ class TaskContextBuilder:
                 task_id,
                 limit=5,
             )
-        raw_relevant_files = task.metadata.get("relevant_files", [])
-        relevant_files: list[object] = raw_relevant_files if isinstance(raw_relevant_files, list) else []
 
         file_char_budget = min(max_file_chars, max(80, max_chars // 3))
         policy_summary = "default policy"
@@ -66,20 +80,21 @@ class TaskContextBuilder:
             f"Worktree: {worktree_path}",
             f"Policy: {policy_summary}",
             "Skills:",
-            *([
-                f"- {skill.name}: {skill.purpose}; artifacts={', '.join(skill.expected_artifacts) or 'none'}"
-                for skill in selected_skills
-            ] or ["- none"]),
+            *(
+                [
+                    f"- {skill.name}: {skill.purpose}; "
+                    f"artifacts={', '.join(skill.expected_artifacts) or 'none'}"
+                    for skill in selected_skills
+                ]
+                or ["- none"]
+            ),
             "Memory:",
-            *([
-                f"- {fact.kind.value}: {fact.fact}"
-                for fact in relevant_memory
-            ] or ["- none"]),
+            *([_render_memory_fact(fact) for fact in relevant_memory] or ["- none"]),
             "Recent comments:",
-            *([
-                f"- {comment.author}: {comment.body[:240]}"
-                for comment in recent_comments
-            ] or ["- none"]),
+            *(
+                [f"- {comment.author}: {comment.body[:240]}" for comment in recent_comments]
+                or ["- none"]
+            ),
             "Files:",
         ]
         omitted: list[str] = []
@@ -104,3 +119,35 @@ class TaskContextBuilder:
         if len(rendered) > max_chars:
             rendered = rendered[: max_chars - 24].rstrip() + "\n[context truncated]"
         return TaskContext(rendered=rendered, omitted_files=omitted)
+
+
+async def _audit_memory_context(
+    uow: UnitOfWork,
+    *,
+    project_id: int,
+    task_id: int | None,
+    facts: list[domain.MemoryFact],
+) -> None:
+    if uow.audits is None:
+        return
+    await uow.audits.append_audit_event(
+        domain.AuditEvent(
+            project_id=project_id,
+            task_id=task_id,
+            actor_type=AuditEventActorType.SYSTEM,
+            actor_id="memory-context",
+            event_type=AuditEventType.SYSTEM_EVENT,
+            payload_redacted={
+                "event": "memory_context.injected",
+                "fact_ids": [fact.id for fact in facts if fact.id is not None],
+            },
+        )
+    )
+
+
+def _render_memory_fact(fact: domain.MemoryFact) -> str:
+    provenance = (
+        f"validity={fact.validity.value}; source={fact.source}; "
+        f"scope={fact.policy_scope or 'default'}; verifier={fact.verifier or 'unknown'}"
+    )
+    return f"- {fact.kind.value}: {fact.fact} ({provenance})"

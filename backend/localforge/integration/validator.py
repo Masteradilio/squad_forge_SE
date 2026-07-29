@@ -44,11 +44,7 @@ class IntegrationBranchValidator:
                 failure_class=FailureClass.CONTRACT_DRIFT,
             )
         except subprocess.TimeoutExpired as exc:
-            output = (
-                _text(exc.stdout)
-                + _text(exc.stderr)
-                + "\nTimeout expired."
-            )
+            output = _text(exc.stdout) + _text(exc.stderr) + "\nTimeout expired."
             return IntegrationResult(
                 passed=False,
                 task_keys=task_keys,

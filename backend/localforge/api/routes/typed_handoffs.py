@@ -11,7 +11,9 @@ router = APIRouter(tags=["typed-handoffs"])
 
 
 @router.post("/handoff-artifacts", status_code=status.HTTP_201_CREATED)
-async def create_typed_handoff_artifact(req: TypedHandoffCreateRequest) -> domain.TypedHandoffArtifact:
+async def create_typed_handoff_artifact(
+    req: TypedHandoffCreateRequest,
+) -> domain.TypedHandoffArtifact:
     """Create a new validated TypedHandoffArtifact with SHA-256 content_hash."""
     async with UnitOfWork(db_manager) as uow:
         assert uow.typed_handoffs is not None
@@ -51,8 +53,8 @@ async def consume_artifact(artifact_id: int) -> domain.TypedHandoffArtifact:
         assert uow.typed_handoffs is not None
         try:
             return await uow.typed_handoffs.consume_artifact(artifact_id)
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/task-runs/{task_run_id}/handoff-artifacts")

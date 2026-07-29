@@ -1,17 +1,15 @@
 import asyncio
-import logging
 from typing import Any
 
 import typer
+from localforge.storage import UnitOfWork, db_manager
 from rich.console import Console
 from rich.table import Table
 
-from localforge.models import domain
-from localforge.models.enums import TypedArtifactType
-from localforge.storage import UnitOfWork, db_manager
-
 console = Console()
-handoffs_app = typer.Typer(help="Manage, inspect, and verify Typed Handoff Artifacts and evidence lineage.")
+handoffs_app = typer.Typer(
+    help="Manage, inspect, and verify Typed Handoff Artifacts and evidence lineage."
+)
 
 
 def _run_async(coro: Any) -> Any:
@@ -19,7 +17,9 @@ def _run_async(coro: Any) -> Any:
 
 
 @handoffs_app.command("list")
-def list_artifacts(task_run_id: int = typer.Option(..., "--task-run-id", "-t", help="TaskRun ID")) -> None:
+def list_artifacts(
+    task_run_id: int = typer.Option(..., "--task-run-id", "-t", help="TaskRun ID"),
+) -> None:
     """List typed handoff artifacts produced during a task run."""
 
     async def _impl() -> None:
@@ -28,7 +28,9 @@ def list_artifacts(task_run_id: int = typer.Option(..., "--task-run-id", "-t", h
             artifacts = await uow.typed_handoffs.list_artifacts_for_run(task_run_id)
 
             if not artifacts:
-                console.print(f"[yellow]No typed handoff artifacts found for TaskRun {task_run_id}[/yellow]")
+                console.print(
+                    f"[yellow]No typed handoff artifacts found for TaskRun {task_run_id}[/yellow]"
+                )
                 return
 
             table = Table(title=f"Typed Handoff Artifacts (TaskRun {task_run_id})")
@@ -64,7 +66,9 @@ def verify_artifact(artifact_id: int = typer.Option(..., "--id", "-i", help="Art
             valid, msg = await uow.typed_handoffs.validate_artifact_integrity(artifact_id)
 
             if valid:
-                console.print(f"[bold green]Artifact ID {artifact_id} integrity VERIFIED (SHA-256 hash matches).[/bold green]")
+                console.print(
+                    f"[bold green]Artifact ID {artifact_id} integrity VERIFIED (SHA-256 hash matches).[/bold green]"
+                )
             else:
                 console.print(f"[bold red]INTEGRITY VIOLATION: {msg}[/bold red]")
 
@@ -78,12 +82,15 @@ def render_artifact(artifact_id: int = typer.Option(..., "--id", "-i", help="Art
     async def _impl() -> None:
         async with UnitOfWork(db_manager) as uow:
             assert uow.typed_handoffs is not None
-            stmt = await uow.typed_handoffs.list_artifacts_for_run(1)  # trigger query session
+            await uow.typed_handoffs.list_artifacts_for_run(1)  # trigger query session
             # fetch specific artifact
-            from sqlalchemy import select
             from localforge.storage.orm import TypedHandoffArtifactORM
+            from sqlalchemy import select
+
             assert uow.session is not None
-            res = await uow.session.execute(select(TypedHandoffArtifactORM).where(TypedHandoffArtifactORM.id == artifact_id))
+            res = await uow.session.execute(
+                select(TypedHandoffArtifactORM).where(TypedHandoffArtifactORM.id == artifact_id)
+            )
 
             orm_obj = res.scalar_one_or_none()
             if not orm_obj:

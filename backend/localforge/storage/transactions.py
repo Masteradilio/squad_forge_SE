@@ -4,27 +4,27 @@ from typing import Self
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from localforge.services.audit import AuditService
+from localforge.services.autonomy import AutonomyService
+from localforge.services.circuit_breaker import CircuitBreakerService
 from localforge.services.coordination import CoordinationService
+from localforge.services.cost_benchmark import CostBenchmarkService
 from localforge.services.execution import ExecutionService
+from localforge.services.light_swarm import LightSwarmService
+from localforge.services.loop_coordinator import LoopCoordinator
+from localforge.services.loop_service import LoopService
+from localforge.services.maker_checker import MakerCheckerService
 from localforge.services.memory import MemoryService
 from localforge.services.model_calls import ModelCallLedgerService
+from localforge.services.path_lease import PathLeaseService
 from localforge.services.project import ProjectService
 from localforge.services.routing import ModelRoutingService
-from localforge.services.safety import SafetyService
-from localforge.services.task import TaskService
-from localforge.services.cost_benchmark import CostBenchmarkService
-from localforge.services.simulation import APISimulationService
-from localforge.services.loop_service import LoopService
-from localforge.services.loop_coordinator import LoopCoordinator
-from localforge.services.circuit_breaker import CircuitBreakerService
-from localforge.services.autonomy import AutonomyService
-from localforge.services.maker_checker import MakerCheckerService
-from localforge.services.worktree import WorktreeService
-from localforge.services.path_lease import PathLeaseService
 from localforge.services.runner_pool import RunnerPoolService
-from localforge.services.typed_handoff import TypedHandoffService
-from localforge.services.light_swarm import LightSwarmService
+from localforge.services.safety import SafetyService
+from localforge.services.simulation import APISimulationService
+from localforge.services.task import TaskService
 from localforge.services.task_graph import TaskGraphService
+from localforge.services.typed_handoff import TypedHandoffService
+from localforge.services.worktree import WorktreeService
 from localforge.storage.database import DatabaseManager, db_manager
 
 
@@ -88,12 +88,6 @@ class UnitOfWork:
         self.task_graph = TaskGraphService(self.session)
         return self
 
-
-
-
-
-
-
     async def __aexit__(
         self,
         exc_type: type[BaseException] | None,
@@ -112,15 +106,18 @@ class UnitOfWork:
                     await self.session.commit()
             finally:
                 from localforge.services.model_calls import ModelCallLedgerService
+
                 ModelCallLedgerService._pending_calls.clear()
                 await self.session.close()
 
     async def _persist_pending_model_calls(self) -> None:
         from localforge.services.model_calls import ModelCallLedgerService
+
         if not ModelCallLedgerService._pending_calls:
             return
         try:
             from localforge.storage.orm import ModelCallLedgerORM
+
             async with self.db_manager.session_factory() as session:
                 for call in ModelCallLedgerService._pending_calls:
                     orm_obj = ModelCallLedgerORM.from_domain(call)
@@ -128,5 +125,7 @@ class UnitOfWork:
                 await session.commit()
         except Exception as e:
             import logging
-            logging.getLogger("localforge").error(f"Failed to persist pending model calls post-rollback: {e}")
 
+            logging.getLogger("localforge").error(
+                f"Failed to persist pending model calls post-rollback: {e}"
+            )

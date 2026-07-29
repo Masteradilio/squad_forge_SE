@@ -1,8 +1,19 @@
 # LocalForge OS
 
-LocalForge OS is an open-source, economy-aware AI software engineering control plane. It turns product specifications (PRDs) into sprint backlogs, routes work across a specialized agent squad, executes tasks in isolated Git worktrees, validates outputs through deterministic gates, performs bounded self-healing, and prepares pull requests for human review.
+LocalForge OS is an open-source, economy-aware AI software engineering control
+plane. It turns product specifications (PRDs) into sprint backlogs, routes work
+across a specialized agent squad, executes tasks in isolated Git worktrees,
+validates outputs through deterministic gates, performs bounded self-healing,
+and prepares pull requests for human review.
 
-The official V6 contract and architectural specifications are documented in `docs/LocalForge_OS_PRD.md` and `docs/MASTER_BACKLOG_V6.md`.
+Current status: V6 is an **architectural alpha** under V6.1 compliance closure.
+The V6 backlog contains useful implementation work, but its release/evaluation
+claims are being revalidated by `docs/compliance_backlog_V6.md` before they can
+be treated as accepted operational evidence.
+
+The V6 target contract and architectural specifications are documented in
+`docs/LocalForge_OS_PRD.md`, `docs/MASTER_BACKLOG_V6.md`, and
+`docs/compliance_backlog_V6.md`.
 
 ---
 
@@ -133,18 +144,23 @@ sequenceDiagram
 
 ---
 
-## 📊 Measured Phase 11 Evaluation Results
+## 📊 Phase 11 Historical Evaluation Claims
 
-In Phase 11 comparative evaluations across controlled test fixture corpora, LocalForge OS demonstrated empirical superiority of the `LOOP_LIGHT_SWARM` strategy over single-worker baselines:
+The original Phase 11 report published the following controlled-fixture
+strategy comparison. These values are **historical claims under compliance
+review**, not current release evidence, until V6.1 regenerates them from
+observed task-level runs and validates the immutable evidence chain.
 
 | Execution Strategy | PR_READY Rate | Recall | Execution Duration | Total Token Cost | Gate Verdict |
 | --- | --- | --- | --- | --- | --- |
 | **Single-Worker V5 Baseline** | 0.60 | 0.80 | 1200 ms | $0.4500 | `PARTIAL` |
-| **Loop Single-Worker** | 0.80 | 0.95 | 800 ms | $0.3000 | `ACCEPTED` |
-| **Loop Light Swarm** | **0.95** | **1.00** | **650 ms** | **$0.2500** | **`ACCEPTED`** |
+| **Loop Single-Worker** | 0.80 | 0.95 | 800 ms | $0.3000 | historical `ACCEPTED` |
+| **Loop Light Swarm** | **0.95** | **1.00** | **650 ms** | **$0.2500** | historical `ACCEPTED` |
 | **Loop Deep Swarm (Experimental)** | 0.85 | 0.90 | 1800 ms | $0.8500 | `PARTIAL` |
 
-> 📌 **NOTE**: Deep Swarm and semantic embeddings remain marked as **experimental** (`PARTIAL` verdict) because Light Swarm produces higher `PR_READY` rates at lower cost and latency on static task graphs.
+> 📌 **NOTE**: Deep Swarm, semantic embeddings, and the current operational loop
+> claims remain experimental until compliance phases C2 through C12 prove real
+> governed worker execution, observed metrics, and reviewed PR evidence.
 
 ---
 
@@ -165,7 +181,7 @@ cd local_forge_os
 # Install Python dependencies in virtualenv
 python -m venv .venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-pip install -e backend
+pip install -e ".[dev]"
 
 # Install Frontend dependencies
 npm install --prefix frontend
@@ -174,8 +190,8 @@ npm install --prefix frontend
 ### Running the Control Plane
 
 ```bash
-# Initialize database (auto-migrates up to Schema Version 15)
-python manage.py bootstrap-db
+# Initialize database/workspace through the supported CLI wrapper
+python manage.py setup-backend
 
 # Run backend API server
 python manage.py run-backend
@@ -228,7 +244,8 @@ npm run build --prefix frontend
 ## 📄 Key Documents
 
 - `docs/LocalForge_OS_PRD.md` — Product Requirements Document
-- `docs/MASTER_BACKLOG_V6.md` — Master V6 Engineering Backlog
-- `CHANGELOG.md` — Complete V6 Implementation History
-- `docs/e2e/v6/phase_11/acceptance_report.md` — Phase 11 Acceptance Report
-- `docs/e2e/v6/v6_release_summary.json` — Official Release Summary
+- `docs/MASTER_BACKLOG_V6.md` — Historical V6 Engineering Backlog
+- `docs/compliance_backlog_V6.md` — V6.1 Compliance Closure Backlog
+- `CHANGELOG.md` — Implementation History
+- `docs/e2e/v6/phase_11/acceptance_report.md` — Historical Phase 11 report
+- `docs/e2e/v6/v6_release_summary.json` — Historical V6 release summary under V6.1 review

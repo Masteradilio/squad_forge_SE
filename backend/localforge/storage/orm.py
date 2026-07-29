@@ -17,7 +17,6 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from localforge.models import domain, enums
 
 
-
 class Base(DeclarativeBase):
     pass
 
@@ -488,6 +487,7 @@ class MemoryFactORM(Base):
 
     def to_domain(self) -> domain.MemoryFact:
         from localforge.models.enums import MemoryFactCategory, MemoryValidityStatus
+
         return domain.MemoryFact(
             id=self.id,
             project_id=self.project_id,
@@ -528,10 +528,14 @@ class MemoryFactORM(Base):
             attempt_number=d.attempt_number,
             artifact_id=d.artifact_id,
             verifier=d.verifier,
-            validity=d.validity.value if isinstance(d.validity, enums.MemoryValidityStatus) else str(d.validity),
+            validity=d.validity.value
+            if isinstance(d.validity, enums.MemoryValidityStatus)
+            else str(d.validity),
             confidence=d.confidence,
             policy_scope=d.policy_scope,
-            category=d.category.value if isinstance(d.category, enums.MemoryFactCategory) else str(d.category),
+            category=d.category.value
+            if isinstance(d.category, enums.MemoryFactCategory)
+            else str(d.category),
             created_at=d.created_at,
             updated_at=d.updated_at,
         )
@@ -555,6 +559,7 @@ class MemoryRelationORM(Base):
 
     def to_domain(self) -> domain.MemoryRelation:
         from localforge.models.enums import MemoryRelationType
+
         return domain.MemoryRelation(
             id=self.id,
             source_fact_id=self.source_fact_id,
@@ -570,11 +575,12 @@ class MemoryRelationORM(Base):
             id=d.id,
             source_fact_id=d.source_fact_id,
             target_fact_id=d.target_fact_id,
-            relation_type=d.relation_type.value if isinstance(d.relation_type, enums.MemoryRelationType) else str(d.relation_type),
+            relation_type=d.relation_type.value
+            if isinstance(d.relation_type, enums.MemoryRelationType)
+            else str(d.relation_type),
             provenance_json=dict(d.provenance),
             created_at=d.created_at,
         )
-
 
 
 class PolicyORM(Base):
@@ -874,7 +880,9 @@ class ModelPricingSnapshotORM(Base):
     model_name: Mapped[str] = mapped_column(String(255), nullable=False)
     input_price_per_million: Mapped[float] = mapped_column(Float, nullable=False)
     output_price_per_million: Mapped[float] = mapped_column(Float, nullable=False)
-    cached_input_price_per_million: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    cached_input_price_per_million: Mapped[float] = mapped_column(
+        Float, default=0.0, nullable=False
+    )
     is_manual: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
 
@@ -952,11 +960,15 @@ class LoopDefinitionORM(Base):
     status: Mapped[str] = mapped_column(String(50), default="IDLE", nullable=False)
     trigger_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
     detector: Mapped[str] = mapped_column(String(255), default="default_triage", nullable=False)
-    execution_strategy: Mapped[str] = mapped_column(String(50), default="SEQUENTIAL", nullable=False)
+    execution_strategy: Mapped[str] = mapped_column(
+        String(50), default="SEQUENTIAL", nullable=False
+    )
     autonomy: Mapped[str] = mapped_column(String(50), default="L1_INSPECT", nullable=False)
     max_budget_usd: Mapped[float] = mapped_column(Float, default=5.0, nullable=False)
     safety_policy_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
-    escalation_policy_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    escalation_policy_json: Mapped[dict[str, Any]] = mapped_column(
+        JSON, default=dict, nullable=False
+    )
     schema_version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     updated_at: Mapped[datetime] = mapped_column(
@@ -994,8 +1006,12 @@ class LoopDefinitionORM(Base):
             status=d.status.value if isinstance(d.status, enums.LoopStatus) else str(d.status),
             trigger_json=d.trigger.model_dump(),
             detector=d.detector,
-            execution_strategy=d.execution_strategy.value if isinstance(d.execution_strategy, enums.ExecutionStrategy) else str(d.execution_strategy),
-            autonomy=d.autonomy.value if isinstance(d.autonomy, enums.AutonomyLevel) else str(d.autonomy),
+            execution_strategy=d.execution_strategy.value
+            if isinstance(d.execution_strategy, enums.ExecutionStrategy)
+            else str(d.execution_strategy),
+            autonomy=d.autonomy.value
+            if isinstance(d.autonomy, enums.AutonomyLevel)
+            else str(d.autonomy),
             max_budget_usd=d.max_budget_usd,
             safety_policy_json=d.safety_policy,
             escalation_policy_json=d.escalation_policy,
@@ -1047,9 +1063,13 @@ class LoopRunORM(Base):
             id=d.id,
             loop_id=d.loop_id,
             status=d.status.value if isinstance(d.status, enums.LoopRunStatus) else str(d.status),
-            trigger_kind=d.trigger_kind.value if isinstance(d.trigger_kind, enums.TriggerKind) else str(d.trigger_kind),
+            trigger_kind=d.trigger_kind.value
+            if isinstance(d.trigger_kind, enums.TriggerKind)
+            else str(d.trigger_kind),
             idempotency_key=d.idempotency_key,
-            triage_verdict=d.triage_verdict.value if isinstance(d.triage_verdict, enums.LoopRunVerdict) else str(d.triage_verdict),
+            triage_verdict=d.triage_verdict.value
+            if isinstance(d.triage_verdict, enums.LoopRunVerdict)
+            else str(d.triage_verdict),
             scheduler_run_id=d.scheduler_run_id,
             items_processed=d.items_processed,
             cost_usd=d.cost_usd,
@@ -1057,7 +1077,6 @@ class LoopRunORM(Base):
             completed_at=d.completed_at,
             error_message=d.error_message,
         )
-
 
 
 class LoopItemORM(Base):
@@ -1160,7 +1179,9 @@ class CircuitBreakerStateORM(Base):
     state: Mapped[str] = mapped_column(String(50), default="CLOSED", nullable=False)
     consecutive_failures: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     stagnation_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    fingerprint_counts_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    fingerprint_counts_json: Mapped[dict[str, Any]] = mapped_column(
+        JSON, default=dict, nullable=False
+    )
     last_fingerprint: Mapped[str | None] = mapped_column(String(255), nullable=True)
     opened_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     cooldown_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -1245,7 +1266,9 @@ class MakerCheckerVerificationORM(Base):
             maker_agent_id=self.maker_agent_id,
             checker_agent_id=self.checker_agent_id,
             status=enums.VerificationStatus(self.status),
-            tests_executed=self.tests_executed_json if isinstance(self.tests_executed_json, list) else [],
+            tests_executed=self.tests_executed_json
+            if isinstance(self.tests_executed_json, list)
+            else [],
             not_checked=self.not_checked_json if isinstance(self.not_checked_json, list) else [],
             deterministic_passed=self.deterministic_passed,
             checker_feedback=self.checker_feedback,
@@ -1261,7 +1284,9 @@ class MakerCheckerVerificationORM(Base):
             task_run_id=d.task_run_id,
             maker_agent_id=d.maker_agent_id,
             checker_agent_id=d.checker_agent_id,
-            status=d.status.value if isinstance(d.status, enums.VerificationStatus) else str(d.status),
+            status=d.status.value
+            if isinstance(d.status, enums.VerificationStatus)
+            else str(d.status),
             tests_executed_json=d.tests_executed,
             not_checked_json=d.not_checked,
             deterministic_passed=d.deterministic_passed,
@@ -1278,9 +1303,7 @@ class WorktreeAttemptManifestORM(Base):
     project_id: Mapped[int] = mapped_column(
         ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
     )
-    task_id: Mapped[int] = mapped_column(
-        ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False
-    )
+    task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False)
     task_run_id: Mapped[int] = mapped_column(
         ForeignKey("task_runs.id", ondelete="CASCADE"), nullable=False
     )
@@ -1308,7 +1331,9 @@ class WorktreeAttemptManifestORM(Base):
             branch_name=self.branch_name,
             source_commit=self.source_commit,
             owner_agent_id=self.owner_agent_id,
-            expected_paths=self.expected_paths_json if isinstance(self.expected_paths_json, list) else [],
+            expected_paths=self.expected_paths_json
+            if isinstance(self.expected_paths_json, list)
+            else [],
             leases_held=self.leases_held_json if isinstance(self.leases_held_json, list) else [],
             status=enums.WorktreeAttemptStatus(self.status),
             created_at=self.created_at,
@@ -1329,7 +1354,9 @@ class WorktreeAttemptManifestORM(Base):
             owner_agent_id=d.owner_agent_id,
             expected_paths_json=d.expected_paths,
             leases_held_json=d.leases_held,
-            status=d.status.value if isinstance(d.status, enums.WorktreeAttemptStatus) else str(d.status),
+            status=d.status.value
+            if isinstance(d.status, enums.WorktreeAttemptStatus)
+            else str(d.status),
             created_at=d.created_at,
             updated_at=d.updated_at,
         )
@@ -1363,7 +1390,9 @@ class PathLeaseORM(Base):
             is_directory=self.is_directory,
             ttl_seconds=self.ttl_seconds,
             expires_at=self.expires_at,
-            release_reason=enums.LeaseReleaseReason(self.release_reason) if self.release_reason else None,
+            release_reason=enums.LeaseReleaseReason(self.release_reason)
+            if self.release_reason
+            else None,
             created_at=self.created_at,
         )
 
@@ -1378,7 +1407,9 @@ class PathLeaseORM(Base):
             is_directory=d.is_directory,
             ttl_seconds=d.ttl_seconds,
             expires_at=d.expires_at,
-            release_reason=d.release_reason.value if isinstance(d.release_reason, enums.LeaseReleaseReason) else d.release_reason,
+            release_reason=d.release_reason.value
+            if isinstance(d.release_reason, enums.LeaseReleaseReason)
+            else d.release_reason,
             created_at=d.created_at,
         )
 
@@ -1411,7 +1442,9 @@ class RunnerPoolStateORM(Base):
             health_state=enums.RunnerHealthState(self.health_state),
             active_tasks_count=self.active_tasks_count,
             max_concurrency=self.max_concurrency,
-            capabilities=domain.RunnerCapability.model_validate(caps_dict) if caps_dict else domain.RunnerCapability(),
+            capabilities=domain.RunnerCapability.model_validate(caps_dict)
+            if caps_dict
+            else domain.RunnerCapability(),
             success_rate=self.success_rate,
             quarantine_reason=self.quarantine_reason,
             created_at=self.created_at,
@@ -1425,7 +1458,9 @@ class RunnerPoolStateORM(Base):
             runner_id=d.runner_id,
             name=d.name,
             lane=d.lane.value if isinstance(d.lane, enums.RunnerLane) else str(d.lane),
-            health_state=d.health_state.value if isinstance(d.health_state, enums.RunnerHealthState) else str(d.health_state),
+            health_state=d.health_state.value
+            if isinstance(d.health_state, enums.RunnerHealthState)
+            else str(d.health_state),
             active_tasks_count=d.active_tasks_count,
             max_concurrency=d.max_concurrency,
             capabilities_json=d.capabilities.model_dump(mode="json"),
@@ -1459,8 +1494,12 @@ class RunnerDispatchLogORM(Base):
             task_run_id=self.task_run_id,
             selected_runner_id=self.selected_runner_id,
             dispatch_status=self.dispatch_status,
-            ranking_scores_json=self.ranking_scores_json if isinstance(self.ranking_scores_json, dict) else {},
-            rejection_reasons_json=self.rejection_reasons_json if isinstance(self.rejection_reasons_json, dict) else {},
+            ranking_scores_json=self.ranking_scores_json
+            if isinstance(self.ranking_scores_json, dict)
+            else {},
+            rejection_reasons_json=self.rejection_reasons_json
+            if isinstance(self.rejection_reasons_json, dict)
+            else {},
             created_at=self.created_at,
         )
 
@@ -1515,10 +1554,18 @@ class TypedHandoffArtifactORM(Base):
             schema_version=self.schema_version,
             summary=self.summary,
             evidence_json=self.evidence_json if isinstance(self.evidence_json, dict) else {},
-            changed_files=self.changed_files_json if isinstance(self.changed_files_json, list) else [],
-            tests_executed=self.tests_executed_json if isinstance(self.tests_executed_json, list) else [],
-            validation_results_json=self.validation_results_json if isinstance(self.validation_results_json, dict) else {},
-            open_questions=self.open_questions_json if isinstance(self.open_questions_json, list) else [],
+            changed_files=self.changed_files_json
+            if isinstance(self.changed_files_json, list)
+            else [],
+            tests_executed=self.tests_executed_json
+            if isinstance(self.tests_executed_json, list)
+            else [],
+            validation_results_json=self.validation_results_json
+            if isinstance(self.validation_results_json, dict)
+            else {},
+            open_questions=self.open_questions_json
+            if isinstance(self.open_questions_json, list)
+            else [],
             risks=self.risks_json if isinstance(self.risks_json, list) else [],
             not_checked=self.not_checked_json if isinstance(self.not_checked_json, list) else [],
             content_hash=self.content_hash,
@@ -1534,7 +1581,9 @@ class TypedHandoffArtifactORM(Base):
             task_run_id=d.task_run_id,
             producer_agent_id=d.producer_agent_id,
             consumer_agent_id=d.consumer_agent_id,
-            artifact_type=d.artifact_type.value if isinstance(d.artifact_type, enums.TypedArtifactType) else str(d.artifact_type),
+            artifact_type=d.artifact_type.value
+            if isinstance(d.artifact_type, enums.TypedArtifactType)
+            else str(d.artifact_type),
             schema_version=d.schema_version,
             summary=d.summary,
             evidence_json=d.evidence_json,
@@ -1572,8 +1621,11 @@ class SwarmPlanORM(Base):
     )
 
     def to_domain(self) -> domain.SwarmPlan:
-        from localforge.models.enums import SwarmStrategy, SwarmStatus, SwarmNodeType, SwarmNodeStatus, TypedArtifactType
         from localforge.models.domain import SwarmNode, SwarmPolicy
+        from localforge.models.enums import (
+            SwarmStatus,
+            SwarmStrategy,
+        )
 
         nodes = [SwarmNode(**n) for n in (self.nodes_json or [])]
         edges: list[tuple[str, str]] = [tuple(e) for e in (self.edges_json or [])]  # type: ignore[misc]
@@ -1600,7 +1652,9 @@ class SwarmPlanORM(Base):
             id=d.id,
             project_id=d.project_id,
             task_run_id=d.task_run_id,
-            strategy=d.strategy.value if isinstance(d.strategy, enums.SwarmStrategy) else str(d.strategy),
+            strategy=d.strategy.value
+            if isinstance(d.strategy, enums.SwarmStrategy)
+            else str(d.strategy),
             status=d.status.value if isinstance(d.status, enums.SwarmStatus) else str(d.status),
             policy_json=d.policy.model_dump(mode="json"),
             nodes_json=nodes_json,
@@ -1632,6 +1686,7 @@ class SwarmRunORM(Base):
 
     def to_domain(self) -> domain.SwarmRun:
         from localforge.models.enums import SwarmStatus
+
         return domain.SwarmRun(
             id=self.id,
             plan_id=self.plan_id,
@@ -1668,12 +1723,8 @@ class GraphMutationEntryORM(Base):
 
     __tablename__ = "graph_mutation_journal"
     __table_args__ = (
-        UniqueConstraint(
-            "plan_id", "mutation_sequence", name="uq_graph_mutation_plan_sequence"
-        ),
-        UniqueConstraint(
-            "plan_id", "graph_version", name="uq_graph_mutation_plan_version"
-        ),
+        UniqueConstraint("plan_id", "mutation_sequence", name="uq_graph_mutation_plan_sequence"),
+        UniqueConstraint("plan_id", "graph_version", name="uq_graph_mutation_plan_version"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -1692,6 +1743,7 @@ class GraphMutationEntryORM(Base):
 
     def to_domain(self) -> domain.GraphMutationEntry:
         from localforge.models.enums import GraphMutationType
+
         return domain.GraphMutationEntry(
             id=self.id,
             plan_id=self.plan_id,
@@ -1714,7 +1766,9 @@ class GraphMutationEntryORM(Base):
             mutation_sequence=d.mutation_sequence,
             graph_version=d.graph_version,
             parent_graph_version=d.parent_graph_version,
-            mutation_type=d.mutation_type.value if isinstance(d.mutation_type, enums.GraphMutationType) else str(d.mutation_type),
+            mutation_type=d.mutation_type.value
+            if isinstance(d.mutation_type, enums.GraphMutationType)
+            else str(d.mutation_type),
             actor_agent_id=d.actor_agent_id,
             reason=d.reason,
             payload_json=dict(d.payload_json),
@@ -1727,11 +1781,7 @@ class TaskGraphVersionORM(Base):
     """Versioned snapshot of the dynamic task graph (V6-900)."""
 
     __tablename__ = "task_graph_versions"
-    __table_args__ = (
-        UniqueConstraint(
-            "plan_id", "version", name="uq_task_graph_plan_version"
-        ),
-    )
+    __table_args__ = (UniqueConstraint("plan_id", "version", name="uq_task_graph_plan_version"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     plan_id: Mapped[int] = mapped_column(
@@ -1803,8 +1853,9 @@ class DeepSwarmRunORM(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
 
     def to_domain(self) -> domain.DeepSwarmRun:
-        from localforge.models.enums import DeepSwarmStatus
         from localforge.models.domain import DeepSwarmPolicy
+        from localforge.models.enums import DeepSwarmStatus
+
         policy = DeepSwarmPolicy(**self.policy_json) if self.policy_json else DeepSwarmPolicy()
         return domain.DeepSwarmRun(
             id=self.id,

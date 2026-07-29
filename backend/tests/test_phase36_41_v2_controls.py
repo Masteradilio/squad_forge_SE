@@ -1,8 +1,8 @@
 import asyncio
 import json
-import pytest
 from pathlib import Path
 
+import pytest
 from localforge.chief_engineer.final_review import FinalReviewService
 from localforge.chief_engineer.service import ChiefEngineerService
 from localforge.contracts.change_requests import (
@@ -42,7 +42,10 @@ async def test_capability_router_escalates_high_risk_and_logs_rationale():
 
     assert decision.model_tier == "chief_engineer"
     assert decision.escalate is True
-    assert "classified as chief_only" in decision.rationale.lower() or "classified as chief_led" in decision.rationale.lower()
+    assert (
+        "classified as chief_only" in decision.rationale.lower()
+        or "classified as chief_led" in decision.rationale.lower()
+    )
 
 
 def test_contract_verifier_reports_scope_import_api_and_dependency_failures(tmp_path):
@@ -119,7 +122,7 @@ def test_integration_validator_rejects_shell_composition(tmp_path):
     result = IntegrationBranchValidator().validate(
         worktree_path=str(tmp_path),
         task_keys=["LF-4002"],
-        test_command="python -c \"print(1)\" && echo unsafe",
+        test_command='python -c "print(1)" && echo unsafe',
     )
 
     assert result.passed is False
@@ -161,9 +164,7 @@ def test_final_review_records_chief_engineer_paid_call(tmp_path):
                 )
             )
             assert run.id is not None
-            review = await FinalReviewService(
-                ChiefEngineerService(uow)
-            ).review_pr(
+            review = await FinalReviewService(ChiefEngineerService(uow)).review_pr(
                 project_id=project.id,
                 run_id=run.id,
                 task_id=41,

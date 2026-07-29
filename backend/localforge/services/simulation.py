@@ -1,9 +1,9 @@
 from typing import Any
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from localforge.storage.orm import ModelCallLedgerORM, ModelPricingSnapshotORM
-from localforge.models import domain
-from localforge.models.enums import ChiefEngineerCallReason
 
 
 class APISimulationService:
@@ -11,9 +11,7 @@ class APISimulationService:
         self.session = session
 
     async def simulate_api_only_costs(
-        self,
-        project_id: int,
-        run_id: int | None = None
+        self, project_id: int, run_id: int | None = None
     ) -> dict[str, Any]:
         """
         Simulates what the runs would have cost under 100% API execution.
@@ -35,18 +33,18 @@ class APISimulationService:
             "OpenAI": {
                 "large": "gpt-5.5-large",
                 "medium": "gpt-5.4-medium",
-                "small": "gpt-5.4-mini"
+                "small": "gpt-5.4-mini",
             },
             "Anthropic": {
                 "large": "claude-opus-4.8",
                 "medium": "claude-sonnet-4.6",
-                "small": "claude-haiku-4.5"
+                "small": "claude-haiku-4.5",
             },
             "Google": {
                 "large": "gemini-2.5-pro",
                 "medium": "gemini-2.5-flash",
-                "small": "gemini-2.5-flash-lite"
-            }
+                "small": "gemini-2.5-flash-lite",
+            },
         }
 
         # Fallback pricing in case DB is not fully seeded or populated
@@ -59,12 +57,14 @@ class APISimulationService:
             "claude-haiku-4.5": (1.0, 5.0),
             "gemini-2.5-pro": (1.25, 10.0),
             "gemini-2.5-flash": (0.30, 2.50),
-            "gemini-2.5-flash-lite": (0.10, 0.40)
+            "gemini-2.5-flash-lite": (0.10, 0.40),
         }
 
         def get_prices(model_name: str) -> tuple[float, float]:
             if model_name in snapshots:
-                return snapshots[model_name].input_price_per_million, snapshots[model_name].output_price_per_million
+                return snapshots[model_name].input_price_per_million, snapshots[
+                    model_name
+                ].output_price_per_million
             return fallbacks.get(model_name, (1.0, 1.0))
 
         actual_paid = 0.0
@@ -77,8 +77,18 @@ class APISimulationService:
             output_tokens = call.output_tokens
 
             # Map tier
-            is_chief = call.provider == "openrouter" or "chief" in call.reason.lower() or "contract" in call.reason.lower() or "repair" in call.reason.lower() or "review" in call.reason.lower()
-            is_small = "pr" in call.reason.lower() or "summary" in call.reason.lower() or "changelog" in call.reason.lower()
+            is_chief = (
+                call.provider == "openrouter"
+                or "chief" in call.reason.lower()
+                or "contract" in call.reason.lower()
+                or "repair" in call.reason.lower()
+                or "review" in call.reason.lower()
+            )
+            is_small = (
+                "pr" in call.reason.lower()
+                or "summary" in call.reason.lower()
+                or "changelog" in call.reason.lower()
+            )
             tier = "large" if is_chief else ("small" if is_small else "medium")
 
             # OpenAI Simulation

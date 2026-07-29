@@ -9,7 +9,12 @@ from localforge.api.schemas import (
     MemoryRetrieveRequest,
 )
 from localforge.models import domain
-from localforge.models.enums import MemoryFactCategory, MemoryRecordKind, MemoryRelationType, MemoryValidityStatus
+from localforge.models.enums import (
+    MemoryFactCategory,
+    MemoryRecordKind,
+    MemoryRelationType,
+    MemoryValidityStatus,
+)
 from localforge.storage import UnitOfWork, db_manager
 
 router = APIRouter(tags=["memory"])
@@ -75,8 +80,8 @@ async def update_memory_fact(
                 status=status_str,
                 validity=val_enum,
             )
-        except ValueError as e:
-            raise HTTPException(status_code=404, detail=str(e))
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.post("/memory/relations", status_code=status.HTTP_201_CREATED)
@@ -92,8 +97,8 @@ async def create_memory_relation(req: MemoryRelationCreateRequest) -> domain.Mem
                 relation_type=rel_type,
                 provenance=req.provenance,
             )
-        except ValueError as e:
-            raise HTTPException(status_code=422, detail=str(e))
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.post("/memory/consolidate")

@@ -26,9 +26,7 @@ def _build_nodes(req_nodes: list[Any]) -> list[domain.SwarmNode]:
                     else None
                 ),
                 output_artifact_type=(
-                    TypedArtifactType(n.output_artifact_type)
-                    if n.output_artifact_type
-                    else None
+                    TypedArtifactType(n.output_artifact_type) if n.output_artifact_type else None
                 ),
             )
         )
@@ -53,8 +51,8 @@ async def create_swarm(req: SwarmCreateRequest) -> dict[str, Any]:
                 policy=policy,
                 strategy=SwarmStrategy(req.strategy),
             )
-        except ValueError as e:
-            raise HTTPException(status_code=422, detail=str(e))
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
         run = None
         if req.auto_start and plan.id is not None:
@@ -74,8 +72,8 @@ async def get_swarm_status(run_id: int) -> dict[str, Any]:
         assert uow.light_swarm is not None
         try:
             return await uow.light_swarm.get_dag_view(run_id)
-        except ValueError as e:
-            raise HTTPException(status_code=404, detail=str(e))
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.get("/swarms/{run_id}/dag")
@@ -85,8 +83,8 @@ async def get_swarm_dag(run_id: int) -> dict[str, Any]:
         assert uow.light_swarm is not None
         try:
             return await uow.light_swarm.get_dag_view(run_id)
-        except ValueError as e:
-            raise HTTPException(status_code=404, detail=str(e))
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.get("/swarms/{run_id}/summary")
@@ -96,8 +94,8 @@ async def get_swarm_summary(run_id: int) -> domain.SwarmExecutionSummary:
         assert uow.light_swarm is not None
         try:
             return await uow.light_swarm.aggregate_result(run_id)
-        except ValueError as e:
-            raise HTTPException(status_code=404, detail=str(e))
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.post("/swarms/{run_id}/pause")
@@ -108,8 +106,8 @@ async def pause_swarm(run_id: int) -> dict[str, Any]:
         try:
             run = await uow.light_swarm.pause_swarm(run_id)
             return {"run_id": run_id, "status": run.status}
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/swarms/{run_id}/kill")
@@ -120,5 +118,5 @@ async def kill_swarm(run_id: int) -> dict[str, Any]:
         try:
             run = await uow.light_swarm.kill_swarm(run_id)
             return {"run_id": run_id, "status": run.status, "verdict": run.verdict}
-        except ValueError as e:
-            raise HTTPException(status_code=404, detail=str(e))
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc

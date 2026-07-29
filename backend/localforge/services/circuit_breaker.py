@@ -1,6 +1,5 @@
 import logging
 from datetime import UTC, datetime, timedelta
-from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -81,9 +80,12 @@ class CircuitBreakerService:
                 return True, CircuitState.HALF_OPEN, breaker.reason
             return False, CircuitState.OPEN, breaker.reason or "Circuit breaker is OPEN"
 
-
         elif breaker.state == CircuitState.ESCALATED:
-            return False, CircuitState.ESCALATED, breaker.reason or "Circuit breaker is ESCALATED awaiting human review"
+            return (
+                False,
+                CircuitState.ESCALATED,
+                breaker.reason or "Circuit breaker is ESCALATED awaiting human review",
+            )
 
         return True, breaker.state, breaker.reason
 
@@ -156,9 +158,7 @@ class CircuitBreakerService:
                 breaker.state = CircuitState.OPEN
                 breaker.opened_at = now
                 breaker.cooldown_until = now + timedelta(seconds=cooldown_seconds)
-                breaker.reason = (
-                    f"Tripped: no progress detected across {breaker.stagnation_count} consecutive attempts."
-                )
+                breaker.reason = f"Tripped: no progress detected across {breaker.stagnation_count} consecutive attempts."
                 logger.warning(f"Circuit breaker TRIPPED (stagnation) for {scope}:{target_id}")
 
         elif record.signal == ProgressSignal.REGRESSION:
@@ -225,14 +225,18 @@ class CircuitBreakerService:
         result = await self.session.execute(stmt)
         return [orm.to_domain() for orm in result.scalars().all()]
 
-    async def _update_breaker_domain(self, breaker: domain.CircuitBreakerState) -> domain.CircuitBreakerState:
+    async def _update_breaker_domain(
+        self, breaker: domain.CircuitBreakerState
+    ) -> domain.CircuitBreakerState:
         stmt = select(CircuitBreakerStateORM).where(CircuitBreakerStateORM.id == breaker.id)
         result = await self.session.execute(stmt)
         orm_obj = result.scalar_one_or_none()
         if not orm_obj:
             raise ValueError(f"CircuitBreakerState with ID {breaker.id} not found")
 
-        orm_obj.state = breaker.state.value if isinstance(breaker.state, CircuitState) else str(breaker.state)
+        orm_obj.state = (
+            breaker.state.value if isinstance(breaker.state, CircuitState) else str(breaker.state)
+        )
         orm_obj.consecutive_failures = breaker.consecutive_failures
         orm_obj.stagnation_count = breaker.stagnation_count
         orm_obj.fingerprint_counts_json = breaker.fingerprint_counts

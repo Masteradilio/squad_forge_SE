@@ -71,7 +71,9 @@ class FinalReviewService:
 
         # Budget preview print/log
         estimated_input = _estimate_tokens(json.dumps(messages))
-        print(f"[Economy Bundler] Previewing API call: reason=FINAL_PR_REVIEW, estimated_input_tokens={estimated_input}")
+        print(
+            f"[Economy Bundler] Previewing API call: reason=FINAL_PR_REVIEW, estimated_input_tokens={estimated_input}"
+        )
         estimated_output = 512
         await uow.model_calls.ensure_budget(
             project_id=project_id,
@@ -105,9 +107,7 @@ class FinalReviewService:
                     reason=ChiefEngineerCallReason.FINAL_PR_REVIEW,
                     input_tokens=estimated_input,
                     output_tokens=output_tokens,
-                    estimated_cost_usd=estimate_paid_call_cost_usd(
-                        estimated_input, output_tokens
-                    ),
+                    estimated_cost_usd=estimate_paid_call_cost_usd(estimated_input, output_tokens),
                     status=status,
                     error_summary=error_summary,
                 )
@@ -123,9 +123,7 @@ class FinalReviewService:
                 reason=ChiefEngineerCallReason.FINAL_PR_REVIEW,
                 input_tokens=estimated_input,
                 output_tokens=output_tokens,
-                estimated_cost_usd=estimate_paid_call_cost_usd(
-                    estimated_input, output_tokens
-                ),
+                estimated_cost_usd=estimate_paid_call_cost_usd(estimated_input, output_tokens),
                 status=status,
                 error_summary=error_summary,
                 metadata={"approved": review.approved},

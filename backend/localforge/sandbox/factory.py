@@ -24,9 +24,7 @@ def create_sandbox(
     if sandbox_type == "docker":
         image = image_override or config.sandbox.image
         network_enabled = (
-            config.sandbox.network_enabled
-            if network_override is None
-            else network_override
+            config.sandbox.network_enabled if network_override is None else network_override
         )
 
         try:

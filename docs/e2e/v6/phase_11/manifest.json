@@ -2,7 +2,7 @@
   "phase_id": "phase_11",
   "phase_name": "First Operational Loops and Comparative Evaluation",
   "timestamp": "2026-07-28T08:38:00Z",
-  "source_commit": "HEAD",
+  "source_commit": "INVALID_HEAD_REFERENCE",
   "changed_modules": [
     "backend/localforge/services/eval_corpus.py",
     "backend/localforge/services/daily_triage_loop.py",
@@ -16,5 +16,10 @@
     "backend/localforge/cli/main.py",
     "backend/tests/test_phase11_operational_loops.py"
   ],
-  "verdict": "PHASE_ACCEPTED"
+  "verdict": "HISTORICAL_INVALIDATED",
+  "compliance_reasons": [
+    "Original manifest used source_commit: HEAD.",
+    "Original strategy comparison metrics were not derived from observed task-level executions.",
+    "V6.1 compliance evidence must regenerate this artifact before acceptance."
+  ]
 }

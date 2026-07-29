@@ -98,9 +98,7 @@ class WorktreeManager:
             # between runs; without this `git worktree add` aborts with
             # "is a missing but already registered worktree".
             await self._git_prune_stale_worktrees(git)
-            await self._remove_stale_worktree_path(
-                git, worktree_path, project.root_path
-            )
+            await self._remove_stale_worktree_path(git, worktree_path, project.root_path)
             try:
                 await git.create_worktree(
                     path=worktree_path,
@@ -108,9 +106,7 @@ class WorktreeManager:
                     base_branch=base_branch,
                 )
             except Exception:
-                await self._remove_stale_worktree_path(
-                    git, worktree_path, project.root_path
-                )
+                await self._remove_stale_worktree_path(git, worktree_path, project.root_path)
                 raise
         return worktree_path, branch_name
 
@@ -293,7 +289,8 @@ class WorktreeManager:
         active_keys = {
             t.key.lower()
             for t in tasks
-            if t.status not in (
+            if t.status
+            not in (
                 TaskStatus.DONE,
                 TaskStatus.FAILED_SAFE,
                 TaskStatus.CANCELLED,

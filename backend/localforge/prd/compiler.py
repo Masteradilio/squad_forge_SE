@@ -73,8 +73,7 @@ async def import_prd(
             DocumentKind.ARCHITECTURE,
             persist=True,
             parsed_summary=(
-                f"{len(contract.module_map)} modules, "
-                f"{len(contract.task_contracts)} task contracts"
+                f"{len(contract.module_map)} modules, {len(contract.task_contracts)} task contracts"
             ),
         )
         epic_by_title: dict[str, domain.Epic] = {}
@@ -121,9 +120,7 @@ async def import_prd(
                         "contract_id": contract.contract_id,
                         "architecture_contract_path": contract_rel_path,
                         "task_contract": (
-                            task_contract.model_dump(mode="json")
-                            if task_contract
-                            else {}
+                            task_contract.model_dump(mode="json") if task_contract else {}
                         ),
                         "sizing": sizing.model_dump(),
                         "source_document_id": persisted_doc.document.id,

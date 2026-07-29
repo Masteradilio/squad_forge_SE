@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException
 
 from localforge.api.schemas import CircuitBreakerResetRequest, KillRunRequest
 from localforge.models import domain
@@ -17,14 +17,19 @@ async def list_circuit_breakers(project_id: int) -> list[domain.CircuitBreakerSt
 
 
 @router.post("/projects/{project_id}/circuit-breakers/reset")
-async def reset_circuit_breaker(project_id: int, req: CircuitBreakerResetRequest) -> domain.CircuitBreakerState:
+async def reset_circuit_breaker(
+    project_id: int, req: CircuitBreakerResetRequest
+) -> domain.CircuitBreakerState:
     """Manually reset a circuit breaker to CLOSED state."""
     async with UnitOfWork(db_manager) as uow:
         assert uow.circuit_breakers is not None
         try:
             scope_enum = CircuitScope(req.scope.upper())
-        except ValueError:
-            raise HTTPException(status_code=400, detail=f"Invalid CircuitScope: {req.scope}")
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid CircuitScope: {req.scope}",
+            ) from exc
 
         return await uow.circuit_breakers.reset_breaker(
             project_id=project_id,
@@ -46,5 +51,5 @@ async def kill_loop_run(run_id: int, req: KillRunRequest) -> domain.LoopRun:
                 actor_id=req.actor_id,
                 reason=req.reason,
             )
-        except ValueError as e:
-            raise HTTPException(status_code=404, detail=str(e))
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc

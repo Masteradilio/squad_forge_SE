@@ -16,6 +16,10 @@ from localforge.models.enums import (
     TaskStatus,
 )
 from localforge.pipeline import PipelineMode, RolePipelineEngine
+from localforge.services.governed_execution import (
+    GovernedExecutionRequest,
+    GovernedExecutionService,
+)
 from localforge.services.runners import LocalWorktreeTaskRunner, TaskRunnerPool
 from localforge.storage.transactions import UnitOfWork
 
@@ -31,7 +35,15 @@ def _clean_error_message(error: str) -> str:
     cleaned_lines = []
     has_failures = False
     for line in lines:
-        if any(term in line for term in ("FAILURES", "AssertionError", "ModuleNotFoundError", "ValueError", "TypeError", "SyntaxError")):
+        failure_terms = (
+            "FAILURES",
+            "AssertionError",
+            "ModuleNotFoundError",
+            "ValueError",
+            "TypeError",
+            "SyntaxError",
+        )
+        if any(term in line for term in failure_terms):
             has_failures = True
         if has_failures:
             cleaned_lines.append(line)
@@ -189,14 +201,11 @@ class Scheduler:
         try:
             async with UnitOfWork(self.db_manager) as uow:
                 manager = WorktreeManager(project_id=self.project_id, uow=uow)
-                cleaned = await asyncio.wait_for(
-                    manager.cleanup_orphan_worktrees(), timeout=10.0
-                )
+                cleaned = await asyncio.wait_for(manager.cleanup_orphan_worktrees(), timeout=10.0)
                 if cleaned:
                     logger.info(f"Cleaned up {len(cleaned)} orphan worktrees in background")
         except Exception as e:
             logger.warning(f"Orphan worktrees cleanup failed or timed out: {e}")
-
 
     async def _process_iteration(self) -> None:
         async with UnitOfWork(self.db_manager) as uow:
@@ -220,9 +229,7 @@ class Scheduler:
                 max_run_time = 3600.0
 
             if run.resource_limits:
-                max_run_time = run.resource_limits.get(
-                    "max_run_time", max_run_time
-                )
+                max_run_time = run.resource_limits.get("max_run_time", max_run_time)
 
             elapsed_run_time = (datetime.now(UTC) - _as_utc(run.started_at)).total_seconds()
             if elapsed_run_time > max_run_time:
@@ -231,9 +238,7 @@ class Scheduler:
                     f"of {max_run_time}s. Aborting."
                 )
                 run.status = RunStatus.FAILED
-                run.summary = (
-                    f"Run exceeded maximum run time budget of {max_run_time} seconds."
-                )
+                run.summary = f"Run exceeded maximum run time budget of {max_run_time} seconds."
                 run.ended_at = datetime.now(UTC)
                 await uow.executions.update_run(run)
 
@@ -265,8 +270,7 @@ class Scheduler:
             has_pending = counts["__pending__"] > 0
             has_blocking_recovery = counts["__blocking_recovery__"] > 0
             only_blocked_human = (
-                counts["__blocked_human__"] > 0
-                and counts["__blocking_recovery__"] == 0
+                counts["__blocked_human__"] > 0 and counts["__blocking_recovery__"] == 0
             )
 
             await self._scrum_master_record_conformity(uow, tasks)
@@ -304,20 +308,13 @@ class Scheduler:
             if has_blocking_recovery:
                 recovery_budget = 0
                 if not os.getenv("PYTEST_CURRENT_TEST"):
-                    recovery_budget = await self._recovery_budget_remaining(
-                        uow, run
-                    )
+                    recovery_budget = await self._recovery_budget_remaining(uow, run)
                     if recovery_budget > 0:
-                        reopened = await self._scrum_master_unblock_failed_tasks(
-                            uow, tasks
-                        )
+                        reopened = await self._scrum_master_unblock_failed_tasks(uow, tasks)
                         if reopened:
                             run.resource_limits = dict(run.resource_limits or {})
                             run.resource_limits[self.RUN_RECOVERY_CYCLES_KEY] = int(
-                                run.resource_limits.get(
-                                    self.RUN_RECOVERY_CYCLES_KEY, 0
-                                )
-                                + 1
+                                run.resource_limits.get(self.RUN_RECOVERY_CYCLES_KEY, 0) + 1
                             )
                             await uow.executions.update_run(run)
                             return
@@ -332,15 +329,12 @@ class Scheduler:
                     run,
                     tasks,
                     counts=self._classify_task_statuses(
-                        await uow.tasks.list_tasks_for_project(
-                            self.project_id
-                        )
+                        await uow.tasks.list_tasks_for_project(self.project_id)
                     ),
                     run_status=RunStatus.BLOCKED_NEEDS_HUMAN_REVIEW,
                 )
                 self._running = False
                 return
-
 
             # Tasks already in BLOCKED_NEEDS_HUMAN_REVIEW: stop the loop.
             if only_blocked_human:
@@ -381,29 +375,37 @@ class Scheduler:
                     task_run = await uow.tasks.create_task_run(task_run_data)
 
                     runner = self.runner_pool.acquire(t)
+                    governed = GovernedExecutionService(runner)
                     try:
-                        runner_context = await asyncio.wait_for(
-                            runner.setup(t, run_id=self.run_id, uow=uow),
-                            timeout=45.0
+                        governed_result = await asyncio.wait_for(
+                            governed.start_task(
+                                GovernedExecutionRequest(
+                                    project_id=self.project_id,
+                                    run_id=self.run_id,
+                                    task=t,
+                                    task_run=task_run,
+                                ),
+                                uow=uow,
+                            ),
+                            timeout=45.0,
                         )
                     except Exception as e:
                         logger.error(
-                            f"Task {t.key} failed during runner setup: {e!r}",
+                            f"Task {t.key} failed during governed dispatch: {e!r}",
                             exc_info=True,
                         )
                         task_run.status = TaskRunStatus.FAILED
-                        task_run.final_summary = f"Runner setup failed: {e!r}"
+                        task_run.final_summary = f"Governed dispatch failed: {e!r}"
                         task_run.ended_at = datetime.now(UTC)
                         await uow.tasks.update_task_run(task_run)
                         await uow.tasks.update_task_status(t.id, TaskStatus.FAILED_SAFE)
                         continue
+                    if governed_result.status != "STARTED":
+                        continue
 
-
-                    # Update task run with runner details
-                    task_run.worktree_path = runner_context.worktree_path
-                    task_run.branch_name = runner_context.branch_name
-                    task_run.sandbox_id = runner_context.sandbox_id
-                    await uow.tasks.update_task_run(task_run)
+                    task_run = governed_result.task_run
+                    if uow.session is not None:
+                        await uow.session.commit()
 
                     if self.execute_pipeline:
                         assert task_run.id is not None
@@ -416,6 +418,11 @@ class Scheduler:
                                 mode=PipelineMode.DEFAULT,
                                 complete_run=False,
                             )
+                            if governed_result.selected_runner_id and uow.runner_pool is not None:
+                                await uow.runner_pool.release_runner_lease(
+                                    governed_result.selected_runner_id,
+                                    success=True,
+                                )
                         except Exception as e:
                             logger.error(
                                 f"Task {t.key} failed during pipeline execution: {e!r}",
@@ -450,7 +457,12 @@ class Scheduler:
                                 await uow.session.commit()
                             latest_runs = await uow.tasks.list_runs_for_task(t.id)
                             if latest_runs:
-                                await runner.cleanup(latest_runs[0], uow=uow)
+                                await governed.cleanup(latest_runs[0], uow=uow)
+                            if governed_result.selected_runner_id and uow.runner_pool is not None:
+                                await uow.runner_pool.release_runner_lease(
+                                    governed_result.selected_runner_id,
+                                    success=False,
+                                )
                             continue
 
                     executing_count += 1
@@ -471,7 +483,9 @@ class Scheduler:
             status = "passed" if task.status == TaskStatus.PR_READY else "blocked"
             blocker = ""
             if status == "blocked":
-                blocker = latest.final_summary if latest and latest.final_summary else "Unknown blocker"
+                blocker = (
+                    latest.final_summary if latest and latest.final_summary else "Unknown blocker"
+                )
             check = {
                 "status": status,
                 "checked_by": AgentRole.SCRUM_MASTER.value,
@@ -544,7 +558,11 @@ class Scheduler:
                 continue
             runs = await uow.tasks.list_runs_for_task(task_id)
             latest = max(runs, key=lambda run: run.id or 0) if runs else None
-            blocker = _clean_error_message(latest.final_summary) if latest and latest.final_summary else "Unknown blocker"
+            blocker = (
+                _clean_error_message(latest.final_summary)
+                if latest and latest.final_summary
+                else "Unknown blocker"
+            )
             contract = metadata.get("task_contract")
             if not isinstance(contract, dict):
                 contract = {}
@@ -707,9 +725,7 @@ class Scheduler:
                             f"(stuck for {elapsed}s). Watchdog aborting."
                         )
                         r.status = TaskRunStatus.FAILED
-                        r.final_summary = (
-                            f"Watchdog terminated unresponsive task after {elapsed}s."
-                        )
+                        r.final_summary = f"Watchdog terminated unresponsive task after {elapsed}s."
                         r.ended_at = datetime.now(UTC)
                         await uow.tasks.update_task_run(r)
                         await uow.tasks.update_task_status(t.id, TaskStatus.FAILED_SAFE)
@@ -717,9 +733,7 @@ class Scheduler:
                         runner = self.runner_pool.acquire(t)
                         await runner.cleanup(r, uow=uow)
 
-    async def _recovery_budget_remaining(
-        self, uow: UnitOfWork, run: domain.Run
-    ) -> int:
+    async def _recovery_budget_remaining(self, uow: UnitOfWork, run: domain.Run) -> int:
         """Return how many additional scheduler recovery cycles are still available.
 
         Honors BudgetsConfig.max_run_recovery_cycles and the absolute USD
@@ -747,9 +761,7 @@ class Scheduler:
                     totals = await model_calls.get_run_totals(
                         project_id=self.project_id, run_id=self.run_id
                     )
-                    spent_usd = float(
-                        totals.get("estimated_cost_usd", 0.0) or 0.0
-                    )
+                    spent_usd = float(totals.get("estimated_cost_usd", 0.0) or 0.0)
             except Exception:
                 spent_usd = 0.0
         limits[self.RUN_PAID_USD_SPENT_KEY] = spent_usd
@@ -763,9 +775,7 @@ class Scheduler:
             return 0
         return max_cycles - cycles_used
 
-    async def _escalate_remaining_blockers(
-        self, uow: UnitOfWork, tasks: list[domain.Task]
-    ) -> int:
+    async def _escalate_remaining_blockers(self, uow: UnitOfWork, tasks: list[domain.Task]) -> int:
         """Move FAILED_SAFE / BLOCKED tasks that exhausted the recovery
         budget into BLOCKED_NEEDS_HUMAN_REVIEW so the run can close
         honestly. Returns the number of escalated tasks.
@@ -811,9 +821,7 @@ class Scheduler:
         run.status = run_status
         run.ended_at = datetime.now(UTC)
 
-        prs_ready_count = counts[TaskStatus.PR_READY.value] + counts[
-            TaskStatus.DONE.value
-        ]
+        prs_ready_count = counts[TaskStatus.PR_READY.value] + counts[TaskStatus.DONE.value]
         blocked_count = counts[TaskStatus.BLOCKED.value]
         failed_safe_count = counts[TaskStatus.FAILED_SAFE.value]
         blocked_human_count = counts[TaskStatus.BLOCKED_NEEDS_HUMAN_REVIEW.value]
@@ -821,9 +829,7 @@ class Scheduler:
         safety_blocks = 0
         audits_svc = cast(Any, uow).audits
         if audits_svc is not None:
-            audits = await audits_svc.list_audit_events_for_project(
-                self.project_id
-            )
+            audits = await audits_svc.list_audit_events_for_project(self.project_id)
             safety_blocks = len(
                 [
                     e
@@ -833,12 +839,9 @@ class Scheduler:
                     and e.payload_redacted.get("decision") == "DENY"
                 ]
             )
-        recovery_cycles_used = int(
-            (run.resource_limits or {}).get(self.RUN_RECOVERY_CYCLES_KEY, 0)
-        )
+        recovery_cycles_used = int((run.resource_limits or {}).get(self.RUN_RECOVERY_CYCLES_KEY, 0))
         paid_usd_spent = float(
-            (run.resource_limits or {}).get(self.RUN_PAID_USD_SPENT_KEY, 0.0)
-            or 0.0
+            (run.resource_limits or {}).get(self.RUN_PAID_USD_SPENT_KEY, 0.0) or 0.0
         )
 
         recommendations: list[str] = []
@@ -855,17 +858,13 @@ class Scheduler:
                 f"and adjust resource budgets or LLM configurations."
             )
         if blocked_count > 0:
-            recommendations.append(
-                "- Resolve dependency tasks that blocked subsequent tasks."
-            )
+            recommendations.append("- Resolve dependency tasks that blocked subsequent tasks.")
         if safety_blocks > 0:
             recommendations.append(
                 "- Review Safety Kernel logs to see why commands or files were blocked."
             )
         if not recommendations:
-            recommendations.append(
-                "- Execution completed cleanly. Ready to merge PRs!"
-            )
+            recommendations.append("- Execution completed cleanly. Ready to merge PRs!")
 
         summary_lines = [
             "Execution Summary:",
@@ -890,12 +889,10 @@ class Scheduler:
                 if t.status != TaskStatus.BLOCKED_NEEDS_HUMAN_REVIEW:
                     continue
                 metadata = dict(t.metadata or {})
-                last_blocker = str(
-                    metadata.get("scrum_master_last_blocker", "Unknown blocker")
-                )[:600]
-                summary_lines.append(
-                    f"- {t.key} ({t.title}): {last_blocker}"
-                )
+                last_blocker = str(metadata.get("scrum_master_last_blocker", "Unknown blocker"))[
+                    :600
+                ]
+                summary_lines.append(f"- {t.key} ({t.title}): {last_blocker}")
 
         run.summary = "\n".join(summary_lines)
         executions_svc = cast(Any, uow).executions
@@ -921,9 +918,7 @@ class Scheduler:
                 f"- **Safety Kernel Blocks**: {safety_blocks}\n"
                 f"- **Recovery Cycles Used**: {recovery_cycles_used}\n"
                 f"- **Paid USD Spent**: ${paid_usd_spent:.4f}\n\n"
-                "### Recommended Next Steps\n"
-                + "\n".join(recommendations)
-                + "\n"
+                "### Recommended Next Steps\n" + "\n".join(recommendations) + "\n"
             )
             try:
                 filepath = os.path.join(project.root_path, "run_summary.md")

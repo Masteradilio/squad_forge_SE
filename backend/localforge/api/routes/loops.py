@@ -1,5 +1,4 @@
-from typing import Any
-from fastapi import APIRouter, HTTPException, Response, status
+from fastapi import APIRouter, HTTPException, status
 
 from localforge.api.schemas import LoopCreateRequest, LoopTriggerRequest
 from localforge.models import domain
@@ -24,8 +23,8 @@ async def create_loop(project_id: int, req: LoopCreateRequest) -> domain.LoopDef
             trigger_k = TriggerKind(req.trigger_kind)
             exec_s = ExecutionStrategy(req.execution_strategy)
             auton_l = AutonomyLevel(req.autonomy)
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=f"Invalid enum value: {e}")
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=f"Invalid enum value: {exc}") from exc
 
         trigger = domain.LoopTrigger(
             kind=trigger_k,
@@ -85,7 +84,9 @@ async def disable_loop(loop_id: int) -> domain.LoopDefinition:
     """Disable a Loop."""
     async with UnitOfWork(db_manager) as uow:
         assert uow.loops is not None
-        loop_def = await uow.loops.update_loop_status(loop_id, status=LoopStatus.DISABLED, enabled=False)
+        loop_def = await uow.loops.update_loop_status(
+            loop_id, status=LoopStatus.DISABLED, enabled=False
+        )
 
         if not loop_def:
             raise HTTPException(status_code=404, detail=f"Loop {loop_id} not found")
@@ -99,8 +100,8 @@ async def pause_loop(loop_id: int) -> domain.LoopDefinition:
         assert uow.loop_coordinator is not None
         try:
             return await uow.loop_coordinator.pause_loop(loop_id)
-        except ValueError as e:
-            raise HTTPException(status_code=404, detail=str(e))
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.post("/loops/{loop_id}/resume")
@@ -110,8 +111,8 @@ async def resume_loop(loop_id: int) -> domain.LoopDefinition:
         assert uow.loop_coordinator is not None
         try:
             return await uow.loop_coordinator.resume_loop(loop_id)
-        except ValueError as e:
-            raise HTTPException(status_code=404, detail=str(e))
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.post("/loops/{loop_id}/run-now")
@@ -130,8 +131,8 @@ async def run_loop_now(loop_id: int, req: LoopTriggerRequest | None = None) -> d
                 idempotency_key=key,
                 payload=payload,
             )
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/loops/{loop_id}/history")

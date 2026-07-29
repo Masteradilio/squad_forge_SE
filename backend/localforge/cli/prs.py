@@ -33,9 +33,7 @@ async def run_prs() -> None:
 
         assert project.id is not None
         tasks = await uow.tasks.list_tasks_for_project(project.id)
-        pr_ready_tasks = [
-            t for t in tasks if t.status in (TaskStatus.PR_READY, TaskStatus.DONE)
-        ]
+        pr_ready_tasks = [t for t in tasks if t.status in (TaskStatus.PR_READY, TaskStatus.DONE)]
 
         if not pr_ready_tasks:
             console.print(
@@ -57,9 +55,7 @@ async def run_prs() -> None:
         pr_task_ids = [task.id for task in pr_ready_tasks if task.id is not None]
         runs_by_task = await uow.tasks.list_runs_for_tasks(pr_task_ids)
         latest_run_ids = [
-            runs[0].id
-            for runs in runs_by_task.values()
-            if runs and runs[0].id is not None
+            runs[0].id for runs in runs_by_task.values() if runs and runs[0].id is not None
         ]
         artifacts_by_run = await uow.audits.list_artifacts_for_task_runs(latest_run_ids)
 

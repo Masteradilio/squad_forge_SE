@@ -6,14 +6,13 @@ from datetime import UTC, datetime
 from typing import Any
 
 import typer
-from rich.console import Console
-from rich.table import Table
-
 from localforge.core.config import load_config
 from localforge.llm.openai_compatible import OpenAICompatibleProvider
 from localforge.models.enums import RunStatus
 from localforge.skills import SkillRegistry
 from localforge.storage import UnitOfWork, db_manager
+from rich.console import Console
+from rich.table import Table
 
 console = Console()
 
@@ -22,7 +21,9 @@ async def _current_project(uow: UnitOfWork):
     assert uow.projects is not None
     project = await uow.projects.get_project_by_path(os.getcwd())
     if not project:
-        console.print("[bold red]Workspace not initialized. Run 'localforge init' first.[/bold red]")
+        console.print(
+            "[bold red]Workspace not initialized. Run 'localforge init' first.[/bold red]"
+        )
         raise typer.Exit(code=1)
     return project
 
@@ -227,9 +228,7 @@ def chief_engineer_freeze_contract_cmd(
         if not os.path.isfile(path):
             console.print(f"[bold red]Architecture contract not found:[/bold red] {contract_path}")
             raise typer.Exit(code=1)
-        contract = ArchitectureContract.model_validate_json(
-            open(path, encoding="utf-8").read()
-        )
+        contract = ArchitectureContract.model_validate_json(open(path, encoding="utf-8").read())
         if not config.chief_engineer.model:
             console.print("[bold red]OPENROUTER_MODEL is not configured.[/bold red]")
             raise typer.Exit(code=1)
@@ -264,7 +263,10 @@ def skills_list_cmd() -> None:
     async def run() -> None:
         async with UnitOfWork(db_manager) as uow:
             project = await _current_project(uow)
-            skills = [skill.model_dump(mode="json") for skill in SkillRegistry(project.root_path).load_all()]
+            skills = [
+                skill.model_dump(mode="json")
+                for skill in SkillRegistry(project.root_path).load_all()
+            ]
             console.print_json(json.dumps(skills))
 
     asyncio.run(run())

@@ -1,12 +1,17 @@
-"""PR Babysitter Loop L2 implementation — review comment handling, isolated worktree fixes, upstream revalidation (V6-1103)."""
+"""PR Babysitter Loop L2 implementation."""
 
 import logging
-from datetime import UTC, datetime
-from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from localforge.services.eval_corpus import LabeledEvent
+from localforge.services.operational_connector import (
+    OperationalRepositoryConnector,
+    PullRequestRecord,
+    ReviewThreadRecord,
+    fetch_all_pages,
+    sanitize_external_text,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -16,19 +21,19 @@ class PRBabysitterAction(BaseModel):
 
     pr_id: int
     event_id: str
-    action_type: str  # SMALL_FIX_WORKTREE, ESCALATE_CONFLICT, NOTIFY_HUMAN, REVALIDATE_UPSTREAM, IGNORE_DUPLICATE
+    action_type: str
     target_file: str | None = None
     target_line: int | None = None
     deduplicated: bool = False
     revalidated_upstream: bool = False
     evidence_invalidated: bool = False
     approved_self_pr: bool = False  # Strictly MUST be False
-    merged_self_pr: bool = False    # Strictly MUST be False
+    merged_self_pr: bool = False  # Strictly MUST be False
     summary: str
 
 
 class PRBabysitterLoopService:
-    """Service managing L2 PR Babysitter — comment deduplication, small fixes, conflict escalation."""
+    """Deduplicate review comments, map small fixes, and escalate conflicts."""
 
     def __init__(self) -> None:
         self.processed_event_ids: set[str] = set()
@@ -43,7 +48,7 @@ class PRBabysitterLoopService:
         - Upstream branch change detection (invalidates stale evidence and revalidates).
         - Small fixes applied only in isolated worktree with exact file/line mapping.
         - Merge conflicts escalated to human notification (no silent overwrite).
-        - Strict prohibition of self-approval or self-merge (approved_self_pr=False, merged_self_pr=False).
+        - Strict prohibition of self-approval or self-merge.
         """
         payload = event.payload
         pr_id = payload.get("pr_id", 0)
@@ -65,7 +70,10 @@ class PRBabysitterLoopService:
         # 2. Upstream branch change check
         evidence_invalidated = False
         if upstream_changed:
-            logger.info("Upstream branch change detected for PR %d — invalidating stale evidence.", pr_id)
+            logger.info(
+                "Upstream branch change detected for PR %d; invalidating stale evidence.",
+                pr_id,
+            )
             evidence_invalidated = True
 
         # 3. Handle Merge Conflicts
@@ -80,7 +88,10 @@ class PRBabysitterLoopService:
                 evidence_invalidated=evidence_invalidated,
                 approved_self_pr=False,
                 merged_self_pr=False,
-                summary=f"Merge conflict in PR #{pr_id} escalated to human review. Silent overwrite prohibited.",
+                summary=(
+                    f"Merge conflict in PR #{pr_id} escalated to human review. "
+                    "Silent overwrite prohibited."
+                ),
             )
 
         # 4. Handle Review Comment Small Fixes
@@ -98,7 +109,10 @@ class PRBabysitterLoopService:
                 evidence_invalidated=evidence_invalidated,
                 approved_self_pr=False,
                 merged_self_pr=False,
-                summary=f"Small fix applied in isolated worktree for PR #{pr_id} at {target_file}:{target_line}.",
+                summary=(
+                    f"Small fix applied in isolated worktree for PR #{pr_id} "
+                    f"at {target_file}:{target_line}."
+                ),
             )
 
         return PRBabysitterAction(
@@ -112,3 +126,57 @@ class PRBabysitterLoopService:
             merged_self_pr=False,
             summary=f"PR #{pr_id} event processed for human notification.",
         )
+
+    def process_from_connector(
+        self,
+        connector: OperationalRepositoryConnector,
+        *,
+        known_pr_heads: dict[int, str] | None = None,
+    ) -> list[PRBabysitterAction]:
+        """Process open PR review state fetched through the connector."""
+        known_heads = known_pr_heads or {}
+        pull_requests = {
+            item.number: item
+            for item in fetch_all_pages(connector.list_pull_requests)
+            if isinstance(item, PullRequestRecord)
+        }
+        actions: list[PRBabysitterAction] = []
+        for item in fetch_all_pages(connector.list_review_threads):
+            if not isinstance(item, ReviewThreadRecord) or item.resolved:
+                continue
+            pr = pull_requests.get(item.pr_number)
+            upstream_changed = (
+                pr is not None
+                and item.pr_number in known_heads
+                and known_heads[item.pr_number] != pr.head_sha
+            )
+            event = LabeledEvent(
+                id=item.external_id,
+                category="PR_REVIEW_COMMENT",
+                title=f"Review comment on PR #{item.pr_number}",
+                payload={
+                    "pr_id": item.pr_number,
+                    "file_path": item.file_path,
+                    "line_number": item.line_number,
+                    "comment": sanitize_external_text(item.body),
+                    "commit_sha": item.commit_sha,
+                },
+                expected_classification="SMALL_FIX",
+                allowed_action="AUTO_FIX",
+                required_approval="HUMAN_MERGE",
+            )
+            actions.append(self.process_pr_event(event, upstream_changed=upstream_changed))
+        for pr in pull_requests.values():
+            if not pr.has_conflicts:
+                continue
+            event = LabeledEvent(
+                id=f"{pr.external_id}:conflict",
+                category="PR_MERGE_CONFLICT",
+                title=sanitize_external_text(pr.title),
+                payload={"pr_id": pr.number, "conflicting_files": []},
+                expected_classification="MERGE_CONFLICT",
+                allowed_action="ESCALATE",
+                required_approval="HUMAN_REVIEW",
+            )
+            actions.append(self.process_pr_event(event, upstream_changed=False))
+        return actions

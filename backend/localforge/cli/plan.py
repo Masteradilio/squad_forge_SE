@@ -73,9 +73,7 @@ async def run_plan(approve: str | None, approve_all: bool) -> None:
             return
 
         # Listing pending plans
-        planning_tasks = [
-            t for t in tasks if t.status in (TaskStatus.BACKLOG, TaskStatus.PLANNING)
-        ]
+        planning_tasks = [t for t in tasks if t.status in (TaskStatus.BACKLOG, TaskStatus.PLANNING)]
         if not planning_tasks:
             console.print("[yellow]No tasks found in BACKLOG or PLANNING status.[/yellow]")
             return

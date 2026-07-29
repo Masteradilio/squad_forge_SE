@@ -35,9 +35,7 @@ def test_api_exposes_core_state_endpoints(tmp_path):
     manager = make_db_manager(tmp_path)
     try:
         ids = seed_api_state(manager, tmp_path)
-        client = TestClient(
-            create_app(db_manager=manager, llm_provider=FakeLLMProvider())
-        )
+        client = TestClient(create_app(db_manager=manager, llm_provider=FakeLLMProvider()))
 
         assert client.get("/projects").json()[0]["id"] == ids["project_id"]
         assert client.get(f"/projects/{ids['project_id']}/tasks").json()[0]["key"] == "LF-1401"
@@ -114,7 +112,10 @@ def test_api_comments_runtimes_and_task_ancestry(tmp_path):
         )
         assert heartbeat.status_code == 200
         assert heartbeat.json()["metadata"]["reason"] == "ollama offline"
-        assert client.get(f"/projects/{ids['project_id']}/runtimes").json()[0]["runtime_id"] == "daemon-1"
+        assert (
+            client.get(f"/projects/{ids['project_id']}/runtimes").json()[0]["runtime_id"]
+            == "daemon-1"
+        )
 
         squad = client.post(
             f"/projects/{ids['project_id']}/squads",
@@ -122,7 +123,9 @@ def test_api_comments_runtimes_and_task_ancestry(tmp_path):
         )
         assert squad.status_code == 200
         assert squad.json()["roles"] == ["Reviewer"]
-        assert client.get(f"/projects/{ids['project_id']}/squads").json()[0]["name"] == "Review Squad"
+        assert (
+            client.get(f"/projects/{ids['project_id']}/squads").json()[0]["name"] == "Review Squad"
+        )
 
         ancestry = client.get(f"/tasks/{ids['task_id']}/ancestry")
         assert ancestry.status_code == 200
@@ -145,6 +148,7 @@ def test_api_dashboard_completion_endpoints(tmp_path):
         async def seed_worktree_path() -> None:
             async with await manager.get_session() as session:
                 from localforge.storage.orm import TaskRunORM
+
                 result = await session.get(TaskRunORM, ids["task_run_id"])
                 assert result is not None
                 result.worktree_path = str(worktree)
@@ -321,7 +325,7 @@ def test_api_cors_and_gzip_middlewares_and_safety_endpoints(tmp_path):
     manager = make_db_manager(tmp_path)
     try:
         ids = seed_api_state(manager, tmp_path)
-        
+
         # Seed a pending safety approval
         async def seed_approval():
             async with UnitOfWork(manager) as uow:
@@ -337,6 +341,7 @@ def test_api_cors_and_gzip_middlewares_and_safety_endpoints(tmp_path):
                         status=domain.ActionApprovalStatus.PENDING,
                     )
                 )
+
         asyncio.run(seed_approval())
 
         client = TestClient(create_app(db_manager=manager))
@@ -428,9 +433,7 @@ def test_api_prd_and_backlog_studio_endpoints(tmp_path):
         assert updated_task["risk_level"] == "medium"
 
         # 7. Test POST /tasks/{task_id}/approve
-        approved_task = client.post(
-            f"/tasks/{login_task['id']}/approve"
-        ).json()
+        approved_task = client.post(f"/tasks/{login_task['id']}/approve").json()
         assert approved_task["status"] == "READY"
 
     finally:
@@ -454,7 +457,7 @@ def test_api_pr_review_center_and_policy_updates(tmp_path):
             "max_repair_attempts": 3,
             "max_files_touched": 5,
             "max_run_duration": 10,
-            "allowed_directories": []
+            "allowed_directories": [],
         }
         policy_res = client.put(policy_url, json=rules_payload)
         assert policy_res.status_code == 200
@@ -478,9 +481,7 @@ def test_api_pr_review_center_and_policy_updates(tmp_path):
         assert "exit_code" in rerun_res.json()
 
         # 5. Test POST PR reviews: reject
-        review_reject_res = client.post(
-            f"/tasks/{ids['task_id']}/pr-review/reject"
-        )
+        review_reject_res = client.post(f"/tasks/{ids['task_id']}/pr-review/reject")
         assert review_reject_res.status_code == 200
         assert review_reject_res.json()["status"] == "FAILED_SAFE"
 
@@ -488,15 +489,15 @@ def test_api_pr_review_center_and_policy_updates(tmp_path):
         async def reset_status():
             async with await manager.get_session() as session:
                 from localforge.storage.orm import TaskORM
+
                 task = await session.get(TaskORM, ids["task_id"])
                 task.status = "PR_READY"
                 await session.commit()
+
         asyncio.run(reset_status())
 
         # Test POST PR reviews: request_adjustment
-        review_adj_res = client.post(
-            f"/tasks/{ids['task_id']}/pr-review/request_adjustment"
-        )
+        review_adj_res = client.post(f"/tasks/{ids['task_id']}/pr-review/request_adjustment")
         assert review_adj_res.status_code == 200
         assert review_adj_res.json()["status"] == "READY"
 
@@ -504,19 +505,19 @@ def test_api_pr_review_center_and_policy_updates(tmp_path):
         asyncio.run(reset_status())
 
         # Test POST PR reviews: accept
-        review_accept_res = client.post(
-            f"/tasks/{ids['task_id']}/pr-review/accept"
-        )
+        review_accept_res = client.post(f"/tasks/{ids['task_id']}/pr-review/accept")
         assert review_accept_res.status_code == 200
         assert review_accept_res.json()["status"] == "DONE"
 
         async def assign_agent():
             async with await manager.get_session() as session:
                 from localforge.storage.orm import TaskORM
+
                 task = await session.get(TaskORM, ids["task_id"])
                 task.assigned_agent_id = 1
                 task.status = "READY"
                 await session.commit()
+
         asyncio.run(assign_agent())
 
         agent_details_res = client.get("/agents/1/details")
@@ -532,9 +533,7 @@ def test_api_pr_review_center_and_policy_updates(tmp_path):
 
         # 8. Test POST restore policy version
         client.put(policy_url, json=rules_payload)
-        restore_res = client.post(
-            f"/projects/{ids['project_id']}/policies/default/restore/1"
-        )
+        restore_res = client.post(f"/projects/{ids['project_id']}/policies/default/restore/1")
         assert restore_res.status_code == 200
 
     finally:
@@ -549,53 +548,63 @@ def test_api_v3_endpoints(tmp_path):
         async def seed_v3_data() -> None:
             async with UnitOfWork(manager) as uow:
                 assert uow.session is not None
-                from localforge.storage.orm import PricingSourceORM, ModelPricingSnapshotORM, ModelCallLedgerORM
                 from localforge.models.enums import ChiefEngineerCallReason
+                from localforge.storage.orm import (
+                    ModelCallLedgerORM,
+                    ModelPricingSnapshotORM,
+                    PricingSourceORM,
+                )
 
                 # Pricing Source
                 source = PricingSourceORM(
-                    provider="OpenAI",
-                    url="https://openai.com/api/pricing/",
-                    notes="Test notes"
+                    provider="OpenAI", url="https://openai.com/api/pricing/", notes="Test notes"
                 )
                 uow.session.add(source)
                 await uow.session.flush()
 
                 # Snapshots
-                uow.session.add(ModelPricingSnapshotORM(
-                    pricing_source_id=source.id,
-                    model_name="gpt-5.5-large",
-                    input_price_per_million=5.0,
-                    output_price_per_million=30.0,
-                    cached_input_price_per_million=2.5,
-                ))
-                uow.session.add(ModelPricingSnapshotORM(
-                    pricing_source_id=source.id,
-                    model_name="gpt-5.4-medium",
-                    input_price_per_million=2.5,
-                    output_price_per_million=15.0,
-                    cached_input_price_per_million=1.25,
-                ))
-                uow.session.add(ModelPricingSnapshotORM(
-                    pricing_source_id=source.id,
-                    model_name="gpt-5.4-mini",
-                    input_price_per_million=0.75,
-                    output_price_per_million=4.5,
-                ))
+                uow.session.add(
+                    ModelPricingSnapshotORM(
+                        pricing_source_id=source.id,
+                        model_name="gpt-5.5-large",
+                        input_price_per_million=5.0,
+                        output_price_per_million=30.0,
+                        cached_input_price_per_million=2.5,
+                    )
+                )
+                uow.session.add(
+                    ModelPricingSnapshotORM(
+                        pricing_source_id=source.id,
+                        model_name="gpt-5.4-medium",
+                        input_price_per_million=2.5,
+                        output_price_per_million=15.0,
+                        cached_input_price_per_million=1.25,
+                    )
+                )
+                uow.session.add(
+                    ModelPricingSnapshotORM(
+                        pricing_source_id=source.id,
+                        model_name="gpt-5.4-mini",
+                        input_price_per_million=0.75,
+                        output_price_per_million=4.5,
+                    )
+                )
 
                 # Model Call Ledger (to populate reports)
-                uow.session.add(ModelCallLedgerORM(
-                    project_id=ids["project_id"],
-                    run_id=ids["run_id"],
-                    task_id=ids["task_id"],
-                    provider="openrouter",
-                    model="gpt-5.5-large",
-                    reason=ChiefEngineerCallReason.SEMANTIC_REPAIR_PLAN.value,
-                    input_tokens=1000,
-                    output_tokens=500,
-                    estimated_cost_usd=0.02,
-                    status="success"
-                ))
+                uow.session.add(
+                    ModelCallLedgerORM(
+                        project_id=ids["project_id"],
+                        run_id=ids["run_id"],
+                        task_id=ids["task_id"],
+                        provider="openrouter",
+                        model="gpt-5.5-large",
+                        reason=ChiefEngineerCallReason.SEMANTIC_REPAIR_PLAN.value,
+                        input_tokens=1000,
+                        output_tokens=500,
+                        estimated_cost_usd=0.02,
+                        status="success",
+                    )
+                )
                 await uow.session.commit()
 
         asyncio.run(seed_v3_data())
@@ -644,7 +653,11 @@ def test_api_v3_endpoints(tmp_path):
         # 6. Test POST /projects/{project_id}/costs/sources
         new_source_res = client.post(
             f"/projects/{ids['project_id']}/costs/sources",
-            json={"provider": "Anthropic", "url": "https://anthropic.com/pricing", "notes": "notes"}
+            json={
+                "provider": "Anthropic",
+                "url": "https://anthropic.com/pricing",
+                "notes": "notes",
+            },
         )
         assert new_source_res.status_code == 200
         new_source = new_source_res.json()
@@ -659,7 +672,7 @@ def test_api_v3_endpoints(tmp_path):
                 "model_name": "claude-opus-4.8",
                 "input_price_per_million": 15.0,
                 "output_price_per_million": 75.0,
-            }
+            },
         )
         assert new_snap_res.status_code == 200
         new_snap = new_snap_res.json()

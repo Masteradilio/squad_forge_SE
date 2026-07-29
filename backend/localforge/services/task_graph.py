@@ -791,12 +791,17 @@ class TaskGraphService:
             fallback_verdict = "FALLBACK_LIGHT_SWARM"
         elif effective_policy.enabled and effective_policy.max_concurrent_workers == 1:
             fallback_verdict = "FALLBACK_SINGLE_WORKER"
+        elif effective_policy.enabled and not effective_policy.registered_decision_contract_ids:
+            fallback_verdict = "EVIDENCE_REQUIRED"
 
         run = domain.DeepSwarmRun(
             plan_id=plan_id,
             status=(
                 DeepSwarmStatus.DISABLED
-                if not effective_policy.enabled or fallback_verdict == "FALLBACK_LIGHT_SWARM"
+                if (
+                    not effective_policy.enabled
+                    or fallback_verdict in {"FALLBACK_LIGHT_SWARM", "EVIDENCE_REQUIRED"}
+                )
                 else DeepSwarmStatus.PENDING
             ),
             policy=effective_policy,
@@ -820,6 +825,8 @@ class TaskGraphService:
             )
         if run.verdict == "FALLBACK_LIGHT_SWARM":
             raise ValueError("Plan fits Light Swarm; Deep Swarm was not enabled.")
+        if run.verdict == "EVIDENCE_REQUIRED":
+            raise ValueError("Deep Swarm requires registered decision-contract evidence.")
         if run.status != DeepSwarmStatus.PENDING:
             raise ValueError(f"Deep Swarm run cannot be enabled from {run.status}.")
         run.status = DeepSwarmStatus.RUNNING

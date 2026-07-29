@@ -1,12 +1,11 @@
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from localforge.models.domain import Task
 from localforge.models.enums import FailureClass, TaskSeniorityClass
 from localforge.storage.orm import ModelCapabilityORM
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 @dataclass(frozen=True)
@@ -47,13 +46,24 @@ class TaskSeniorityClassifier:
 
         # 3. Critical errors or architecture sensitive scope
         text = f"{task.title} {task.description}".lower()
-        if any(term in text for term in ("architecture", "public api", "cross-module", "breaking change")):
+        if any(
+            term in text
+            for term in ("architecture", "public api", "cross-module", "breaking change")
+        ):
             return TaskSeniorityClass.CHIEF_ONLY
 
         # 4. Enforce escalation for previous failures
         if previous_failures:
             # Se houver falhas repetidas ou falhas graves de timeout, drift e api mismatch
-            if any(f in {FailureClass.TIMEOUT, FailureClass.CONTRACT_DRIFT, FailureClass.PUBLIC_API_MISMATCH} for f in previous_failures):
+            if any(
+                f
+                in {
+                    FailureClass.TIMEOUT,
+                    FailureClass.CONTRACT_DRIFT,
+                    FailureClass.PUBLIC_API_MISMATCH,
+                }
+                for f in previous_failures
+            ):
                 return TaskSeniorityClass.CHIEF_ONLY
             if len(previous_failures) >= 2:
                 return TaskSeniorityClass.CHIEF_ONLY
@@ -102,16 +112,16 @@ class LocalWorkerCapabilityRouter:
 
             if orm_cap:
                 disq = orm_cap.disqualified_until
-                if disq and (
-                    disq if disq.tzinfo else disq.replace(tzinfo=UTC)
-                ) > datetime.now(UTC):
-                    reasons.append(f"Model {model_name} is disqualified: {orm_cap.disqualification_reason}")
+                if disq and (disq if disq.tzinfo else disq.replace(tzinfo=UTC)) > datetime.now(UTC):
+                    reasons.append(
+                        f"Model {model_name} is disqualified: {orm_cap.disqualification_reason}"
+                    )
                     return CapabilityDecision(
                         model_tier="chief_engineer",
                         escalate=True,
                         local_draft_allowed=False,
                         rationale="; ".join(reasons),
-                        seniority_class=TaskSeniorityClass.CHIEF_ONLY
+                        seniority_class=TaskSeniorityClass.CHIEF_ONLY,
                     )
 
         if seniority == TaskSeniorityClass.CHIEF_ONLY:
@@ -120,7 +130,7 @@ class LocalWorkerCapabilityRouter:
                 escalate=True,
                 local_draft_allowed=False,
                 rationale="; ".join(reasons),
-                seniority_class=seniority
+                seniority_class=seniority,
             )
         elif seniority == TaskSeniorityClass.CHIEF_LED:
             return CapabilityDecision(
@@ -128,7 +138,7 @@ class LocalWorkerCapabilityRouter:
                 escalate=True,
                 local_draft_allowed=True,
                 rationale="; ".join(reasons),
-                seniority_class=seniority
+                seniority_class=seniority,
             )
         elif seniority == TaskSeniorityClass.LOCAL_ASSISTED:
             return CapabilityDecision(
@@ -136,15 +146,15 @@ class LocalWorkerCapabilityRouter:
                 escalate=False,
                 local_draft_allowed=False,
                 rationale="; ".join(reasons),
-                seniority_class=seniority
+                seniority_class=seniority,
             )
-        else: # LOCAL_ONLY / DETERMINISTIC_ONLY
+        else:  # LOCAL_ONLY / DETERMINISTIC_ONLY
             return CapabilityDecision(
                 model_tier="local_small",
                 escalate=False,
                 local_draft_allowed=False,
                 rationale="; ".join(reasons),
-                seniority_class=seniority
+                seniority_class=seniority,
             )
 
 

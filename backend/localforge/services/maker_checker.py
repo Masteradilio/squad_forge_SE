@@ -1,5 +1,4 @@
 import logging
-from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,7 +26,9 @@ class MakerCheckerService:
         """Initialize a new MakerCheckerVerification request."""
         # Validation: Maker and Checker cannot be the same agent/context ID
         if maker_agent_id == checker_agent_id:
-            raise ValueError(f"Self-verification rejected: maker_agent_id ({maker_agent_id}) cannot be equal to checker_agent_id.")
+            raise ValueError(
+                f"Self-verification rejected: maker_agent_id ({maker_agent_id}) cannot be equal to checker_agent_id."
+            )
 
         verification = domain.MakerCheckerVerification(
             project_id=project_id,
@@ -56,7 +57,9 @@ class MakerCheckerService:
         Returns:
             (verification, enforcement_result, reason)
         """
-        stmt = select(MakerCheckerVerificationORM).where(MakerCheckerVerificationORM.id == verification_id)
+        stmt = select(MakerCheckerVerificationORM).where(
+            MakerCheckerVerificationORM.id == verification_id
+        )
         result = await self.session.execute(stmt)
         orm_obj = result.scalar_one_or_none()
         if not orm_obj:
@@ -98,7 +101,9 @@ class MakerCheckerService:
         await self.session.flush()
         return orm_obj.to_domain(), AutonomyEnforcementResult.ALLOWED, reason
 
-    async def get_verification_for_task_run(self, task_run_id: int) -> domain.MakerCheckerVerification | None:
+    async def get_verification_for_task_run(
+        self, task_run_id: int
+    ) -> domain.MakerCheckerVerification | None:
         """Get the latest verification record for a task run."""
         stmt = (
             select(MakerCheckerVerificationORM)

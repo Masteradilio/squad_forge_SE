@@ -1,17 +1,13 @@
 import pytest
-from datetime import UTC, datetime
-
 from localforge.models import domain
 from localforge.models.enums import (
     AutonomyLevel,
-    ExecutionStrategy,
     LoopRunStatus,
     LoopRunVerdict,
     LoopStatus,
+    TaskStatus,
     TriggerKind,
 )
-from localforge.services.loop_coordinator import LoopCoordinator
-from localforge.services.loop_service import LoopService
 from localforge.storage import UnitOfWork
 
 
@@ -22,7 +18,11 @@ async def test_loop_domain_and_persistence(db_manager) -> None:
         assert uow.projects is not None
         assert uow.loops is not None
 
-        proj = domain.Project(name="Loop Test Project", root_path="E:/tmp/loop_test", default_branch="main")
+        proj = domain.Project(
+            name="Loop Test Project",
+            root_path="E:/tmp/loop_test",
+            default_branch="main",
+        )
         project = await uow.projects.create_project(proj)
 
         trigger = domain.LoopTrigger(kind=TriggerKind.INTERVAL, schedule="10m")
@@ -62,7 +62,11 @@ async def test_loop_coordinator_triage_noop(db_manager) -> None:
         assert uow.loops is not None
         assert uow.loop_coordinator is not None
 
-        proj = domain.Project(name="Loop No-Op Test", root_path="E:/tmp/noop_test", default_branch="main")
+        proj = domain.Project(
+            name="Loop No-Op Test",
+            root_path="E:/tmp/noop_test",
+            default_branch="main",
+        )
         project = await uow.projects.create_project(proj)
 
         loop_def = domain.LoopDefinition(
@@ -88,6 +92,42 @@ async def test_loop_coordinator_triage_noop(db_manager) -> None:
 
 
 @pytest.mark.asyncio
+async def test_loop_coordinator_manual_without_payload_is_noop(db_manager) -> None:
+    """C3: manual triggers without detector evidence must not invent work."""
+    async with UnitOfWork(db_manager) as uow:
+        assert uow.projects is not None
+        assert uow.loops is not None
+        assert uow.loop_coordinator is not None
+
+        project = await uow.projects.create_project(
+            domain.Project(
+                name="Manual No Payload",
+                root_path="E:/tmp/no_payload",
+                default_branch="main",
+            )
+        )
+        loop_def = await uow.loops.create_loop(
+            domain.LoopDefinition(
+                project_id=project.id,  # type: ignore[arg-type]
+                name="No Payload Inspector",
+                repository_path="E:/tmp/no_payload",
+            )
+        )
+
+        run = await uow.loop_coordinator.trigger_loop(
+            loop_id=loop_def.id,  # type: ignore[arg-type]
+            trigger_kind=TriggerKind.MANUAL,
+            idempotency_key="manual_empty_payload",
+            payload=None,
+        )
+
+        assert run.status == LoopRunStatus.NO_OP
+        assert run.triage_verdict == LoopRunVerdict.NO_OP
+        assert run.scheduler_run_id is None
+        assert run.items_processed == 0
+
+
+@pytest.mark.asyncio
 async def test_loop_coordinator_triage_actionable(db_manager) -> None:
     """Test V6-102: Actionable triage creates a scheduler Run and items."""
     async with UnitOfWork(db_manager) as uow:
@@ -95,7 +135,11 @@ async def test_loop_coordinator_triage_actionable(db_manager) -> None:
         assert uow.loops is not None
         assert uow.loop_coordinator is not None
 
-        proj = domain.Project(name="Loop Actionable Test", root_path="E:/tmp/act_test", default_branch="main")
+        proj = domain.Project(
+            name="Loop Actionable Test",
+            root_path="E:/tmp/act_test",
+            default_branch="main",
+        )
         project = await uow.projects.create_project(proj)
 
         loop_def = domain.LoopDefinition(
@@ -131,6 +175,57 @@ async def test_loop_coordinator_triage_actionable(db_manager) -> None:
         assert len(items) == 2
         assert items[0].external_id == "issue_101"
         assert items[1].title == "Add test suite"
+        assert all(item.status == "TASK_CREATED" for item in items)
+        assert all(item.scheduler_task_id is not None for item in items)
+
+        assert uow.tasks is not None
+        tasks = await uow.tasks.list_tasks_for_project(project.id)  # type: ignore[arg-type]
+        assert [task.key for task in tasks] == [
+            f"LOOP-{run.id}-001",
+            f"LOOP-{run.id}-002",
+        ]
+        assert all(task.status == TaskStatus.READY for task in tasks)
+        assert tasks[0].metadata["source"] == "loop_item"
+
+
+@pytest.mark.asyncio
+async def test_loop_coordinator_records_detector_errors_without_work(db_manager) -> None:
+    """C3: detector errors are failed loop evidence, not no-op or fake work."""
+    async with UnitOfWork(db_manager) as uow:
+        assert uow.projects is not None
+        assert uow.loops is not None
+        assert uow.tasks is not None
+        assert uow.loop_coordinator is not None
+
+        project = await uow.projects.create_project(
+            domain.Project(
+                name="Loop Detector Error",
+                root_path="E:/tmp/detector_error",
+                default_branch="main",
+            )
+        )
+        loop_def = await uow.loops.create_loop(
+            domain.LoopDefinition(
+                project_id=project.id,  # type: ignore[arg-type]
+                name="Detector Error Inspector",
+                repository_path="E:/tmp/detector_error",
+            )
+        )
+
+        run = await uow.loop_coordinator.trigger_loop(
+            loop_id=loop_def.id,  # type: ignore[arg-type]
+            trigger_kind=TriggerKind.EVENT,
+            idempotency_key="detector_error_key",
+            payload={"detector_error": "webhook payload could not be parsed"},
+        )
+
+        assert run.status == LoopRunStatus.FAILED
+        assert run.triage_verdict == LoopRunVerdict.FAILED
+        assert run.error_message == "Detector failed: webhook payload could not be parsed"
+        assert run.scheduler_run_id is None
+
+        tasks = await uow.tasks.list_tasks_for_project(project.id)  # type: ignore[arg-type]
+        assert tasks == []
 
 
 @pytest.mark.asyncio
@@ -141,7 +236,11 @@ async def test_loop_coordinator_deduplication(db_manager) -> None:
         assert uow.loops is not None
         assert uow.loop_coordinator is not None
 
-        proj = domain.Project(name="Loop Dedup Test", root_path="E:/tmp/dedup_test", default_branch="main")
+        proj = domain.Project(
+            name="Loop Dedup Test",
+            root_path="E:/tmp/dedup_test",
+            default_branch="main",
+        )
         project = await uow.projects.create_project(proj)
 
         loop_def = domain.LoopDefinition(
@@ -180,7 +279,11 @@ async def test_loop_coordinator_pause_and_resume(db_manager) -> None:
         assert uow.loops is not None
         assert uow.loop_coordinator is not None
 
-        proj = domain.Project(name="Loop Pause Test", root_path="E:/tmp/pause_test", default_branch="main")
+        proj = domain.Project(
+            name="Loop Pause Test",
+            root_path="E:/tmp/pause_test",
+            default_branch="main",
+        )
         project = await uow.projects.create_project(proj)
 
         loop_def = domain.LoopDefinition(
@@ -216,7 +319,6 @@ async def test_loop_coordinator_pause_and_resume(db_manager) -> None:
         assert updated_run_2.status == LoopRunStatus.RUNNING
 
 
-
 @pytest.mark.asyncio
 async def test_loop_coordinator_restart_recovery(db_manager) -> None:
     """Test V6-102: Process restart recovery scans and resumes triaging/running loops."""
@@ -225,7 +327,11 @@ async def test_loop_coordinator_restart_recovery(db_manager) -> None:
         assert uow.loops is not None
         assert uow.loop_coordinator is not None
 
-        proj = domain.Project(name="Loop Restart Test", root_path="E:/tmp/restart_test", default_branch="main")
+        proj = domain.Project(
+            name="Loop Restart Test",
+            root_path="E:/tmp/restart_test",
+            default_branch="main",
+        )
         project = await uow.projects.create_project(proj)
 
         loop_def = domain.LoopDefinition(
@@ -250,4 +356,3 @@ async def test_loop_coordinator_restart_recovery(db_manager) -> None:
         assert len(recovered) == 1
         assert recovered[0].idempotency_key == "interrupted_key_999"
         assert recovered[0].status in (LoopRunStatus.NO_OP, LoopRunStatus.RUNNING)
-

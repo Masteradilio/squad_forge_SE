@@ -1,7 +1,8 @@
-import os
 import json
+import os
 from collections.abc import AsyncIterator
 from typing import Any
+
 import httpx
 
 from localforge.llm.base import (
@@ -38,7 +39,7 @@ def _looks_like_upstream_error(content: str) -> bool:
     lowered = content.strip().lower()
     if not lowered:
         return False
-    if lowered.startswith("{\"error\""):
+    if lowered.startswith('{"error"'):
         return True
     return any(hint in lowered for hint in _UPSTREAM_ERROR_HINTS)
 
@@ -65,6 +66,7 @@ def _ollama_options_overrides() -> dict[str, object]:
     except ValueError:
         return options
     return options
+
 
 class OpenAICompatibleProvider(BaseLLMProvider):
     """LLM provider wrapper using OpenAI-compatible API schemas (e.g.
@@ -191,10 +193,7 @@ class OpenAICompatibleProvider(BaseLLMProvider):
         # upstream Ollama server expects when called with raw JSON
         # instead of the ``-d`` shell wrapper.
         ollama_options = _ollama_options_overrides()
-        if (
-            ollama_options
-            and (self.provider_name or "").lower().startswith("ollama")
-        ):
+        if ollama_options and (self.provider_name or "").lower().startswith("ollama"):
             payload["options"] = ollama_options
         if stream:
             return self._stream_chat_completion(url, headers, payload, timeout)
@@ -221,8 +220,7 @@ class OpenAICompatibleProvider(BaseLLMProvider):
                 content = choices[0].get("message", {}).get("content") or ""
                 if _looks_like_upstream_error(content):
                     raise LLMError(
-                        f"Upstream model error returned inside content: "
-                        f"{content[:300]!r}"
+                        f"Upstream model error returned inside content: {content[:300]!r}"
                     )
                 return str(content)
         except httpx.TimeoutException as e:

@@ -1,16 +1,15 @@
 import asyncio
-import logging
 from typing import Any
 
 import typer
-from rich.console import Console
-from rich.table import Table
-
 from localforge.models.enums import AutonomyLevel
 from localforge.storage import UnitOfWork, db_manager
+from rich.console import Console
 
 console = Console()
-autonomy_app = typer.Typer(help="Manage and inspect Autonomy Policies and Maker/Checker Verifications.")
+autonomy_app = typer.Typer(
+    help="Manage and inspect Autonomy Policies and Maker/Checker Verifications."
+)
 
 
 def _run_async(coro: Any) -> Any:
@@ -19,8 +18,15 @@ def _run_async(coro: Any) -> Any:
 
 @autonomy_app.command("evaluate")
 def evaluate_autonomy(
-    level: str = typer.Option("L1_INSPECT", "--level", "-l", help="L0_SIMULATE, L1_INSPECT, L2_ISOLATED, L3_UNATTENDED"),
-    action_kind: str = typer.Option("write_file", "--action", "-a", help="write_file, run_command, git_commit, pr_ready, git_merge"),
+    level: str = typer.Option(
+        "L1_INSPECT", "--level", "-l", help="L0_SIMULATE, L1_INSPECT, L2_ISOLATED, L3_UNATTENDED"
+    ),
+    action_kind: str = typer.Option(
+        "write_file",
+        "--action",
+        "-a",
+        help="write_file, run_command, git_commit, pr_ready, git_merge",
+    ),
     target: str = typer.Option(None, "--target", "-t", help="Target path or command"),
 ) -> None:
     """Evaluate whether an action is permitted under an AutonomyLevel."""
@@ -30,9 +36,9 @@ def evaluate_autonomy(
             assert uow.autonomy is not None
             try:
                 level_enum = AutonomyLevel(level.upper())
-            except ValueError:
+            except ValueError as exc:
                 console.print(f"[bold red]Invalid AutonomyLevel: {level}[/bold red]")
-                raise typer.Exit(1)
+                raise typer.Exit(1) from exc
 
             allowed, result_code, reason = uow.autonomy.evaluate_action(
                 level=level_enum,
@@ -58,9 +64,13 @@ def verify_pr_ready(task_run_id: int = typer.Argument(..., help="TaskRun ID")) -
             eligible, reason = await uow.maker_checker.verify_pr_ready_eligibility(task_run_id)
 
             if eligible:
-                console.print(f"[bold green]TaskRun {task_run_id} is ELIGIBLE for PR_READY: {reason}[/bold green]")
+                console.print(
+                    f"[bold green]TaskRun {task_run_id} is ELIGIBLE for PR_READY: {reason}[/bold green]"
+                )
             else:
-                console.print(f"[bold red]TaskRun {task_run_id} is INELIGIBLE for PR_READY: {reason}[/bold red]")
+                console.print(
+                    f"[bold red]TaskRun {task_run_id} is INELIGIBLE for PR_READY: {reason}[/bold red]"
+                )
 
     _run_async(_impl())
 
@@ -84,7 +94,9 @@ def pre_pr_check(
             )
 
             if res.passed:
-                console.print(f"[bold green]Pre-PR Gate PASSED for TaskRun {task_run_id}[/bold green]")
+                console.print(
+                    f"[bold green]Pre-PR Gate PASSED for TaskRun {task_run_id}[/bold green]"
+                )
             else:
                 console.print(f"[bold red]Pre-PR Gate FAILED for TaskRun {task_run_id}:[/bold red]")
                 for v in res.violations:

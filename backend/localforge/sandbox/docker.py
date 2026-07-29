@@ -51,9 +51,7 @@ class DockerSandbox(BaseSandbox):
                 await loop.run_in_executor(None, lambda: self.client.images.pull(self.image))
             except Exception as e:
                 self._status = "failed"
-                raise RuntimeError(
-                    f"Failed to pull Docker image '{self.image}': {e}"
-                ) from e
+                raise RuntimeError(f"Failed to pull Docker image '{self.image}': {e}") from e
 
         # Set up options
         abs_worktree = os.path.abspath(self.worktree_path)
@@ -108,9 +106,7 @@ class DockerSandbox(BaseSandbox):
                 timeout=timeout,
             )
         except TimeoutError as e:
-            raise TimeoutError(
-                f"Command execution timed out after {timeout} seconds."
-            ) from e
+            raise TimeoutError(f"Command execution timed out after {timeout} seconds.") from e
 
         exit_code = result.exit_code
         stdout_bytes, stderr_bytes = result.output

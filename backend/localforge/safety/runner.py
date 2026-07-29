@@ -7,10 +7,14 @@ from localforge.models.enums import (
     ActionKind,
     AuditEventActorType,
     AuditEventType,
+    AutonomyLevel,
     RunMode,
 )
+from localforge.safety.action_gateway import ActionGateway
 from localforge.safety.kernel import ActionRequest, SafetyDecision, SafetyKernel
 from localforge.storage import UnitOfWork
+
+__all__ = ["SafetyKernel", "SafetyViolationError", "redact_secrets", "run_safe_command"]
 
 
 class SafetyViolationError(Exception):
@@ -95,8 +99,14 @@ async def run_safe_command(
         risk_level=risk_level,
     )
 
-    # 4. Evaluate request
-    decision, reason = await SafetyKernel.evaluate(request, uow, project_root)
+    # 4. Evaluate request through the common action gateway.
+    gateway_decision = await ActionGateway(uow).evaluate(
+        request,
+        project_root=project_root,
+        autonomy_level=AutonomyLevel.L3_UNATTENDED,
+    )
+    decision = gateway_decision.decision
+    reason = gateway_decision.reason
 
     if decision == SafetyDecision.DENY:
         # Log Audit safety block
@@ -224,9 +234,7 @@ async def run_safe_command(
 
         await sandbox.create()
         try:
-            exit_code, stdout_str, stderr_str = await sandbox.execute(
-                command, timeout=timeout
-            )
+            exit_code, stdout_str, stderr_str = await sandbox.execute(command, timeout=timeout)
         finally:
             await sandbox.destroy()
 
@@ -255,5 +263,5 @@ async def run_safe_command(
 
     except Exception as e:
         if isinstance(e, SafetyViolationError) or isinstance(e, asyncio.TimeoutError):
-            raise e
+            raise
         raise RuntimeError(f"Unexpected error executing command: {e}") from e

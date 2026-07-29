@@ -74,10 +74,9 @@ class FallbackLLMProvider(BaseLLMProvider):
                 "service temporarily unavailable",
             )
             if any(hint in message for hint in upstream_hint):
-                return await self._call_fallback(
-                    messages, response_schema, stream, timeout
-                )
+                return await self._call_fallback(messages, response_schema, stream, timeout)
             raise
+
     async def _call_fallback(
         self,
         messages: list[dict[str, str]],

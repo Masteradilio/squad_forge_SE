@@ -19,6 +19,7 @@ class VisualFidelityGate:
     major layout, spacing, and color differences. It does not perform micro-layout
     OCR or label parsing, and should be combined with layout checks where possible.
     """
+
     def evaluate(
         self,
         *,
@@ -98,9 +99,12 @@ class VisualFidelityGate:
         )
 
 
-def _verify_aspect_ratio(ref_path: str, actual_path: str, metrics: dict[str, object]) -> float | None:
+def _verify_aspect_ratio(
+    ref_path: str, actual_path: str, metrics: dict[str, object]
+) -> float | None:
     try:
         from PIL import Image
+
         with Image.open(ref_path) as ref, Image.open(actual_path) as actual:
             ref_w, ref_h = ref.size
             act_w, act_h = actual.size

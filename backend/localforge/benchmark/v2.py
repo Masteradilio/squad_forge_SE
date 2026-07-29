@@ -54,17 +54,14 @@ class BenchmarkV2Reporter:
         ]
         if manifest.failure_classes:
             lines.extend(
-                f"- {name}: {count}"
-                for name, count in sorted(manifest.failure_classes.items())
+                f"- {name}: {count}" for name, count in sorted(manifest.failure_classes.items())
             )
         else:
             lines.append("- none")
         lines.append("")
         return BenchmarkReport(rating=rating, markdown="\n".join(lines))
 
-    def write_report(
-        self, manifest: BenchmarkRunManifest, output_path: str
-    ) -> BenchmarkReport:
+    def write_report(self, manifest: BenchmarkRunManifest, output_path: str) -> BenchmarkReport:
         report = self.render(manifest)
         path = Path(output_path)
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -73,9 +70,7 @@ class BenchmarkV2Reporter:
 
 
 def _rating(manifest: BenchmarkRunManifest) -> str:
-    all_scenarios = (
-        manifest.acceptance_scenarios_passed == manifest.acceptance_scenarios_total
-    )
+    all_scenarios = manifest.acceptance_scenarios_passed == manifest.acceptance_scenarios_total
     all_tasks_ready = (
         manifest.task_count > 0
         and manifest.pr_ready_count == manifest.task_count

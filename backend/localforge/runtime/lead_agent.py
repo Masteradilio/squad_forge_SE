@@ -104,7 +104,15 @@ class LeadAgentRuntime:
 
         await self.uow.tasks.update_task_status(task_id, TaskStatus.TESTING)
         await self.uow.tasks.update_task_status(task_id, TaskStatus.REVIEWING)
-        await self.uow.tasks.update_task_status(task_id, TaskStatus.PR_READY)
+        await self.uow.tasks.mark_pr_ready(
+            task_id,
+            gate_evidence={
+                "source": "lead_agent_runtime",
+                "task_run_id": task_run_id,
+                "changed_files": changed_files,
+                "commands": command_summaries,
+            },
+        )
         summary = "Lead agent summarized executed actions."
         task_run.final_summary = summary
         await self.uow.tasks.update_task_run(task_run)

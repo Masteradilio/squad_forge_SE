@@ -52,7 +52,7 @@ def is_path_safe(target_path: str, root_path: str) -> bool:
         real_root = os.path.realpath(os.path.abspath(root_path))
 
         # On Windows, drive letters and paths are case-insensitive
-        if os.name == 'nt':
+        if os.name == "nt":
             real_target_norm = os.path.normcase(real_target)
             real_root_norm = os.path.normcase(real_root)
             common = os.path.commonpath([real_target_norm, real_root_norm])
@@ -134,9 +134,6 @@ class SafetyKernel:
                     SafetyDecision.REQUIRE_APPROVAL,
                     f"Command request has escalated risk level: {request.risk_level}",
                 )
-
-
-
 
         # 4. Handle other action requests escalation
         elif request.risk_level in ("high", "medium"):

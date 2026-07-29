@@ -21,6 +21,3 @@ __all__ = [
     "typed_handoffs_router",
     "worktrees_router",
 ]
-
-
-

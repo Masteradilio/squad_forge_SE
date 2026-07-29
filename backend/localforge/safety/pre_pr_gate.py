@@ -2,11 +2,10 @@ import json
 import logging
 import re
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from localforge.models import domain
 from localforge.models.enums import VerificationStatus
 from localforge.storage import UnitOfWork
 
@@ -38,7 +37,7 @@ class PrePRGateResult:
     task_run_id: int
     checks: dict[str, bool] = field(default_factory=dict)
     violations: list[str] = field(default_factory=list)
-    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    timestamp: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -79,7 +78,9 @@ class MechanicalPrePRGate:
         # 1. File Count Limit Check
         if len(files) > max_file_limit:
             checks["file_count_limit"] = False
-            violations.append(f"Modified file count ({len(files)}) exceeds maximum limit ({max_file_limit}).")
+            violations.append(
+                f"Modified file count ({len(files)}) exceeds maximum limit ({max_file_limit})."
+            )
         else:
             checks["file_count_limit"] = True
 
@@ -89,7 +90,9 @@ class MechanicalPrePRGate:
             norm_path = file_path.replace("\\", "/").lower()
             for prot in PROTECTED_PATH_PATTERNS:
                 if prot.lower() in norm_path:
-                    path_violations.append(f"Protected path '{prot}' found in modified file: {file_path}")
+                    path_violations.append(
+                        f"Protected path '{prot}' found in modified file: {file_path}"
+                    )
 
         if path_violations:
             checks["protected_paths"] = False

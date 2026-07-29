@@ -80,9 +80,7 @@ class DeterministicPRDExtractor:
             epics.append(ExtractedEpic(title="Imported PRD", summary="Tasks imported from PRD."))
         return ExtractedPlan(epics=epics, tasks=tasks)
 
-    def _task_from_text(
-        self, text: str, current_epic: ExtractedEpic | None
-    ) -> ExtractedTask:
+    def _task_from_text(self, text: str, current_epic: ExtractedEpic | None) -> ExtractedTask:
         return ExtractedTask(
             epic_title=current_epic.title if current_epic else None,
             title=text,

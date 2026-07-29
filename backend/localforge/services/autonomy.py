@@ -1,5 +1,4 @@
 import logging
-from typing import Any
 
 from localforge.models import domain
 from localforge.models.enums import ActionKind, AutonomyEnforcementResult, AutonomyLevel
@@ -71,7 +70,9 @@ class AutonomyService:
 
         elif action_str == ActionKind.RUN_COMMAND.value:
             if not rule.allow_command_execution:
-                reason = f"Command execution '{target}' rejected under autonomy level {level.value}."
+                reason = (
+                    f"Command execution '{target}' rejected under autonomy level {level.value}."
+                )
                 logger.warning(reason)
                 return False, AutonomyEnforcementResult.DENIED_AUTONOMY_EXCEEDED, reason
 
@@ -93,4 +94,8 @@ class AutonomyService:
                 logger.warning(reason)
                 return False, AutonomyEnforcementResult.DENIED_AUTONOMY_EXCEEDED, reason
 
-        return True, AutonomyEnforcementResult.ALLOWED, f"Action '{action_str}' permitted under {level.value}."
+        return (
+            True,
+            AutonomyEnforcementResult.ALLOWED,
+            f"Action '{action_str}' permitted under {level.value}.",
+        )

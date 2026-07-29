@@ -29,9 +29,7 @@ async def test_local_sandbox_lifecycle(tmp_path):
     assert await sandbox.status() == "running"
 
     # Run hello command
-    exit_code, stdout, stderr = await sandbox.execute(
-        'python -c "print(\'hello\')"'
-    )
+    exit_code, stdout, stderr = await sandbox.execute("python -c \"print('hello')\"")
     assert exit_code == 0
     assert "hello" in stdout
 
@@ -61,9 +59,7 @@ async def test_local_sandbox_timeout(tmp_path):
     await sandbox.create()
 
     with pytest.raises(TimeoutError):
-        await sandbox.execute(
-            'python -c "import time; time.sleep(10)"', timeout=0.1
-        )
+        await sandbox.execute('python -c "import time; time.sleep(10)"', timeout=0.1)
 
     await sandbox.destroy()
 
@@ -76,7 +72,7 @@ async def test_local_sandbox_rejects_shell_composition(tmp_path):
     await sandbox.create()
 
     with pytest.raises(ValueError, match="Shell operators"):
-        await sandbox.execute("python -c \"print(1)\" && echo unsafe")
+        await sandbox.execute('python -c "print(1)" && echo unsafe')
 
     await sandbox.destroy()
 
@@ -114,9 +110,7 @@ async def test_docker_sandbox_mocked(tmp_path):
     mock_container.exec_run.return_value = mock_exec_result
 
     with patch.dict("sys.modules", {"docker": mock_docker}):
-        sandbox = DockerSandbox(
-            str(worktree), image="custom-python", network_enabled=False
-        )
+        sandbox = DockerSandbox(str(worktree), image="custom-python", network_enabled=False)
         assert await sandbox.status() == "stopped"
 
         await sandbox.create()
@@ -131,9 +125,7 @@ async def test_docker_sandbox_mocked(tmp_path):
         assert str(worktree) in kwargs["volumes"]
 
         # Run execute command
-        exit_code, stdout, stderr = await sandbox.execute(
-            "echo something", timeout=5
-        )
+        exit_code, stdout, stderr = await sandbox.execute("echo something", timeout=5)
         assert exit_code == 0
         assert stdout == "docker_out"
         assert stderr == "docker_err"
@@ -203,14 +195,10 @@ async def test_docker_sandbox_rejects_unsafe_archive_member(tmp_path):
 async def test_sandbox_factory_resolution():
     """Verify factory returns appropriate provider according to config & packages."""
     config_local = LocalForgeConfig(
-        sandbox=SandboxConfig(
-            type="local", image="test:latest", network_enabled=False
-        )
+        sandbox=SandboxConfig(type="local", image="test:latest", network_enabled=False)
     )
     config_docker = LocalForgeConfig(
-        sandbox=SandboxConfig(
-            type="docker", image="test:latest", network_enabled=False
-        )
+        sandbox=SandboxConfig(type="docker", image="test:latest", network_enabled=False)
     )
 
     # Local config resolves to LocalSandbox
@@ -313,13 +301,16 @@ async def test_run_safe_command_routes_to_sandbox(tmp_path, db_session):
     from localforge.safety.kernel import SafetyDecision
 
     # Mock the SafetyKernel.evaluate and LocalSandbox.execute methods
-    with patch(
-        "localforge.safety.runner.SafetyKernel.evaluate",
-        return_value=(SafetyDecision.ALLOW, ""),
-    ), patch(
-        "localforge.sandbox.local.LocalSandbox.execute",
-        return_value=(0, "output_from_sandbox_run", ""),
-    ) as mock_exec:
+    with (
+        patch(
+            "localforge.safety.runner.SafetyKernel.evaluate",
+            return_value=(SafetyDecision.ALLOW, ""),
+        ),
+        patch(
+            "localforge.sandbox.local.LocalSandbox.execute",
+            return_value=(0, "output_from_sandbox_run", ""),
+        ) as mock_exec,
+    ):
         exit_code, out, err = await run_safe_command(
             project_id=project.id,
             command="echo 'sandbox-test'",

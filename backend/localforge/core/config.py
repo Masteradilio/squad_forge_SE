@@ -59,6 +59,7 @@ DEFAULT_CONFIG = {
     },
 }
 
+
 class ProjectConfig(BaseModel):
     name: str = Field(default="Default Project")
 
@@ -98,6 +99,7 @@ class SandboxConfig(BaseModel):
     type: str = Field(default="local")
     image: str = Field(default="python:3.12-slim")
     network_enabled: bool = Field(default=False)
+
 
 class BudgetsConfig(BaseModel):
     max_run_time: float = Field(default=5400.0)
@@ -172,11 +174,17 @@ def load_config(cli_args: dict[str, Any] | None = None) -> LocalForgeConfig:
             config_dict["chief_engineer"]["base_url"] = "https://integrate.api.nvidia.com/v1"
             config_dict["chief_engineer"]["model"] = env_file_values["NVIDIA_LLM_MODEL"]
             config_dict["chief_engineer"]["api_key"] = env_file_values["NVIDIA_API_KEY"]
-            if env_file_values.get("OPENROUTER_MODEL") and env_file_values.get("OPENROUTER_API_KEY"):
+            if env_file_values.get("OPENROUTER_MODEL") and env_file_values.get(
+                "OPENROUTER_API_KEY"
+            ):
                 config_dict["chief_engineer"]["fallback_provider"] = "openrouter"
                 config_dict["chief_engineer"]["fallback_base_url"] = "https://openrouter.ai/api/v1"
-                config_dict["chief_engineer"]["fallback_model"] = env_file_values["OPENROUTER_MODEL"]
-                config_dict["chief_engineer"]["fallback_api_key"] = env_file_values["OPENROUTER_API_KEY"]
+                config_dict["chief_engineer"]["fallback_model"] = env_file_values[
+                    "OPENROUTER_MODEL"
+                ]
+                config_dict["chief_engineer"]["fallback_api_key"] = env_file_values[
+                    "OPENROUTER_API_KEY"
+                ]
         else:
             if env_file_values.get("OPENROUTER_MODEL"):
                 config_dict["chief_engineer"]["model"] = env_file_values["OPENROUTER_MODEL"]

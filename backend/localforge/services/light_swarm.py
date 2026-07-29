@@ -9,6 +9,7 @@ Implements V6-800 through V6-804:
 - Pause/kill controls
 - Replayable SwarmExecutionSummary export
 """
+
 import logging
 from datetime import UTC, datetime
 from typing import Any
@@ -22,7 +23,6 @@ from localforge.models.enums import (
     SwarmNodeType,
     SwarmStatus,
     SwarmStrategy,
-    TypedArtifactType,
 )
 from localforge.storage.orm import SwarmPlanORM, SwarmRunORM
 
@@ -35,7 +35,7 @@ MAX_DEPTH = 1
 
 
 class LightSwarmService:
-    """Service managing Light Swarm creation, policy validation, DAG coordination, and observability."""
+    """Service managing Light Swarm creation, policy validation, and DAG state."""
 
     def __init__(self, session: AsyncSession):
         self.session = session
@@ -50,11 +50,15 @@ class LightSwarmService:
         """Return node_ids whose all dependencies are COMPLETED and which are PENDING."""
         ready: list[str] = []
         completed = {
-            nid for nid, st in node_statuses.items()
+            nid
+            for nid, st in node_statuses.items()
             if st in (SwarmNodeStatus.COMPLETED, SwarmNodeStatus.COMPLETED.value)
         }
         for node in nodes:
-            if node_statuses.get(node.node_id) in (SwarmNodeStatus.PENDING, SwarmNodeStatus.PENDING.value):
+            if node_statuses.get(node.node_id) in (
+                SwarmNodeStatus.PENDING,
+                SwarmNodeStatus.PENDING.value,
+            ):
                 if all(dep in completed for dep in node.depends_on):
                     ready.append(node.node_id)
         return ready
@@ -67,9 +71,7 @@ class LightSwarmService:
         policy = plan.policy
 
         # Strategy-level guard: Light allows at most MAX_WORKERS code-changing nodes
-        code_changing = [
-            n for n in plan.nodes if n.node_type == SwarmNodeType.IMPLEMENT
-        ]
+        code_changing = [n for n in plan.nodes if n.node_type == SwarmNodeType.IMPLEMENT]
         if len(code_changing) > MAX_WORKERS:
             return False, (
                 f"Plan has {len(code_changing)} IMPLEMENT nodes; "
@@ -200,20 +202,28 @@ class LightSwarmService:
         """Mark a node COMPLETED, propagate artifacts, advance ready nodes."""
         run_orm, run = await self._load_run(run_id)
 
-        run.node_statuses[node_id] = SwarmNodeStatus.COMPLETED
-        if node_id in run.active_node_ids:
-            run.active_node_ids.remove(node_id)
-
-        run.cumulative_cost_usd += cost_usd
-        run.cumulative_tokens += tokens
-
         # Check budget policy
         plan_orm = await self._load_plan_orm(run.plan_id)
         plan = plan_orm.to_domain()
+        node = next((candidate for candidate in plan.nodes if candidate.node_id == node_id), None)
+        if node is None:
+            raise ValueError(f"Node {node_id} not found in plan {run.plan_id}")
+        if node_id not in run.active_node_ids:
+            raise ValueError(f"Node {node_id} is not owned by an active worker.")
+
+        run.node_statuses[node_id] = SwarmNodeStatus.COMPLETED
+        run.active_node_ids.remove(node_id)
+        run.cumulative_cost_usd += cost_usd
+        run.cumulative_tokens += tokens
+        if artifact_id is not None:
+            node.artifact_id = artifact_id
+            plan_orm.nodes_json = [n.model_dump(mode="json") for n in plan.nodes]
         if run.cumulative_cost_usd > plan.policy.max_cost_usd:
             logger.warning(
                 "SwarmRun %d exceeded budget (%.4f USD > %.4f USD). Killing.",
-                run_id, run.cumulative_cost_usd, plan.policy.max_cost_usd,
+                run_id,
+                run.cumulative_cost_usd,
+                plan.policy.max_cost_usd,
             )
             return await self._kill_run(run_orm, run, "BUDGET_EXCEEDED")
 
@@ -230,11 +240,19 @@ class LightSwarmService:
             for st in run.node_statuses.values()
         )
         if all_done:
-            has_failures = any(
-                st == SwarmNodeStatus.FAILED for st in run.node_statuses.values()
+            has_failures = any(st == SwarmNodeStatus.FAILED for st in run.node_statuses.values())
+            missing_artifact = any(
+                n.output_artifact_type is not None and n.artifact_id is None for n in plan.nodes
             )
-            run.status = SwarmStatus.FAILED if has_failures else SwarmStatus.COMPLETED
-            run.verdict = "NEEDS_REPAIR" if has_failures else "PR_READY"
+            run.status = (
+                SwarmStatus.FAILED if has_failures or missing_artifact else SwarmStatus.COMPLETED
+            )
+            if has_failures:
+                run.verdict = "NEEDS_REPAIR"
+            elif missing_artifact:
+                run.verdict = "EVIDENCE_MISSING"
+            else:
+                run.verdict = "PR_READY"
             run.finished_at = datetime.now(UTC)
 
         await self._flush_run(run_orm, run)
@@ -254,7 +272,12 @@ class LightSwarmService:
 
         # Retry if within limit
         if attempt_count < plan.policy.max_retries_per_node:
-            logger.info("Node %s retry %d/%d", node_id, attempt_count, plan.policy.max_retries_per_node)
+            logger.info(
+                "Node %s retry %d/%d",
+                node_id,
+                attempt_count,
+                plan.policy.max_retries_per_node,
+            )
             run.node_statuses[node_id] = SwarmNodeStatus.PENDING
             await self._flush_run(run_orm, run)
             return run
@@ -272,7 +295,13 @@ class LightSwarmService:
 
         # If all remaining nodes are terminal, conclude run
         all_terminal = all(
-            s in (SwarmNodeStatus.COMPLETED, SwarmNodeStatus.FAILED, SwarmNodeStatus.BLOCKED, SwarmNodeStatus.SKIPPED)
+            s
+            in (
+                SwarmNodeStatus.COMPLETED,
+                SwarmNodeStatus.FAILED,
+                SwarmNodeStatus.BLOCKED,
+                SwarmNodeStatus.SKIPPED,
+            )
             for s in run.node_statuses.values()
         )
         if all_terminal:
@@ -319,7 +348,9 @@ class LightSwarmService:
         run_orm, run = await self._load_run(run_id)
         return await self._kill_run(run_orm, run, "KILLED_BY_USER")
 
-    async def _kill_run(self, run_orm: SwarmRunORM, run: domain.SwarmRun, reason: str) -> domain.SwarmRun:
+    async def _kill_run(
+        self, run_orm: SwarmRunORM, run: domain.SwarmRun, reason: str
+    ) -> domain.SwarmRun:
         run.status = SwarmStatus.KILLED
         run.verdict = reason
         run.finished_at = datetime.now(UTC)
@@ -340,9 +371,7 @@ class LightSwarmService:
         plan = plan_orm.to_domain()
 
         # Collect artifact IDs from completed nodes
-        artifact_ids = [
-            n.artifact_id for n in plan.nodes if n.artifact_id is not None
-        ]
+        artifact_ids = [n.artifact_id for n in plan.nodes if n.artifact_id is not None]
 
         # Compute duration
         duration = 0.0
@@ -417,7 +446,9 @@ class LightSwarmService:
         return orm
 
     async def _flush_run(self, run_orm: SwarmRunORM, run: domain.SwarmRun) -> None:
-        run_orm.status = run.status.value if isinstance(run.status, SwarmStatus) else str(run.status)
+        run_orm.status = (
+            run.status.value if isinstance(run.status, SwarmStatus) else str(run.status)
+        )
         run_orm.active_node_ids_json = list(run.active_node_ids)
         run_orm.cumulative_cost_usd = run.cumulative_cost_usd
         run_orm.cumulative_tokens = run.cumulative_tokens

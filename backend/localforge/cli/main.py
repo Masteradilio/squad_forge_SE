@@ -1,7 +1,8 @@
 import typer
-
 from localforge import __version__
+from localforge.cli.autonomy import autonomy_app
 from localforge.cli.benchmark import benchmark_app
+from localforge.cli.circuit_breakers import breakers_app
 from localforge.cli.control import (
     chief_engineer_app,
     logs_cmd,
@@ -19,30 +20,19 @@ from localforge.cli.costs import costs_app
 from localforge.cli.doctor import doctor_cmd
 from localforge.cli.import_prd import import_prd_cmd
 from localforge.cli.init import init_cmd
-from localforge.cli.autonomy import autonomy_app
-from localforge.cli.circuit_breakers import breakers_app
-from localforge.cli.loops import loops_app
-from localforge.cli.worktree import worktree_app
-from localforge.cli.runners import runners_app
-from localforge.cli.typed_handoffs import handoffs_app
 from localforge.cli.light_swarm import swarm_app
-from localforge.cli.task_graph import graph_app
+from localforge.cli.loops import loops_app
 from localforge.cli.memory import memory_app
 from localforge.cli.operational_loops import ops_loops_app
-
-
-
-
-
-
 from localforge.cli.plan import plan_cmd
-
-
 from localforge.cli.prs import prs_cmd
 from localforge.cli.run import run_cmd
+from localforge.cli.runners import runners_app
 from localforge.cli.squad import squad_app
 from localforge.cli.status import status_cmd
-
+from localforge.cli.task_graph import graph_app
+from localforge.cli.typed_handoffs import handoffs_app
+from localforge.cli.worktree import worktree_app
 
 app = typer.Typer(
     name="localforge",
@@ -110,14 +100,6 @@ app.add_typer(swarm_app, name="swarm")
 app.add_typer(graph_app, name="graph")
 app.add_typer(memory_app, name="memory")
 app.add_typer(ops_loops_app, name="loops-eval")
-
-
-
-
-
-
-
-
 
 
 if __name__ == "__main__":

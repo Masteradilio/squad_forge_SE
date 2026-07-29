@@ -10,6 +10,12 @@
 >
 > Target: LocalForge V6 — governed operational loops and evidence-driven swarms
 
+> Compliance note: the checked V6 completion markers below are historical
+> implementation evidence only. `docs/compliance_backlog_V6.md` reclassifies the
+> current V6 state as architectural alpha until V6.1 compliance gates prove the
+> real governed execution path, immutable evidence, reviewed PR workflow, and
+> observed benchmark metrics.
+
 ## 1. Objective
 
 Close the V5 open-source-readiness work, then evolve LocalForge into a

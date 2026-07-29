@@ -1,10 +1,10 @@
 import pytest
-from unittest.mock import MagicMock
+from localforge.chief_engineer.bundler import EconomyPromptBundler
 from localforge.models import domain
 from localforge.models.enums import ChiefEngineerCallReason, FailureClass
-from localforge.chief_engineer.bundler import EconomyPromptBundler
 from localforge.routing.delegation import LocalWorkDelegationContract
 from localforge.storage import UnitOfWork
+
 
 def test_economy_prompt_bundler_redacts_keys():
     bundler = EconomyPromptBundler()
@@ -19,19 +19,22 @@ def test_economy_prompt_bundler_redacts_keys():
     assert "[REDACTED_PASSWORD]" in redacted_pass
     assert "[REDACTED_TOKEN]" in redacted_pass
 
+
 def test_economy_prompt_bundler_compresses_errors():
     bundler = EconomyPromptBundler()
     huge_error = "Traceback:\n" + "same error line\n" * 100
     compressed = bundler.compress_diff_and_errors(huge_error, max_chars=200)
     assert "[repeated" in compressed
 
+
 def test_economy_prompt_bundler_snippet_selection():
     bundler = EconomyPromptBundler(max_file_chars=50)
     file_content = "\n".join([f"line_{i}" for i in range(1, 100)])
     error_output = 'File "app.py", line 50'
     snippet = bundler.select_relevant_snippets("app.py", file_content, error_output)
-    
+
     assert "Line 50: line_50" in snippet
+
 
 def test_local_work_delegation_limits():
     delegation = LocalWorkDelegationContract(max_file_size=100)
@@ -43,7 +46,7 @@ def test_local_work_delegation_limits():
         risk_level="low",
     )
     task_run = domain.TaskRun(id=1, run_id=1, task_id=100, worktree_path=None)
-    
+
     is_allowed, rationale = delegation.evaluate_delegation(task, task_run)
     assert is_allowed is True
 
@@ -84,43 +87,47 @@ def test_local_work_delegation_limits():
 
 @pytest.mark.asyncio
 async def test_api_simulation_service(db_session):
-    from localforge.services.simulation import APISimulationService
     from localforge.services.model_calls import ModelCallLedgerService
-    
+    from localforge.services.simulation import APISimulationService
+
     ledger_svc = ModelCallLedgerService(db_session)
     simulation_svc = APISimulationService(db_session)
-    
+
     # 1. Record a large model call
-    await ledger_svc.record_call(domain.ModelCallLedger(
-        project_id=1,
-        run_id=20,
-        task_id=200,
-        provider="openrouter",
-        model="minimax/minimax-m3",
-        reason=ChiefEngineerCallReason.SEMANTIC_REPAIR_PLAN,
-        input_tokens=100000,
-        output_tokens=10000,
-        estimated_cost_usd=0.042,
-        status="success"
-    ))
-    
+    await ledger_svc.record_call(
+        domain.ModelCallLedger(
+            project_id=1,
+            run_id=20,
+            task_id=200,
+            provider="openrouter",
+            model="minimax/minimax-m3",
+            reason=ChiefEngineerCallReason.SEMANTIC_REPAIR_PLAN,
+            input_tokens=100000,
+            output_tokens=10000,
+            estimated_cost_usd=0.042,
+            status="success",
+        )
+    )
+
     # 2. Record a local model call (free)
-    await ledger_svc.record_call(domain.ModelCallLedger(
-        project_id=1,
-        run_id=20,
-        task_id=200,
-        provider="ollama",
-        model="granite4.1:8b",
-        reason=ChiefEngineerCallReason.E2E_RETROSPECTIVE,
-        input_tokens=50000,
-        output_tokens=5000,
-        estimated_cost_usd=0.0,
-        status="success"
-    ))
-    
+    await ledger_svc.record_call(
+        domain.ModelCallLedger(
+            project_id=1,
+            run_id=20,
+            task_id=200,
+            provider="ollama",
+            model="granite4.1:8b",
+            reason=ChiefEngineerCallReason.E2E_RETROSPECTIVE,
+            input_tokens=50000,
+            output_tokens=5000,
+            estimated_cost_usd=0.0,
+            status="success",
+        )
+    )
+
     # 3. Simulate costs
     sim = await simulation_svc.simulate_api_only_costs(project_id=1, run_id=20)
-    
+
     assert sim["actual_paid_usd"] == 0.042
     assert sim["openai_simulated_usd"] > 0.0
     assert sim["google_simulated_usd"] > 0.0
@@ -131,39 +138,39 @@ async def test_api_simulation_service(db_session):
 @pytest.mark.asyncio
 async def test_v3_benchmark_harness(db_session):
     from localforge.benchmark.benchmark_runner import V3BenchmarkHarness
-    from localforge.services.project import ProjectService
-    from localforge.services.task import TaskService
     from localforge.services.cost_benchmark import CostBenchmarkService
+    from localforge.services.project import ProjectService
     from localforge.services.simulation import APISimulationService
-    
+    from localforge.services.task import TaskService
+
     # 1. Create a dummy project in DB
     proj_svc = ProjectService(db_session)
-    project = await proj_svc.create_project(domain.Project(
-        name="Benchmark Dummy",
-        root_path="/tmp/benchmark_dummy",
-        default_branch="main"
-    ))
-    
+    project = await proj_svc.create_project(
+        domain.Project(
+            name="Benchmark Dummy", root_path="/tmp/benchmark_dummy", default_branch="main"
+        )
+    )
+
     async with UnitOfWork() as uow:
         uow.session = db_session
         uow.projects = proj_svc
         uow.tasks = TaskService(db_session)
         uow.cost_benchmark = CostBenchmarkService(db_session)
         uow.simulation = APISimulationService(db_session)
-        
+
         harness = V3BenchmarkHarness(uow)
         report = await harness.run_benchmark(project.id)
-        
+
     assert "error" not in report
     assert report["project_name"] == "Benchmark Dummy"
-    
+
     md = harness.generate_markdown_summary(report)
     assert "# V3 Benchmark Acceptance Report" in md
 
 
 def test_task_seniority_classification_evidence():
+    from localforge.models.enums import TaskSeniorityClass
     from localforge.routing.capabilities import TaskSeniorityClassifier
-    from localforge.models.enums import TaskSeniorityClass, FailureClass
 
     classifier = TaskSeniorityClassifier()
 
@@ -177,7 +184,7 @@ def test_task_seniority_classification_evidence():
             "task_contract": {
                 "allowed_files": ["f1.py", "f2.py", "f3.py", "f4.py", "f5.py", "f6.py"]
             }
-        }
+        },
     )
     res = classifier.classify(task_many_files)
     assert res == TaskSeniorityClass.CHIEF_ONLY
@@ -188,19 +195,20 @@ def test_task_seniority_classification_evidence():
         key="LF-102",
         title="Simple task",
         description="Just simple edit",
-        metadata={
-            "task_contract": {
-                "allowed_files": ["f1.py"]
-            }
-        }
+        metadata={"task_contract": {"allowed_files": ["f1.py"]}},
     )
     assert classifier.classify(task_normal) == TaskSeniorityClass.LOCAL_ASSISTED
-    assert classifier.classify(task_normal, previous_failures=[FailureClass.SYNTAX_ERROR, FailureClass.EMPTY_DIFF]) == TaskSeniorityClass.CHIEF_ONLY
+    assert (
+        classifier.classify(
+            task_normal, previous_failures=[FailureClass.SYNTAX_ERROR, FailureClass.EMPTY_DIFF]
+        )
+        == TaskSeniorityClass.CHIEF_ONLY
+    )
 
 
 def test_task_contract_seniority_override_is_hard_rule():
-    from localforge.routing.capabilities import TaskSeniorityClassifier
     from localforge.models.enums import TaskSeniorityClass
+    from localforge.routing.capabilities import TaskSeniorityClassifier
 
     classifier = TaskSeniorityClassifier()
     task = domain.Task(
@@ -373,9 +381,7 @@ def test_v4_benchmark_marks_blocked_needs_human_review_as_partial():
     )
 
     assert status == "PARTIAL"
-    assert any(
-        "BLOCKED_NEEDS_HUMAN_REVIEW" in blocker for blocker in blockers
-    )
+    assert any("BLOCKED_NEEDS_HUMAN_REVIEW" in blocker for blocker in blockers)
 
 
 def test_v4_benchmark_full_pr_ready_unaffected_by_recovery_loop():

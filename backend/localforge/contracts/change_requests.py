@@ -30,12 +30,8 @@ class ContractChangeService:
         public_apis = _strings(contract.get("required_public_apis"))
 
         new_files = [path for path in request.requested_files if path not in allowed_files]
-        forbidden = [
-            dep for dep in request.requested_dependencies if dep in forbidden_dependencies
-        ]
-        new_apis = [
-            api for api in request.requested_public_apis if api not in public_apis
-        ]
+        forbidden = [dep for dep in request.requested_dependencies if dep in forbidden_dependencies]
+        new_apis = [api for api in request.requested_public_apis if api not in public_apis]
         if forbidden:
             return ContractChangeDecision(
                 approved=False,

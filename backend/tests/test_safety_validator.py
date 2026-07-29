@@ -1,6 +1,5 @@
-from localforge.core.policy import PolicyRules
 import pytest
-
+from localforge.core.policy import PolicyRules
 from localforge.safety import command_to_argv, split_shell_commands, validate_command
 from localforge.safety.command_validator import _split_direct_command
 

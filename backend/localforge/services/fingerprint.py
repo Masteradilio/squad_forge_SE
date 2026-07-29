@@ -68,7 +68,9 @@ def compute_test_signature(test_results: list[dict[str, Any]] | dict[str, Any] |
     if isinstance(test_results, str):
         content = test_results
     else:
-        content = str(sorted(test_results.items()) if isinstance(test_results, dict) else test_results)
+        content = str(
+            sorted(test_results.items()) if isinstance(test_results, dict) else test_results
+        )
 
     norm_content = normalize_error_message(content)
     return hashlib.sha256(norm_content.encode("utf-8")).hexdigest()[:16]
@@ -79,7 +81,11 @@ def compute_diff_signature(diff_content: str) -> str:
     if not diff_content:
         return "EMPTY_DIFF"
 
-    lines = [line.strip() for line in diff_content.splitlines() if line.strip() and not line.startswith("@@")]
+    lines = [
+        line.strip()
+        for line in diff_content.splitlines()
+        if line.strip() and not line.startswith("@@")
+    ]
     normalized = "\n".join(lines)
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:16]
 
@@ -102,7 +108,6 @@ def evaluate_attempt_progress(
     current_diff_sig: str,
     current_artifact_sig: str,
     current_fingerprint_hash: str | None = None,
-
     failed_test_count: int = 0,
     previous_failed_test_count: int = 0,
 ) -> domain.AttemptProgressRecord:

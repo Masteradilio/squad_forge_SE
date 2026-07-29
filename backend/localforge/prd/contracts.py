@@ -72,9 +72,7 @@ def _task_contract(task: ExtractedTask) -> TaskContract:
 def _infer_allowed_files(title: str) -> list[str]:
     """Create a conservative generic file contract when the PRD names no files."""
     slug = _slug(title)
-    if _contains_term(
-        title, "documentation", "document", "readme", "guide", "changelog"
-    ):
+    if _contains_term(title, "documentation", "document", "readme", "guide", "changelog"):
         return [f"docs/{slug}.md"]
     if _contains_term(title, "frontend", "interface", "ui", "component", "page", "view"):
         return [
@@ -154,7 +152,9 @@ def _dependencies_for_task(task: ExtractedTask, known_titles: set[str]) -> list[
     dependencies = _string_list_metadata(task, "depends_on")
     if not dependencies:
         dependencies = _string_list_metadata(task, "dependency_titles")
-    return list(dict.fromkeys(item for item in dependencies if item in known_titles and item != task.title))
+    return list(
+        dict.fromkeys(item for item in dependencies if item in known_titles and item != task.title)
+    )
 
 
 def _implementation_notes(task: ExtractedTask) -> list[str]:

@@ -29,9 +29,11 @@ class DatabaseManager:
             connect_args["check_same_thread"] = False
             connect_args["timeout"] = 30
             from sqlalchemy.pool import NullPool
+
             kwargs["poolclass"] = NullPool
             if ":memory:" in db_url:
                 from sqlalchemy.pool import StaticPool
+
                 kwargs["poolclass"] = StaticPool
 
         self.engine: AsyncEngine = create_async_engine(

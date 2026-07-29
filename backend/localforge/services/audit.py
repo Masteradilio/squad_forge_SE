@@ -110,9 +110,7 @@ class AuditService:
         )
         artifacts_by_task_run: dict[int, list[domain.Artifact]] = {}
         for orm_obj in result.scalars().all():
-            artifacts_by_task_run.setdefault(orm_obj.task_run_id, []).append(
-                orm_obj.to_domain()
-            )
+            artifacts_by_task_run.setdefault(orm_obj.task_run_id, []).append(orm_obj.to_domain())
         return artifacts_by_task_run
 
     # Policy Operations
@@ -180,6 +178,7 @@ class AuditService:
 
         # 2. Fetch all artifacts associated with task runs belonging to this run_id
         from localforge.storage.orm import TaskRunORM
+
         task_runs_result = await self.session.execute(
             select(TaskRunORM.id).where(TaskRunORM.run_id == run_id)
         )
@@ -218,13 +217,15 @@ class AuditService:
                 for tr_id in task_run_ids_by_task.get(event.task_id, []):
                     if tr_id in artifacts_by_task_run:
                         for art in artifacts_by_task_run[tr_id]:
-                            artifacts_list.append({
-                                "id": art.id,
-                                "type": art.type.value,
-                                "path": art.path,
-                                "content_hash": art.content_hash,
-                                "summary": art.summary,
-                            })
+                            artifacts_list.append(
+                                {
+                                    "id": art.id,
+                                    "type": art.type.value,
+                                    "path": art.path,
+                                    "content_hash": art.content_hash,
+                                    "summary": art.summary,
+                                }
+                            )
 
             timeline.append(event_data)
 

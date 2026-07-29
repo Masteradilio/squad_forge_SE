@@ -2,12 +2,15 @@ import asyncio
 from typing import Any
 
 import typer
+from localforge.models import domain
+from localforge.models.enums import (
+    MemoryFactCategory,
+    MemoryRelationType,
+    MemoryValidityStatus,
+)
+from localforge.storage import UnitOfWork, db_manager
 from rich.console import Console
 from rich.table import Table
-
-from localforge.models import domain
-from localforge.models.enums import MemoryFactCategory, MemoryRecordKind, MemoryRelationType, MemoryValidityStatus
-from localforge.storage import UnitOfWork, db_manager
 
 console = Console()
 memory_app = typer.Typer(help="Manage provenance-aware operational memory, relations, consolidation, and retrieval.")
@@ -128,7 +131,10 @@ def consolidate(
             policy = domain.MemoryRetentionPolicy(max_fact_age_days=max_age_days)
             res = await uow.memory.consolidate_memory(project_id, policy)
             console.print(
-                f"[cyan]Consolidation complete — Expired: {res['expired_count']} | Duplicates: {res['duplicate_count']} | Active: {res['remaining_active_facts']}[/cyan]"
+                "[cyan]Consolidation complete - "
+                f"Expired: {res['expired_count']} | "
+                f"Duplicates: {res['duplicate_count']} | "
+                f"Active: {res['remaining_active_facts']}[/cyan]"
             )
 
     _run_async(_impl())

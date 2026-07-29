@@ -46,6 +46,7 @@ from localforge.api.schemas import (
 from localforge.core.config import load_config
 from localforge.core.policy import PolicyRules
 from localforge.events.bus import EventBus, LifecycleEvent
+from localforge.gitops.manager import WorktreeManager
 from localforge.llm.base import BaseLLMProvider
 from localforge.llm.openai_compatible import OpenAICompatibleProvider
 from localforge.models import domain
@@ -61,14 +62,12 @@ from localforge.models.enums import (
 from localforge.pipeline import RolePipelineEngine
 from localforge.prd import import_prd
 from localforge.quality.discovery import TestCommandDiscovery
-from localforge.gitops.manager import WorktreeManager
 from localforge.safety.runner import run_safe_command
 from localforge.services.audit import redact_secrets
 from localforge.skills import SkillDefinition, SkillRegistry
 from localforge.storage import DatabaseManager, UnitOfWork
 from localforge.storage import db_manager as default_db_manager
 from localforge.storage.orm import ArtifactORM, TaskRunORM
-
 
 logger = logging.getLogger(__name__)
 
@@ -113,7 +112,6 @@ def create_app(
         return response
 
     @app.get("/health")
-
     async def health() -> dict[str, str]:
         return {"status": "ok"}
 
@@ -127,14 +125,6 @@ def create_app(
     app.include_router(task_graph_router)
     app.include_router(memory_router)
     app.include_router(operational_loops_router)
-
-
-
-
-
-
-
-
 
     @app.get("/projects")
     async def list_projects() -> list[dict[str, Any]]:
@@ -215,9 +205,7 @@ def create_app(
             ]
 
     @app.get("/projects/{project_id}/chief-engineer/calls")
-    async def chief_engineer_calls(
-        project_id: int, run_id: int | None = None
-    ) -> dict[str, Any]:
+    async def chief_engineer_calls(project_id: int, run_id: int | None = None) -> dict[str, Any]:
         config = load_config()
         async with UnitOfWork(manager) as uow:
             assert uow.model_calls is not None
@@ -290,9 +278,7 @@ def create_app(
             return skill.model_dump(mode="json")
 
     @app.put("/projects/{project_id}/skills/{name}")
-    async def update_project_skill(
-        project_id: int, name: str, req: SkillRequest
-    ) -> dict[str, Any]:
+    async def update_project_skill(project_id: int, name: str, req: SkillRequest) -> dict[str, Any]:
         async with UnitOfWork(manager) as uow:
             assert uow.projects is not None
             project = await uow.projects.get_project(project_id)
@@ -485,9 +471,7 @@ def create_app(
             return _dump(runtime)
 
     @app.post("/runtimes/{runtime_id}/heartbeat")
-    async def heartbeat_runtime(
-        runtime_id: str, req: RuntimeHeartbeatRequest
-    ) -> dict[str, Any]:
+    async def heartbeat_runtime(runtime_id: str, req: RuntimeHeartbeatRequest) -> dict[str, Any]:
         async with UnitOfWork(manager) as uow:
             assert uow.coordination is not None
             runtime = await uow.coordination.heartbeat_runtime(
@@ -547,7 +531,9 @@ def create_app(
                     model_profile_id = "Deterministic Gate"
                     provider = "harness"
                 else:
-                    route_val = await uow.routing.get_model_for_role(project_id, meta.default_agent_role)
+                    route_val = await uow.routing.get_model_for_role(
+                        project_id, meta.default_agent_role
+                    )
                     if route_val:
                         model_profile_id = route_val
                         routes = await uow.routing.list_routes(project_id)
@@ -556,7 +542,10 @@ def create_app(
                                 provider = r.provider
                                 break
                     else:
-                        if meta.seniority_class in (domain.SeniorityClass.CHIEF_ONLY, domain.SeniorityClass.CHIEF_LED):
+                        if meta.seniority_class in (
+                            domain.SeniorityClass.CHIEF_ONLY,
+                            domain.SeniorityClass.CHIEF_LED,
+                        ):
                             model_profile_id = "gpt-5.5-large"
                             provider = "openrouter"
                         elif meta.seniority_class == domain.SeniorityClass.LOCAL_ASSISTED:
@@ -566,15 +555,16 @@ def create_app(
                             model_profile_id = "local_small"
                             provider = "ollama"
 
-                composition.append({
-                    "role": role.value,
-                    "seniority_class": meta.seniority_class.value,
-                    "responsibility": meta.responsibility,
-                    "model_profile_id": model_profile_id,
-                    "provider": provider
-                })
+                composition.append(
+                    {
+                        "role": role.value,
+                        "seniority_class": meta.seniority_class.value,
+                        "responsibility": meta.responsibility,
+                        "model_profile_id": model_profile_id,
+                        "provider": provider,
+                    }
+                )
             return composition
-
 
     @app.get("/projects/{project_id}/costs/report")
     async def get_project_costs_report(project_id: int) -> dict[str, Any]:
@@ -587,7 +577,9 @@ def create_app(
 
             assert uow.session is not None
             from sqlalchemy import select
+
             from localforge.storage.orm import ModelCallLedgerORM
+
             res = await uow.session.execute(
                 select(ModelCallLedgerORM).where(ModelCallLedgerORM.project_id == project_id)
             )
@@ -599,9 +591,23 @@ def create_app(
             for call in calls:
                 cost = call.estimated_cost_usd if call.provider == "openrouter" else 0.0
 
-                is_chief = call.provider == "openrouter" or "chief" in call.reason.lower() or "contract" in call.reason.lower() or "repair" in call.reason.lower() or "review" in call.reason.lower()
-                is_small = "pr" in call.reason.lower() or "summary" in call.reason.lower() or "changelog" in call.reason.lower()
-                role_name = "Chief Engineer" if is_chief else ("Release Writer" if is_small else "Developer")
+                is_chief = (
+                    call.provider == "openrouter"
+                    or "chief" in call.reason.lower()
+                    or "contract" in call.reason.lower()
+                    or "repair" in call.reason.lower()
+                    or "review" in call.reason.lower()
+                )
+                is_small = (
+                    "pr" in call.reason.lower()
+                    or "summary" in call.reason.lower()
+                    or "changelog" in call.reason.lower()
+                )
+                role_name = (
+                    "Chief Engineer"
+                    if is_chief
+                    else ("Release Writer" if is_small else "Developer")
+                )
 
                 by_role[role_name] = by_role.get(role_name, 0.0) + cost
 
@@ -610,6 +616,7 @@ def create_app(
                     by_task[task_key] = by_task.get(task_key, 0.0) + cost
 
             from localforge.storage.orm import ModelPricingSnapshotORM
+
             snap_res = await uow.session.execute(select(ModelPricingSnapshotORM))
             snapshots = [_dump(s.to_domain()) for s in snap_res.scalars().all()]
 
@@ -617,7 +624,7 @@ def create_app(
                 "benchmarks": benchmarks,
                 "by_role": by_role,
                 "by_task": by_task,
-                "snapshots": snapshots
+                "snapshots": snapshots,
             }
 
     @app.get("/projects/{project_id}/costs/simulate")
@@ -640,20 +647,20 @@ def create_app(
             return await uow.cost_benchmark.calculate_benchmarks(project_id)
 
     @app.post("/projects/{project_id}/costs/sources")
-    async def create_pricing_source(project_id: int, req: PricingSourceCreateRequest) -> dict[str, Any]:
+    async def create_pricing_source(
+        project_id: int, req: PricingSourceCreateRequest
+    ) -> dict[str, Any]:
         async with UnitOfWork(manager) as uow:
             assert uow.model_calls is not None
             source = await uow.model_calls.create_pricing_source(
-                domain.PricingSource(
-                    provider=req.provider,
-                    url=req.url,
-                    notes=req.notes
-                )
+                domain.PricingSource(provider=req.provider, url=req.url, notes=req.notes)
             )
             return _dump(source)
 
     @app.put("/projects/{project_id}/costs/snapshots")
-    async def update_pricing_snapshot(project_id: int, req: PricingSnapshotUpdateRequest) -> dict[str, Any]:
+    async def update_pricing_snapshot(
+        project_id: int, req: PricingSnapshotUpdateRequest
+    ) -> dict[str, Any]:
         async with UnitOfWork(manager) as uow:
             assert uow.model_calls is not None
             snapshot = await uow.model_calls.update_pricing_snapshot(
@@ -664,9 +671,6 @@ def create_app(
                 cached_input_price_per_million=req.cached_input_price_per_million,
             )
             return _dump(snapshot)
-
-
-
 
     @app.post("/tasks/{task_id}/pipeline")
     async def run_role_pipeline(task_id: int, req: PipelineRunRequest) -> dict[str, Any]:
@@ -962,7 +966,7 @@ def create_app(
             approval.decided_at = datetime.now(UTC)
             approval.decided_by = "local-api"
             updated = await uow.safety.update_approval(approval)
-            
+
             # Publish event
             await app.state.event_bus.publish(
                 LifecycleEvent(
@@ -982,9 +986,7 @@ def create_app(
             return [_dump(epic) for epic in epics]
 
     @app.post("/projects/{project_id}/import-prd")
-    async def api_import_prd(
-        project_id: int, req: ImportPRDRequest
-    ) -> dict[str, Any]:
+    async def api_import_prd(project_id: int, req: ImportPRDRequest) -> dict[str, Any]:
         try:
             result = await import_prd(
                 path=req.path,
@@ -997,9 +999,7 @@ def create_app(
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.put("/tasks/{task_id}")
-    async def update_task(
-        task_id: int, req: TaskUpdateRequest
-    ) -> dict[str, Any]:
+    async def update_task(task_id: int, req: TaskUpdateRequest) -> dict[str, Any]:
         async with UnitOfWork(manager) as uow:
             assert uow.tasks is not None
             task = await uow.tasks.get_task(task_id)
@@ -1040,9 +1040,7 @@ def create_app(
         async with UnitOfWork(manager) as uow:
             assert uow.tasks is not None
             try:
-                updated = await uow.tasks.update_task_status(
-                    task_id, TaskStatus.READY
-                )
+                updated = await uow.tasks.update_task_status(task_id, TaskStatus.READY)
             except ValueError as exc:
                 raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -1072,10 +1070,7 @@ def create_app(
                 req_copy.pop("history", None)
                 rules_validated = PolicyRules.model_validate(req_copy)
             except ValidationError as exc:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Invalid policy rules: {exc}"
-                ) from exc
+                raise HTTPException(status_code=400, detail=f"Invalid policy rules: {exc}") from exc
 
             old_rules = dict(policy.rules)
             history = old_rules.pop("history", [])
@@ -1083,7 +1078,7 @@ def create_app(
             history_entry = {
                 "version": len(history) + 1,
                 "updated_at": datetime.now(UTC).isoformat(),
-                "rules": old_rules
+                "rules": old_rules,
             }
             history.append(history_entry)
 
@@ -1112,9 +1107,7 @@ def create_app(
 
             task_runs = await uow.tasks.list_runs_for_task(task_id)
             if not task_runs:
-                raise HTTPException(
-                    status_code=400, detail="No run exists for this task"
-                )
+                raise HTTPException(status_code=400, detail="No run exists for this task")
 
             task_runs = sorted(task_runs, key=lambda r: r.started_at, reverse=True)
             latest_run = task_runs[0]
@@ -1202,9 +1195,7 @@ def create_app(
                     worktree_path = task_runs[0].worktree_path
 
             if not os.path.exists(worktree_path):
-                raise HTTPException(
-                    status_code=404, detail=f"Path not found: {worktree_path}"
-                )
+                raise HTTPException(status_code=404, detail=f"Path not found: {worktree_path}")
 
             if os.getenv("PYTEST_CURRENT_TEST"):
                 return {"status": "ok", "path": worktree_path, "opened": False}
@@ -1214,12 +1205,13 @@ def create_app(
                     os.startfile(worktree_path)
                 else:
                     import subprocess
+
                     subprocess.run(["open", worktree_path], check=True)
-            except Exception as e:
-                logger.warning("Failed to open local path %s: %s", worktree_path, e)
+            except Exception as exc:
+                logger.warning("Failed to open local path %s: %s", worktree_path, exc)
                 raise HTTPException(
                     status_code=500, detail="Failed to open local path"
-                )
+                ) from exc
 
             return {"status": "ok", "path": worktree_path}
 
@@ -1239,9 +1231,7 @@ def create_app(
 
             task_runs = await uow.tasks.list_runs_for_task(task_id)
             if not task_runs:
-                raise HTTPException(
-                    status_code=400, detail="No run exists for this task"
-                )
+                raise HTTPException(status_code=400, detail="No run exists for this task")
 
             task_runs = sorted(task_runs, key=lambda r: r.started_at, reverse=True)
             latest_run = task_runs[0]
@@ -1265,15 +1255,13 @@ def create_app(
                     task_id=task_id,
                     timeout=60.0,
                 )
-            except Exception as e:
+            except Exception as exc:
                 logger.warning(
                     "Failed to run discovered test command for task %s: %s",
                     task_id,
-                    e,
+                    exc,
                 )
-                raise HTTPException(
-                    status_code=500, detail="Failed to run command"
-                )
+                raise HTTPException(status_code=500, detail="Failed to run command") from exc
 
             return {
                 "exit_code": exit_code,
@@ -1290,20 +1278,12 @@ def create_app(
             assert uow.tasks is not None
             try:
                 if action == "accept":
-                    updated = await uow.tasks.update_task_status(
-                        task_id, TaskStatus.DONE
-                    )
+                    updated = await uow.tasks.update_task_status(task_id, TaskStatus.DONE)
                 elif action == "reject":
-                    updated = await uow.tasks.update_task_status(
-                        task_id, TaskStatus.FAILED_SAFE
-                    )
+                    updated = await uow.tasks.update_task_status(task_id, TaskStatus.FAILED_SAFE)
                 else:  # request_adjustment
-                    await uow.tasks.update_task_status(
-                        task_id, TaskStatus.FAILED_SAFE
-                    )
-                    updated = await uow.tasks.update_task_status(
-                        task_id, TaskStatus.READY
-                    )
+                    await uow.tasks.update_task_status(task_id, TaskStatus.FAILED_SAFE)
+                    updated = await uow.tasks.update_task_status(task_id, TaskStatus.READY)
             except ValueError as exc:
                 raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -1377,8 +1357,8 @@ def create_app(
                     audit_res = await session.execute(
                         select(AuditEventORM)
                         .where(
-                            (AuditEventORM.task_id.in_(assigned_task_ids)) |
-                            (AuditEventORM.actor_id == agent.name)
+                            (AuditEventORM.task_id.in_(assigned_task_ids))
+                            | (AuditEventORM.actor_id == agent.name)
                         )
                         .order_by(AuditEventORM.created_at.desc())
                         .limit(100)
@@ -1388,8 +1368,8 @@ def create_app(
                 handoff_res = await session.execute(
                     select(HandoffORM)
                     .where(
-                        (HandoffORM.from_role == agent.role.value) |
-                        (HandoffORM.to_role == agent.role.value)
+                        (HandoffORM.from_role == agent.role.value)
+                        | (HandoffORM.to_role == agent.role.value)
                     )
                     .order_by(HandoffORM.created_at.desc())
                     .limit(50)
@@ -1400,32 +1380,25 @@ def create_app(
                 latest_run = None
                 if agent.current_task_id:
                     current_task = next(
-                        (t for t in assigned_tasks if t.id == agent.current_task_id),
-                        None
+                        (t for t in assigned_tasks if t.id == agent.current_task_id), None
                     )
                     if not current_task:
                         t_res = await session.get(TaskORM, agent.current_task_id)
                         if t_res:
                             current_task = t_res
 
-                    current_runs = [
-                        tr for tr in task_runs if tr.task_id == agent.current_task_id
-                    ]
+                    current_runs = [tr for tr in task_runs if tr.task_id == agent.current_task_id]
                     if current_runs:
                         latest_run = current_runs[0]
 
                 return {
                     "agent": _dump(agent),
-                    "current_task": (
-                        _dump(current_task.to_domain()) if current_task else None
-                    ),
-                    "latest_run": (
-                        _dump(latest_run.to_domain()) if latest_run else None
-                    ),
+                    "current_task": (_dump(current_task.to_domain()) if current_task else None),
+                    "latest_run": (_dump(latest_run.to_domain()) if latest_run else None),
                     "handoffs": [_dump(h.to_domain()) for h in handoffs],
                     "artifacts": [_dump(a.to_domain()) for a in artifacts],
                     "actions": [_dump(ap.to_domain()) for ap in approvals],
-                    "logs": [_dump(l.to_domain()) for l in logs],
+                    "logs": [_dump(log.to_domain()) for log in logs],
                 }
 
     @app.post("/tasks/{task_id}/control/{action}")
@@ -1449,17 +1422,13 @@ def create_app(
 
             if action == "block":
                 try:
-                    updated = await uow.tasks.update_task_status(
-                        task_id, TaskStatus.BLOCKED
-                    )
+                    updated = await uow.tasks.update_task_status(task_id, TaskStatus.BLOCKED)
                 except ValueError as exc:
                     raise HTTPException(status_code=400, detail=str(exc)) from exc
 
             else:
                 if not latest_run:
-                    raise HTTPException(
-                        status_code=400, detail="No active run to control"
-                    )
+                    raise HTTPException(status_code=400, detail="No active run to control")
 
                 run = await uow.executions.get_run(latest_run.run_id)
                 if not run:
@@ -1470,6 +1439,7 @@ def create_app(
                     if latest_run.status == TaskRunStatus.RUNNING:
                         async with await manager.get_session() as session:
                             from localforge.storage.orm import TaskRunORM
+
                             db_tr = await session.get(TaskRunORM, latest_run.id)
                             if db_tr:
                                 db_tr.status = "PENDING"
@@ -1479,12 +1449,11 @@ def create_app(
                 elif action == "terminate":
                     run.status = RunStatus.CANCELLED
                     try:
-                        await uow.tasks.update_task_status(
-                            task_id, TaskStatus.CANCELLED
-                        )
+                        await uow.tasks.update_task_status(task_id, TaskStatus.CANCELLED)
                     except ValueError:
                         async with await manager.get_session() as session:
                             from localforge.storage.orm import TaskORM
+
                             db_task = await session.get(TaskORM, task_id)
                             if db_task:
                                 db_task.status = "CANCELLED"
@@ -1509,9 +1478,7 @@ def create_app(
             return _dump(updated)
 
     @app.post("/projects/{project_id}/policies/{name}/restore/{version}")
-    async def restore_policy_version(
-        project_id: int, name: str, version: int
-    ) -> dict[str, Any]:
+    async def restore_policy_version(project_id: int, name: str, version: int) -> dict[str, Any]:
         async with UnitOfWork(manager) as uow:
             assert uow.audits is not None
             policy = await uow.audits.get_project_policy(project_id, name)
@@ -1538,6 +1505,7 @@ def create_app(
     )
     if os.path.isdir(frontend_dist):
         from fastapi.staticfiles import StaticFiles
+
         app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="frontend")
 
     return app

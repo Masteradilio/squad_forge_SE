@@ -2,8 +2,6 @@ import asyncio
 import json
 
 import pytest
-from pydantic import ValidationError
-
 from localforge.chief_engineer.service import ChiefEngineerRepairPlan, ChiefEngineerService
 from localforge.llm.fake import FakeLLMProvider
 from localforge.models import domain
@@ -13,6 +11,7 @@ from localforge.prd.schemas import ExtractedPlan, ExtractedTask
 from localforge.storage import UnitOfWork
 from localforge.storage.bootstrap import bootstrap_database
 from localforge.storage.database import DatabaseManager
+from pydantic import ValidationError
 
 
 def test_chief_engineer_contract_review_records_paid_call(tmp_path):
@@ -125,7 +124,9 @@ def test_chief_engineer_semantic_repair_records_paid_call(tmp_path):
             assert uow.executions is not None
             assert uow.model_calls is not None
             project = await uow.projects.create_project(
-                domain.Project(name="Phase 34 Repair", root_path=str(tmp_path), default_branch="main")
+                domain.Project(
+                    name="Phase 34 Repair", root_path=str(tmp_path), default_branch="main"
+                )
             )
             assert project.id is not None
             run = await uow.executions.create_run(

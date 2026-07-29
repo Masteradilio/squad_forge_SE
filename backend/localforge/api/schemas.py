@@ -295,5 +295,3 @@ class MemoryRetrieveRequest(BaseModel):
     category: str | None = None
     validity: str | None = None
     limit: int = 5
-
-

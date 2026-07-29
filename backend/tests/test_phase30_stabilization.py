@@ -3,8 +3,6 @@ from typing import Any, cast
 from unittest.mock import MagicMock
 
 import pytest
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from localforge.cli.plan import run_plan
 from localforge.cli.prs import run_prs
 from localforge.gitops.manager import WorktreeManager
@@ -15,6 +13,7 @@ from localforge.services.audit import AuditService
 from localforge.services.project import ProjectService
 from localforge.storage import UnitOfWork
 from localforge.storage.artifacts import ArtifactStore
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 @pytest.mark.anyio
@@ -34,8 +33,8 @@ async def test_safety_kernel_cmd_injection_blocking(db_session):
         rules={
             "blocked_commands": ["rm -rf", "sh", "bash"],
             "protected_paths": [".env"],
-            "allowed_commands": ["git", "pytest"]
-        }
+            "allowed_commands": ["git", "pytest"],
+        },
     )
     await uow.audits.create_policy(policy)
     await db_session.commit()
@@ -47,11 +46,12 @@ async def test_safety_kernel_cmd_injection_blocking(db_session):
         task_id=1,
         kind="run_command",
         payload={"command": "git status && rm -rf /"},
-        purpose="malicious test"
+        purpose="malicious test",
     )
     decision, reason = await SafetyKernel.evaluate(req, uow, "/tmp")
     assert decision == SafetyDecision.DENY
     assert "Blocked command" in reason or "shell chaining" in reason or "AST" in reason
+
 
 @pytest.mark.anyio
 async def test_artifact_store_atomic_writes(tmp_path):
@@ -63,6 +63,7 @@ async def test_artifact_store_atomic_writes(tmp_path):
     # Mock create_artifact to return whatever artifact was passed to it
     async def mock_create_artifact(art):
         return art
+
     uow.audits.create_artifact = mock_create_artifact
 
     store = ArtifactStore(uow)
@@ -76,22 +77,16 @@ async def test_artifact_store_atomic_writes(tmp_path):
         run_id=1,
         filename="tests.md",
         content="some content",
-        summary="some summary"
+        summary="some summary",
     )
 
     resolved_path = os.path.join(
-        project_root, 
-        ".localforge", 
-        "artifacts", 
-        "runs", 
-        "1", 
-        "tasks", 
-        "lf-1001", 
-        "tests.md"
+        project_root, ".localforge", "artifacts", "runs", "1", "tasks", "lf-1001", "tests.md"
     )
     assert os.path.exists(resolved_path)
     with open(resolved_path, encoding="utf-8") as f:
         assert f.read() == "some content"
+
 
 @pytest.mark.anyio
 async def test_worktree_manager_lock_concurrency(tmp_path, db_session):
@@ -113,6 +108,7 @@ async def test_worktree_manager_lock_concurrency(tmp_path, db_session):
     lock2 = WorktreeManager._get_worktree_lock(str(tmp_path / "wt1"))
     assert lock is lock2
 
+
 @pytest.mark.anyio
 async def test_cli_plan_and_run_integration(tmp_path, monkeypatch):
     """Verify that CLI plan and run execute transitions safely."""
@@ -129,10 +125,12 @@ async def test_cli_plan_and_run_integration(tmp_path, monkeypatch):
 
     # 4. Inject a new DatabaseManager to override the imported ones
     import localforge.storage.database as db_mod
+
     test_manager = db_mod.DatabaseManager(test_db_url)
 
     # Bootstrap the temporary database
     from localforge.storage.bootstrap import bootstrap_database
+
     await bootstrap_database(test_manager)
 
     # Patch original db_managers
@@ -140,14 +138,17 @@ async def test_cli_plan_and_run_integration(tmp_path, monkeypatch):
     db_mod.db_manager = test_manager
 
     import localforge.storage as storage_mod
+
     original_storage_manager = storage_mod.db_manager
     storage_mod.db_manager = test_manager
 
     import localforge.cli.plan as plan_mod
+
     original_plan_manager = plan_mod.db_manager
     plan_mod.db_manager = test_manager
 
     import localforge.cli.prs as prs_mod
+
     original_prs_manager = prs_mod.db_manager
     prs_mod.db_manager = test_manager
 
@@ -159,11 +160,7 @@ async def test_cli_plan_and_run_integration(tmp_path, monkeypatch):
             assert uow.tasks is not None
 
             proj = await uow.projects.create_project(
-                domain.Project(
-                    name="CliProj",
-                    root_path=str(tmp_path),
-                    default_branch="main"
-                )
+                domain.Project(name="CliProj", root_path=str(tmp_path), default_branch="main")
             )
             t = await uow.tasks.create_task(
                 domain.Task(
@@ -171,7 +168,7 @@ async def test_cli_plan_and_run_integration(tmp_path, monkeypatch):
                     key="LF-3001",
                     title="Test stabilization",
                     description="Stabilize OS",
-                    acceptance_criteria=["Stable build"]
+                    acceptance_criteria=["Stable build"],
                 )
             )
             assert uow.session is not None
@@ -180,7 +177,7 @@ async def test_cli_plan_and_run_integration(tmp_path, monkeypatch):
         # 2. Test plan command - list and then approve task
         # Approve a specific task plan
         await run_plan(approve="LF-3001", approve_all=False)
-        
+
         async with uow:
             refreshed_t = await uow.tasks.get_task(t.id)
             assert refreshed_t is not None
@@ -205,8 +202,8 @@ async def test_cli_prs_uses_pr_artifact_type(tmp_path, monkeypatch, db_session):
     os.makedirs(os.path.join(tmp_path, ".localforge"), exist_ok=True)
 
     import localforge.cli.prs as prs_mod
-    from localforge.services.task import TaskService
     from localforge.services.execution import ExecutionService
+    from localforge.services.task import TaskService
 
     uow = UnitOfWork()
     uow.session = db_session

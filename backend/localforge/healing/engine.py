@@ -249,9 +249,7 @@ class SelfHealingEngine:
             run_id=self.run_id,
             filename="repair.md",
             content=(
-                "# Repair Attempt\n\n"
-                f"Failure class: {failure_class.value}\n\n"
-                f"Path: {action.path}\n"
+                f"# Repair Attempt\n\nFailure class: {failure_class.value}\n\nPath: {action.path}\n"
             ),
             summary=f"Repair attempt for {failure_class.value}",
         )

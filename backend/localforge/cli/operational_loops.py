@@ -2,17 +2,16 @@ import asyncio
 from typing import Any
 
 import typer
-from rich.console import Console
-from rich.table import Table
-
 from localforge.services.ci_sweeper_loop import CISweeperLoopService
 from localforge.services.daily_triage_loop import DailyTriageLoopService
 from localforge.services.eval_corpus import EvaluationCorpusService
 from localforge.services.pr_babysitter_loop import PRBabysitterLoopService
 from localforge.services.strategy_comparator import StrategyComparatorService
+from rich.console import Console
+from rich.table import Table
 
 console = Console()
-ops_loops_app = typer.Typer(help="Manage and evaluate Phase 11 operational loops (L1 Triage, L2 CI Sweeper, L2 PR Babysitter) and strategy matrix.")
+ops_loops_app = typer.Typer(help=("Manage and evaluate Phase 11 operational loops (L1 Triage, L2 CI Sweeper, L2 PR Babysitter) and strategy matrix."))
 
 
 def _run_async(coro: Any) -> Any:
@@ -61,10 +60,21 @@ def run_triage(
 
     for f in findings:
         color = "red" if f.priority == 1 else ("yellow" if f.priority == 2 else "gray")
-        table.add_row(f.item_id, f"[{color}]{f.priority}[/{color}]", f.classification, f.recommended_action, f"${f.cost_usd:.4f}")
+        table.add_row(
+            f.item_id,
+            f"[{color}]{f.priority}[/{color}]",
+            f.classification,
+            f.recommended_action,
+            f"${f.cost_usd:.4f}",
+        )
     console.print(table)
 
-    console.print(f"[cyan]Critique: verdict={critique.verdict} actionable={critique.actionable_count} noop={critique.noop_count} cost=${critique.total_cost_usd:.4f}[/cyan]")
+    console.print(
+        f"[cyan]Critique: verdict={critique.verdict} "
+        f"actionable={critique.actionable_count} "
+        f"noop={critique.noop_count} "
+        f"cost=${critique.total_cost_usd:.4f}[/cyan]"
+    )
 
 
 @ops_loops_app.command("ci-sweeper")
@@ -76,7 +86,10 @@ def run_ci_sweeper(
     sweeper_svc = CISweeperLoopService()
 
     events = corpus_svc.list_events()
-    target_event = next((e for e in events if e.payload.get("build_id") == build_id or e.id == f"EVT-00{build_id % 10}"), events[3])
+    target_event = next(
+        (e for e in events if e.payload.get("build_id") == build_id or e.id == f"EVT-00{build_id % 10}"),
+        events[3],
+    )
 
     classification = sweeper_svc.classify_ci_event(target_event)
     repair = sweeper_svc.execute_repair(classification)

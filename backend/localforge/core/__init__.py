@@ -1,6 +1,6 @@
 from localforge.core.config import (
-    GitConfig,
     ChiefEngineerConfig,
+    GitConfig,
     LocalForgeConfig,
     ModelsConfig,
     ProjectConfig,

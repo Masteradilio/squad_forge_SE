@@ -25,9 +25,7 @@ def size_task(
         reasons.append("multiple components")
     if risk_level == "high":
         reasons.append("high risk")
-    has_vague_acceptance = all(
-        c.strip().lower() in VAGUE_ACCEPTANCE for c in acceptance_criteria
-    )
+    has_vague_acceptance = all(c.strip().lower() in VAGUE_ACCEPTANCE for c in acceptance_criteria)
     if not acceptance_criteria or has_vague_acceptance:
         reasons.append("ambiguous acceptance")
 

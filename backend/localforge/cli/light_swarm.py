@@ -2,12 +2,11 @@ import asyncio
 from typing import Any
 
 import typer
+from localforge.models import domain
+from localforge.models.enums import SwarmNodeType, SwarmStrategy, TypedArtifactType
+from localforge.storage import UnitOfWork, db_manager
 from rich.console import Console
 from rich.table import Table
-
-from localforge.models import domain
-from localforge.models.enums import SwarmNodeType, SwarmStatus, SwarmStrategy, TypedArtifactType
-from localforge.storage import UnitOfWork, db_manager
 
 console = Console()
 swarm_app = typer.Typer(help="Manage Light Swarm multi-agent plans, executions, and observability.")
@@ -43,7 +42,9 @@ def start_swarm(
             ),
         ]
         edges: list[tuple[str, str]] = [("node-0", "node-1")]
-        policy = domain.SwarmPolicy(strategy=SwarmStrategy(strategy), require_independent_checker=False)
+        policy = domain.SwarmPolicy(
+            strategy=SwarmStrategy(strategy), require_independent_checker=False
+        )
 
         async with UnitOfWork(db_manager) as uow:
             assert uow.light_swarm is not None
@@ -56,7 +57,9 @@ def start_swarm(
                 strategy=SwarmStrategy(strategy),
             )
             run = await uow.light_swarm.start_swarm(plan.id)  # type: ignore[arg-type]
-            console.print(f"[green]Swarm started — plan_id={plan.id} run_id={run.id} status={run.status}[/green]")
+            console.print(
+                f"[green]Swarm started — plan_id={plan.id} run_id={run.id} status={run.status}[/green]"
+            )
 
     _run_async(_impl())
 
@@ -76,8 +79,12 @@ def status_swarm(
                 console.print(f"[red]{e}[/red]")
                 return
 
-            console.print(f"\n[bold]SwarmRun {run_id}[/bold] — status=[cyan]{view['status']}[/cyan] strategy={view['strategy']}")
-            console.print(f"  Cost: ${view['cumulative_cost_usd']:.4f} | Tokens: {view['cumulative_tokens']:,}")
+            console.print(
+                f"\n[bold]SwarmRun {run_id}[/bold] — status=[cyan]{view['status']}[/cyan] strategy={view['strategy']}"
+            )
+            console.print(
+                f"  Cost: ${view['cumulative_cost_usd']:.4f} | Tokens: {view['cumulative_tokens']:,}"
+            )
             console.print(f"  Active nodes: {view['active_node_ids']}")
             console.print(f"  Verdict: {view['verdict']}")
 

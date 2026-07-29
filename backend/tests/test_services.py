@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import datetime
 
 import pytest
 from localforge.models import domain
@@ -104,6 +104,16 @@ async def test_task_service_and_state_machine(db_session: AsyncSession):
 
     t_planning = await task_service.update_task_status(task.id, TaskStatus.PLANNING)
     assert t_planning.status == TaskStatus.PLANNING
+
+    await task_service.update_task_status(task.id, TaskStatus.IMPLEMENTING)
+    await task_service.update_task_status(task.id, TaskStatus.TESTING)
+    await task_service.update_task_status(task.id, TaskStatus.REVIEWING)
+    pr_ready = await task_service.mark_pr_ready(
+        task.id,
+        gate_evidence={"source": "unit_test", "task_run_id": 1},
+    )
+    assert pr_ready.status == TaskStatus.PR_READY
+    assert pr_ready.metadata["pr_ready_gate"]["passed"] is True
 
 
 @pytest.mark.asyncio

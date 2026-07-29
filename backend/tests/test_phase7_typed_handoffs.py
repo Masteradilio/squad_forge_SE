@@ -1,5 +1,4 @@
 import pytest
-
 from localforge.models import domain
 from localforge.models.enums import TypedArtifactType
 from localforge.services.typed_handoff import compute_artifact_hash
@@ -34,11 +33,15 @@ async def test_artifact_creation_integrity_and_consume_once(db_manager) -> None:
         assert uow.tasks is not None
         assert uow.typed_handoffs is not None
 
-        proj = domain.Project(name="Handoff Test", root_path="E:/tmp/handoff_test", default_branch="main")
+        proj = domain.Project(
+            name="Handoff Test", root_path="E:/tmp/handoff_test", default_branch="main"
+        )
         project = await uow.projects.create_project(proj)
         assert project.id is not None
 
-        task = await uow.tasks.create_task(domain.Task(project_id=project.id, key="TH-1", title="Task 1", description="Desc 1"))
+        task = await uow.tasks.create_task(
+            domain.Task(project_id=project.id, key="TH-1", title="Task 1", description="Desc 1")
+        )
         assert task.id is not None
         task_run = await uow.tasks.create_task_run(domain.TaskRun(task_id=task.id, run_id=1))
         assert task_run.id is not None

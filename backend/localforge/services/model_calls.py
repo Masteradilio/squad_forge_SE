@@ -4,7 +4,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from localforge.models import domain
 from localforge.storage.orm import ModelCallLedgerORM, RunORM
 
-
 OPENROUTER_MINIMAX_M3_INPUT_PER_MILLION = 0.30
 OPENROUTER_MINIMAX_M3_OUTPUT_PER_MILLION = 1.20
 
@@ -16,10 +15,9 @@ def estimate_paid_call_cost_usd(
     input_per_million: float = OPENROUTER_MINIMAX_M3_INPUT_PER_MILLION,
     output_per_million: float = OPENROUTER_MINIMAX_M3_OUTPUT_PER_MILLION,
 ) -> float:
-    return (
-        (max(input_tokens, 0) / 1_000_000) * input_per_million
-        + (max(output_tokens, 0) / 1_000_000) * output_per_million
-    )
+    return (max(input_tokens, 0) / 1_000_000) * input_per_million + (
+        max(output_tokens, 0) / 1_000_000
+    ) * output_per_million
 
 
 class ModelCallLedgerService:
@@ -35,8 +33,6 @@ class ModelCallLedgerService:
         await self.session.flush()
         self._pending_calls.append(call)
         return orm_obj.to_domain()
-
-
 
     async def list_calls(
         self, *, project_id: int, run_id: int | None = None
@@ -107,12 +103,18 @@ class ModelCallLedgerService:
 
     async def list_pricing_sources(self) -> list[domain.PricingSource]:
         from localforge.storage.orm import PricingSourceORM
-        result = await self.session.execute(select(PricingSourceORM).order_by(PricingSourceORM.provider))
+
+        result = await self.session.execute(
+            select(PricingSourceORM).order_by(PricingSourceORM.provider)
+        )
         return [orm_obj.to_domain() for orm_obj in result.scalars().all()]
 
     async def list_pricing_snapshots(self) -> list[domain.ModelPricingSnapshot]:
         from localforge.storage.orm import ModelPricingSnapshotORM
-        result = await self.session.execute(select(ModelPricingSnapshotORM).order_by(ModelPricingSnapshotORM.model_name))
+
+        result = await self.session.execute(
+            select(ModelPricingSnapshotORM).order_by(ModelPricingSnapshotORM.model_name)
+        )
         return [orm_obj.to_domain() for orm_obj in result.scalars().all()]
 
     async def update_pricing_snapshot(
@@ -124,6 +126,7 @@ class ModelCallLedgerService:
         cached_input_price_per_million: float = 0.0,
     ) -> domain.ModelPricingSnapshot:
         from localforge.storage.orm import ModelPricingSnapshotORM
+
         result = await self.session.execute(
             select(ModelPricingSnapshotORM).where(ModelPricingSnapshotORM.model_name == model_name)
         )
@@ -150,6 +153,7 @@ class ModelCallLedgerService:
 
     async def create_pricing_source(self, source: domain.PricingSource) -> domain.PricingSource:
         from localforge.storage.orm import PricingSourceORM
+
         orm_obj = PricingSourceORM.from_domain(source)
         self.session.add(orm_obj)
         await self.session.flush()

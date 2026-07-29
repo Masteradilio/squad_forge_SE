@@ -1,6 +1,6 @@
+import logging
 import os
 import subprocess
-import logging
 import tempfile
 
 logger = logging.getLogger(__name__)
@@ -13,12 +13,13 @@ WINDOWS_BROWSER_PATHS = [
     r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
 ]
 
+
 def find_browser_executable() -> str | None:
     """Find Google Chrome or Microsoft Edge executable on Windows."""
     for path in WINDOWS_BROWSER_PATHS:
         if os.path.isfile(path):
             return path
-    
+
     # Try locating via basic command query if not found in standard paths
     for exe in ["msedge.exe", "chrome.exe"]:
         try:
@@ -29,30 +30,33 @@ def find_browser_executable() -> str | None:
                 return path
         except Exception:
             continue
-            
+
     return None
+
 
 def capture_html_screenshot(html_path: str, output_image_path: str) -> bool:
     """Capture a screenshot of a local HTML file using Chrome/Edge Headless.
-    
+
     Returns True if screenshot was captured successfully, False otherwise.
     """
     if not os.path.isfile(html_path):
         logger.error(f"HTML file not found for screenshot: {html_path}")
         return False
-        
+
     browser_exe = find_browser_executable()
     if not browser_exe:
-        logger.error("No compatible browser (Chrome or Edge) found for visual validation screenshots.")
+        logger.error(
+            "No compatible browser (Chrome or Edge) found for visual validation screenshots."
+        )
         return False
-        
+
     # Standardize absolute paths with absolute formatting for file:// schema or simple path resolution
     abs_html = os.path.abspath(html_path)
     abs_output = os.path.abspath(output_image_path)
-    
+
     # Ensure directory of the output image exists
     os.makedirs(os.path.dirname(abs_output), exist_ok=True)
-    
+
     # Build CLI command for headless capture
     with tempfile.TemporaryDirectory(prefix="localforge-headless-") as profile_dir:
         cache_dir = os.path.join(profile_dir, "cache")
@@ -87,5 +91,7 @@ def capture_html_screenshot(html_path: str, output_image_path: str) -> bool:
             logger.info(f"Successfully captured screenshot to: {abs_output}")
             return True
         else:
-            logger.error(f"Browser screenshot failed: output file not created. Stdout: {res.stdout}, Stderr: {res.stderr}")
+            logger.error(
+                f"Browser screenshot failed: output file not created. Stdout: {res.stdout}, Stderr: {res.stderr}"
+            )
             return False

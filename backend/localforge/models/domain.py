@@ -1,13 +1,5 @@
 from datetime import UTC, datetime
-from localforge.models.loop import (
-    LoopDefinition,
-    LoopItem,
-    LoopRun,
-    LoopStateSnapshot,
-    LoopTrigger,
-)
-
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -18,41 +10,52 @@ from localforge.models.enums import (
     ArtifactType,
     AuditEventActorType,
     AuditEventType,
-    AutonomyEnforcementResult,
     ChiefEngineerCallReason,
     CircuitScope,
     CircuitState,
+    DeepSwarmStatus,
     DocumentKind,
+    GraphMutationType,
     HandoffKind,
     HandoffStatus,
-    MemoryRecordKind,
-    ProgressSignal,
-    RuntimeStatus,
-    RunMode,
-    RunStatus,
-    TaskRunStatus,
-    TaskStatus,
-    VerificationStatus,
-    WorktreeAttemptStatus,
     LeaseReleaseReason,
-    RunnerHealthState,
-    RunnerLane,
-    TypedArtifactType,
-    SwarmStrategy,
-    SwarmNodeType,
-    SwarmNodeStatus,
-    SwarmStatus,
-    GraphMutationType,
-    GraphNodeKind,
-    DeepSwarmStatus,
     MemoryFactCategory,
+    MemoryRecordKind,
     MemoryRelationType,
     MemoryValidityStatus,
-    SquadRole,
+    ProgressSignal,
+    RunMode,
+    RunnerHealthState,
+    RunnerLane,
+    RunStatus,
+    RuntimeStatus,
     SeniorityClass,
+    SquadRole,
+    SwarmNodeStatus,
+    SwarmNodeType,
+    SwarmStatus,
+    SwarmStrategy,
+    TaskRunStatus,
+    TaskStatus,
+    TypedArtifactType,
+    VerificationStatus,
+    WorktreeAttemptStatus,
+)
+from localforge.models.loop import (
+    LoopDefinition,
+    LoopItem,
+    LoopRun,
+    LoopStateSnapshot,
+    LoopTrigger,
 )
 
-
+__all__ = [
+    "LoopDefinition",
+    "LoopItem",
+    "LoopRun",
+    "LoopStateSnapshot",
+    "LoopTrigger",
+]
 
 
 def utc_now() -> datetime:
@@ -62,12 +65,12 @@ def utc_now() -> datetime:
 class Project(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: Optional[int] = None
+    id: int | None = None
     name: str
     root_path: str
     default_branch: str
-    remote_url: Optional[str] = None
-    localforge_config_path: Optional[str] = None
+    remote_url: str | None = None
+    localforge_config_path: str | None = None
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
 
@@ -75,34 +78,34 @@ class Project(BaseModel):
 class ProductDocument(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: Optional[int] = None
+    id: int | None = None
     project_id: int
     kind: DocumentKind
     path: str
     content_hash: str
     imported_at: datetime = Field(default_factory=utc_now)
-    parsed_summary: Optional[str] = None
+    parsed_summary: str | None = None
 
 
 class Epic(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: Optional[int] = None
+    id: int | None = None
     project_id: int
     title: str
     summary: str
-    source_document_id: Optional[int] = None
+    source_document_id: int | None = None
     priority: int = 1
     status: str = "BACKLOG"
-    acceptance_summary: Optional[str] = None
+    acceptance_summary: str | None = None
 
 
 class Task(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: Optional[int] = None
+    id: int | None = None
     project_id: int
-    epic_id: Optional[int] = None
+    epic_id: int | None = None
     key: str
     title: str
     description: str
@@ -110,7 +113,7 @@ class Task(BaseModel):
     dependency_task_ids: list[int] = Field(default_factory=list)
     risk_level: str = "low"  # low, medium, high
     status: TaskStatus = TaskStatus.BACKLOG
-    assigned_agent_id: Optional[int] = None
+    assigned_agent_id: int | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
@@ -119,51 +122,51 @@ class Task(BaseModel):
 class Agent(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: Optional[int] = None
+    id: int | None = None
     name: str
     role: AgentRole
     model_profile_id: str
     active: bool = True
     max_concurrent_tasks: int = 1
-    permissions_profile_id: Optional[str] = None
-    heartbeat_at: Optional[datetime] = None
-    current_task_id: Optional[int] = None
+    permissions_profile_id: str | None = None
+    heartbeat_at: datetime | None = None
+    current_task_id: int | None = None
 
 
 class Run(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: Optional[int] = None
+    id: int | None = None
     project_id: int
     mode: RunMode
     status: RunStatus = RunStatus.PENDING
     started_at: datetime = Field(default_factory=utc_now)
-    ended_at: Optional[datetime] = None
+    ended_at: datetime | None = None
     initiated_by: str
     resource_limits: dict[str, Any] = Field(default_factory=dict)
-    summary: Optional[str] = None
+    summary: str | None = None
 
 
 class TaskRun(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: Optional[int] = None
+    id: int | None = None
     run_id: int
     task_id: int
     status: TaskRunStatus = TaskRunStatus.PENDING
-    worktree_path: Optional[str] = None
-    branch_name: Optional[str] = None
-    sandbox_id: Optional[str] = None
+    worktree_path: str | None = None
+    branch_name: str | None = None
+    sandbox_id: str | None = None
     attempt_count: int = 1
     started_at: datetime = Field(default_factory=utc_now)
-    ended_at: Optional[datetime] = None
-    final_summary: Optional[str] = None
+    ended_at: datetime | None = None
+    final_summary: str | None = None
 
 
 class Handoff(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: Optional[int] = None
+    id: int | None = None
     task_run_id: int
     from_role: AgentRole
     to_role: AgentRole
@@ -172,41 +175,41 @@ class Handoff(BaseModel):
     priority: int = 1
     status: HandoffStatus = HandoffStatus.PENDING
     created_at: datetime = Field(default_factory=utc_now)
-    consumed_at: Optional[datetime] = None
+    consumed_at: datetime | None = None
 
 
 class Artifact(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: Optional[int] = None
+    id: int | None = None
     task_run_id: int
     type: ArtifactType
     path: str
     content_hash: str
-    summary: Optional[str] = None
+    summary: str | None = None
     created_at: datetime = Field(default_factory=utc_now)
 
 
 class ModelRoute(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: Optional[int] = None
+    id: int | None = None
     project_id: int
     role: AgentRole
     provider: str = "localforge"
     model_profile_id: str
-    endpoint_url: Optional[str] = None
-    fallback_model_profile_id: Optional[str] = None
+    endpoint_url: str | None = None
+    fallback_model_profile_id: str | None = None
     updated_at: datetime = Field(default_factory=utc_now)
 
 
 class ModelCallLedger(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: Optional[int] = None
+    id: int | None = None
     project_id: int
-    run_id: Optional[int] = None
-    task_id: Optional[int] = None
+    run_id: int | None = None
+    task_id: int | None = None
     provider: str
     model: str
     reason: ChiefEngineerCallReason
@@ -214,7 +217,7 @@ class ModelCallLedger(BaseModel):
     output_tokens: int = 0
     estimated_cost_usd: float = 0.0
     status: str = "success"
-    error_summary: Optional[str] = None
+    error_summary: str | None = None
     duration_ms: int = 0
     metadata: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=utc_now)
@@ -223,7 +226,7 @@ class ModelCallLedger(BaseModel):
 class MemoryFact(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: Optional[int] = None
+    id: int | None = None
     project_id: int
     kind: MemoryRecordKind = MemoryRecordKind.STACK_FACT
     fact: str
@@ -232,15 +235,15 @@ class MemoryFact(BaseModel):
     status: str = "active"
     tags: list[str] = Field(default_factory=list)
     # Provenance-aware extensions (Phase 10 / V6-1000)
-    repository: Optional[str] = None
-    run_id: Optional[int] = None
-    task_key: Optional[str] = None
-    attempt_number: Optional[int] = None
-    artifact_id: Optional[int] = None
-    verifier: Optional[str] = None
+    repository: str | None = None
+    run_id: int | None = None
+    task_key: str | None = None
+    attempt_number: int | None = None
+    artifact_id: int | None = None
+    verifier: str | None = None
     validity: MemoryValidityStatus = MemoryValidityStatus.AUTHORITATIVE
     confidence: float = 1.0
-    policy_scope: Optional[str] = None
+    policy_scope: str | None = None
     category: MemoryFactCategory = MemoryFactCategory.OBSERVED_FACT
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
@@ -251,7 +254,7 @@ class MemoryRelation(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-    id: Optional[int] = None
+    id: int | None = None
     source_fact_id: int
     target_fact_id: int
     relation_type: MemoryRelationType
@@ -273,12 +276,14 @@ class MemoryRetentionPolicy(BaseModel):
 class MemoryRetrievalFilter(BaseModel):
     """Structured search filters for operational memory (V6-1003)."""
 
-    task_key: Optional[str] = None
-    file_path: Optional[str] = None
-    error_fingerprint: Optional[str] = None
-    provider: Optional[str] = None
-    category: Optional[MemoryFactCategory] = None
-    validity: Optional[MemoryValidityStatus] = None
+    repository: str | None = None
+    task_key: str | None = None
+    file_path: str | None = None
+    error_fingerprint: str | None = None
+    provider: str | None = None
+    policy_scope: str | None = None
+    category: MemoryFactCategory | None = None
+    validity: MemoryValidityStatus | None = None
     tags: list[str] = Field(default_factory=list)
 
 
@@ -289,7 +294,7 @@ class MemoryRetrievalBenchmarkResult(BaseModel):
 
     total_queries: int = 0
     recall_at_k: float = 0.0
-    mrr: float = 0.0                      # Mean Reciprocal Rank
+    mrr: float = 0.0  # Mean Reciprocal Rank
     latency_ms: float = 0.0
     zero_result_rate: float = 0.0
     stale_hit_rate: float = 0.0
@@ -297,11 +302,10 @@ class MemoryRetrievalBenchmarkResult(BaseModel):
     created_at: datetime = Field(default_factory=utc_now)
 
 
-
 class Policy(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: Optional[int] = None
+    id: int | None = None
     project_id: int
     name: str
     rules: dict[str, Any] = Field(default_factory=dict)
@@ -312,12 +316,12 @@ class Policy(BaseModel):
 class AuditEvent(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: Optional[int] = None
+    id: int | None = None
     project_id: int
-    run_id: Optional[int] = None
-    task_id: Optional[int] = None
+    run_id: int | None = None
+    task_id: int | None = None
     actor_type: AuditEventActorType
-    actor_id: Optional[str] = None
+    actor_id: str | None = None
     event_type: AuditEventType
     payload_redacted: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=utc_now)
@@ -326,29 +330,29 @@ class AuditEvent(BaseModel):
 class ActionApproval(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: Optional[int] = None
+    id: int | None = None
     project_id: int
-    run_id: Optional[int] = None
-    task_id: Optional[int] = None
+    run_id: int | None = None
+    task_id: int | None = None
     action_kind: ActionKind
     payload: dict[str, Any] = Field(default_factory=dict)
     purpose: str
     risk_level: str
     status: ActionApprovalStatus = ActionApprovalStatus.PENDING
     created_at: datetime = Field(default_factory=utc_now)
-    decided_at: Optional[datetime] = None
-    decided_by: Optional[str] = None
+    decided_at: datetime | None = None
+    decided_by: str | None = None
 
 
 class TaskComment(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: Optional[int] = None
+    id: int | None = None
     project_id: int
     task_id: int
     author: str
     body: str
-    thread_id: Optional[str] = None
+    thread_id: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=utc_now)
 
@@ -356,7 +360,7 @@ class TaskComment(BaseModel):
 class RuntimeRegistration(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: Optional[int] = None
+    id: int | None = None
     project_id: int
     runtime_id: str
     name: str
@@ -372,7 +376,7 @@ class RuntimeRegistration(BaseModel):
 class Squad(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: Optional[int] = None
+    id: int | None = None
     project_id: int
     name: str
     purpose: str = ""
@@ -386,7 +390,7 @@ class Squad(BaseModel):
 class PricingSource(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: Optional[int] = None
+    id: int | None = None
     provider: str
     url: str
     retrieved_at: datetime = Field(default_factory=utc_now)
@@ -396,7 +400,7 @@ class PricingSource(BaseModel):
 class ModelPricingSnapshot(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: Optional[int] = None
+    id: int | None = None
     pricing_source_id: int
     model_name: str
     input_price_per_million: float
@@ -413,8 +417,8 @@ class ModelCapability(BaseModel):
     task_class: str
     success_count: int = 0
     failure_count: int = 0
-    disqualified_until: Optional[datetime] = None
-    disqualification_reason: Optional[str] = None
+    disqualified_until: datetime | None = None
+    disqualification_reason: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -489,7 +493,7 @@ class FailureFingerprint(BaseModel):
     error_type: str
     normalized_message: str
     fingerprint_hash: str
-    file_location: Optional[str] = None
+    file_location: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -501,13 +505,13 @@ class AttemptProgressRecord(BaseModel):
     diff_signature: str
     artifact_signature: str
     signal: ProgressSignal
-    fingerprint_hash: Optional[str] = None
+    fingerprint_hash: str | None = None
 
 
 class CircuitBreakerState(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: Optional[int] = None
+    id: int | None = None
     project_id: int
     scope: CircuitScope
     target_id: str
@@ -515,10 +519,10 @@ class CircuitBreakerState(BaseModel):
     consecutive_failures: int = 0
     stagnation_count: int = 0
     fingerprint_counts: dict[str, int] = Field(default_factory=dict)
-    last_fingerprint: Optional[str] = None
-    opened_at: Optional[datetime] = None
-    cooldown_until: Optional[datetime] = None
-    reason: Optional[str] = None
+    last_fingerprint: str | None = None
+    opened_at: datetime | None = None
+    cooldown_until: datetime | None = None
+    reason: str | None = None
     evidence_json: dict[str, Any] = Field(default_factory=dict)
     schema_version: int = 1
     created_at: datetime = Field(default_factory=utc_now)
@@ -528,7 +532,7 @@ class CircuitBreakerState(BaseModel):
 class MakerCheckerVerification(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: Optional[int] = None
+    id: int | None = None
     project_id: int
     task_run_id: int
     maker_agent_id: str
@@ -537,7 +541,7 @@ class MakerCheckerVerification(BaseModel):
     tests_executed: list[str] = Field(default_factory=list)
     not_checked: list[str] = Field(default_factory=list)
     deterministic_passed: bool = False
-    checker_feedback: Optional[str] = None
+    checker_feedback: str | None = None
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
 
@@ -556,7 +560,7 @@ class AutonomyPolicyRule(BaseModel):
 class WorktreeAttemptManifest(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: Optional[int] = None
+    id: int | None = None
     project_id: int
     task_id: int
     task_run_id: int
@@ -575,7 +579,7 @@ class WorktreeAttemptManifest(BaseModel):
 class PathLease(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: Optional[int] = None
+    id: int | None = None
     project_id: int
     task_run_id: int
     owner_id: str
@@ -583,7 +587,7 @@ class PathLease(BaseModel):
     is_directory: bool = False
     ttl_seconds: int = 3600
     expires_at: datetime = Field(default_factory=utc_now)
-    release_reason: Optional[LeaseReleaseReason] = None
+    release_reason: LeaseReleaseReason | None = None
     created_at: datetime = Field(default_factory=utc_now)
 
 
@@ -602,7 +606,7 @@ class RunnerCapability(BaseModel):
 class RunnerPoolState(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: Optional[int] = None
+    id: int | None = None
     runner_id: str
     name: str
     lane: RunnerLane = RunnerLane.INLINE
@@ -611,7 +615,7 @@ class RunnerPoolState(BaseModel):
     max_concurrency: int = 4
     capabilities: RunnerCapability = Field(default_factory=RunnerCapability)
     success_rate: float = 1.0
-    quarantine_reason: Optional[str] = None
+    quarantine_reason: str | None = None
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
 
@@ -619,10 +623,10 @@ class RunnerPoolState(BaseModel):
 class RunnerDispatchLog(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: Optional[int] = None
+    id: int | None = None
     project_id: int
     task_run_id: int
-    selected_runner_id: Optional[str] = None
+    selected_runner_id: str | None = None
     dispatch_status: str = "SUCCESS"  # SUCCESS, NO_COMPATIBLE_RUNNER, BACKPRESSURE_LIMITED
     ranking_scores_json: dict[str, float] = Field(default_factory=dict)
     rejection_reasons_json: dict[str, str] = Field(default_factory=dict)
@@ -632,7 +636,7 @@ class RunnerDispatchLog(BaseModel):
 class TypedHandoffArtifact(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: Optional[int] = None
+    id: int | None = None
     project_id: int
     task_run_id: int
     producer_agent_id: str
@@ -658,14 +662,14 @@ class SwarmPolicy(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     strategy: SwarmStrategy = SwarmStrategy.LIGHT
-    max_workers: int = 4                    # 2-4 workers (V6-800)
-    max_depth: int = 1                      # no recursive sub-swarms (V6-800)
-    max_duration_seconds: int = 3600        # 1-hour aggregate time bound
-    max_cost_usd: float = 5.0               # aggregate budget bound
-    max_tokens: int = 500_000               # aggregate token bound
-    max_files: int = 50                     # files across all code-changing nodes
-    max_retries_per_node: int = 3           # per-node retry bound
-    allow_sub_swarms: bool = False          # always False in Light mode
+    max_workers: int = 4  # 2-4 workers (V6-800)
+    max_depth: int = 1  # no recursive sub-swarms (V6-800)
+    max_duration_seconds: int = 3600  # 1-hour aggregate time bound
+    max_cost_usd: float = 5.0  # aggregate budget bound
+    max_tokens: int = 500_000  # aggregate token bound
+    max_files: int = 50  # files across all code-changing nodes
+    max_retries_per_node: int = 3  # per-node retry bound
+    allow_sub_swarms: bool = False  # always False in Light mode
     require_independent_checker: bool = True
 
 
@@ -674,20 +678,20 @@ class SwarmNode(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-    node_id: str                            # local identifier within plan (e.g. "node-0")
+    node_id: str  # local identifier within plan (e.g. "node-0")
     node_type: SwarmNodeType
     status: SwarmNodeStatus = SwarmNodeStatus.PENDING
     title: str
     description: str
-    owner_agent_id: Optional[str] = None
-    runner_id: Optional[str] = None
-    worktree_path: Optional[str] = None
-    required_input_artifact_type: Optional[TypedArtifactType] = None
-    output_artifact_type: Optional[TypedArtifactType] = None
+    owner_agent_id: str | None = None
+    runner_id: str | None = None
+    worktree_path: str | None = None
+    required_input_artifact_type: TypedArtifactType | None = None
+    output_artifact_type: TypedArtifactType | None = None
     depends_on: list[str] = Field(default_factory=list)
-    artifact_id: Optional[int] = None
+    artifact_id: int | None = None
     attempt_count: int = 0
-    error_reason: Optional[str] = None
+    error_reason: str | None = None
 
 
 class SwarmPlan(BaseModel):
@@ -695,7 +699,7 @@ class SwarmPlan(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-    id: Optional[int] = None
+    id: int | None = None
     project_id: int
     task_run_id: int
     strategy: SwarmStrategy = SwarmStrategy.LIGHT
@@ -703,7 +707,7 @@ class SwarmPlan(BaseModel):
     policy: SwarmPolicy = Field(default_factory=SwarmPolicy)
     nodes: list[SwarmNode] = Field(default_factory=list)
     edges: list[tuple[str, str]] = Field(default_factory=list)
-    paused_at: Optional[datetime] = None
+    paused_at: datetime | None = None
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
 
@@ -713,7 +717,7 @@ class SwarmRun(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-    id: Optional[int] = None
+    id: int | None = None
     plan_id: int
     status: SwarmStatus = SwarmStatus.DRAFT
 
@@ -721,10 +725,12 @@ class SwarmRun(BaseModel):
     cumulative_cost_usd: float = 0.0
     cumulative_tokens: int = 0
     node_statuses: dict[str, str] = Field(default_factory=dict)
-    verdict: Optional[str] = None
-    started_at: Optional[datetime] = None
-    finished_at: Optional[datetime] = None
+    verdict: str | None = None
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
     created_at: datetime = Field(default_factory=utc_now)
+
+
 class SwarmExecutionSummary(BaseModel):
     """Replayable summary exported after swarm completion."""
 
@@ -733,7 +739,7 @@ class SwarmExecutionSummary(BaseModel):
     plan_id: int
     run_id: int
     strategy: SwarmStrategy
-    verdict: Optional[str]
+    verdict: str | None
     nodes: list[SwarmNode]
     total_cost_usd: float
     total_tokens: int
@@ -744,21 +750,22 @@ class SwarmExecutionSummary(BaseModel):
 
 # ─── Phase 9 — Server-Owned Dynamic Task DAG and Deep Swarm ──────────────── #
 
+
 class GraphMutationEntry(BaseModel):
     """Append-only journal entry for a single validated graph mutation (V6-900)."""
 
     model_config = ConfigDict(from_attributes=True)
 
-    id: Optional[int] = None
-    plan_id: int                       # parent SwarmPlan this journal belongs to
-    mutation_sequence: int             # append-only sequence scoped to the plan
-    graph_version: int                 # graph version after this mutation is applied
-    parent_graph_version: int          # graph version this mutation was applied against
+    id: int | None = None
+    plan_id: int  # parent SwarmPlan this journal belongs to
+    mutation_sequence: int  # append-only sequence scoped to the plan
+    graph_version: int  # graph version after this mutation is applied
+    parent_graph_version: int  # graph version this mutation was applied against
     mutation_type: GraphMutationType
     actor_agent_id: str
     reason: str
     payload_json: dict[str, Any] = Field(default_factory=dict)  # mutation-specific params
-    content_hash: str                  # SHA-256 of (graph_version, mutation_type, payload)
+    content_hash: str  # SHA-256 of (graph_version, mutation_type, payload)
     created_at: datetime = Field(default_factory=utc_now)
 
 
@@ -767,7 +774,7 @@ class DeepSwarmPolicy(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-    enabled: bool = False              # disabled by default
+    enabled: bool = False  # disabled by default
     max_depth: int = Field(default=3, ge=1, le=8)
     max_nodes: int = Field(default=20, ge=1, le=200)
     max_fan_out: int = Field(default=6, ge=1, le=32)
@@ -788,13 +795,13 @@ class TaskGraphVersion(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-    id: Optional[int] = None
+    id: int | None = None
     plan_id: int
-    version: int                       # monotonically increasing per plan
+    version: int  # monotonically increasing per plan
     nodes_snapshot_json: list[Any] = Field(default_factory=list)
     edges_snapshot_json: list[Any] = Field(default_factory=list)
-    content_hash: str                  # SHA-256 of canonical (nodes, edges) at this version
-    mutation_id: Optional[int] = None  # mutation that produced this version (None = initial)
+    content_hash: str  # SHA-256 of canonical (nodes, edges) at this version
+    mutation_id: int | None = None  # mutation that produced this version (None = initial)
     created_at: datetime = Field(default_factory=utc_now)
 
 
@@ -803,13 +810,13 @@ class DeepSwarmRun(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-    id: Optional[int] = None
+    id: int | None = None
     plan_id: int
     status: DeepSwarmStatus = DeepSwarmStatus.DISABLED
     policy: DeepSwarmPolicy = Field(default_factory=DeepSwarmPolicy)
     current_graph_version: int = 0
     mutation_count: int = 0
-    stall_ticks: int = 0               # ticks without progress; compare to policy.stall_tick_threshold
+    stall_ticks: int = 0  # ticks without progress; compare to policy.stall_tick_threshold
     cumulative_cost_usd: float = 0.0
     cumulative_tokens: int = 0
     cumulative_paid_calls: int = 0
@@ -817,7 +824,7 @@ class DeepSwarmRun(BaseModel):
     active_node_ids: list[str] = Field(default_factory=list)
     node_side_effect_keys: dict[str, str] = Field(default_factory=dict)
     completed_side_effect_keys: list[str] = Field(default_factory=list)
-    verdict: Optional[str] = None
-    started_at: Optional[datetime] = None
-    finished_at: Optional[datetime] = None
+    verdict: str | None = None
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
     created_at: datetime = Field(default_factory=utc_now)

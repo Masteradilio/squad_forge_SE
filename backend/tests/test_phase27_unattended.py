@@ -23,8 +23,8 @@ from localforge.runtime.file_tools import SafeFileEditor
 from localforge.services.audit import AuditService
 from localforge.services.execution import ExecutionService
 from localforge.services.project import ProjectService
-from localforge.services.scheduler import Scheduler
 from localforge.services.runners import BaseTaskRunner, RunnerContext, TaskRunnerPool
+from localforge.services.scheduler import Scheduler
 from localforge.services.task import TaskService
 from localforge.storage import UnitOfWork
 
@@ -43,9 +43,7 @@ class StubRunner(BaseTaskRunner):
     async def execute(self, task_run: domain.TaskRun, *, uow: Any) -> None:
         return None
 
-    async def checkpoint(
-        self, task_run: domain.TaskRun, name: str, *, uow: Any
-    ) -> str:
+    async def checkpoint(self, task_run: domain.TaskRun, name: str, *, uow: Any) -> str:
         return name
 
     async def cleanup(self, task_run: domain.TaskRun, *, uow: Any) -> None:
@@ -114,9 +112,7 @@ async def test_llm_call_budget_enforcement():
 
     mock_response = MagicMock()
     mock_response.status_code = 200
-    mock_response.json.return_value = {
-        "choices": [{"message": {"content": "response_content"}}]
-    }
+    mock_response.json.return_value = {"choices": [{"message": {"content": "response_content"}}]}
 
     with patch("httpx.AsyncClient.post", return_value=mock_response):
         # Call 1: Success
@@ -148,12 +144,11 @@ async def test_workspace_file_and_diff_limits(tmp_path, db_session):
     uow.tasks = TaskService(db_session)
     uow.executions = ExecutionService(db_session)
     from localforge.services.audit import AuditService
+
     uow.audits = AuditService(db_session)
 
     proj = await uow.projects.create_project(
-        domain.Project(
-            name="BudgetProj", root_path=str(tmp_path), default_branch="main"
-        )
+        domain.Project(name="BudgetProj", root_path=str(tmp_path), default_branch="main")
     )
     run = await uow.executions.create_run(
         domain.Run(project_id=proj.id, mode="interactive", initiated_by="test")
@@ -218,17 +213,13 @@ async def test_scheduler_watchdog_cleanup(tmp_path, db_session, db_manager):
     uow.executions = ExecutionService(db_session)
 
     proj = await uow.projects.create_project(
-        domain.Project(
-            name="WatchdogProj", root_path=str(tmp_path), default_branch="main"
-        )
+        domain.Project(name="WatchdogProj", root_path=str(tmp_path), default_branch="main")
     )
     run = await uow.executions.create_run(
         domain.Run(project_id=proj.id, mode="unattended", initiated_by="test")
     )
     task = await uow.tasks.create_task(
-        domain.Task(
-            project_id=proj.id, key="LF-99", title="Stuck Task", description=""
-        )
+        domain.Task(project_id=proj.id, key="LF-99", title="Stuck Task", description="")
     )
 
     await transition_task_to(uow, task.id, TaskStatus.IMPLEMENTING)
@@ -241,12 +232,10 @@ async def test_scheduler_watchdog_cleanup(tmp_path, db_session, db_manager):
     )
     # Set started_at back in time to trigger watchdog
     task_run_data.started_at = datetime.now(UTC) - timedelta(hours=2)
-    task_run = await uow.tasks.create_task_run(task_run_data)
+    await uow.tasks.create_task_run(task_run_data)
     await uow.session.commit()
 
-    scheduler = Scheduler(
-        project_id=proj.id, run_id=run.id, db_manager=db_manager
-    )
+    scheduler = Scheduler(project_id=proj.id, run_id=run.id, db_manager=db_manager)
 
     await scheduler._process_iteration()
     await uow.session.commit()
@@ -274,9 +263,7 @@ async def test_scheduler_max_run_time(tmp_path, db_session, db_manager):
     uow.executions = ExecutionService(db_session)
 
     proj = await uow.projects.create_project(
-        domain.Project(
-            name="RunTimeProj", root_path=str(tmp_path), default_branch="main"
-        )
+        domain.Project(name="RunTimeProj", root_path=str(tmp_path), default_branch="main")
     )
     run_data = domain.Run(
         project_id=proj.id,
@@ -288,9 +275,7 @@ async def test_scheduler_max_run_time(tmp_path, db_session, db_manager):
     run = await uow.executions.create_run(run_data)
 
     task = await uow.tasks.create_task(
-        domain.Task(
-            project_id=proj.id, key="LF-98", title="Timeout Task", description=""
-        )
+        domain.Task(project_id=proj.id, key="LF-98", title="Timeout Task", description="")
     )
     await transition_task_to(uow, task.id, TaskStatus.IMPLEMENTING)
 
@@ -303,9 +288,7 @@ async def test_scheduler_max_run_time(tmp_path, db_session, db_manager):
     await uow.tasks.create_task_run(task_run_data)
     await uow.session.commit()
 
-    scheduler = Scheduler(
-        project_id=proj.id, run_id=run.id, db_manager=db_manager
-    )
+    scheduler = Scheduler(project_id=proj.id, run_id=run.id, db_manager=db_manager)
 
     await scheduler._process_iteration()
     await uow.session.commit()
@@ -322,7 +305,6 @@ async def test_scheduler_max_run_time(tmp_path, db_session, db_manager):
         TaskStatus.FAILED_SAFE,
         TaskStatus.BLOCKED_NEEDS_HUMAN_REVIEW,
     )
-
 
 
 @pytest.mark.anyio
@@ -397,9 +379,7 @@ async def test_scheduler_summary_generation(tmp_path, db_session, db_manager):
     uow.audits = AuditService(db_session)
 
     proj = await uow.projects.create_project(
-        domain.Project(
-            name="SummaryProj", root_path=str(tmp_path), default_branch="main"
-        )
+        domain.Project(name="SummaryProj", root_path=str(tmp_path), default_branch="main")
     )
     run = await uow.executions.create_run(
         domain.Run(
@@ -449,9 +429,7 @@ async def test_scheduler_summary_generation(tmp_path, db_session, db_manager):
     )
     await uow.session.commit()
 
-    scheduler = Scheduler(
-        project_id=proj.id, run_id=run.id, db_manager=db_manager
-    )
+    scheduler = Scheduler(project_id=proj.id, run_id=run.id, db_manager=db_manager)
 
     await scheduler._process_iteration()
     await uow.session.commit()

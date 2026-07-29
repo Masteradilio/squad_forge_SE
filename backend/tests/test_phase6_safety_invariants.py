@@ -1,7 +1,7 @@
 import pytest
-
 from localforge.core.policy import PolicyRules
-from localforge.models.enums import ActionKind
+from localforge.models.enums import ActionKind, AutonomyEnforcementResult, AutonomyLevel
+from localforge.safety.action_gateway import ActionGateway
 from localforge.safety.command_validator import validate_command
 from localforge.safety.kernel import ActionRequest, SafetyDecision, SafetyKernel, is_path_safe
 from localforge.safety.pre_pr_gate import MechanicalPrePRGate
@@ -34,6 +34,29 @@ async def test_protected_paths_denial(db_manager) -> None:
         decision, reason = await SafetyKernel.evaluate(req, uow, "E:/workspace/project")
         assert decision == SafetyDecision.DENY
         assert "protected path" in reason or "workspace root" in reason
+
+
+@pytest.mark.asyncio
+async def test_action_gateway_enforces_autonomy_before_safety(db_manager) -> None:
+    """C4: mutating actions must pass autonomy and safety through the same gateway."""
+    async with UnitOfWork(db_manager) as uow:
+        req = ActionRequest(
+            project_id=1,
+            kind=ActionKind.WRITE_FILE,
+            payload={"path": "E:/workspace/project/src/app.py"},
+            purpose="Attempt L1 mutation",
+            risk_level="low",
+        )
+
+        decision = await ActionGateway(uow).evaluate(
+            req,
+            project_root="E:/workspace/project",
+            autonomy_level=AutonomyLevel.L1_INSPECT,
+        )
+
+        assert decision.decision == SafetyDecision.DENY
+        assert decision.autonomy_result == AutonomyEnforcementResult.DENIED_AUTONOMY_EXCEEDED
+        assert "L1_INSPECT" in decision.reason
 
 
 def test_command_validation_dangerous_syntax() -> None:

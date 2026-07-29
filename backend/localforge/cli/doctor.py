@@ -82,6 +82,7 @@ async def check_docker() -> tuple[str, str, str]:
     sdk_installed = False
     try:
         import docker
+
         sdk_installed = True
     except ImportError:
         pass
@@ -105,7 +106,7 @@ async def check_docker() -> tuple[str, str, str]:
         )
         try:
             await asyncio.wait_for(proc.communicate(), timeout=3.0)
-            daemon_running = (proc.returncode == 0)
+            daemon_running = proc.returncode == 0
         except TimeoutError:
             proc.kill()
             await proc.wait()
@@ -146,7 +147,6 @@ async def check_docker() -> tuple[str, str, str]:
             "Docker command exists, but daemon is not running.",
             "inactive",
         )
-
 
 
 async def check_ollama() -> tuple[str, str, str]:

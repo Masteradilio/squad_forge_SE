@@ -1,9 +1,7 @@
 from contextvars import ContextVar
 
 # ContextVar tracking the active task_run_id in the execution thread/context
-active_task_run_id: ContextVar[int | None] = ContextVar(
-    "active_task_run_id", default=None
-)
+active_task_run_id: ContextVar[int | None] = ContextVar("active_task_run_id", default=None)
 
 # Thread-safe dictionary tracking the count of LLM calls per task run
 # Key: task_run_id (int), Value: call_count (int)
@@ -54,4 +52,3 @@ async def check_and_increment_llm_calls(task_run_id: int, limit: int) -> None:
             f"Task run {task_run_id} exceeded maximum LLM call budget of {limit} calls."
         )
     _llm_call_counters[task_run_id] = current + 1
-

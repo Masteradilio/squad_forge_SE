@@ -2,7 +2,6 @@ import logging
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from localforge.models import domain
@@ -10,18 +9,19 @@ from localforge.models.enums import (
     AuditEventActorType,
     AuditEventType,
     CircuitScope,
-    CircuitState,
     LoopRunStatus,
     LoopRunVerdict,
     LoopStatus,
     RunMode,
     RunStatus,
+    TaskStatus,
     TriggerKind,
 )
 from localforge.services.audit import AuditService
 from localforge.services.circuit_breaker import CircuitBreakerService
 from localforge.services.execution import ExecutionService
 from localforge.services.loop_service import LoopService
+from localforge.services.task import TaskService
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +38,7 @@ class LoopCoordinator:
         self.execution_service = ExecutionService(session)
         self.audit_service = AuditService(session)
         self.circuit_breaker_service = CircuitBreakerService(session)
+        self.task_service = TaskService(session)
 
     async def trigger_loop(
         self,
@@ -46,7 +47,7 @@ class LoopCoordinator:
         idempotency_key: str | None = None,
         payload: dict[str, Any] | None = None,
     ) -> domain.LoopRun:
-        """Receive a trigger for a loop, enforce idempotency, run triage, and manage run lifecycle."""
+        """Receive a trigger, enforce idempotency, run triage, and manage lifecycle."""
         loop_def = await self.loop_service.get_loop(loop_id)
         if not loop_def:
             raise ValueError(f"Loop definition with ID {loop_id} not found")
@@ -58,21 +59,31 @@ class LoopCoordinator:
             raise ValueError(f"Loop {loop_id} is currently paused")
 
         # Check Circuit Breaker for this Loop
-        can_proceed, breaker_state, breaker_reason = await self.circuit_breaker_service.check_breaker(
+        (
+            can_proceed,
+            breaker_state,
+            breaker_reason,
+        ) = await self.circuit_breaker_service.check_breaker(
             project_id=loop_def.project_id,
             scope=CircuitScope.LOOP,
             target_id=str(loop_id),
         )
         if not can_proceed:
-            raise ValueError(f"Loop {loop_id} is blocked by Circuit Breaker ({breaker_state.value}): {breaker_reason}")
-
+            raise ValueError(
+                f"Loop {loop_id} is blocked by Circuit Breaker "
+                f"({breaker_state.value}): {breaker_reason}"
+            )
 
         key = idempotency_key or f"loop_{loop_id}_{trigger_kind}_{datetime.now(UTC).timestamp()}"
 
         # Deduplication check
         existing_run = await self.loop_service.get_loop_run_by_idempotency_key(key)
         if existing_run:
-            logger.info(f"Duplicate trigger received for loop {loop_id} with key {key}. Returning existing run.")
+            logger.info(
+                "Duplicate trigger received for loop %s with key %s. Returning existing run.",
+                loop_id,
+                key,
+            )
             return existing_run
 
         # Create LoopRun record in PENDING state
@@ -92,6 +103,20 @@ class LoopCoordinator:
         )
 
         # Run cheap triage
+        if payload and "detector_error" in payload:
+            error_message = str(payload["detector_error"])
+            loop_run.status = LoopRunStatus.FAILED
+            loop_run.triage_verdict = LoopRunVerdict.FAILED
+            loop_run.error_message = f"Detector failed: {error_message}"
+            loop_run.completed_at = datetime.now(UTC)
+            loop_run = await self.loop_service.update_loop_run(loop_run)
+            await self._log_audit_event(
+                project_id=loop_def.project_id,
+                details=f"Loop {loop_id} detector failed: {error_message[:500]}",
+            )
+            await self._update_loop_snapshot(loop_id, active_run_id=None)
+            return loop_run
+
         is_actionable, items = await self._run_cheap_triage(loop_def, payload)
 
         if not is_actionable:
@@ -103,7 +128,9 @@ class LoopCoordinator:
 
             await self._log_audit_event(
                 project_id=loop_def.project_id,
-                details=f"Loop {loop_id} run {loop_run.id} triaged as NO_OP. No scheduler run created.",
+                details=(
+                    f"Loop {loop_id} run {loop_run.id} triaged as NO_OP. No scheduler run created."
+                ),
             )
 
             # Update snapshot
@@ -117,13 +144,12 @@ class LoopCoordinator:
         new_run = domain.Run(
             project_id=loop_def.project_id,
             mode=RunMode.UNATTENDED,
-            status=RunStatus.RUNNING,
+            status=RunStatus.PENDING,
             initiated_by="loop_coordinator",
         )
 
         scheduler_run = await self.execution_service.create_run(new_run)
         loop_run.scheduler_run_id = scheduler_run.id
-
 
         # Persist actionable items
         processed_count = 0
@@ -139,7 +165,15 @@ class LoopCoordinator:
                     status="ACTIONABLE",
                     idempotency_key=item_key,
                 )
-                await self.loop_service.create_loop_item(item)
+                created_item = await self.loop_service.create_loop_item(item)
+                created_task = await self._create_task_for_loop_item(
+                    loop_def=loop_def,
+                    item=created_item,
+                    ordinal=processed_count,
+                )
+                created_item.scheduler_task_id = created_task.id
+                created_item.status = "TASK_CREATED"
+                await self.loop_service.update_loop_item(created_item)
                 processed_count += 1
 
         loop_run.items_processed = processed_count
@@ -151,12 +185,57 @@ class LoopCoordinator:
 
         await self._log_audit_event(
             project_id=loop_def.project_id,
-            details=f"Loop {loop_id} run {loop_run.id} created scheduler Run {scheduler_run.id} with {processed_count} actionable items.",
+            details=(
+                f"Loop {loop_id} run {loop_run.id} created scheduler Run "
+                f"{scheduler_run.id} with {processed_count} actionable items."
+            ),
             execution_id=scheduler_run.id,
         )
 
-
         return loop_run
+
+    async def _create_task_for_loop_item(
+        self,
+        loop_def: domain.LoopDefinition,
+        item: domain.LoopItem,
+        ordinal: int,
+    ) -> domain.Task:
+        payload = item.payload
+        task_contract = payload.get("task_contract")
+        if not isinstance(task_contract, dict):
+            task_contract = {}
+        acceptance = payload.get("acceptance_criteria")
+        if not isinstance(acceptance, list):
+            acceptance = task_contract.get("acceptance_criteria")
+        if not isinstance(acceptance, list):
+            acceptance = [f"Resolve loop item {item.external_id}: {item.title}"]
+        metadata = {
+            "source": "loop_item",
+            "loop_id": loop_def.id,
+            "loop_run_id": item.loop_run_id,
+            "loop_item_id": item.id,
+            "external_id": item.external_id,
+            "task_contract": {
+                **task_contract,
+                "loop_item_id": item.id,
+                "required_evidence": task_contract.get(
+                    "required_evidence", ["Task reaches PR_READY through governed scheduler"]
+                ),
+            },
+        }
+        key = str(payload.get("key") or f"LOOP-{item.loop_run_id}-{ordinal + 1:03d}")
+        return await self.task_service.create_task(
+            domain.Task(
+                project_id=loop_def.project_id,
+                key=key,
+                title=str(payload.get("title") or item.title),
+                description=str(payload.get("description") or item.title),
+                acceptance_criteria=[str(value) for value in acceptance],
+                risk_level=str(payload.get("risk_level") or "medium"),
+                status=TaskStatus.READY,
+                metadata=metadata,
+            )
+        )
 
     async def _run_cheap_triage(
         self, loop_def: domain.LoopDefinition, payload: dict[str, Any] | None
@@ -177,8 +256,8 @@ class LoopCoordinator:
             items = payload["items"]
             return len(items) > 0, items
 
-        # Simple default detector fallback: if manually triggered without payload, treat as single actionable item
-        return True, [{"external_id": "task_1", "title": f"Action for {loop_def.name}"}]
+        # Production-safe default: no detector/payload means no actionable work.
+        return False, []
 
     async def recover_pending_loops(self, project_id: int) -> list[domain.LoopRun]:
         """Scan and recover any pending or running loop runs after process restart."""

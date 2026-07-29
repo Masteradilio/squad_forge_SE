@@ -165,6 +165,28 @@ class TaskService:
         await self.session.flush()
         return orm_obj.to_domain()
 
+    async def mark_pr_ready(
+        self,
+        task_id: int,
+        *,
+        gate_evidence: dict[str, object],
+    ) -> domain.Task:
+        """Central server-owned transition to PR_READY with persisted gate evidence."""
+        task = await self.get_task(task_id)
+        if task is None:
+            raise ValueError(f"Task with ID {task_id} not found")
+        if not gate_evidence:
+            raise ValueError("PR_READY transition requires explicit gate evidence")
+        metadata = dict(task.metadata or {})
+        metadata["pr_ready_gate"] = {
+            "passed": True,
+            "evidence": gate_evidence,
+        }
+        task.metadata = metadata
+        task.updated_at = domain.utc_now()
+        await self.update_task(task)
+        return await self.update_task_status(task_id, TaskStatus.PR_READY)
+
     async def update_task(self, task: domain.Task) -> domain.Task:
         """Update general task fields (except status validation)."""
         if not task.id:
@@ -209,9 +231,7 @@ class TaskService:
     async def list_runs_for_task(self, task_id: int) -> list[domain.TaskRun]:
         """List all execution runs for a specific task."""
         result = await self.session.execute(
-            select(TaskRunORM)
-            .where(TaskRunORM.task_id == task_id)
-            .order_by(TaskRunORM.id.desc())
+            select(TaskRunORM).where(TaskRunORM.task_id == task_id).order_by(TaskRunORM.id.desc())
         )
         return [orm_obj.to_domain() for orm_obj in result.scalars().all()]
 

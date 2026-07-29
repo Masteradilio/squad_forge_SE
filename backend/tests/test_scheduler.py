@@ -7,6 +7,7 @@ from localforge.models.enums import (
     AuditEventActorType,
     AuditEventType,
     RunMode,
+    RunnerHealthState,
     RunStatus,
     TaskRunStatus,
     TaskStatus,
@@ -292,6 +293,14 @@ async def test_scheduler_uses_runner_pool_to_prepare_task_execution(
     assert task_runs[0].worktree_path == "/tmp/localforge/lf-40"
     assert task_runs[0].branch_name == "localforge/lf-40"
     assert task_runs[0].sandbox_id == "fake-local"
+    assert task_runs[0].id is not None
+
+    async with UnitOfWork(db_manager) as verify_uow:
+        assert verify_uow.runner_pool is not None
+        logs = await verify_uow.runner_pool.list_dispatch_logs_for_task_run(task_runs[0].id)
+        assert len(logs) == 1
+        assert logs[0].dispatch_status == "SUCCESS"
+        assert logs[0].selected_runner_id == "scheduler-local-worktree"
 
 
 @pytest.mark.anyio
@@ -347,6 +356,66 @@ async def test_scheduler_marks_pipeline_failure_failed_safe_and_recovers_session
 
 
 @pytest.mark.anyio
+async def test_scheduler_releases_runner_lease_after_pipeline_success(
+    db_manager, db_session: AsyncSession, monkeypatch
+):
+    uow = UnitOfWork(db_manager)
+    uow.session = db_session
+    uow.projects = ProjectService(db_session)
+    uow.tasks = TaskService(db_session)
+    uow.executions = ExecutionService(db_session)
+
+    proj = await uow.projects.create_project(
+        domain.Project(name="PipelineSuccessProj", root_path="/p", default_branch="main")
+    )
+    assert proj.id is not None
+    run = await uow.executions.create_run(
+        domain.Run(project_id=proj.id, mode=RunMode.UNATTENDED, initiated_by="test")
+    )
+    assert run.id is not None
+    task = await uow.tasks.create_task(
+        domain.Task(project_id=proj.id, key="LF-42", title="Pipeline task", description="")
+    )
+    assert task.id is not None
+    await uow.tasks.update_task_status(task.id, TaskStatus.READY)
+    await uow.session.commit()
+
+    async def pass_pipeline(self, *, task_id: int, task_run_id: int, **kwargs) -> None:
+        assert self.uow.tasks is not None
+        await self.uow.tasks.update_task_status(task_id, TaskStatus.IMPLEMENTING)
+        await self.uow.tasks.update_task_status(task_id, TaskStatus.TESTING)
+        await self.uow.tasks.update_task_status(task_id, TaskStatus.REVIEWING)
+        await self.uow.tasks.update_task_status(task_id, TaskStatus.PR_READY)
+        task_run = await self.uow.tasks.get_task_run(task_run_id)
+        assert task_run is not None
+        task_run.status = TaskRunStatus.COMPLETED
+        await self.uow.tasks.update_task_run(task_run)
+
+    monkeypatch.setattr(
+        "localforge.services.scheduler.RolePipelineEngine.run_task",
+        pass_pipeline,
+    )
+
+    scheduler = Scheduler(
+        project_id=proj.id,
+        run_id=run.id,
+        max_parallel_tasks=1,
+        db_manager=db_manager,
+        runner_pool=TaskRunnerPool([FakeRunner()]),
+        execute_pipeline=True,
+    )
+
+    await scheduler._process_iteration()
+
+    async with UnitOfWork(db_manager) as verify_uow:
+        assert verify_uow.runner_pool is not None
+        runners = await verify_uow.runner_pool.list_runners()
+        runner = next(r for r in runners if r.runner_id == "scheduler-local-worktree")
+        assert runner.active_tasks_count == 0
+        assert runner.health_state == RunnerHealthState.READY
+
+
+@pytest.mark.anyio
 async def test_scheduler_lifecycle_and_parallel_limits(
     tmp_path, db_manager, db_session: AsyncSession
 ):
@@ -366,6 +435,7 @@ async def test_scheduler_lifecycle_and_parallel_limits(
 
     # Initial commit to create main branch and HEAD in temp repository
     import git
+
     repo = git.Repo.init(str(tmp_path))
     readme = tmp_path / "README.md"
     readme.write_text("# Test Repo")
@@ -460,6 +530,7 @@ async def test_scheduler_lifecycle_and_parallel_limits(
 
     # Clean up worktrees physically
     from localforge.gitops.manager import WorktreeManager
+
     wt_manager = WorktreeManager(project_id=proj.id, uow=uow)
     for tid in claimed_ids:
         # Move task status to final state (DONE) to allow cleanup

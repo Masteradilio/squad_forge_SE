@@ -85,6 +85,7 @@ async def test_safety_kernel_evaluate_file(tmp_path, db_session):
     # Initialize UOW service bindings manually
     from localforge.services.audit import AuditService
     from localforge.services.project import ProjectService
+
     uow.projects = ProjectService(db_session)
     uow.audits = AuditService(db_session)
 
@@ -137,6 +138,7 @@ async def test_safety_kernel_evaluate_commands(tmp_path, db_session):
     uow.session = db_session
     from localforge.services.audit import AuditService
     from localforge.services.project import ProjectService
+
     uow.projects = ProjectService(db_session)
     uow.audits = AuditService(db_session)
 
@@ -207,7 +209,6 @@ async def test_run_safe_command_unattended(tmp_path, db_session):
     )
     project = await uow.projects.create_project(proj_data)
     assert project.id is not None
-
 
     # Let's verify via task context
     task_data = domain.Task(

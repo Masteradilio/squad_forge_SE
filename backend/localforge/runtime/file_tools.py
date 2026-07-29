@@ -3,8 +3,14 @@ import os
 from dataclasses import dataclass
 
 from localforge.models import domain
-from localforge.models.enums import ActionKind, AuditEventActorType, AuditEventType
-from localforge.safety.kernel import ActionRequest, SafetyDecision, SafetyKernel, is_path_safe
+from localforge.models.enums import (
+    ActionKind,
+    AuditEventActorType,
+    AuditEventType,
+    AutonomyLevel,
+)
+from localforge.safety.action_gateway import ActionGateway
+from localforge.safety.kernel import ActionRequest, SafetyDecision, is_path_safe
 from localforge.storage import UnitOfWork
 from localforge.storage.artifacts import ArtifactStore
 
@@ -76,6 +82,7 @@ class SafeFileEditor:
             )
         # Check budgets limits
         from localforge.core.config import load_config
+
         try:
             config = load_config()
             max_files = config.budgets.max_file_count
@@ -94,6 +101,7 @@ class SafeFileEditor:
 
         # Run git checks in worktree_root
         import subprocess
+
         try:
             toplevel_res = subprocess.run(
                 ["git", "rev-parse", "--show-toplevel"],
@@ -119,9 +127,7 @@ class SafeFileEditor:
                 check=True,
             )
             modified_files = [
-                line[3:].strip()
-                for line in (status_res.stdout or "").splitlines()
-                if line.strip()
+                line[3:].strip() for line in (status_res.stdout or "").splitlines() if line.strip()
             ]
             if len(modified_files) > max_files:
                 raise ValueError(
@@ -166,13 +172,22 @@ class SafeFileEditor:
             payload={"path": target},
             purpose=f"{kind.value}: {target}",
         )
-        decision, reason = await SafetyKernel.evaluate(request, self.uow, worktree_root)
-        if decision != SafetyDecision.ALLOW:
+        gateway_decision = await ActionGateway(self.uow).evaluate(
+            request,
+            project_root=worktree_root,
+            autonomy_level=AutonomyLevel.L3_UNATTENDED,
+        )
+        if gateway_decision.decision != SafetyDecision.ALLOW:
             await self._audit(
                 kind.value,
-                {"path": target, "decision": decision.value, "reason": reason},
+                {
+                    "path": target,
+                    "decision": gateway_decision.decision.value,
+                    "reason": gateway_decision.reason,
+                    "gateway": "ActionGateway",
+                },
             )
-            raise ValueError(reason)
+            raise ValueError(gateway_decision.reason)
 
     async def _audit(self, action: str, payload: dict[str, object]) -> None:
         assert self.uow.audits is not None

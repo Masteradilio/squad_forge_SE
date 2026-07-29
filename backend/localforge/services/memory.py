@@ -1,7 +1,7 @@
-"""Memory service — provenance-aware operational memory, consolidation, advanced retrieval, and safety isolation.
+"""Provenance-aware operational memory service.
 
 Implements V6-1000 through V6-1004:
-- Provenance tracking (repository, run_id, task_key, attempt, verifier, validity, confidence, scope) (V6-1000)
+- Provenance tracking for repository, run, task, verifier, validity, and scope.
 - Learning restriction: failed/unverified attempts are not authoritative memory (V6-1000)
 - Typed relationships with cycle detection for partial-order semantics (V6-1001)
 - Consolidation background job (duplicates, expired facts, contradictions) (V6-1002)
@@ -9,9 +9,10 @@ Implements V6-1000 through V6-1004:
 - Safe prompt injection for Loop & Swarm without permission elevation (V6-1004)
 - Human override operations (pin, correct, supersede, invalidate) (V6-1004)
 """
+
 import json
 import logging
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import select
@@ -28,18 +29,17 @@ from localforge.models.enums import (
 from localforge.services.memory_relations import MemoryRelationService
 from localforge.services.memory_retrieval import (
     EmbeddingProvider,
-    MockEmbeddingProvider,
     build_safe_memory_prompt,
     calculate_retrieval_metrics,
     filter_and_score_facts,
 )
-from localforge.storage.orm import MemoryFactORM, MemoryRelationORM
+from localforge.storage.orm import MemoryFactORM
 
 logger = logging.getLogger(__name__)
 
 
 class MemoryService:
-    """Persist provenance-aware project memory facts, manage relationships, and run consolidation/retrieval."""
+    """Persist memory facts, relationships, consolidation, and retrieval."""
 
     def __init__(self, session: AsyncSession):
         self.session = session
@@ -95,7 +95,9 @@ class MemoryService:
         if status is not None:
             orm_obj.status = status
         if validity is not None:
-            orm_obj.validity = validity.value if isinstance(validity, MemoryValidityStatus) else str(validity)
+            orm_obj.validity = (
+                validity.value if isinstance(validity, MemoryValidityStatus) else str(validity)
+            )
         if tags is not None:
             orm_obj.tags = tags
         orm_obj.updated_at = datetime.now(UTC)
@@ -122,10 +124,12 @@ class MemoryService:
     ) -> list[domain.MemoryFact]:
         """Learn facts from a run (V6-1000).
 
-        If is_successful is False, facts are marked UNVERIFIED/REJECTED and NOT stored as authoritative.
+        Failed runs are persisted as rejected, not authoritative.
         """
         learned: list[domain.MemoryFact] = []
-        validity = MemoryValidityStatus.AUTHORITATIVE if is_successful else MemoryValidityStatus.REJECTED
+        validity = (
+            MemoryValidityStatus.AUTHORITATIVE if is_successful else MemoryValidityStatus.REJECTED
+        )
 
         if final_summary:
             learned.append(
@@ -211,10 +215,16 @@ class MemoryService:
                 continue
 
             # 1. Check expiration based on max_fact_age_days
-            created = fact.created_at if fact.created_at.tzinfo else fact.created_at.replace(tzinfo=UTC)
+            created = (
+                fact.created_at if fact.created_at.tzinfo else fact.created_at.replace(tzinfo=UTC)
+            )
             age = (now - created).days
 
-            if age > pol.max_fact_age_days and fact.validity == MemoryValidityStatus.AUTHORITATIVE and not fact.pinned:
+            if (
+                age > pol.max_fact_age_days
+                and fact.validity == MemoryValidityStatus.AUTHORITATIVE
+                and not fact.pinned
+            ):
                 await self.update_fact(fact.id, validity=MemoryValidityStatus.EXPIRED)
                 expired_count += 1
                 continue
@@ -254,7 +264,7 @@ class MemoryService:
         limit: int = 5,
         embedding_provider: EmbeddingProvider | None = None,
     ) -> list[domain.MemoryFact]:
-        """Advanced search using structured filters, lexical terms, and optional embeddings (V6-1003)."""
+        """Search using structured filters, lexical terms, and optional embeddings."""
         all_facts = await self.list_facts(project_id)
         scored = filter_and_score_facts(all_facts, query, filters, embedding_provider)
         return [fact for _, fact in scored[:limit]]
@@ -274,11 +284,12 @@ class MemoryService:
         self, project_id: int, task_key: str, query: str = "", limit: int = 5
     ) -> str:
         """Inject read-only, scoped, authoritative memory into loop/swarm prompts (V6-1004)."""
-        flt = domain.MemoryRetrievalFilter(
+        facts = await self.retrieve_scoped(
+            project_id,
+            query=query or task_key,
             task_key=task_key,
-            validity=MemoryValidityStatus.AUTHORITATIVE,
+            limit=limit,
         )
-        facts = await self.retrieve_advanced(project_id, query=query or task_key, filters=flt, limit=limit)
         return build_safe_memory_prompt(facts)
 
     async def retrieve_relevant(
@@ -288,10 +299,48 @@ class MemoryService:
         flt = domain.MemoryRetrievalFilter(validity=MemoryValidityStatus.AUTHORITATIVE)
         return await self.retrieve_advanced(project_id, query=query, filters=flt, limit=limit)
 
+    async def retrieve_scoped(
+        self,
+        project_id: int,
+        *,
+        query: str,
+        task_key: str | None = None,
+        repository: str | None = None,
+        file_paths: list[str] | None = None,
+        error_fingerprint: str | None = None,
+        policy_scope: str | None = None,
+        limit: int = 5,
+    ) -> list[domain.MemoryFact]:
+        """Retrieve active authoritative memory bounded by project and execution scope."""
+        filters = domain.MemoryRetrievalFilter(
+            repository=repository,
+            task_key=task_key,
+            error_fingerprint=error_fingerprint,
+            policy_scope=policy_scope,
+            validity=MemoryValidityStatus.AUTHORITATIVE,
+        )
+        facts = await self.retrieve_advanced(
+            project_id,
+            query=query,
+            filters=filters,
+            limit=max(limit * 3, limit),
+        )
+        active_facts = [fact for fact in facts if fact.status == "active"]
+        if not file_paths:
+            return active_facts[:limit]
+
+        scoped: list[domain.MemoryFact] = []
+        normalized_paths = [path.lower() for path in file_paths]
+        for fact in active_facts:
+            text = " ".join([fact.fact, fact.source, " ".join(fact.tags)]).lower()
+            if not any(path in text for path in normalized_paths):
+                continue
+            scoped.append(fact)
+        return scoped[:limit]
+
     # ------------------------------------------------------------------ #
     # Backup & Internal Helpers
     # ------------------------------------------------------------------ #
-
 
     async def export_backup(self, project_id: int, *, fmt: str = "json") -> str:
         payload = {
@@ -302,7 +351,9 @@ class MemoryService:
             return json.dumps(payload, indent=2, sort_keys=True)
         raise ValueError("Unsupported memory export format")
 
-    async def import_backup(self, project_id: int, payload: dict[str, Any]) -> list[domain.MemoryFact]:
+    async def import_backup(
+        self, project_id: int, payload: dict[str, Any]
+    ) -> list[domain.MemoryFact]:
         facts = payload.get("facts", [])
         if not isinstance(facts, list):
             raise ValueError("Memory backup must contain a facts list")

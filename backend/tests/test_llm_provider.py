@@ -27,14 +27,14 @@ class NestedResponse(BaseModel):
 
 def test_clean_json_str():
     """Verify that clean_json_str extracts raw JSON strings from markdown fences."""
-    raw1 = "```json\n{\n  \"name\": \"test\"\n}\n```"
-    assert clean_json_str(raw1) == "{\n  \"name\": \"test\"\n}"
+    raw1 = '```json\n{\n  "name": "test"\n}\n```'
+    assert clean_json_str(raw1) == '{\n  "name": "test"\n}'
 
-    raw2 = "  ```\n{\n  \"name\": \"test\"\n}\n```  "
-    assert clean_json_str(raw2) == "{\n  \"name\": \"test\"\n}"
+    raw2 = '  ```\n{\n  "name": "test"\n}\n```  '
+    assert clean_json_str(raw2) == '{\n  "name": "test"\n}'
 
-    raw3 = "{\n  \"name\": \"test\"\n}"
-    assert clean_json_str(raw3) == "{\n  \"name\": \"test\"\n}"
+    raw3 = '{\n  "name": "test"\n}'
+    assert clean_json_str(raw3) == '{\n  "name": "test"\n}'
 
 
 @pytest.mark.anyio
@@ -44,9 +44,7 @@ async def test_openai_compatible_provider_list_models():
 
     mock_resp = MagicMock()
     mock_resp.status_code = 200
-    mock_resp.json.return_value = {
-        "data": [{"id": "llama3"}, {"id": "mistral"}]
-    }
+    mock_resp.json.return_value = {"data": [{"id": "llama3"}, {"id": "mistral"}]}
 
     with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
         mock_get.return_value = mock_resp
@@ -63,9 +61,7 @@ async def test_openai_compatible_provider_chat_success():
 
     mock_resp = MagicMock()
     mock_resp.status_code = 200
-    mock_resp.json.return_value = {
-        "choices": [{"message": {"content": "Mocked LLM answer."}}]
-    }
+    mock_resp.json.return_value = {"choices": [{"message": {"content": "Mocked LLM answer."}}]}
 
     with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
         mock_post.return_value = mock_resp

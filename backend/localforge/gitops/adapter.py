@@ -28,9 +28,7 @@ class GitAdapter:
         self.task_id = task_id
         self.run_mode = run_mode
 
-    async def _execute_git(
-        self, args: list[str], use_task_context: bool = True
-    ) -> str:
+    async def _execute_git(self, args: list[str], use_task_context: bool = True) -> str:
         """Helper routing the raw Git command list to the safety runner."""
         # Sanitize arguments portably using double quotes where necessary
         cmd_str = "git " + " ".join(
@@ -81,9 +79,7 @@ class GitAdapter:
         """Check if a branch exists locally or in refs/heads/."""
         try:
             # Check with rev-parse
-            await self._execute_git(
-                ["show-ref", "--verify", f"refs/heads/{branch_name}"]
-            )
+            await self._execute_git(["show-ref", "--verify", f"refs/heads/{branch_name}"])
             return True
         except Exception:
             return False
@@ -123,9 +119,7 @@ class GitAdapter:
 
     async def remove_worktree(self, path: str) -> None:
         """Remove a worktree registered directory from the main repository."""
-        await self._execute_git(
-            ["worktree", "remove", path, "--force"], use_task_context=False
-        )
+        await self._execute_git(["worktree", "remove", path, "--force"], use_task_context=False)
 
     async def diff(self, base_ref: str | None = None) -> str:
         """Show unstaged/staged diff changes or compare against base ref."""

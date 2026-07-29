@@ -12,14 +12,12 @@ Covers V6-1000 to V6-1004:
 - Safe read-only memory prompt injection for Loop/Swarm (V6-1004)
 - Human override operations (pin, supersede, invalidate) (V6-1004)
 """
-import pytest
-from datetime import UTC, datetime, timedelta
 
+import pytest
 from localforge.models import domain
 from localforge.models.enums import (
     ArtifactType,
     MemoryFactCategory,
-    MemoryRecordKind,
     MemoryRelationType,
     MemoryValidityStatus,
 )
@@ -31,10 +29,10 @@ from localforge.services.memory_retrieval import (
 )
 from localforge.storage import UnitOfWork
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Unit-level tests (no DB required)
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def test_mock_embedding_provider_deterministic() -> None:
     """V6-1003: MockEmbeddingProvider generates normalized vectors and non-zero similarity for matches."""
@@ -55,12 +53,20 @@ def test_mock_embedding_provider_deterministic() -> None:
 def test_filter_and_score_facts_structured_filters() -> None:
     """V6-1003: Structured filters strictly constrain facts by task_key and category."""
     f1 = domain.MemoryFact(
-        id=1, project_id=1, fact="Fix bug in auth service", task_key="TASK-1",
-        category=MemoryFactCategory.OBSERVED_FACT, validity=MemoryValidityStatus.AUTHORITATIVE
+        id=1,
+        project_id=1,
+        fact="Fix bug in auth service",
+        task_key="TASK-1",
+        category=MemoryFactCategory.OBSERVED_FACT,
+        validity=MemoryValidityStatus.AUTHORITATIVE,
     )
     f2 = domain.MemoryFact(
-        id=2, project_id=1, fact="Use PostgreSQL for DB", task_key="TASK-2",
-        category=MemoryFactCategory.DECISION, validity=MemoryValidityStatus.AUTHORITATIVE
+        id=2,
+        project_id=1,
+        fact="Use PostgreSQL for DB",
+        task_key="TASK-2",
+        category=MemoryFactCategory.DECISION,
+        validity=MemoryValidityStatus.AUTHORITATIVE,
     )
     facts = [f1, f2]
 
@@ -77,15 +83,61 @@ def test_filter_and_score_facts_structured_filters() -> None:
     assert res2[0][1].id == 2
 
 
+def test_filter_and_score_facts_rejects_out_of_scope_memory() -> None:
+    """C9: scoped retrieval excludes stale, wrong repository, wrong policy, and wrong file facts."""
+    in_scope = domain.MemoryFact(
+        id=1,
+        project_id=1,
+        fact="Use isolated pytest for app/widget.py",
+        repository="repo-a",
+        task_key="TASK-1",
+        policy_scope="default",
+        tags=["app/widget.py", "fingerprint-1"],
+        validity=MemoryValidityStatus.AUTHORITATIVE,
+    )
+    wrong_repository = in_scope.model_copy(update={"id": 2, "repository": "repo-b"})
+    wrong_policy = in_scope.model_copy(update={"id": 3, "policy_scope": "elevated"})
+    wrong_file = in_scope.model_copy(
+        update={"id": 4, "fact": "Use isolated pytest for app/other.py", "tags": []}
+    )
+    stale = in_scope.model_copy(update={"id": 5, "validity": MemoryValidityStatus.SUPERSEDED})
+    filters = domain.MemoryRetrievalFilter(
+        repository="repo-a",
+        task_key="TASK-1",
+        file_path="app/widget.py",
+        error_fingerprint="fingerprint-1",
+        policy_scope="default",
+        validity=MemoryValidityStatus.AUTHORITATIVE,
+    )
+
+    results = filter_and_score_facts(
+        [in_scope, wrong_repository, wrong_policy, wrong_file, stale],
+        query="pytest widget",
+        filters=filters,
+    )
+
+    assert [fact.id for _, fact in results] == [1]
+
+
 def test_calculate_retrieval_metrics() -> None:
     """V6-1003: Evaluation benchmark metrics (Recall@k, MRR, zero-result, stale hit rate)."""
-    f1 = domain.MemoryFact(id=10, project_id=1, fact="Fact 1", validity=MemoryValidityStatus.AUTHORITATIVE)
-    f2 = domain.MemoryFact(id=20, project_id=1, fact="Fact 2", validity=MemoryValidityStatus.SUPERSEDED)
-    f3 = domain.MemoryFact(id=30, project_id=1, fact="Fact 3", validity=MemoryValidityStatus.AUTHORITATIVE)
+    f1 = domain.MemoryFact(
+        id=10, project_id=1, fact="Fact 1", validity=MemoryValidityStatus.AUTHORITATIVE
+    )
+    f2 = domain.MemoryFact(
+        id=20, project_id=1, fact="Fact 2", validity=MemoryValidityStatus.SUPERSEDED
+    )
+    f3 = domain.MemoryFact(
+        id=30, project_id=1, fact="Fact 3", validity=MemoryValidityStatus.AUTHORITATIVE
+    )
 
     eval_cases = [
-        ("query 1", [10, 30], [f1, f2, f3]),  # Expected 10, 30. Top-5 returned: f1, f2, f3. Hits: 10, 30. Hit f2 is superseded!
-        ("query 2", [99], []),                # Expected 99. Zero results returned.
+        (
+            "query 1",
+            [10, 30],
+            [f1, f2, f3],
+        ),  # Expected 10, 30. Top-5 returned: f1, f2, f3. Hits: 10, 30. Hit f2 is superseded!
+        ("query 2", [99], []),  # Expected 99. Zero results returned.
     ]
 
     metrics = calculate_retrieval_metrics(eval_cases, k=5)
@@ -99,12 +151,21 @@ def test_calculate_retrieval_metrics() -> None:
 def test_build_safe_memory_prompt_read_only_isolation() -> None:
     """V6-1004: Injected memory contains only authoritative facts and preserves read-only safety text."""
     f_auth = domain.MemoryFact(
-        id=1, project_id=1, fact="Use pytest for testing", category=MemoryFactCategory.CONSTRAINT,
-        validity=MemoryValidityStatus.AUTHORITATIVE, task_key="TSK-10", verifier="pytest_runner"
+        id=1,
+        project_id=1,
+        fact="Use pytest for testing",
+        category=MemoryFactCategory.CONSTRAINT,
+        validity=MemoryValidityStatus.AUTHORITATIVE,
+        task_key="TSK-10",
+        verifier="pytest_runner",
     )
     f_stale = domain.MemoryFact(
-        id=2, project_id=1, fact="Use unittest for testing", category=MemoryFactCategory.CONSTRAINT,
-        validity=MemoryValidityStatus.SUPERSEDED, task_key="TSK-10"
+        id=2,
+        project_id=1,
+        fact="Use unittest for testing",
+        category=MemoryFactCategory.CONSTRAINT,
+        validity=MemoryValidityStatus.SUPERSEDED,
+        task_key="TSK-10",
     )
 
     prompt = build_safe_memory_prompt([f_auth, f_stale])
@@ -117,6 +178,7 @@ def test_build_safe_memory_prompt_read_only_isolation() -> None:
 # ─────────────────────────────────────────────────────────────────────────────
 # Integration tests (DB required)
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_provenance_fact_creation_and_failed_attempt_rejection(db_manager) -> None:
@@ -170,8 +232,12 @@ async def test_memory_relations_and_cycle_prevention(db_manager) -> None:
         )
         assert proj.id is not None
 
-        fact1 = await uow.memory.create_fact(domain.MemoryFact(project_id=proj.id, fact="Old API route v1"))
-        fact2 = await uow.memory.create_fact(domain.MemoryFact(project_id=proj.id, fact="New API route v2"))
+        fact1 = await uow.memory.create_fact(
+            domain.MemoryFact(project_id=proj.id, fact="Old API route v1")
+        )
+        fact2 = await uow.memory.create_fact(
+            domain.MemoryFact(project_id=proj.id, fact="New API route v2")
+        )
         assert fact1.id is not None
         assert fact2.id is not None
 
@@ -185,7 +251,9 @@ async def test_memory_relations_and_cycle_prevention(db_manager) -> None:
         assert rel1.id is not None
 
         # Check updated validity on target
-        updated_fact1 = (await uow.memory.list_facts(proj.id, validity=MemoryValidityStatus.SUPERSEDED))[0]
+        updated_fact1 = (
+            await uow.memory.list_facts(proj.id, validity=MemoryValidityStatus.SUPERSEDED)
+        )[0]
         assert updated_fact1.id == fact1.id
 
         # Self-referential relation must fail
@@ -214,8 +282,12 @@ async def test_memory_consolidation_job(db_manager) -> None:
         assert proj.id is not None
 
         # Create two exact duplicate facts
-        f_dup1 = await uow.memory.create_fact(domain.MemoryFact(project_id=proj.id, fact="Use SQLite for dev"))
-        f_dup2 = await uow.memory.create_fact(domain.MemoryFact(project_id=proj.id, fact="Use SQLite for dev "))
+        await uow.memory.create_fact(
+            domain.MemoryFact(project_id=proj.id, fact="Use SQLite for dev")
+        )
+        await uow.memory.create_fact(
+            domain.MemoryFact(project_id=proj.id, fact="Use SQLite for dev ")
+        )
 
         res = await uow.memory.consolidate_memory(proj.id)
         assert res["duplicate_count"] >= 1

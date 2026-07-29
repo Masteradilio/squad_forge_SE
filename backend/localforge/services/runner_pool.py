@@ -1,7 +1,6 @@
 import logging
-from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from localforge.models import domain
@@ -12,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class RunnerPoolService:
-    """Service layer for Capability-Aware RunnerPool management, health tracking, deterministic dispatch, and backpressure."""
+    """Capability-aware RunnerPool management, health tracking, and dispatch."""
 
     def __init__(self, session: AsyncSession):
         self.session = session
@@ -73,6 +72,14 @@ class RunnerPoolService:
         result = await self.session.execute(stmt)
         return [orm_obj.to_domain() for orm_obj in result.scalars().all()]
 
+    async def list_dispatch_logs_for_task_run(
+        self, task_run_id: int
+    ) -> list[domain.RunnerDispatchLog]:
+        """List persisted dispatch decisions for a task run."""
+        stmt = select(RunnerDispatchLogORM).where(RunnerDispatchLogORM.task_run_id == task_run_id)
+        result = await self.session.execute(stmt)
+        return [orm_obj.to_domain() for orm_obj in result.scalars().all()]
+
     async def dispatch_task(
         self,
         project_id: int,
@@ -84,7 +91,7 @@ class RunnerPoolService:
         """Perform deterministic, capability-aware dispatch for a task run.
 
         Returns:
-            (selected_runner: RunnerPoolState | None, dispatch_status: str, dispatch_log: RunnerDispatchLog)
+            Selected runner, dispatch status, and persisted dispatch log.
         """
         all_runners = await self.list_runners()
         rejection_reasons: dict[str, str] = {}
@@ -96,35 +103,51 @@ class RunnerPoolService:
         # Filter & Rank
         for runner in all_runners:
             # Hard filter 1: Health State
-            if runner.health_state in (RunnerHealthState.QUARANTINED, RunnerHealthState.UNAVAILABLE):
-                rejection_reasons[runner.runner_id] = f"Excluded due to health state '{runner.health_state.value}'."
+            if runner.health_state in (
+                RunnerHealthState.QUARANTINED,
+                RunnerHealthState.UNAVAILABLE,
+            ):
+                rejection_reasons[runner.runner_id] = (
+                    f"Excluded due to health state '{runner.health_state.value}'."
+                )
                 continue
 
             # Hard filter 2: Lane
             if required_lane and runner.lane != required_lane:
-                rejection_reasons[runner.runner_id] = f"Lane mismatch: expected '{required_lane.value}', got '{runner.lane.value}'."
+                rejection_reasons[runner.runner_id] = (
+                    f"Lane mismatch: expected '{required_lane.value}', got '{runner.lane.value}'."
+                )
                 continue
 
             # Hard filter 3: Tools
             missing_tools = req_tools - set(runner.capabilities.tools)
             if missing_tools:
-                rejection_reasons[runner.runner_id] = f"Missing required tools: {sorted(list(missing_tools))}."
+                rejection_reasons[runner.runner_id] = (
+                    f"Missing required tools: {sorted(list(missing_tools))}."
+                )
                 continue
 
             # Hard filter 4: Supported Task Types
             if required_task_type and runner.capabilities.supported_task_types:
                 if required_task_type not in runner.capabilities.supported_task_types:
-                    rejection_reasons[runner.runner_id] = f"Task type '{required_task_type}' not supported."
+                    rejection_reasons[runner.runner_id] = (
+                        f"Task type '{required_task_type}' not supported."
+                    )
                     continue
 
             # Hard filter 5: Concurrency Capacity
             if runner.active_tasks_count >= runner.max_concurrency:
-                rejection_reasons[runner.runner_id] = f"Concurrency capacity exhausted ({runner.active_tasks_count}/{runner.max_concurrency})."
+                rejection_reasons[runner.runner_id] = (
+                    "Concurrency capacity exhausted "
+                    f"({runner.active_tasks_count}/{runner.max_concurrency})."
+                )
                 continue
 
             # Score formula: (success_rate * 100) - (active_tasks * 10) + health_bonus
             health_bonus = 50.0 if runner.health_state == RunnerHealthState.READY else 20.0
-            score = (runner.success_rate * 100.0) - (runner.active_tasks_count * 10.0) + health_bonus
+            score = (
+                (runner.success_rate * 100.0) - (runner.active_tasks_count * 10.0) + health_bonus
+            )
             ranking_scores[runner.runner_id] = score
             eligible_runners.append((runner, score))
 
@@ -147,11 +170,39 @@ class RunnerPoolService:
         eligible_runners.sort(key=lambda item: (-item[1], item[0].runner_id))
         winning_runner, _ = eligible_runners[0]
 
-        # Record runner capacity reservation
-        stmt = select(RunnerPoolStateORM).where(RunnerPoolStateORM.runner_id == winning_runner.runner_id)
+        # Reserve capacity atomically so concurrent schedulers cannot over-allocate.
+        reserve_stmt = (
+            update(RunnerPoolStateORM)
+            .where(
+                RunnerPoolStateORM.runner_id == winning_runner.runner_id,
+                RunnerPoolStateORM.active_tasks_count < RunnerPoolStateORM.max_concurrency,
+            )
+            .values(active_tasks_count=RunnerPoolStateORM.active_tasks_count + 1)
+        )
+        reserve_result = await self.session.execute(reserve_stmt)
+        if getattr(reserve_result, "rowcount", 0) != 1:
+            rejection_reasons[winning_runner.runner_id] = (
+                "Concurrency capacity changed before reservation completed."
+            )
+            dispatch_status = "NO_COMPATIBLE_RUNNER"
+            log_domain = domain.RunnerDispatchLog(
+                project_id=project_id,
+                task_run_id=task_run_id,
+                selected_runner_id=None,
+                dispatch_status=dispatch_status,
+                ranking_scores_json=ranking_scores,
+                rejection_reasons_json=rejection_reasons,
+            )
+            orm_log = RunnerDispatchLogORM.from_domain(log_domain)
+            self.session.add(orm_log)
+            await self.session.flush()
+            return None, dispatch_status, orm_log.to_domain()
+
+        stmt = select(RunnerPoolStateORM).where(
+            RunnerPoolStateORM.runner_id == winning_runner.runner_id
+        )
         res = await self.session.execute(stmt)
         orm_runner = res.scalar_one()
-        orm_runner.active_tasks_count += 1
         if orm_runner.active_tasks_count >= orm_runner.max_concurrency:
             orm_runner.health_state = RunnerHealthState.BUSY.value
 
@@ -170,7 +221,9 @@ class RunnerPoolService:
 
         return orm_runner.to_domain(), dispatch_status, orm_log.to_domain()
 
-    async def release_runner_lease(self, runner_id: str, success: bool = True) -> domain.RunnerPoolState:
+    async def release_runner_lease(
+        self, runner_id: str, success: bool = True
+    ) -> domain.RunnerPoolState:
         """Release concurrency lease and update historical outcome metrics."""
         stmt = select(RunnerPoolStateORM).where(RunnerPoolStateORM.runner_id == runner_id)
         res = await self.session.execute(stmt)
@@ -182,7 +235,10 @@ class RunnerPoolService:
             orm_runner.active_tasks_count -= 1
 
         # Restore READY health if it was BUSY
-        if orm_runner.health_state == RunnerHealthState.BUSY.value and orm_runner.active_tasks_count < orm_runner.max_concurrency:
+        if (
+            orm_runner.health_state == RunnerHealthState.BUSY.value
+            and orm_runner.active_tasks_count < orm_runner.max_concurrency
+        ):
             orm_runner.health_state = RunnerHealthState.READY.value
 
         # Update success rate (moving average)

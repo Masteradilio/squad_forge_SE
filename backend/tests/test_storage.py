@@ -12,7 +12,6 @@ async def test_bootstrap_initialization(db_session: AsyncSession):
     version = await get_current_schema_version(db_session)
     assert version == CURRENT_VERSION
 
-
     # Verify that tables like projects, tasks, epics exist by running a simple query
     result = await db_session.execute(text("SELECT COUNT(*) FROM projects"))
     count = result.scalar()

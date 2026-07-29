@@ -1,12 +1,19 @@
-"""Daily Project Triage Loop L1 implementation — report-only, cheap triage, zero external mutations (V6-1101)."""
+"""Daily Project Triage Loop L1 implementation."""
 
 import logging
-from datetime import UTC, datetime
-from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from localforge.services.eval_corpus import LabeledEvent
+from localforge.services.operational_connector import (
+    CheckRunRecord,
+    IssueRecord,
+    OperationalRepositoryConnector,
+    PullRequestRecord,
+    ReviewThreadRecord,
+    fetch_all_pages,
+    sanitize_external_text,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -15,9 +22,9 @@ class TriageFinding(BaseModel):
     """Prioritized finding produced by L1 Daily Project Triage (V6-1101)."""
 
     item_id: str
-    priority: int        # 1 (HIGH), 2 (MEDIUM), 3 (LOW)
+    priority: int  # 1 (HIGH), 2 (MEDIUM), 3 (LOW)
     title: str
-    classification: str  # CODE_REGRESSION, QUESTION, MALICIOUS_PROMPT_INJECTION, FLAKE, ENVIRONMENT, SMALL_FIX, MERGE_CONFLICT
+    classification: str
     evidence_summary: str
     recommended_action: str
     acting_on: bool = False  # Tracked idempotency state
@@ -41,7 +48,7 @@ class TriageCritique(BaseModel):
 
 
 class DailyTriageLoopService:
-    """Service managing L1 Daily Project Triage — report-only inspection with zero external mutations."""
+    """Run report-only repository triage with zero external mutations."""
 
     def __init__(self) -> None:
         # Acting-on idempotency store: item_id -> TriageFinding
@@ -52,7 +59,7 @@ class DailyTriageLoopService:
 
         Enforces:
         - Malicious prompt injection neutralization (is_malicious=True, priority=3, action=IGNORE)
-        - Idempotency: duplicate event IDs update existing acting_on entry without creating duplicate findings.
+        - Idempotency: duplicate event IDs update the existing acting_on entry.
         - Zero external mutation guarantee.
         """
         findings: list[TriageFinding] = []
@@ -65,12 +72,14 @@ class DailyTriageLoopService:
                 continue
 
             # Check malicious injection guard (V6-1101 regression test)
-            is_malicious = False
             title_lower = evt.title.lower()
             body_lower = str(evt.payload.get("body", "")).lower()
 
-            if "system override" in title_lower or "ignore previous instructions" in body_lower or "elevate autonomy" in body_lower:
-                is_malicious = True
+            if (
+                "system override" in title_lower
+                or "ignore previous instructions" in body_lower
+                or "elevate autonomy" in body_lower
+            ):
                 finding = TriageFinding(
                     item_id=evt.id,
                     priority=3,
@@ -118,8 +127,82 @@ class DailyTriageLoopService:
 
         return findings
 
-    def generate_post_run_critique(self, run_id: str, findings: list[TriageFinding]) -> TriageCritique:
-        """Produce post-run critique analyzing false positives, missed items, and costs (V6-1101)."""
+    def run_from_connector(self, connector: OperationalRepositoryConnector) -> list[TriageFinding]:
+        """Fetch controlled repository state through the connector and triage it."""
+        events: list[LabeledEvent] = []
+        for item in fetch_all_pages(connector.list_issues):
+            if isinstance(item, IssueRecord):
+                events.append(
+                    LabeledEvent(
+                        id=item.external_id,
+                        category="ACTIONABLE_ISSUE",
+                        title=sanitize_external_text(item.title),
+                        payload={
+                            "issue_number": item.number,
+                            "body": sanitize_external_text(item.body),
+                        },
+                        expected_classification="CODE_REGRESSION",
+                        allowed_action="REPORT_ONLY",
+                        required_approval="NONE",
+                    )
+                )
+        for item in fetch_all_pages(connector.list_check_runs):
+            if isinstance(item, CheckRunRecord) and item.conclusion == "failure":
+                category = "CI_FLAKE" if item.is_flaky else "CI_CODE_REGRESSION"
+                events.append(
+                    LabeledEvent(
+                        id=item.external_id,
+                        category=category,
+                        title=sanitize_external_text(item.name),
+                        payload={
+                            "build_id": item.build_id,
+                            "failed_test": item.failed_test,
+                            "error_log": sanitize_external_text(item.log_excerpt),
+                            "is_flaky": item.is_flaky,
+                        },
+                        expected_classification="FLAKE" if item.is_flaky else "CODE_REGRESSION",
+                        allowed_action="REPORT_ONLY",
+                        required_approval="NONE",
+                    )
+                )
+        for item in fetch_all_pages(connector.list_pull_requests):
+            if isinstance(item, PullRequestRecord) and item.has_conflicts:
+                events.append(
+                    LabeledEvent(
+                        id=f"{item.external_id}:conflict",
+                        category="PR_MERGE_CONFLICT",
+                        title=sanitize_external_text(item.title),
+                        payload={"pr_id": item.number, "conflicting_files": []},
+                        expected_classification="MERGE_CONFLICT",
+                        allowed_action="REPORT_ONLY",
+                        required_approval="HUMAN_REVIEW",
+                    )
+                )
+        for item in fetch_all_pages(connector.list_review_threads):
+            if isinstance(item, ReviewThreadRecord) and not item.resolved:
+                events.append(
+                    LabeledEvent(
+                        id=item.external_id,
+                        category="PR_REVIEW_COMMENT",
+                        title=f"Review comment on PR #{item.pr_number}",
+                        payload={
+                            "pr_id": item.pr_number,
+                            "file_path": item.file_path,
+                            "line_number": item.line_number,
+                            "comment": sanitize_external_text(item.body),
+                            "commit_sha": item.commit_sha,
+                        },
+                        expected_classification="SMALL_FIX",
+                        allowed_action="REPORT_ONLY",
+                        required_approval="HUMAN_MERGE",
+                    )
+                )
+        return self.run_cheap_triage(events)
+
+    def generate_post_run_critique(
+        self, run_id: str, findings: list[TriageFinding]
+    ) -> TriageCritique:
+        """Produce post-run critique for false positives, missed items, and costs."""
         actionable = [f for f in findings if f.priority in (1, 2) and not f.is_malicious]
         noop = [f for f in findings if f.priority == 3 or f.is_malicious]
         malicious = [f for f in findings if f.is_malicious]
@@ -138,5 +221,5 @@ class DailyTriageLoopService:
         )
 
     def get_acting_on_state(self, item_id: str) -> TriageFinding | None:
-        """Return persisted acting_on state for an item to verify state retention across restarts."""
+        """Return persisted acting_on state for an item."""
         return self._acting_on_store.get(item_id)

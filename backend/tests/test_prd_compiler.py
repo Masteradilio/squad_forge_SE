@@ -206,15 +206,10 @@ async def test_import_prd_dry_run_does_not_persist_and_normal_import_creates_tas
 
 
 @pytest.mark.anyio
-async def test_import_prd_creates_architecture_contract_and_task_packets(
-    db_manager, tmp_path
-):
+async def test_import_prd_creates_architecture_contract_and_task_packets(db_manager, tmp_path):
     prd_path = tmp_path / "PRD.md"
     prd_path.write_text(
-        "# PRD\n\n"
-        "## Calculator\n"
-        "- Implement numeric entry\n"
-        "- Implement TVM solving\n",
+        "# PRD\n\n## Calculator\n- Implement numeric entry\n- Implement TVM solving\n",
         encoding="utf-8",
     )
     async with UnitOfWork(db_manager) as uow:
@@ -238,8 +233,10 @@ async def test_import_prd_creates_architecture_contract_and_task_packets(
     assert (tmp_path / imported.architecture_contract_path).exists()
     assert tasks[0].metadata["contract_id"] == "architecture-contract-v1"
     assert tasks[0].metadata["task_contract"]["allowed_files"]
-    assert tasks[0].metadata["task_contract"]["canonical_test_command"].startswith(
-        "python -m pytest tests/"
+    assert (
+        tasks[0]
+        .metadata["task_contract"]["canonical_test_command"]
+        .startswith("python -m pytest tests/")
     )
 
 
@@ -278,9 +275,7 @@ def test_architecture_contract_uses_explicit_domain_neutral_task_packets():
         )
     )
 
-    assert contract.task_contracts[api_title].required_public_apis == [
-        "list_audit_events"
-    ]
+    assert contract.task_contracts[api_title].required_public_apis == ["list_audit_events"]
     assert contract.task_contracts[api_title].allowed_files == [
         "backend/localforge/api/audit.py",
         "backend/tests/test_audit_api.py",

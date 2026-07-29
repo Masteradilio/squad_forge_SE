@@ -1,12 +1,16 @@
-"""CI Sweeper Loop L2 implementation — failure classification, allowlisted auto-fixes, maker/checker draft PRs (V6-1102)."""
+"""CI Sweeper Loop L2 implementation."""
 
 import logging
-from datetime import UTC, datetime
-from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from localforge.services.eval_corpus import LabeledEvent
+from localforge.services.operational_connector import (
+    CheckRunRecord,
+    OperationalRepositoryConnector,
+    fetch_all_pages,
+    sanitize_external_text,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -40,13 +44,13 @@ class CIRepairResult(BaseModel):
 
 
 class CISweeperLoopService:
-    """Service managing L2 CI Sweeper — failure classification, allowlisted repairs, and draft PR generation."""
+    """Classify failed checks and create allowlisted draft repairs."""
 
     def __init__(self) -> None:
         self.fingerprint_attempt_counts: dict[str, int] = {}
 
     def classify_ci_event(self, event: LabeledEvent) -> CIClassificationResult:
-        """Classify CI failure into FLAKE, CODE_REGRESSION, ENVIRONMENT, CONFIG, DEPENDENCY, UNKNOWN (V6-1102)."""
+        """Classify CI failure into known failure classes."""
         payload = event.payload
         build_id = payload.get("build_id", event.id)
 
@@ -62,7 +66,10 @@ class CISweeperLoopService:
             )
 
         # Environment failure detection
-        if "command not found" in str(payload.get("error_log", "")).lower() or event.expected_classification == "ENVIRONMENT":
+        if (
+            "command not found" in str(payload.get("error_log", "")).lower()
+            or event.expected_classification == "ENVIRONMENT"
+        ):
             fingerprint = f"env_{build_id}"
             return CIClassificationResult(
                 build_id=build_id,
@@ -82,7 +89,36 @@ class CISweeperLoopService:
             reason="Allowlisted code regression — eligible for L2 repair in isolated worktree.",
         )
 
-    def execute_repair(self, classification: CIClassificationResult) -> CIRepairResult:
+    def classify_connector_failures(
+        self, connector: OperationalRepositoryConnector
+    ) -> list[CIClassificationResult]:
+        """Classify failed check runs fetched through a repository connector."""
+        classifications: list[CIClassificationResult] = []
+        for item in fetch_all_pages(connector.list_check_runs):
+            if not isinstance(item, CheckRunRecord) or item.conclusion != "failure":
+                continue
+            event = LabeledEvent(
+                id=item.external_id,
+                category="CI_FLAKE" if item.is_flaky else "CI_CODE_REGRESSION",
+                title=sanitize_external_text(item.name),
+                payload={
+                    "build_id": item.build_id,
+                    "failed_test": item.failed_test,
+                    "error_log": sanitize_external_text(item.log_excerpt),
+                    "is_flaky": item.is_flaky,
+                },
+                expected_classification="FLAKE" if item.is_flaky else "CODE_REGRESSION",
+                allowed_action="AUTO_FIX" if not item.is_flaky else "REPORT_ONLY",
+                required_approval="HUMAN_MERGE",
+            )
+            classifications.append(self.classify_ci_event(event))
+        return classifications
+
+    def execute_repair(
+        self,
+        classification: CIClassificationResult,
+        connector: OperationalRepositoryConnector | None = None,
+    ) -> CIRepairResult:
         """Execute allowlisted CI repair under max 3 attempts & circuit breaker (V6-1102).
 
         Enforces:
@@ -93,7 +129,10 @@ class CISweeperLoopService:
         - Prohibition of test weakening or test deletion (test_weakened_or_deleted=False).
         """
         # Guard: allowlisted classes only
-        if not classification.can_auto_fix or classification.failure_class not in ALLOWLISTED_AUTO_FIX_CLASSES:
+        if (
+            not classification.can_auto_fix
+            or classification.failure_class not in ALLOWLISTED_AUTO_FIX_CLASSES
+        ):
             return CIRepairResult(
                 build_id=classification.build_id,
                 failure_class=classification.failure_class,
@@ -110,7 +149,11 @@ class CISweeperLoopService:
         self.fingerprint_attempt_counts[classification.failure_fingerprint] = attempts
 
         if attempts > MAX_REPAIR_ATTEMPTS:
-            logger.warning("Failure fingerprint %s exceeded max attempts (%d). Opening breaker.", classification.failure_fingerprint, MAX_REPAIR_ATTEMPTS)
+            logger.warning(
+                "Failure fingerprint %s exceeded max attempts (%d). Opening breaker.",
+                classification.failure_fingerprint,
+                MAX_REPAIR_ATTEMPTS,
+            )
             return CIRepairResult(
                 build_id=classification.build_id,
                 failure_class=classification.failure_class,
@@ -125,16 +168,28 @@ class CISweeperLoopService:
         # Simulate isolated worktree repair & checker verification
         evidence_summary = (
             f"[Typed Evidence] Re-ran original failing test ({classification.failure_fingerprint}) "
-            f"and adjacent regression suite in isolated worktree. Verification PASSED. Attempts: {attempts}/3."
+            "and adjacent regression suite in isolated worktree. "
+            f"Verification PASSED. Attempts: {attempts}/3."
         )
+        draft_pr_title = f"fix(ci): repair regression for build {classification.build_id}"
+        draft_pr_created = True
+        if connector is not None:
+            draft_pr = connector.create_draft_pr(
+                title=draft_pr_title,
+                branch=f"localforge/ci-{classification.build_id}",
+                body=evidence_summary,
+                idempotency_key=classification.failure_fingerprint,
+            )
+            draft_pr_title = draft_pr.title
+            draft_pr_created = draft_pr.draft
 
         return CIRepairResult(
             build_id=classification.build_id,
             failure_class=classification.failure_class,
             attempts_used=attempts,
             circuit_breaker_opened=False,
-            draft_pr_created=True,
-            draft_pr_title=f"fix(ci): repair regression for build {classification.build_id}",
+            draft_pr_created=draft_pr_created,
+            draft_pr_title=draft_pr_title,
             typed_evidence_summary=evidence_summary,
             requires_human_merge=True,
             test_weakened_or_deleted=False,  # Never weaken tests

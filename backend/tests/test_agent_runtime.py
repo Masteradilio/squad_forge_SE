@@ -1,5 +1,6 @@
-import pytest
 import json
+
+import pytest
 from localforge.models import domain
 from localforge.models.enums import (
     AgentRole,
@@ -8,9 +9,9 @@ from localforge.models.enums import (
     RunMode,
     TaskStatus,
 )
-from localforge.runtime.context import TaskContextBuilder
 from localforge.runtime.actions import normalize_runtime_command, parse_action_proposals
 from localforge.runtime.compression import compress_tool_output
+from localforge.runtime.context import TaskContextBuilder
 from localforge.runtime.file_tools import SafeFileEditor
 from localforge.runtime.handoffs import RuntimeHandoffService
 from localforge.runtime.lead_agent import LeadAgentRuntime

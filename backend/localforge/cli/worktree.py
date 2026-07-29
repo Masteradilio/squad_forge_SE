@@ -1,12 +1,10 @@
 import asyncio
-import logging
 from typing import Any
 
 import typer
+from localforge.storage import UnitOfWork, db_manager
 from rich.console import Console
 from rich.table import Table
-
-from localforge.storage import UnitOfWork, db_manager
 
 console = Console()
 worktree_app = typer.Typer(help="Manage and inspect Worktree Attempt Manifests and PathLeases.")
@@ -17,7 +15,9 @@ def _run_async(coro: Any) -> Any:
 
 
 @worktree_app.command("leases")
-def list_leases(project_id: int = typer.Option(..., "--project-id", "-p", help="Project ID")) -> None:
+def list_leases(
+    project_id: int = typer.Option(..., "--project-id", "-p", help="Project ID"),
+) -> None:
     """List all active unexpired PathLeases for a project."""
 
     async def _impl() -> None:
@@ -36,13 +36,13 @@ def list_leases(project_id: int = typer.Option(..., "--project-id", "-p", help="
             table.add_column("TaskRun ID", justify="right")
             table.add_column("Expires At", style="magenta")
 
-            for l in leases:
+            for lease in leases:
                 table.add_row(
-                    str(l.id),
-                    l.owner_id,
-                    l.target_path,
-                    str(l.task_run_id),
-                    l.expires_at.strftime("%Y-%m-%d %H:%M:%S"),
+                    str(lease.id),
+                    lease.owner_id,
+                    lease.target_path,
+                    str(lease.task_run_id),
+                    lease.expires_at.strftime("%Y-%m-%d %H:%M:%S"),
                 )
 
             console.print(table)
@@ -51,7 +51,9 @@ def list_leases(project_id: int = typer.Option(..., "--project-id", "-p", help="
 
 
 @worktree_app.command("reconcile")
-def reconcile_worktrees(project_id: int = typer.Option(..., "--project-id", "-p", help="Project ID")) -> None:
+def reconcile_worktrees(
+    project_id: int = typer.Option(..., "--project-id", "-p", help="Project ID"),
+) -> None:
     """Run a report-only reconciliation of worktree manifests against physical filesystems."""
 
     async def _impl() -> None:
@@ -59,13 +61,15 @@ def reconcile_worktrees(project_id: int = typer.Option(..., "--project-id", "-p"
             assert uow.worktrees is not None
             res = await uow.worktrees.reconcile_worktree_manifests(project_id)
 
-            console.print(f"[bold green]Worktree Reconciliation Summary (Project {project_id})[/bold green]")
+            console.print(
+                f"[bold green]Worktree Reconciliation Summary (Project {project_id})[/bold green]"
+            )
             console.print(f"Total Manifests: {res['total_manifests']}")
             console.print(f"Active Worktrees: {res['active_worktrees']}")
             console.print(f"Reconciled Stale: {res['reconciled_stale']}")
-            if res['stale_paths']:
+            if res["stale_paths"]:
                 console.print("[yellow]Stale Worktree Paths:[/yellow]")
-                for p in res['stale_paths']:
+                for p in res["stale_paths"]:
                     console.print(f"  - {p}")
 
     _run_async(_impl())

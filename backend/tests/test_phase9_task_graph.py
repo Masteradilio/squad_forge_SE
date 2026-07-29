@@ -457,6 +457,7 @@ async def test_graph_versioning_and_mutation_journal(db_manager) -> None:
             domain.DeepSwarmPolicy(
                 enabled=True,
                 prefer_light_swarm=False,
+                registered_decision_contract_ids=["phase-c8-test-contract"],
             ),
         )
         assert deep_run.id is not None
@@ -709,11 +710,24 @@ async def test_deep_swarm_enable_and_kill(db_manager) -> None:
         )
         assert fallback.status == DeepSwarmStatus.DISABLED
         assert fallback.verdict == "FALLBACK_LIGHT_SWARM"
+        evidence_required = await uow.task_graph.create_deep_swarm_run(
+            plan.id,
+            domain.DeepSwarmPolicy(
+                enabled=True,
+                prefer_light_swarm=False,
+            ),
+        )
+        assert evidence_required.status == DeepSwarmStatus.DISABLED
+        assert evidence_required.verdict == "EVIDENCE_REQUIRED"
+        with pytest.raises(ValueError, match="decision-contract"):
+            await uow.task_graph.enable_deep_swarm(evidence_required.id or 0)
+
         run = await uow.task_graph.create_deep_swarm_run(
             plan.id,
             domain.DeepSwarmPolicy(
                 enabled=True,
                 prefer_light_swarm=False,
+                registered_decision_contract_ids=["phase-c8-test-contract"],
             ),
         )
         assert run.status == DeepSwarmStatus.PENDING
@@ -777,6 +791,7 @@ async def test_crash_recovery_reconciliation(db_manager) -> None:
             domain.DeepSwarmPolicy(
                 enabled=True,
                 prefer_light_swarm=False,
+                registered_decision_contract_ids=["phase-c8-test-contract"],
             ),
         )
         assert deep_run.id is not None

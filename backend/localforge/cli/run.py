@@ -75,8 +75,7 @@ async def run_execution(unattended: bool) -> None:
         await uow.session.commit()
 
         console.print(
-            f"[bold green]Starting Run {run.id}[/bold green] "
-            f"in [cyan]{mode.value}[/cyan] mode..."
+            f"[bold green]Starting Run {run.id}[/bold green] in [cyan]{mode.value}[/cyan] mode..."
         )
 
     assert project.id is not None
@@ -129,10 +128,7 @@ async def run_execution(unattended: bool) -> None:
                         RunStatus.CANCELLED,
                         RunStatus.BLOCKED_NEEDS_HUMAN_REVIEW,
                     ):
-                        if (
-                            refreshed_run.status
-                            == RunStatus.BLOCKED_NEEDS_HUMAN_REVIEW
-                        ):
+                        if refreshed_run.status == RunStatus.BLOCKED_NEEDS_HUMAN_REVIEW:
                             console.print(
                                 "[bold yellow]Run ended in "
                                 "BLOCKED_NEEDS_HUMAN_REVIEW.[/bold yellow]"
@@ -183,14 +179,10 @@ async def run_execution(unattended: bool) -> None:
                 RunStatus.CANCELLED,
             ):
                 timed_out_run.status = RunStatus.FAILED
-                timed_out_run.summary = (
-                    f"Run monitor timed out after {monitor_timeout} seconds."
-                )
+                timed_out_run.summary = f"Run monitor timed out after {monitor_timeout} seconds."
                 timed_out_run.ended_at = datetime.now(UTC)
                 await uow.executions.update_run(timed_out_run)
-        raise RuntimeError(
-            f"Run monitor timed out after {monitor_timeout} seconds."
-        ) from e
+        raise RuntimeError(f"Run monitor timed out after {monitor_timeout} seconds.") from e
     finally:
         await scheduler.stop(timeout=2.0)
 
@@ -198,7 +190,7 @@ async def run_execution(unattended: bool) -> None:
 def run_cmd(
     unattended: bool = typer.Option(
         False, "--unattended", help="Run in unattended mode without manual approvals."
-    )
+    ),
 ) -> None:
     """Execute the pipeline loop for ready tasks in the current workspace."""
     try:

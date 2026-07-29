@@ -3,14 +3,12 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from localforge.benchmark.v2 import BenchmarkRunManifest, BenchmarkV2Reporter
-from localforge.models.enums import ArtifactType, FailureClass
-from localforge.safety.kernel import SafetyDecision
-from localforge.visual.gate import VisualFidelityGate
-from localforge.pr_factory.local import LocalPRFactory
 from localforge.models import domain
+from localforge.models.enums import FailureClass
 from localforge.pipeline.engine import RolePipelineEngine
+from localforge.pr_factory.local import LocalPRFactory
+from localforge.visual.gate import VisualFidelityGate
 
 
 def test_visual_gate_requires_rendered_evidence_for_visual_tasks(tmp_path):
@@ -68,6 +66,7 @@ def test_visual_gate_checks_aspect_ratio_mismatch(tmp_path):
     # Difference is 0.5/1.0 = 50% which is > 15% threshold
     try:
         from PIL import Image
+
         ref = tmp_path / "ref.png"
         act = tmp_path / "act.png"
         Image.new("RGB", (100, 100)).save(ref)
@@ -146,8 +145,12 @@ async def test_local_pr_factory_runs_contract_verifier_when_contract_exists():
 
     project = domain.Project(id=1, name="Test", root_path=".", default_branch="main")
     task = domain.Task(
-        id=2, project_id=1, key="LF-101", title="Task title", description="desc",
-        metadata={"task_contract": {"allowed_files": ["core.py"]}}
+        id=2,
+        project_id=1,
+        key="LF-101",
+        title="Task title",
+        description="desc",
+        metadata={"task_contract": {"allowed_files": ["core.py"]}},
     )
     task_run = domain.TaskRun(id=3, run_id=10, task_id=2, branch_name="feat-101", worktree_path=".")
 
@@ -158,7 +161,9 @@ async def test_local_pr_factory_runs_contract_verifier_when_contract_exists():
 
     with patch("localforge.pr_factory.local.ContractVerifier") as MockVerifier:
         mock_verifier = MagicMock()
-        mock_verifier.verify.return_value = MagicMock(passed=False, findings=[MagicMock(message="Forbidden scipy")])
+        mock_verifier.verify.return_value = MagicMock(
+            passed=False, findings=[MagicMock(message="Forbidden scipy")]
+        )
         MockVerifier.return_value = mock_verifier
 
         factory = LocalPRFactory(uow, project_id=1, run_id=10)
@@ -178,8 +183,12 @@ async def test_local_pr_factory_runs_visual_gate_only_when_visual_required():
 
     project = domain.Project(id=1, name="Test", root_path=".", default_branch="main")
     task_no_visual = domain.Task(
-        id=2, project_id=1, key="LF-101", title="Task title", description="desc",
-        metadata={"task_contract": {"allowed_files": ["core.py"]}}
+        id=2,
+        project_id=1,
+        key="LF-101",
+        title="Task title",
+        description="desc",
+        metadata={"task_contract": {"allowed_files": ["core.py"]}},
     )
     task_run = domain.TaskRun(id=3, run_id=10, task_id=2, branch_name="feat-101", worktree_path=".")
 
@@ -188,9 +197,10 @@ async def test_local_pr_factory_runs_visual_gate_only_when_visual_required():
     uow.tasks.get_task_run.return_value = task_run
     uow.audits.list_artifacts_for_task_run.return_value = []
 
-    with patch("localforge.pr_factory.local.capture_html_screenshot") as mock_screenshot, \
-         patch("localforge.pr_factory.local.VisualFidelityGate") as MockVisualGate:
-
+    with (
+        patch("localforge.pr_factory.local.capture_html_screenshot") as mock_screenshot,
+        patch("localforge.pr_factory.local.VisualFidelityGate") as MockVisualGate,
+    ):
         factory = LocalPRFactory(uow, project_id=1, run_id=10)
         result = await factory.generate(task_id=2, task_run_id=3)
 
@@ -198,29 +208,38 @@ async def test_local_pr_factory_runs_visual_gate_only_when_visual_required():
         MockVisualGate.assert_not_called()
 
     task_visual = domain.Task(
-        id=2, project_id=1, key="LF-101", title="Task title", description="desc",
+        id=2,
+        project_id=1,
+        key="LF-101",
+        title="Task title",
+        description="desc",
         metadata={
             "visual_required": True,
             "visual_reference_image": "ref.png",
-            "visual_actual_output": "index.html"
-        }
+            "visual_actual_output": "index.html",
+        },
     )
     uow.tasks.get_task.return_value = task_visual
 
-    with patch("localforge.pr_factory.local.capture_html_screenshot") as mock_screenshot, \
-         patch("localforge.pr_factory.local.VisualFidelityGate") as MockVisualGate, \
-         patch("os.path.isfile", return_value=True):
-
+    with (
+        patch("localforge.pr_factory.local.capture_html_screenshot") as mock_screenshot,
+        patch("localforge.pr_factory.local.VisualFidelityGate") as MockVisualGate,
+        patch("os.path.isfile", return_value=True),
+    ):
         mock_screenshot.return_value = True
         mock_gate = MagicMock()
-        mock_gate.evaluate.return_value = MagicMock(passed=False, summary="Visual similarity below threshold: 0.80")
+        mock_gate.evaluate.return_value = MagicMock(
+            passed=False, summary="Visual similarity below threshold: 0.80"
+        )
         MockVisualGate.return_value = mock_gate
 
         factory = LocalPRFactory(uow, project_id=1, run_id=10)
         result = await factory.generate(task_id=2, task_run_id=3)
 
         assert result.ready is False
-        assert any("Visual mismatch: Visual similarity below threshold: 0.80" in r for r in result.reasons)
+        assert any(
+            "Visual mismatch: Visual similarity below threshold: 0.80" in r for r in result.reasons
+        )
         mock_screenshot.assert_called_once()
         mock_gate.evaluate.assert_called_once()
 
@@ -296,9 +315,11 @@ async def test_chief_engineer_receives_expanded_visual_file_context(tmp_path):
         )
     )
 
-    with patch("localforge.pipeline.engine.load_config", return_value=config), \
-         patch("localforge.pipeline.engine.build_chief_engineer_provider"), \
-         patch("localforge.pipeline.engine.ChiefEngineerService") as service_cls:
+    with (
+        patch("localforge.pipeline.engine.load_config", return_value=config),
+        patch("localforge.pipeline.engine.build_chief_engineer_provider"),
+        patch("localforge.pipeline.engine.ChiefEngineerService") as service_cls,
+    ):
         service_cls.return_value.plan_semantic_repair = fake_plan_semantic_repair
         engine = RolePipelineEngine(MagicMock(), project_id=1, run_id=10)
         repaired = await engine._try_chief_engineer_repair(

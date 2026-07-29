@@ -41,7 +41,9 @@ async def list_active_path_leases(project_id: int) -> list[domain.PathLease]:
 
 
 @router.post("/worktree-attempts", status_code=status.HTTP_201_CREATED)
-async def create_worktree_manifest(req: WorktreeManifestCreateRequest) -> domain.WorktreeAttemptManifest:
+async def create_worktree_manifest(
+    req: WorktreeManifestCreateRequest,
+) -> domain.WorktreeAttemptManifest:
     """Create a new worktree attempt manifest."""
     async with UnitOfWork(db_manager) as uow:
         assert uow.worktrees is not None

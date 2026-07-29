@@ -8,8 +8,8 @@ Covers V6-800 to V6-804:
 - Single-worker fallback (SINGLE_WORKER strategy)
 - Pause and kill controls
 """
-import pytest
 
+import pytest
 from localforge.models import domain
 from localforge.models.enums import (
     SwarmNodeStatus,
@@ -21,12 +21,14 @@ from localforge.models.enums import (
 from localforge.services.light_swarm import LightSwarmService
 from localforge.storage import UnitOfWork
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Helper fixtures
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _make_node(node_id: str, node_type: SwarmNodeType, depends_on: list[str] | None = None) -> domain.SwarmNode:
+
+def _make_node(
+    node_id: str, node_type: SwarmNodeType, depends_on: list[str] | None = None
+) -> domain.SwarmNode:
     return domain.SwarmNode(
         node_id=node_id,
         node_type=node_type,
@@ -40,10 +42,13 @@ def _make_node(node_id: str, node_type: SwarmNodeType, depends_on: list[str] | N
 # Unit-level tests (no DB required)
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def test_policy_validation_rejects_too_many_implement_nodes() -> None:
     """V6-800: Policy rejects plans with > 4 IMPLEMENT nodes."""
     nodes = [_make_node(f"n{i}", SwarmNodeType.IMPLEMENT) for i in range(5)]
-    nodes.append(_make_node("checker", SwarmNodeType.VERIFY, depends_on=[f"n{i}" for i in range(5)]))
+    nodes.append(
+        _make_node("checker", SwarmNodeType.VERIFY, depends_on=[f"n{i}" for i in range(5)])
+    )
     edges = [(f"n{i}", "checker") for i in range(5)]
 
     policy = domain.SwarmPolicy(require_independent_checker=True)
@@ -57,9 +62,14 @@ def test_policy_validation_rejects_too_many_implement_nodes() -> None:
 
 def test_policy_validation_rejects_sub_swarms() -> None:
     """V6-800: Policy rejects allow_sub_swarms=True."""
-    nodes = [_make_node("n0", SwarmNodeType.RESEARCH), _make_node("v0", SwarmNodeType.VERIFY, ["n0"])]
+    nodes = [
+        _make_node("n0", SwarmNodeType.RESEARCH),
+        _make_node("v0", SwarmNodeType.VERIFY, ["n0"]),
+    ]
     policy = domain.SwarmPolicy(allow_sub_swarms=True)
-    plan = domain.SwarmPlan(project_id=1, task_run_id=1, nodes=nodes, edges=[("n0", "v0")], policy=policy)
+    plan = domain.SwarmPlan(
+        project_id=1, task_run_id=1, nodes=nodes, edges=[("n0", "v0")], policy=policy
+    )
 
     service = LightSwarmService(None)  # type: ignore[arg-type]
     valid, reason = service.validate_plan(plan)
@@ -106,8 +116,17 @@ def test_valid_light_swarm_plan_passes_validation() -> None:
 def test_single_worker_strategy_accepted() -> None:
     """V6-801: SINGLE_WORKER strategy (fallback) is always accepted with one node."""
     nodes = [_make_node("solo", SwarmNodeType.IMPLEMENT)]
-    policy = domain.SwarmPolicy(strategy=SwarmStrategy.SINGLE_WORKER, require_independent_checker=False)
-    plan = domain.SwarmPlan(project_id=1, task_run_id=1, strategy=SwarmStrategy.SINGLE_WORKER, nodes=nodes, edges=[], policy=policy)
+    policy = domain.SwarmPolicy(
+        strategy=SwarmStrategy.SINGLE_WORKER, require_independent_checker=False
+    )
+    plan = domain.SwarmPlan(
+        project_id=1,
+        task_run_id=1,
+        strategy=SwarmStrategy.SINGLE_WORKER,
+        nodes=nodes,
+        edges=[],
+        policy=policy,
+    )
 
     service = LightSwarmService(None)  # type: ignore[arg-type]
     valid, reason = service.validate_plan(plan)
@@ -142,6 +161,7 @@ def test_ready_node_resolution_respects_dependencies() -> None:
 # DB-level integration tests
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_swarm_plan_create_start_complete_and_kill(db_manager) -> None:
     """V6-802 & V6-804: Create plan, start run, complete a node, then kill remaining."""
@@ -154,7 +174,9 @@ async def test_swarm_plan_create_start_complete_and_kill(db_manager) -> None:
             domain.Project(name="Swarm Test", root_path="E:/tmp/swarm", default_branch="main")
         )
         assert proj.id is not None
-        task = await uow.tasks.create_task(domain.Task(project_id=proj.id, key="SW-1", title="Swarm task", description="desc"))
+        task = await uow.tasks.create_task(
+            domain.Task(project_id=proj.id, key="SW-1", title="Swarm task", description="desc")
+        )
         assert task.id is not None
         task_run = await uow.tasks.create_task_run(domain.TaskRun(task_id=task.id, run_id=1))
         assert task_run.id is not None
@@ -202,10 +224,14 @@ async def test_fail_node_propagates_blocked_downstream(db_manager) -> None:
         assert uow.light_swarm is not None
 
         proj = await uow.projects.create_project(
-            domain.Project(name="Swarm Fail Test", root_path="E:/tmp/swarm_fail", default_branch="main")
+            domain.Project(
+                name="Swarm Fail Test", root_path="E:/tmp/swarm_fail", default_branch="main"
+            )
         )
         assert proj.id is not None
-        task = await uow.tasks.create_task(domain.Task(project_id=proj.id, key="SW-2", title="Fail test", description="desc"))
+        task = await uow.tasks.create_task(
+            domain.Task(project_id=proj.id, key="SW-2", title="Fail test", description="desc")
+        )
         assert task.id is not None
         task_run = await uow.tasks.create_task_run(domain.TaskRun(task_id=task.id, run_id=1))
         assert task_run.id is not None
@@ -239,3 +265,52 @@ async def test_fail_node_propagates_blocked_downstream(db_manager) -> None:
         assert run.node_statuses["n2"] == SwarmNodeStatus.BLOCKED
         assert run.status == SwarmStatus.FAILED
         assert run.verdict == "NEEDS_REPAIR"
+
+
+@pytest.mark.asyncio
+async def test_light_swarm_required_artifact_blocks_pr_ready(db_manager) -> None:
+    """C6/C7: manual node completion without declared evidence cannot be PR_READY."""
+    async with UnitOfWork(db_manager) as uow:
+        assert uow.projects is not None
+        assert uow.tasks is not None
+        assert uow.light_swarm is not None
+
+        proj = await uow.projects.create_project(
+            domain.Project(
+                name="Swarm Evidence Test",
+                root_path="E:/tmp/swarm_evidence",
+                default_branch="main",
+            )
+        )
+        assert proj.id is not None
+        task = await uow.tasks.create_task(
+            domain.Task(project_id=proj.id, key="SW-3", title="Evidence", description="desc")
+        )
+        assert task.id is not None
+        task_run = await uow.tasks.create_task_run(domain.TaskRun(task_id=task.id, run_id=1))
+        assert task_run.id is not None
+
+        nodes = [
+            domain.SwarmNode(
+                node_id="verify",
+                node_type=SwarmNodeType.VERIFY,
+                title="Node verify",
+                description="Requires verification evidence",
+                output_artifact_type=TypedArtifactType.VERIFICATION,
+            ),
+        ]
+        plan = await uow.light_swarm.create_plan(
+            project_id=proj.id,
+            task_run_id=task_run.id,
+            nodes=nodes,
+            edges=[],
+            policy=domain.SwarmPolicy(require_independent_checker=False),
+        )
+        assert plan.id is not None
+        run = await uow.light_swarm.start_swarm(plan.id)
+        assert run.id is not None
+
+        run = await uow.light_swarm.complete_node(run.id, "verify")
+
+        assert run.status == SwarmStatus.FAILED
+        assert run.verdict == "EVIDENCE_MISSING"

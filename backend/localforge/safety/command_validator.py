@@ -113,9 +113,7 @@ def _split_direct_command(command: str, *, windows: bool) -> list[str]:
     if not windows:
         return tokens
     return [
-        token[1:-1]
-        if len(token) >= 2 and token.startswith('"') and token.endswith('"')
-        else token
+        token[1:-1] if len(token) >= 2 and token.startswith('"') and token.endswith('"') else token
         for token in tokens
     ]
 

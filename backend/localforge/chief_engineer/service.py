@@ -1,7 +1,6 @@
 import json
 
-from pydantic import BaseModel, Field
-from pydantic import field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from localforge.llm.base import BaseLLMProvider, LLMError
 from localforge.llm.validator import chat_completion_validated
@@ -111,6 +110,7 @@ class ChiefEngineerService:
     def __init__(self, uow: UnitOfWork):
         self.uow = uow
         from localforge.chief_engineer.bundler import EconomyPromptBundler
+
         self.bundler = EconomyPromptBundler()
 
     async def review_contract(
@@ -175,9 +175,7 @@ class ChiefEngineerService:
                     reason=ChiefEngineerCallReason.CONTRACT_FREEZE,
                     input_tokens=estimated_input,
                     output_tokens=output_tokens,
-                    estimated_cost_usd=estimate_paid_call_cost_usd(
-                        estimated_input, output_tokens
-                    ),
+                    estimated_cost_usd=estimate_paid_call_cost_usd(estimated_input, output_tokens),
                     status=status,
                     error_summary=error_summary,
                     metadata=_provider_metadata(provider),
@@ -194,9 +192,7 @@ class ChiefEngineerService:
                 reason=ChiefEngineerCallReason.CONTRACT_FREEZE,
                 input_tokens=estimated_input,
                 output_tokens=output_tokens,
-                estimated_cost_usd=estimate_paid_call_cost_usd(
-                    estimated_input, output_tokens
-                ),
+                estimated_cost_usd=estimate_paid_call_cost_usd(estimated_input, output_tokens),
                 status=status,
                 error_summary=error_summary,
                 metadata={**_provider_metadata(provider), "approved": review.approved},
@@ -277,9 +273,7 @@ class ChiefEngineerService:
                     reason=ChiefEngineerCallReason.SEMANTIC_REPAIR_PLAN,
                     input_tokens=estimated_input,
                     output_tokens=output_tokens,
-                    estimated_cost_usd=estimate_paid_call_cost_usd(
-                        estimated_input, output_tokens
-                    ),
+                    estimated_cost_usd=estimate_paid_call_cost_usd(estimated_input, output_tokens),
                     status=status,
                     error_summary=error_summary,
                     metadata=_provider_metadata(provider),
@@ -296,9 +290,7 @@ class ChiefEngineerService:
                 reason=ChiefEngineerCallReason.SEMANTIC_REPAIR_PLAN,
                 input_tokens=estimated_input,
                 output_tokens=output_tokens,
-                estimated_cost_usd=estimate_paid_call_cost_usd(
-                    estimated_input, output_tokens
-                ),
+                estimated_cost_usd=estimate_paid_call_cost_usd(estimated_input, output_tokens),
                 status=status,
                 error_summary=error_summary,
                 metadata={
@@ -318,7 +310,7 @@ def _estimate_tokens(text: str) -> int:
 def _provider_metadata(provider: BaseLLMProvider) -> dict[str, object]:
     metadata: dict[str, object] = {}
     if hasattr(provider, "primary_provider_name"):
-        metadata["primary_provider"] = str(getattr(provider, "primary_provider_name"))
+        metadata["primary_provider"] = str(provider.primary_provider_name)
         metadata["fallback_provider"] = str(getattr(provider, "fallback_provider_name", ""))
         metadata["used_fallback"] = bool(getattr(provider, "used_fallback", False))
     return metadata

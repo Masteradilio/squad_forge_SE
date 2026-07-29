@@ -1,13 +1,11 @@
 import asyncio
-import logging
 from typing import Any
 
 import typer
-from rich.console import Console
-from rich.table import Table
-
 from localforge.models.enums import CircuitScope
 from localforge.storage import UnitOfWork, db_manager
+from rich.console import Console
+from rich.table import Table
 
 console = Console()
 breakers_app = typer.Typer(help="Manage and inspect Circuit Breakers.")
@@ -18,7 +16,9 @@ def _run_async(coro: Any) -> Any:
 
 
 @breakers_app.command("list")
-def list_breakers(project_id: int = typer.Option(..., "--project-id", "-p", help="Project ID")) -> None:
+def list_breakers(
+    project_id: int = typer.Option(..., "--project-id", "-p", help="Project ID"),
+) -> None:
     """List all circuit breakers for a project."""
 
     async def _impl() -> None:
@@ -27,7 +27,9 @@ def list_breakers(project_id: int = typer.Option(..., "--project-id", "-p", help
             breakers = await uow.circuit_breakers.list_breakers_for_project(project_id)
 
             if not breakers:
-                console.print(f"[yellow]No circuit breakers found for project {project_id}[/yellow]")
+                console.print(
+                    f"[yellow]No circuit breakers found for project {project_id}[/yellow]"
+                )
                 return
 
             table = Table(title=f"Circuit Breakers (Project {project_id})")
@@ -58,7 +60,9 @@ def list_breakers(project_id: int = typer.Option(..., "--project-id", "-p", help
 @breakers_app.command("reset")
 def reset_breaker(
     project_id: int = typer.Option(..., "--project-id", "-p", help="Project ID"),
-    scope: str = typer.Option(..., "--scope", "-s", help="Scope e.g. LOOP, RUN, ITEM, TASK, PROVIDER"),
+    scope: str = typer.Option(
+        ..., "--scope", "-s", help="Scope e.g. LOOP, RUN, ITEM, TASK, PROVIDER"
+    ),
     target_id: str = typer.Option(..., "--target-id", "-t", help="Target ID"),
     reason: str = typer.Option("Manual reset via CLI", "--reason", "-r", help="Reason for reset"),
 ) -> None:
@@ -69,9 +73,9 @@ def reset_breaker(
             assert uow.circuit_breakers is not None
             try:
                 scope_enum = CircuitScope(scope.upper())
-            except ValueError:
+            except ValueError as exc:
                 console.print(f"[bold red]Invalid scope: {scope}[/bold red]")
-                raise typer.Exit(1)
+                raise typer.Exit(1) from exc
 
             res = await uow.circuit_breakers.reset_breaker(
                 project_id=project_id,
@@ -80,6 +84,8 @@ def reset_breaker(
                 actor_id="cli_user",
                 reason=reason,
             )
-            console.print(f"[bold green]Circuit breaker {res.scope.value}:{res.target_id} reset to CLOSED[/bold green]")
+            console.print(
+                f"[bold green]Circuit breaker {res.scope.value}:{res.target_id} reset to CLOSED[/bold green]"
+            )
 
     _run_async(_impl())

@@ -188,5 +188,9 @@ class TypedHandoffService:
 
     def _redact_secrets(self, text: str) -> str:
         """Redact sensitive token strings or API key patterns."""
-        redacted = re.sub(r"(?i)(api[_-]?key|secret|password|token)\s*[:=]\s*['\"]?[\w\-]+['\"]?", r"\1: [REDACTED]", text)
+        redacted = re.sub(
+            r"(?i)(api[_-]?key|secret|password|token)\s*[:=]\s*['\"]?[\w\-]+['\"]?",
+            r"\1: [REDACTED]",
+            text,
+        )
         return redacted

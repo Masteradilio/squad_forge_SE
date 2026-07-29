@@ -2,7 +2,7 @@ import json
 import sys
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, ValidationError, model_validator
+from pydantic import BaseModel, ValidationError, model_validator
 
 
 class RuntimeActionProposal(BaseModel):
@@ -99,19 +99,19 @@ def parse_action_proposals(raw: object) -> list[RuntimeActionProposal]:
     return proposals
 
 
-
 def _loads_action_payload(raw: str) -> object:
     import re
+
     # Clean the raw string first
     cleaned = raw.strip()
     # Strip markdown code fences if present
     match = re.search(r"```(?:json)?\s*([\s\S]+?)\s*```", cleaned)
     if match:
         cleaned = match.group(1).strip()
-    
+
     # Fix trailing commas in objects and arrays
     cleaned = re.sub(r",(\s*[}\]])", r"\1", cleaned)
-    
+
     try:
         return json.loads(cleaned)
     except json.JSONDecodeError:
@@ -127,7 +127,7 @@ def _loads_action_payload(raw: str) -> object:
                     clean_chars.append(char)
                     escape = False
                     continue
-                if char == '\\':
+                if char == "\\":
                     clean_chars.append(char)
                     escape = True
                     continue
@@ -136,26 +136,26 @@ def _loads_action_payload(raw: str) -> object:
                     clean_chars.append(char)
                     continue
                 if not in_string:
-                    if char == '{':
+                    if char == "{":
                         open_braces += 1
-                    elif char == '}':
+                    elif char == "}":
                         if open_braces > 0:
                             open_braces -= 1
                         else:
                             continue
-                    elif char == '[':
+                    elif char == "[":
                         open_brackets += 1
-                    elif char == ']':
+                    elif char == "]":
                         if open_brackets > 0:
                             open_brackets -= 1
                         else:
                             continue
                 clean_chars.append(char)
-                
+
             reconstructed = "".join(clean_chars)
             if in_string:
                 reconstructed += '"'
-                
+
             nesting_stack = []
             in_string = False
             escape = False
@@ -163,7 +163,7 @@ def _loads_action_payload(raw: str) -> object:
                 if escape:
                     escape = False
                     continue
-                if char == '\\':
+                if char == "\\":
                     escape = True
                     continue
                 if char == '"':
@@ -176,7 +176,7 @@ def _loads_action_payload(raw: str) -> object:
                         matching = "{" if char == "}" else "["
                         if nesting_stack and nesting_stack[-1] == matching:
                             nesting_stack.pop()
-                            
+
             for op in reversed(nesting_stack):
                 if op == "{":
                     reconstructed += "}"
@@ -202,7 +202,6 @@ def _loads_action_payload(raw: str) -> object:
         raise original_error
 
 
-
 def proposals_to_metadata(proposals: list[RuntimeActionProposal]) -> list[dict[str, Any]]:
     return [proposal.model_dump(exclude_none=True) for proposal in proposals]
 
@@ -217,5 +216,5 @@ def normalize_runtime_command(command: str) -> str:
         if stripped == prefix:
             return f'"{sys.executable}" -m pytest'
         if stripped.startswith(prefix + " "):
-            return f'"{sys.executable}" -m pytest{stripped[len(prefix):]}'
+            return f'"{sys.executable}" -m pytest{stripped[len(prefix) :]}'
     return command

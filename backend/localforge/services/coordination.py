@@ -30,9 +30,7 @@ class CoordinationService:
         await self.session.flush()
         return orm_obj.to_domain()
 
-    async def list_task_comments(
-        self, task_id: int, limit: int = 50
-    ) -> list[domain.TaskComment]:
+    async def list_task_comments(self, task_id: int, limit: int = 50) -> list[domain.TaskComment]:
         result = await self.session.execute(
             select(TaskCommentORM)
             .where(TaskCommentORM.task_id == task_id)
@@ -78,9 +76,7 @@ class CoordinationService:
         metadata: dict[str, Any] | None = None,
     ) -> domain.RuntimeRegistration | None:
         result = await self.session.execute(
-            select(RuntimeRegistrationORM).where(
-                RuntimeRegistrationORM.runtime_id == runtime_id
-            )
+            select(RuntimeRegistrationORM).where(RuntimeRegistrationORM.runtime_id == runtime_id)
         )
         runtime = result.scalar_one_or_none()
         if not runtime:

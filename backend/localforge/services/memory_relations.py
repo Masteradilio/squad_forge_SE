@@ -70,15 +70,20 @@ class MemoryRelationService:
     async def list_relations(self, fact_id: int) -> list[domain.MemoryRelation]:
         """List all relations where fact_id is source or target."""
         stmt = select(MemoryRelationORM).where(
-            (MemoryRelationORM.source_fact_id == fact_id) | (MemoryRelationORM.target_fact_id == fact_id)
+            (MemoryRelationORM.source_fact_id == fact_id)
+            | (MemoryRelationORM.target_fact_id == fact_id)
         )
         result = await self.session.execute(stmt)
         return [row.to_domain() for row in result.scalars().all()]
 
-    async def _would_create_cycle(self, source_id: int, target_id: int, relation_type: MemoryRelationType) -> bool:
+    async def _would_create_cycle(
+        self, source_id: int, target_id: int, relation_type: MemoryRelationType
+    ) -> bool:
         """DFS check if adding an edge target_id -> source_id creates a cycle."""
         # Query all existing relations of the same partial-order type
-        stmt = select(MemoryRelationORM).where(MemoryRelationORM.relation_type == relation_type.value)
+        stmt = select(MemoryRelationORM).where(
+            MemoryRelationORM.relation_type == relation_type.value
+        )
         result = await self.session.execute(stmt)
         all_relations = result.scalars().all()
 

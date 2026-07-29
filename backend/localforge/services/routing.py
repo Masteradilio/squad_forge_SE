@@ -51,8 +51,11 @@ class ModelRoutingService:
         )
         return result.scalar_one_or_none()
 
-    async def get_model_capability(self, model_name: str, task_class: str) -> domain.ModelCapability | None:
+    async def get_model_capability(
+        self, model_name: str, task_class: str
+    ) -> domain.ModelCapability | None:
         from localforge.storage.orm import ModelCapabilityORM
+
         result = await self.session.execute(
             select(ModelCapabilityORM).where(
                 ModelCapabilityORM.model_name == model_name,
@@ -62,8 +65,11 @@ class ModelRoutingService:
         orm_obj = result.scalar_one_or_none()
         return orm_obj.to_domain() if orm_obj else None
 
-    async def save_model_capability(self, capability: domain.ModelCapability) -> domain.ModelCapability:
+    async def save_model_capability(
+        self, capability: domain.ModelCapability
+    ) -> domain.ModelCapability:
         from localforge.storage.orm import ModelCapabilityORM
+
         result = await self.session.execute(
             select(ModelCapabilityORM).where(
                 ModelCapabilityORM.model_name == capability.model_name,
@@ -83,9 +89,10 @@ class ModelRoutingService:
         await self.session.flush()
         return orm_obj.to_domain()
 
-    async def disqualify_model(self, model_name: str, task_class: str, reason: str, duration_seconds: int = 3600) -> None:
+    async def disqualify_model(
+        self, model_name: str, task_class: str, reason: str, duration_seconds: int = 3600
+    ) -> None:
         from datetime import UTC, datetime, timedelta
-        from localforge.storage.orm import ModelCapabilityORM
 
         cap = await self.get_model_capability(model_name, task_class)
         if not cap:
@@ -95,7 +102,7 @@ class ModelRoutingService:
                 success_count=0,
                 failure_count=1,
                 disqualified_until=datetime.now(UTC) + timedelta(seconds=duration_seconds),
-                disqualification_reason=reason
+                disqualification_reason=reason,
             )
         else:
             cap.failure_count += 1

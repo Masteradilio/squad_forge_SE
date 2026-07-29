@@ -2,7 +2,6 @@ import importlib.util
 import json
 from pathlib import Path
 
-
 SCRIPT_PATH = Path(__file__).parents[2] / "scripts" / "collect_benchmark_evidence.py"
 SPEC = importlib.util.spec_from_file_location("benchmark_evidence", SCRIPT_PATH)
 assert SPEC is not None and SPEC.loader is not None

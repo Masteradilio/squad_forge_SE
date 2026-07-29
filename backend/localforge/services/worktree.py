@@ -1,6 +1,5 @@
 import logging
 import os
-from pathlib import Path
 from typing import Any
 
 from sqlalchemy import select
@@ -49,7 +48,9 @@ class WorktreeService:
         await self.session.flush()
         return orm_obj.to_domain()
 
-    async def get_manifest_by_task_run(self, task_run_id: int) -> domain.WorktreeAttemptManifest | None:
+    async def get_manifest_by_task_run(
+        self, task_run_id: int
+    ) -> domain.WorktreeAttemptManifest | None:
         """Retrieve the latest attempt manifest for a task run."""
         stmt = (
             select(WorktreeAttemptManifestORM)
@@ -64,7 +65,9 @@ class WorktreeService:
         self, manifest_id: int, status: WorktreeAttemptStatus
     ) -> domain.WorktreeAttemptManifest:
         """Update the lifecycle status of an attempt manifest."""
-        stmt = select(WorktreeAttemptManifestORM).where(WorktreeAttemptManifestORM.id == manifest_id)
+        stmt = select(WorktreeAttemptManifestORM).where(
+            WorktreeAttemptManifestORM.id == manifest_id
+        )
         result = await self.session.execute(stmt)
         orm_obj = result.scalar_one_or_none()
         if not orm_obj:
@@ -80,7 +83,9 @@ class WorktreeService:
         Returns:
             summary: dict containing active_count, stale_count, orphan_count, details.
         """
-        stmt = select(WorktreeAttemptManifestORM).where(WorktreeAttemptManifestORM.project_id == project_id)
+        stmt = select(WorktreeAttemptManifestORM).where(
+            WorktreeAttemptManifestORM.project_id == project_id
+        )
         result = await self.session.execute(stmt)
         manifests = [orm_obj.to_domain() for orm_obj in result.scalars().all()]
 

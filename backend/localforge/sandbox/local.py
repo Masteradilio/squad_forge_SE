@@ -2,8 +2,8 @@ import asyncio
 import os
 import shutil
 
-from localforge.sandbox.base import BaseSandbox
 from localforge.safety.command_validator import command_to_argv
+from localforge.sandbox.base import BaseSandbox
 
 
 class LocalSandbox(BaseSandbox):
@@ -16,9 +16,7 @@ class LocalSandbox(BaseSandbox):
     async def create(self) -> None:
         """Provision local worktree directory checks."""
         if not os.path.exists(self.worktree_path):
-            raise FileNotFoundError(
-                f"Worktree path '{self.worktree_path}' does not exist."
-            )
+            raise FileNotFoundError(f"Worktree path '{self.worktree_path}' does not exist.")
         self._status = "running"
 
     async def execute(self, cmd: str, timeout: float = 60.0) -> tuple[int, str, str]:
@@ -35,14 +33,10 @@ class LocalSandbox(BaseSandbox):
         )
 
         try:
-            stdout_bytes, stderr_bytes = await asyncio.wait_for(
-                proc.communicate(), timeout=timeout
-            )
+            stdout_bytes, stderr_bytes = await asyncio.wait_for(proc.communicate(), timeout=timeout)
         except TimeoutError as e:
             await self._terminate_process(proc)
-            raise TimeoutError(
-                f"Command execution timed out after {timeout} seconds."
-            ) from e
+            raise TimeoutError(f"Command execution timed out after {timeout} seconds.") from e
         except asyncio.CancelledError:
             await self._terminate_process(proc)
             raise
@@ -101,9 +95,7 @@ class LocalSandbox(BaseSandbox):
         except ValueError:
             is_within_worktree = False
         if not is_within_worktree:
-            raise PermissionError(
-                f"Local sandbox cannot {operation} outside its worktree: {path}"
-            )
+            raise PermissionError(f"Local sandbox cannot {operation} outside its worktree: {path}")
 
     async def destroy(self) -> None:
         """Halt local execution state."""

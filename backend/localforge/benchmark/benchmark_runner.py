@@ -1,10 +1,11 @@
 import time
 from datetime import UTC, datetime
 from typing import Any
-from sqlalchemy import select, text
+
+from sqlalchemy import text
+
 from localforge.storage.transactions import UnitOfWork
-from localforge.models import domain
-from localforge.models.enums import TaskStatus
+
 
 class V3BenchmarkHarness:
     """
@@ -33,9 +34,7 @@ class V3BenchmarkHarness:
 
         # 2. Gather task outcomes
         # Using session direct query
-        db_tasks = await self.uow.session.execute(
-            text(f"SELECT status, COUNT(*) FROM tasks WHERE project_id = {project_id} GROUP BY status")
-        )
+        db_tasks = await self.uow.session.execute(text(f"SELECT status, COUNT(*) FROM tasks WHERE project_id = {project_id} GROUP BY status"))
         task_counts = {row[0]: row[1] for row in db_tasks.fetchall()}
 
         pr_ready = task_counts.get("PR_READY", 0)
@@ -77,26 +76,39 @@ class V3BenchmarkHarness:
         if "error" in report:
             return f"# Benchmark Error\n{report['error']}"
 
-        md = f"""# V3 Benchmark Acceptance Report - {report['project_name']}
+        api_cost_row = (
+            f"| **API Costs (USD)** | ${report['actual_paid_usd']:.4f} | "
+            f"${report['openai_simulated_usd']:.4f} | "
+            f"${report['anthropic_simulated_usd']:.4f} | "
+            f"${report['google_simulated_usd']:.4f} |"
+        )
+        savings_row = (
+            f"| **Projected Net Savings** | - | ${report['openai_savings_usd']:.4f} | "
+            f"${report['anthropic_savings_usd']:.4f} | "
+            f"${report['google_savings_usd']:.4f} |"
+        )
+        md = f"""# V3 Benchmark Acceptance Report - {report["project_name"]}
 Date: {datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")} UTC
 
 ## Summary Metrics
-- **Total Tasks**: {report['total_tasks']}
-- **Tasks Ready for PR (PR_READY)**: {report['pr_ready']}
-- **Tasks Failed Safe (FAILED_SAFE)**: {report['failed_safe']}
-- **Blocked Tasks**: {report['blocked']}
-- **Task Success Pass Rate**: {report['pass_rate']:.2f}%
-- **Wall-Clock Processing Time**: {report['wall_clock_seconds']:.2f} seconds
+- **Total Tasks**: {report["total_tasks"]}
+- **Tasks Ready for PR (PR_READY)**: {report["pr_ready"]}
+- **Tasks Failed Safe (FAILED_SAFE)**: {report["failed_safe"]}
+- **Blocked Tasks**: {report["blocked"]}
+- **Task Success Pass Rate**: {report["pass_rate"]:.2f}%
+- **Wall-Clock Processing Time**: {report["wall_clock_seconds"]:.2f} seconds
 
 ## Financial & Cost Metrics
 | Metric | LocalForge Hybrid | OpenAI API-Only | Anthropic API-Only | Google API-Only |
 | :--- | :---: | :---: | :---: | :---: |
-| **API Costs (USD)** | ${report['actual_paid_usd']:.4f} | ${report['openai_simulated_usd']:.4f} | ${report['anthropic_simulated_usd']:.4f} | ${report['google_simulated_usd']:.4f} |
-| **Paid API Calls** | {report['total_calls']} | - | - | - |
-| **Local Calls Saved** | {report['local_calls_avoided']} | - | - | - |
-| **Projected Net Savings** | - | ${report['openai_savings_usd']:.4f} | ${report['anthropic_savings_usd']:.4f} | ${report['google_savings_usd']:.4f} |
+{api_cost_row}
+| **Paid API Calls** | {report["total_calls"]} | - | - | - |
+| **Local Calls Saved** | {report["local_calls_avoided"]} | - | - | - |
+{savings_row}
 
 ## Conclusion
-API-led routing to Chief Engineer combined with local worker task delegation achieved a **{report['pass_rate']:.2f}% pass rate** while generating significant token savings compared to 100% cloud API execution models.
+API-led routing to Chief Engineer combined with local worker task delegation achieved a
+**{report["pass_rate"]:.2f}% pass rate** while generating significant token savings compared
+to 100% cloud API execution models.
 """
         return md

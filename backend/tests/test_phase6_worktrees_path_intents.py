@@ -1,5 +1,4 @@
 import pytest
-
 from localforge.models import domain
 from localforge.models.enums import LeaseReleaseReason, WorktreeAttemptStatus
 from localforge.services.path_lease import is_path_overlapping
@@ -28,21 +27,25 @@ async def test_path_lease_acquisition_and_conflict(db_manager) -> None:
         assert uow.tasks is not None
         assert uow.path_leases is not None
 
-        proj = domain.Project(name="Lease Test", root_path="E:/tmp/lease_test", default_branch="main")
+        proj = domain.Project(
+            name="Lease Test", root_path="E:/tmp/lease_test", default_branch="main"
+        )
         project = await uow.projects.create_project(proj)
         assert project.id is not None
 
-        task_1 = await uow.tasks.create_task(domain.Task(project_id=project.id, key="T1", title="Task 1", description="Desc 1"))
+        task_1 = await uow.tasks.create_task(
+            domain.Task(project_id=project.id, key="T1", title="Task 1", description="Desc 1")
+        )
         assert task_1.id is not None
         task_run_1 = await uow.tasks.create_task_run(domain.TaskRun(task_id=task_1.id, run_id=1))
         assert task_run_1.id is not None
 
-        task_2 = await uow.tasks.create_task(domain.Task(project_id=project.id, key="T2", title="Task 2", description="Desc 2"))
+        task_2 = await uow.tasks.create_task(
+            domain.Task(project_id=project.id, key="T2", title="Task 2", description="Desc 2")
+        )
         assert task_2.id is not None
         task_run_2 = await uow.tasks.create_task_run(domain.TaskRun(task_id=task_2.id, run_id=1))
         assert task_run_2.id is not None
-
-
 
         # Owner 1 acquires lease on backend/localforge
         lease1, conflict_owner, msg1 = await uow.path_leases.acquire_lease(
@@ -67,7 +70,9 @@ async def test_path_lease_acquisition_and_conflict(db_manager) -> None:
         assert "PathIntent conflict" in msg2
 
         # Owner 1 releases lease
-        released = await uow.path_leases.release_all_leases_for_run(task_run_1.id, LeaseReleaseReason.COMPLETED)
+        released = await uow.path_leases.release_all_leases_for_run(
+            task_run_1.id, LeaseReleaseReason.COMPLETED
+        )
         assert released == 1
 
         # Now Owner 2 can acquire lease
@@ -93,11 +98,14 @@ async def test_worktree_attempt_manifest_and_reconciliation(db_manager, tmp_path
         project = await uow.projects.create_project(proj)
         assert project.id is not None
 
-        task = await uow.tasks.create_task(domain.Task(project_id=project.id, key="WT-1", title="Worktree task", description="WT desc"))
+        task = await uow.tasks.create_task(
+            domain.Task(
+                project_id=project.id, key="WT-1", title="Worktree task", description="WT desc"
+            )
+        )
         assert task.id is not None
         task_run = await uow.tasks.create_task_run(domain.TaskRun(task_id=task.id, run_id=1))
         assert task_run.id is not None
-
 
         # Create physical directory for active worktree
         wt_dir = tmp_path / "wt_attempt_1"
@@ -119,7 +127,7 @@ async def test_worktree_attempt_manifest_and_reconciliation(db_manager, tmp_path
 
         # Create non-existent path manifest
         ghost_dir = tmp_path / "wt_ghost_attempt"
-        manifest_ghost = await uow.worktrees.create_attempt_manifest(
+        await uow.worktrees.create_attempt_manifest(
             project_id=project.id,
             task_id=task.id,
             task_run_id=task_run.id,

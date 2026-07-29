@@ -1,9 +1,8 @@
 import logging
 import os
-from datetime import datetime, timedelta, timezone
-from typing import Any
+from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import delete, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from localforge.models import domain
@@ -55,7 +54,7 @@ class PathLeaseService:
         Returns:
             (lease: PathLease | None, conflict_owner_id: str | None, message: str)
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         # Fetch active, unexpired leases for the same project
         stmt = select(PathLeaseORM).where(
             PathLeaseORM.project_id == project_id,
@@ -88,7 +87,9 @@ class PathLeaseService:
         await self.session.flush()
         return orm_obj.to_domain(), None, f"Lease acquired for '{target_path}'."
 
-    async def release_lease(self, lease_id: int, reason: LeaseReleaseReason) -> domain.PathLease | None:
+    async def release_lease(
+        self, lease_id: int, reason: LeaseReleaseReason
+    ) -> domain.PathLease | None:
         """Release a specific path lease."""
         stmt = select(PathLeaseORM).where(PathLeaseORM.id == lease_id)
         result = await self.session.execute(stmt)
@@ -119,7 +120,7 @@ class PathLeaseService:
 
     async def list_active_leases(self, project_id: int) -> list[domain.PathLease]:
         """List all active unexpired leases for a project."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         stmt = select(PathLeaseORM).where(
             PathLeaseORM.project_id == project_id,
             PathLeaseORM.release_reason.is_(None),

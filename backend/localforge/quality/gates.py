@@ -1,6 +1,6 @@
-from dataclasses import dataclass
 import os
 import re
+from dataclasses import dataclass
 
 from localforge.models.enums import ActionApprovalStatus, TaskStatus
 from localforge.storage import UnitOfWork
@@ -77,13 +77,17 @@ class QualityGateEvaluator:
         if not task_run or not task_run.worktree_path:
             return False
         patterns = [
-            re.compile(r"(?i)(api[_-]?key|secret|token|password)\s*[:=]\s*['\"]?[A-Za-z0-9_\-]{12,}"),
+            re.compile(
+                r"(?i)(api[_-]?key|secret|token|password)\s*[:=]\s*['\"]?[A-Za-z0-9_\-]{12,}"
+            ),
             re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH |)PRIVATE KEY-----"),
         ]
         for rel_path in changed_files:
             if not isinstance(rel_path, str):
                 continue
-            target = os.path.realpath(os.path.abspath(os.path.join(task_run.worktree_path, rel_path)))
+            target = os.path.realpath(
+                os.path.abspath(os.path.join(task_run.worktree_path, rel_path))
+            )
             root = os.path.realpath(os.path.abspath(task_run.worktree_path))
             try:
                 if os.path.commonpath([root, target]) != root:

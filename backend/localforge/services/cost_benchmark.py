@@ -1,6 +1,6 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from localforge.models import domain
+
 from localforge.storage.orm import ModelCallLedgerORM, ModelPricingSnapshotORM
 
 
@@ -24,18 +24,18 @@ class CostBenchmarkService:
             "OpenAI": {
                 "large": "gpt-5.5-large",
                 "medium": "gpt-5.4-medium",
-                "small": "gpt-5.4-mini"
+                "small": "gpt-5.4-mini",
             },
             "Anthropic": {
                 "large": "claude-opus-4.8",
                 "medium": "claude-sonnet-4.6",
-                "small": "claude-haiku-4.5"
+                "small": "claude-haiku-4.5",
             },
             "Google": {
                 "large": "gemini-2.5-pro",
                 "medium": "gemini-2.5-flash",
-                "small": "gemini-2.5-flash-lite"
-            }
+                "small": "gemini-2.5-flash-lite",
+            },
         }
 
         fallbacks = {
@@ -47,7 +47,7 @@ class CostBenchmarkService:
             "claude-haiku-4.5": (1.0, 5.0),
             "gemini-2.5-pro": (1.25, 10.0),
             "gemini-2.5-flash": (0.30, 2.50),
-            "gemini-2.5-flash-lite": (0.10, 0.40)
+            "gemini-2.5-flash-lite": (0.10, 0.40),
         }
 
         def get_prices(model_name: str) -> tuple[float, float]:
@@ -67,7 +67,13 @@ class CostBenchmarkService:
             input_tokens = call.input_tokens
             output_tokens = call.output_tokens
 
-            is_chief = call.provider == "openrouter" or "chief" in call.reason.lower() or "contract" in call.reason.lower() or "repair" in call.reason.lower() or "review" in call.reason.lower()
+            is_chief = (
+                call.provider == "openrouter"
+                or "chief" in call.reason.lower()
+                or "contract" in call.reason.lower()
+                or "repair" in call.reason.lower()
+                or "review" in call.reason.lower()
+            )
             is_small = "pr" in call.reason.lower() or "summary" in call.reason.lower() or "changelog" in call.reason.lower()
             tier = "large" if is_chief else ("small" if is_small else "medium")
 
@@ -108,6 +114,17 @@ class CostBenchmarkService:
         snap_res = await self.session.execute(select(ModelPricingSnapshotORM))
         snapshots = snap_res.scalars().all()
         snapshot_ids = ", ".join([f"#{s.id} ({s.model_name})" for s in snapshots])
+        spend_row = (
+            f"| **Total Spend (USD)** | ${metrics['actual_paid_usd']:.4f} | "
+            f"${metrics['openai_hypothetical_usd']:.4f} | "
+            f"${metrics['anthropic_hypothetical_usd']:.4f} | "
+            f"${metrics['google_hypothetical_usd']:.4f} |"
+        )
+        savings_row = (
+            f"| **Projected Savings** | - | ${metrics['openai_savings_usd']:.4f} | "
+            f"${metrics['anthropic_savings_usd']:.4f} | "
+            f"${metrics['google_savings_usd']:.4f} |"
+        )
 
         md = f"""# LocalForge OS — Cost Benchmark Report
 
@@ -115,12 +132,13 @@ Comparing hybrid execution (API + Local) against hypothetical API-only competito
 
 | Metric | LocalForge Actual | OpenAI API-Only | Anthropic API-Only | Google API-Only |
 | :--- | :---: | :---: | :---: | :---: |
-| **Total Spend (USD)** | ${metrics['actual_paid_usd']:.4f} | ${metrics['openai_hypothetical_usd']:.4f} | ${metrics['anthropic_hypothetical_usd']:.4f} | ${metrics['google_hypothetical_usd']:.4f} |
-| **Actual Paid Calls** | {metrics['actual_calls']} | - | - | - |
-| **Local Calls Avoided** | {metrics['local_calls_avoided']} | - | - | - |
-| **Projected Savings** | - | ${metrics['openai_savings_usd']:.4f} | ${metrics['anthropic_savings_usd']:.4f} | ${metrics['google_savings_usd']:.4f} |
+{spend_row}
+| **Actual Paid Calls** | {metrics["actual_calls"]} | - | - | - |
+| **Local Calls Avoided** | {metrics["local_calls_avoided"]} | - | - | - |
+{savings_row}
 
-*Note: Baselines are estimated token-cost comparison models based on official pricing snapshots, not exact proprietary billing invoices.*
+*Note: Baselines are estimated token-cost comparison models based on official pricing
+snapshots, not exact proprietary billing invoices.*
 
 *Pricing snapshots references used: {snapshot_ids}*
 """

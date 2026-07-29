@@ -2,8 +2,11 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, status
 
-
-from localforge.api.schemas import AutonomyEvaluateRequest, VerificationCreateRequest, VerificationSubmitRequest
+from localforge.api.schemas import (
+    AutonomyEvaluateRequest,
+    VerificationCreateRequest,
+    VerificationSubmitRequest,
+)
 from localforge.models import domain
 from localforge.models.enums import AutonomyLevel
 from localforge.storage import UnitOfWork, db_manager
@@ -18,8 +21,10 @@ async def evaluate_autonomy(req: AutonomyEvaluateRequest) -> dict[str, str | boo
         assert uow.autonomy is not None
         try:
             level_enum = AutonomyLevel(req.autonomy_level.upper())
-        except ValueError:
-            raise HTTPException(status_code=400, detail=f"Invalid AutonomyLevel: {req.autonomy_level}")
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400, detail=f"Invalid AutonomyLevel: {req.autonomy_level}"
+            ) from exc
 
         allowed, result_code, reason = uow.autonomy.evaluate_action(
             level=level_enum,
@@ -45,12 +50,14 @@ async def create_verification(req: VerificationCreateRequest) -> domain.MakerChe
                 maker_agent_id=req.maker_agent_id,
                 checker_agent_id=req.checker_agent_id,
             )
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/verifications/{verification_id}/submit")
-async def submit_verification(verification_id: int, req: VerificationSubmitRequest) -> dict[str, str | bool]:
+async def submit_verification(
+    verification_id: int, req: VerificationSubmitRequest
+) -> dict[str, str | bool]:
     """Submit the verification decision from the independent Checker."""
     async with UnitOfWork(db_manager) as uow:
         assert uow.maker_checker is not None
@@ -70,8 +77,8 @@ async def submit_verification(verification_id: int, req: VerificationSubmitReque
                 "result_code": result_code.value,
                 "reason": reason,
             }
-        except ValueError as e:
-            raise HTTPException(status_code=404, detail=str(e))
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.get("/task-runs/{task_run_id}/pr-ready-check")

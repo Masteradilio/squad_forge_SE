@@ -1,8 +1,9 @@
 import asyncio
 import os
+
 import typer
-from localforge.storage import UnitOfWork, db_manager
 from localforge.models import domain
+from localforge.storage import UnitOfWork, db_manager
 from rich.console import Console
 from rich.table import Table
 
@@ -54,7 +55,9 @@ async def run_squad_composition() -> None:
                 model_profile_id = "Deterministic Gate"
                 provider = "harness"
             else:
-                route_val = await uow.routing.get_model_for_role(project.id, meta.default_agent_role)
+                route_val = await uow.routing.get_model_for_role(
+                    project.id, meta.default_agent_role
+                )
                 if route_val:
                     model_profile_id = route_val
                     routes = await uow.routing.list_routes(project.id)
@@ -63,7 +66,10 @@ async def run_squad_composition() -> None:
                             provider = r.provider
                             break
                 else:
-                    if meta.seniority_class in (domain.SeniorityClass.CHIEF_ONLY, domain.SeniorityClass.CHIEF_LED):
+                    if meta.seniority_class in (
+                        domain.SeniorityClass.CHIEF_ONLY,
+                        domain.SeniorityClass.CHIEF_LED,
+                    ):
                         model_profile_id = "gpt-5.5-large"
                         provider = "openrouter"
                     elif meta.seniority_class == domain.SeniorityClass.LOCAL_ASSISTED:
@@ -78,13 +84,15 @@ async def run_squad_composition() -> None:
                 meta.seniority_class.value,
                 meta.responsibility,
                 model_profile_id or "",
-                provider
+                provider,
             )
 
         console.print(table)
 
 
-@squad_app.command(name="composition", help="Show the current squad composition and routing model assignment.")
+@squad_app.command(
+    name="composition", help="Show the current squad composition and routing model assignment."
+)
 def squad_composition_cmd() -> None:
     try:
         asyncio.run(run_squad_composition())
@@ -96,17 +104,20 @@ def squad_composition_cmd() -> None:
 
 
 async def run_orchestrate(prd_path: str) -> None:
+    import os
+    from pathlib import Path
+
     from localforge.cli.import_prd import run_import_prd
     from localforge.cli.plan import run_plan
     from localforge.cli.run import run_execution
-    from pathlib import Path
-    import os
 
-    console.print(f"[bold green]Scrum Master Orchestrator Started[/bold green] parsing PRD: {prd_path}")
-    
+    console.print(
+        f"[bold green]Scrum Master Orchestrator Started[/bold green] parsing PRD: {prd_path}"
+    )
+
     # 1. Parse PRD
     await run_import_prd(Path(prd_path), dry_run=False, json_output=False)
-    
+
     # 2. Map Tasks
     # Implement deterministic mapping of tasks to roles based on complexity
     cwd = os.getcwd()
@@ -117,12 +128,12 @@ async def run_orchestrate(prd_path: str) -> None:
         project = await uow.projects.get_project_by_path(cwd)
         assert project is not None
         assert project.id is not None
-        
+
         tasks = await uow.tasks.list_tasks_for_project(project.id)
         for task in tasks:
             if task.status in (domain.TaskStatus.BACKLOG, domain.TaskStatus.PLANNING):
                 title_desc = f"{task.title} {task.description}".lower()
-                
+
                 # Deterministic logic for mapping complexity
                 if "frontend" in title_desc or "visualiza" in title_desc or "crud" in title_desc:
                     seniority = domain.SeniorityClass.CHIEF_ONLY.value
@@ -138,21 +149,23 @@ async def run_orchestrate(prd_path: str) -> None:
                 if "task_contract" not in task.metadata:
                     task.metadata["task_contract"] = {}
                 task.metadata["task_contract"]["seniority_class"] = seniority
-                
+
                 await uow.tasks.update_task(task)
-        
+
         await uow.session.commit()
     console.print("[bold green]Tasks mapped to roles based on complexity.[/bold green]")
-    
+
     # 3. Plan / Approve all
     await run_plan(approve=None, approve_all=True)
-    
+
     # 4. Execute (git worktree isolation is handled by the pipeline engine/scheduler)
     console.print("[bold green]Handing over to Execution Pipeline...[/bold green]")
     await run_execution(unattended=True)
 
 
-@squad_app.command(name="orchestrate", help="Run the full Scrum Master deterministic loop (PRD -> Map -> Execute).")
+@squad_app.command(
+    name="orchestrate", help="Run the full Scrum Master deterministic loop (PRD -> Map -> Execute)."
+)
 def squad_orchestrate_cmd(prd_path: str = typer.Argument(..., help="Path to the PRD file")) -> None:
     try:
         asyncio.run(run_orchestrate(prd_path))

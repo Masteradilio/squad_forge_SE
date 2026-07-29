@@ -1,14 +1,12 @@
 import json
 import logging
 from datetime import UTC, datetime
-from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from localforge.models import domain
 from localforge.models.enums import LoopRunStatus, LoopRunVerdict, LoopStatus
-
 from localforge.storage.orm import (
     LoopDefinitionORM,
     LoopItemORM,
@@ -49,7 +47,9 @@ class LoopService:
         result = await self.session.execute(stmt)
         return [orm_obj.to_domain() for orm_obj in result.scalars().all()]
 
-    async def update_loop_status(self, loop_id: int, status: LoopStatus, enabled: bool | None = None) -> domain.LoopDefinition | None:
+    async def update_loop_status(
+        self, loop_id: int, status: LoopStatus, enabled: bool | None = None
+    ) -> domain.LoopDefinition | None:
         """Update status or enabled state of a loop."""
         stmt = select(LoopDefinitionORM).where(LoopDefinitionORM.id == loop_id)
         result = await self.session.execute(stmt)
@@ -93,8 +93,16 @@ class LoopService:
         if not orm_obj:
             raise ValueError(f"LoopRun with id {loop_run.id} not found")
 
-        orm_obj.status = loop_run.status.value if isinstance(loop_run.status, LoopRunStatus) else str(loop_run.status)
-        orm_obj.triage_verdict = loop_run.triage_verdict.value if isinstance(loop_run.triage_verdict, LoopRunVerdict) else str(loop_run.triage_verdict)
+        orm_obj.status = (
+            loop_run.status.value
+            if isinstance(loop_run.status, LoopRunStatus)
+            else str(loop_run.status)
+        )
+        orm_obj.triage_verdict = (
+            loop_run.triage_verdict.value
+            if isinstance(loop_run.triage_verdict, LoopRunVerdict)
+            else str(loop_run.triage_verdict)
+        )
 
         orm_obj.scheduler_run_id = loop_run.scheduler_run_id
         orm_obj.items_processed = loop_run.items_processed
@@ -122,7 +130,9 @@ class LoopService:
         await self.session.flush()
         return orm_obj.to_domain()
 
-    async def get_loop_item_by_idempotency_key(self, idempotency_key: str) -> domain.LoopItem | None:
+    async def get_loop_item_by_idempotency_key(
+        self, idempotency_key: str
+    ) -> domain.LoopItem | None:
         """Retrieve a LoopItem by its idempotency key."""
         stmt = select(LoopItemORM).where(LoopItemORM.idempotency_key == idempotency_key)
         result = await self.session.execute(stmt)
@@ -139,7 +149,25 @@ class LoopService:
         result = await self.session.execute(stmt)
         return [orm_obj.to_domain() for orm_obj in result.scalars().all()]
 
-    async def create_or_update_snapshot(self, snapshot: domain.LoopStateSnapshot) -> domain.LoopStateSnapshot:
+    async def update_loop_item(self, item: domain.LoopItem) -> domain.LoopItem:
+        """Update LoopItem execution linkage and status."""
+        if item.id is None:
+            raise ValueError("Cannot update LoopItem without an ID")
+        stmt = select(LoopItemORM).where(LoopItemORM.id == item.id)
+        result = await self.session.execute(stmt)
+        orm_obj = result.scalar_one_or_none()
+        if orm_obj is None:
+            raise ValueError(f"LoopItem with id {item.id} not found")
+        orm_obj.title = item.title
+        orm_obj.payload_json = item.payload
+        orm_obj.status = item.status
+        orm_obj.scheduler_task_id = item.scheduler_task_id
+        await self.session.flush()
+        return orm_obj.to_domain()
+
+    async def create_or_update_snapshot(
+        self, snapshot: domain.LoopStateSnapshot
+    ) -> domain.LoopStateSnapshot:
         """Save a new state snapshot for a loop."""
         orm_obj = LoopStateSnapshotORM.from_domain(snapshot)
         self.session.add(orm_obj)

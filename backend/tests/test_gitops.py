@@ -57,6 +57,7 @@ async def test_git_adapter_and_checkpoints(temp_git_repo, db_session):
     from localforge.services.project import ProjectService
     from localforge.services.safety import SafetyService
     from localforge.services.task import TaskService
+
     uow.projects = ProjectService(db_session)
     uow.tasks = TaskService(db_session)
     uow.audits = AuditService(db_session)
@@ -82,6 +83,7 @@ async def test_git_adapter_and_checkpoints(temp_git_repo, db_session):
 
     # Register active run with worktree path
     from localforge.models.enums import TaskRunStatus
+
     task_run_data = domain.TaskRun(
         run_id=1,
         task_id=task.id,
@@ -127,6 +129,7 @@ async def test_worktree_manager_setup_and_isolation(temp_git_repo, db_session):
     from localforge.services.project import ProjectService
     from localforge.services.safety import SafetyService
     from localforge.services.task import TaskService
+
     uow.projects = ProjectService(db_session)
     uow.tasks = TaskService(db_session)
     uow.audits = AuditService(db_session)
@@ -159,6 +162,7 @@ async def test_worktree_manager_setup_and_isolation(temp_git_repo, db_session):
 
     # Register active run with worktree path
     from localforge.models.enums import TaskRunStatus
+
     task_run_data = domain.TaskRun(
         run_id=1,
         task_id=task.id,

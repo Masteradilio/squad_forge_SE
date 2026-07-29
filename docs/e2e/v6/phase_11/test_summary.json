@@ -25,5 +25,6 @@
       "total_passed": 5
     }
   },
-  "overall_status": "PASSED"
+  "overall_status": "HISTORICAL_PASSED_NOT_ACCEPTANCE_EVIDENCE",
+  "compliance_note": "Commands are retained as historical test context only; the Phase 11 manifest was invalidated by V6.1 compliance because it used source_commit: HEAD and non-observed strategy metrics."
 }

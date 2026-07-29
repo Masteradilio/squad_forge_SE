@@ -1,17 +1,17 @@
 import asyncio
-import logging
 from typing import Any
 
 import typer
-from rich.console import Console
-from rich.table import Table
-
 from localforge.models import domain
 from localforge.models.enums import RunnerHealthState, RunnerLane
 from localforge.storage import UnitOfWork, db_manager
+from rich.console import Console
+from rich.table import Table
 
 console = Console()
-runners_app = typer.Typer(help="Manage and inspect RunnerPool states, capabilities, health, and dispatch.")
+runners_app = typer.Typer(
+    help="Manage and inspect RunnerPool states, capabilities, health, and dispatch."
+)
 
 
 def _run_async(coro: Any) -> Any:
@@ -40,7 +40,13 @@ def list_runners() -> None:
             table.add_column("Success Rate", justify="right")
 
             for r in runners:
-                health_style = "green" if r.health_state == RunnerHealthState.READY else "yellow" if r.health_state == RunnerHealthState.DEGRADED else "red"
+                health_style = (
+                    "green"
+                    if r.health_state == RunnerHealthState.READY
+                    else "yellow"
+                    if r.health_state == RunnerHealthState.DEGRADED
+                    else "red"
+                )
                 table.add_row(
                     r.runner_id,
                     r.name,
@@ -59,7 +65,9 @@ def list_runners() -> None:
 def register_runner(
     runner_id: str = typer.Option(..., "--id", "-i", help="Runner ID"),
     name: str = typer.Option(..., "--name", "-n", help="Runner Name"),
-    lane: str = typer.Option("INLINE", "--lane", "-l", help="Lane (INLINE, BACKGROUND, SANDBOX, ISOLATED)"),
+    lane: str = typer.Option(
+        "INLINE", "--lane", "-l", help="Lane (INLINE, BACKGROUND, SANDBOX, ISOLATED)"
+    ),
     max_concurrency: int = typer.Option(4, "--max-concurrency", "-c", help="Max Concurrency"),
 ) -> None:
     """Register a new runner in the pool."""
@@ -76,7 +84,9 @@ def register_runner(
                 capabilities=caps,
                 max_concurrency=max_concurrency,
             )
-            console.print(f"[bold green]Runner '{res.runner_id}' registered successfully.[/bold green]")
+            console.print(
+                f"[bold green]Runner '{res.runner_id}' registered successfully.[/bold green]"
+            )
 
     _run_async(_impl())
 
@@ -84,7 +94,12 @@ def register_runner(
 @runners_app.command("health")
 def update_health(
     runner_id: str = typer.Option(..., "--id", "-i", help="Runner ID"),
-    health: str = typer.Option(..., "--health", "-h", help="Health State (READY, BUSY, DEGRADED, UNAVAILABLE, DRAINING, QUARANTINED)"),
+    health: str = typer.Option(
+        ...,
+        "--health",
+        "-h",
+        help="Health State (READY, BUSY, DEGRADED, UNAVAILABLE, DRAINING, QUARANTINED)",
+    ),
     reason: str | None = typer.Option(None, "--reason", "-r", help="Quarantine Reason"),
 ) -> None:
     """Update health state of a runner."""
@@ -97,6 +112,8 @@ def update_health(
                 health_state=RunnerHealthState(health),
                 quarantine_reason=reason,
             )
-            console.print(f"[bold green]Runner '{res.runner_id}' health updated to '{res.health_state.value}'.[/bold green]")
+            console.print(
+                f"[bold green]Runner '{res.runner_id}' health updated to '{res.health_state.value}'.[/bold green]"
+            )
 
     _run_async(_impl())

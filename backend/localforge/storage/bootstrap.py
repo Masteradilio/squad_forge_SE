@@ -14,13 +14,6 @@ logger = logging.getLogger(__name__)
 CURRENT_VERSION = 15
 
 
-
-
-
-
-
-
-
 async def ensure_db_directory(db_url: str) -> None:
     """Ensure that the parent directory for a SQLite database file exists."""
     if db_url.startswith("sqlite+aiosqlite:///"):
@@ -87,8 +80,7 @@ async def bootstrap_database(db_manager: DatabaseManager) -> int:
                     if path
                 }
                 in_temp = any(
-                    normalized_abs.startswith(f"{temp_root}/")
-                    or normalized_abs == temp_root
+                    normalized_abs.startswith(f"{temp_root}/") or normalized_abs == temp_root
                     for temp_root in temp_roots
                 )
                 if is_prod_db and not in_temp:
@@ -105,9 +97,6 @@ async def bootstrap_database(db_manager: DatabaseManager) -> int:
         logger.info(f"Current database schema version: {current_version}")
 
         if current_version == 0:
-
-
-
             logger.info(f"Initializing new database schema (Version {CURRENT_VERSION})...")
             # In SQLAlchemy async, we run create_all on the sync connection within a run_sync block
             async with db_manager.engine.begin() as conn:
@@ -143,9 +132,7 @@ async def bootstrap_database(db_manager: DatabaseManager) -> int:
                     graph_columns = await conn.execute(
                         text("PRAGMA table_info(graph_mutation_journal)")
                     )
-                    graph_column_names = {
-                        str(row[1]) for row in graph_columns.fetchall()
-                    }
+                    graph_column_names = {str(row[1]) for row in graph_columns.fetchall()}
                     if "mutation_sequence" not in graph_column_names:
                         await conn.execute(
                             text(
@@ -164,9 +151,7 @@ async def bootstrap_database(db_manager: DatabaseManager) -> int:
                     deep_run_columns = await conn.execute(
                         text("PRAGMA table_info(deep_swarm_runs)")
                     )
-                    deep_run_column_names = {
-                        str(row[1]) for row in deep_run_columns.fetchall()
-                    }
+                    deep_run_column_names = {str(row[1]) for row in deep_run_columns.fetchall()}
                     if "node_side_effect_keys_json" not in deep_run_column_names:
                         await conn.execute(
                             text(
@@ -175,10 +160,7 @@ async def bootstrap_database(db_manager: DatabaseManager) -> int:
                                 "NOT NULL DEFAULT '{}'"
                             )
                         )
-                    if (
-                        "completed_side_effect_keys_json"
-                        not in deep_run_column_names
-                    ):
+                    if "completed_side_effect_keys_json" not in deep_run_column_names:
                         await conn.execute(
                             text(
                                 "ALTER TABLE deep_swarm_runs "
@@ -210,28 +192,55 @@ async def bootstrap_database(db_manager: DatabaseManager) -> int:
                     memory_fact_columns = {row[1] for row in result.fetchall()}
 
                     if "repository" not in memory_fact_columns:
-                        await conn.execute(text("ALTER TABLE memory_facts ADD COLUMN repository TEXT"))
+                        await conn.execute(
+                            text("ALTER TABLE memory_facts ADD COLUMN repository TEXT")
+                        )
                     if "run_id" not in memory_fact_columns:
-                        await conn.execute(text("ALTER TABLE memory_facts ADD COLUMN run_id INTEGER"))
+                        await conn.execute(
+                            text("ALTER TABLE memory_facts ADD COLUMN run_id INTEGER")
+                        )
                     if "task_key" not in memory_fact_columns:
-                        await conn.execute(text("ALTER TABLE memory_facts ADD COLUMN task_key VARCHAR(100)"))
+                        await conn.execute(
+                            text("ALTER TABLE memory_facts ADD COLUMN task_key VARCHAR(100)")
+                        )
                     if "attempt_number" not in memory_fact_columns:
-                        await conn.execute(text("ALTER TABLE memory_facts ADD COLUMN attempt_number INTEGER"))
+                        await conn.execute(
+                            text("ALTER TABLE memory_facts ADD COLUMN attempt_number INTEGER")
+                        )
                     if "artifact_id" not in memory_fact_columns:
-                        await conn.execute(text("ALTER TABLE memory_facts ADD COLUMN artifact_id INTEGER"))
+                        await conn.execute(
+                            text("ALTER TABLE memory_facts ADD COLUMN artifact_id INTEGER")
+                        )
                     if "verifier" not in memory_fact_columns:
-                        await conn.execute(text("ALTER TABLE memory_facts ADD COLUMN verifier VARCHAR(255)"))
+                        await conn.execute(
+                            text("ALTER TABLE memory_facts ADD COLUMN verifier VARCHAR(255)")
+                        )
                     if "validity" not in memory_fact_columns:
-                        await conn.execute(text("ALTER TABLE memory_facts ADD COLUMN validity VARCHAR(50) NOT NULL DEFAULT 'AUTHORITATIVE'"))
+                        await conn.execute(
+                            text(
+                                "ALTER TABLE memory_facts ADD COLUMN validity VARCHAR(50) NOT NULL DEFAULT 'AUTHORITATIVE'"
+                            )
+                        )
                     if "confidence" not in memory_fact_columns:
-                        await conn.execute(text("ALTER TABLE memory_facts ADD COLUMN confidence FLOAT NOT NULL DEFAULT 1.0"))
+                        await conn.execute(
+                            text(
+                                "ALTER TABLE memory_facts ADD COLUMN confidence FLOAT NOT NULL DEFAULT 1.0"
+                            )
+                        )
                     if "policy_scope" not in memory_fact_columns:
-                        await conn.execute(text("ALTER TABLE memory_facts ADD COLUMN policy_scope VARCHAR(255)"))
+                        await conn.execute(
+                            text("ALTER TABLE memory_facts ADD COLUMN policy_scope VARCHAR(255)")
+                        )
                     if "category" not in memory_fact_columns:
-                        await conn.execute(text("ALTER TABLE memory_facts ADD COLUMN category VARCHAR(50) NOT NULL DEFAULT 'OBSERVED_FACT'"))
+                        await conn.execute(
+                            text(
+                                "ALTER TABLE memory_facts ADD COLUMN category VARCHAR(50) NOT NULL DEFAULT 'OBSERVED_FACT'"
+                            )
+                        )
 
                     # Create memory_relations table if not existing
-                    await conn.execute(text("""
+                    await conn.execute(
+                        text("""
                         CREATE TABLE IF NOT EXISTS memory_relations (
                             id INTEGER PRIMARY KEY AUTOINCREMENT,
                             source_fact_id INTEGER NOT NULL REFERENCES memory_facts(id) ON DELETE CASCADE,
@@ -240,11 +249,11 @@ async def bootstrap_database(db_manager: DatabaseManager) -> int:
                             provenance_json JSON NOT NULL DEFAULT '{}',
                             created_at DATETIME
                         )
-                    """))
+                    """)
+                    )
 
             session.add(SchemaVersionORM(version=CURRENT_VERSION))
             await session.commit()
-
 
             # Seed pricing snapshots
             await seed_pricing_data(session)
@@ -257,8 +266,9 @@ async def bootstrap_database(db_manager: DatabaseManager) -> int:
 
 
 async def seed_pricing_data(session: AsyncSession) -> None:
-    from localforge.storage.orm import PricingSourceORM, ModelPricingSnapshotORM
     from sqlalchemy import select
+
+    from localforge.storage.orm import ModelPricingSnapshotORM, PricingSourceORM
 
     # Check if pricing sources already exist
     existing = await session.execute(select(PricingSourceORM).limit(1))
@@ -271,7 +281,7 @@ async def seed_pricing_data(session: AsyncSession) -> None:
     openai_src = PricingSourceORM(
         provider="OpenAI",
         url="https://openai.com/api/pricing/",
-        notes="Official OpenAI pricing snapshots baseline."
+        notes="Official OpenAI pricing snapshots baseline.",
     )
     session.add(openai_src)
 
@@ -279,7 +289,7 @@ async def seed_pricing_data(session: AsyncSession) -> None:
     anthropic_src = PricingSourceORM(
         provider="Anthropic",
         url="https://platform.claude.com/docs/en/about-claude/pricing",
-        notes="Official Anthropic pricing snapshots baseline."
+        notes="Official Anthropic pricing snapshots baseline.",
     )
     session.add(anthropic_src)
 
@@ -287,30 +297,75 @@ async def seed_pricing_data(session: AsyncSession) -> None:
     google_src = PricingSourceORM(
         provider="Google",
         url="https://ai.google.dev/gemini-api/docs/pricing",
-        notes="Official Google pricing snapshots baseline."
+        notes="Official Google pricing snapshots baseline.",
     )
     session.add(google_src)
-    await session.flush() # Populate IDs
+    await session.flush()  # Populate IDs
 
     # OpenAI snapshots (per 1M tokens)
     openai_snapshots = [
-        ModelPricingSnapshotORM(pricing_source_id=openai_src.id, model_name="gpt-5.5-large", input_price_per_million=5.00, output_price_per_million=30.00),
-        ModelPricingSnapshotORM(pricing_source_id=openai_src.id, model_name="gpt-5.4-medium", input_price_per_million=2.50, output_price_per_million=15.00),
-        ModelPricingSnapshotORM(pricing_source_id=openai_src.id, model_name="gpt-5.4-mini", input_price_per_million=0.75, output_price_per_million=4.50),
+        ModelPricingSnapshotORM(
+            pricing_source_id=openai_src.id,
+            model_name="gpt-5.5-large",
+            input_price_per_million=5.00,
+            output_price_per_million=30.00,
+        ),
+        ModelPricingSnapshotORM(
+            pricing_source_id=openai_src.id,
+            model_name="gpt-5.4-medium",
+            input_price_per_million=2.50,
+            output_price_per_million=15.00,
+        ),
+        ModelPricingSnapshotORM(
+            pricing_source_id=openai_src.id,
+            model_name="gpt-5.4-mini",
+            input_price_per_million=0.75,
+            output_price_per_million=4.50,
+        ),
     ]
 
     # Anthropic snapshots (per 1M tokens)
     anthropic_snapshots = [
-        ModelPricingSnapshotORM(pricing_source_id=anthropic_src.id, model_name="claude-opus-4.8", input_price_per_million=5.00, output_price_per_million=25.00),
-        ModelPricingSnapshotORM(pricing_source_id=anthropic_src.id, model_name="claude-sonnet-4.6", input_price_per_million=3.00, output_price_per_million=15.00),
-        ModelPricingSnapshotORM(pricing_source_id=anthropic_src.id, model_name="claude-haiku-4.5", input_price_per_million=1.00, output_price_per_million=5.00),
+        ModelPricingSnapshotORM(
+            pricing_source_id=anthropic_src.id,
+            model_name="claude-opus-4.8",
+            input_price_per_million=5.00,
+            output_price_per_million=25.00,
+        ),
+        ModelPricingSnapshotORM(
+            pricing_source_id=anthropic_src.id,
+            model_name="claude-sonnet-4.6",
+            input_price_per_million=3.00,
+            output_price_per_million=15.00,
+        ),
+        ModelPricingSnapshotORM(
+            pricing_source_id=anthropic_src.id,
+            model_name="claude-haiku-4.5",
+            input_price_per_million=1.00,
+            output_price_per_million=5.00,
+        ),
     ]
 
     # Google snapshots (per 1M tokens)
     google_snapshots = [
-        ModelPricingSnapshotORM(pricing_source_id=google_src.id, model_name="gemini-2.5-pro", input_price_per_million=1.25, output_price_per_million=10.00),
-        ModelPricingSnapshotORM(pricing_source_id=google_src.id, model_name="gemini-2.5-flash", input_price_per_million=0.30, output_price_per_million=2.50),
-        ModelPricingSnapshotORM(pricing_source_id=google_src.id, model_name="gemini-2.5-flash-lite", input_price_per_million=0.10, output_price_per_million=0.40),
+        ModelPricingSnapshotORM(
+            pricing_source_id=google_src.id,
+            model_name="gemini-2.5-pro",
+            input_price_per_million=1.25,
+            output_price_per_million=10.00,
+        ),
+        ModelPricingSnapshotORM(
+            pricing_source_id=google_src.id,
+            model_name="gemini-2.5-flash",
+            input_price_per_million=0.30,
+            output_price_per_million=2.50,
+        ),
+        ModelPricingSnapshotORM(
+            pricing_source_id=google_src.id,
+            model_name="gemini-2.5-flash-lite",
+            input_price_per_million=0.10,
+            output_price_per_million=0.40,
+        ),
     ]
 
     for snap in openai_snapshots + anthropic_snapshots + google_snapshots:

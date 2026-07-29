@@ -1,5 +1,4 @@
 import pytest
-
 from localforge.models import domain
 from localforge.models.enums import RunnerHealthState, RunnerLane
 from localforge.storage import UnitOfWork
@@ -13,18 +12,26 @@ async def test_runner_capability_matching_and_no_compatible_runner(db_manager) -
         assert uow.tasks is not None
         assert uow.runner_pool is not None
 
-        proj = domain.Project(name="Runner Test", root_path="E:/tmp/runner_test", default_branch="main")
+        proj = domain.Project(
+            name="Runner Test", root_path="E:/tmp/runner_test", default_branch="main"
+        )
         project = await uow.projects.create_project(proj)
         assert project.id is not None
 
-        task = await uow.tasks.create_task(domain.Task(project_id=project.id, key="RP-1", title="Task 1", description="Desc 1"))
+        task = await uow.tasks.create_task(
+            domain.Task(project_id=project.id, key="RP-1", title="Task 1", description="Desc 1")
+        )
         assert task.id is not None
         task_run = await uow.tasks.create_task_run(domain.TaskRun(task_id=task.id, run_id=1))
         assert task_run.id is not None
 
         # Register runner 1: INLINE, tools=[git, pytest]
-        caps1 = domain.RunnerCapability(lane=RunnerLane.INLINE, tools=["git", "pytest"], max_concurrency=2)
-        await uow.runner_pool.register_runner("runner_inline_1", "Inline 1", RunnerLane.INLINE, caps1, 2)
+        caps1 = domain.RunnerCapability(
+            lane=RunnerLane.INLINE, tools=["git", "pytest"], max_concurrency=2
+        )
+        await uow.runner_pool.register_runner(
+            "runner_inline_1", "Inline 1", RunnerLane.INLINE, caps1, 2
+        )
 
         # Dispatch requesting tool 'docker' -> NO_COMPATIBLE_RUNNER
         runner_none, status_err, log_err = await uow.runner_pool.dispatch_task(
@@ -57,23 +64,37 @@ async def test_quarantined_exclusion_and_stable_ranking(db_manager) -> None:
         assert uow.tasks is not None
         assert uow.runner_pool is not None
 
-        proj = domain.Project(name="Ranking Test", root_path="E:/tmp/rank_test", default_branch="main")
+        proj = domain.Project(
+            name="Ranking Test", root_path="E:/tmp/rank_test", default_branch="main"
+        )
         project = await uow.projects.create_project(proj)
         assert project.id is not None
 
-        task = await uow.tasks.create_task(domain.Task(project_id=project.id, key="RP-2", title="Task 2", description="Desc 2"))
+        task = await uow.tasks.create_task(
+            domain.Task(project_id=project.id, key="RP-2", title="Task 2", description="Desc 2")
+        )
         assert task.id is not None
         task_run = await uow.tasks.create_task_run(domain.TaskRun(task_id=task.id, run_id=1))
         assert task_run.id is not None
 
         # Register 3 runners with identical capabilities
-        caps = domain.RunnerCapability(lane=RunnerLane.BACKGROUND, tools=["python"], max_concurrency=4)
-        await uow.runner_pool.register_runner("runner_b", "Runner B", RunnerLane.BACKGROUND, caps, 4)
-        await uow.runner_pool.register_runner("runner_a", "Runner A", RunnerLane.BACKGROUND, caps, 4)
-        await uow.runner_pool.register_runner("runner_q", "Runner Q", RunnerLane.BACKGROUND, caps, 4)
+        caps = domain.RunnerCapability(
+            lane=RunnerLane.BACKGROUND, tools=["python"], max_concurrency=4
+        )
+        await uow.runner_pool.register_runner(
+            "runner_b", "Runner B", RunnerLane.BACKGROUND, caps, 4
+        )
+        await uow.runner_pool.register_runner(
+            "runner_a", "Runner A", RunnerLane.BACKGROUND, caps, 4
+        )
+        await uow.runner_pool.register_runner(
+            "runner_q", "Runner Q", RunnerLane.BACKGROUND, caps, 4
+        )
 
         # Quarantining runner_a
-        await uow.runner_pool.update_runner_health("runner_q", RunnerHealthState.QUARANTINED, "Flaky hardware")
+        await uow.runner_pool.update_runner_health(
+            "runner_q", RunnerHealthState.QUARANTINED, "Flaky hardware"
+        )
 
         # Dispatch task -> runner_q is excluded. Between runner_a and runner_b (same score), runner_a wins by stable tie-break (alphabetical id)
         runner_selected, status_str, log = await uow.runner_pool.dispatch_task(
@@ -95,11 +116,15 @@ async def test_concurrency_lease_release_and_restart_reconciliation(db_manager) 
         assert uow.tasks is not None
         assert uow.runner_pool is not None
 
-        proj = domain.Project(name="Lease Test", root_path="E:/tmp/leak_test", default_branch="main")
+        proj = domain.Project(
+            name="Lease Test", root_path="E:/tmp/leak_test", default_branch="main"
+        )
         project = await uow.projects.create_project(proj)
         assert project.id is not None
 
-        task = await uow.tasks.create_task(domain.Task(project_id=project.id, key="RP-3", title="Task 3", description="Desc 3"))
+        task = await uow.tasks.create_task(
+            domain.Task(project_id=project.id, key="RP-3", title="Task 3", description="Desc 3")
+        )
         assert task.id is not None
         task_run = await uow.tasks.create_task_run(domain.TaskRun(task_id=task.id, run_id=1))
         assert task_run.id is not None
@@ -126,7 +151,9 @@ async def test_concurrency_lease_release_and_restart_reconciliation(db_manager) 
         )
         assert runner2 is None
         assert status2 == "NO_COMPATIBLE_RUNNER"
-        assert "Concurrency capacity exhausted" in log2.rejection_reasons_json.get("runner_iso_1", "")
+        assert "Concurrency capacity exhausted" in log2.rejection_reasons_json.get(
+            "runner_iso_1", ""
+        )
 
         # Simulate daemon restart reconciliation -> resets active task count to 0
         reconciled_count = await uow.runner_pool.reconcile_leaked_leases()

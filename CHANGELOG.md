@@ -4,6 +4,67 @@ All notable changes to LocalForge OS will be documented in this file.
 
  ## [Unreleased]
 
+### V6.1 Compliance Closure - 2026-07-28
+
+#### Changed
+- Reclassified the current V6 public status as an architectural alpha pending
+  `docs/compliance_backlog_V6.md` closure gates, and qualified historical V6
+  release/evaluation claims in README and `docs/MASTER_BACKLOG_V6.md`.
+- Reworked `StrategyComparatorService` so strategy metrics are calculated from
+  labeled event outcomes instead of hard-coded benchmark constants.
+- Corrected README quickstart installation/bootstrap commands to use the root
+  package metadata and supported `manage.py setup-backend` flow.
+
+#### Added
+- Added `ComplianceEvidenceValidator` and focused tests rejecting mutable
+  `HEAD` refs, nonexistent commits, empty corpus hashes, mismatched input
+  hashes, and manual `ACCEPTED` overrides without reviewed PR evidence.
+- Added regression coverage proving strategy metrics change when observed
+  labels change.
+- Added the first C2 governed execution spine: Scheduler task starts now pass
+  through `GovernedExecutionService` and persisted capability-aware
+  `RunnerPoolService` dispatch before any worktree setup or pipeline side
+  effect.
+- Added actionable LoopCoordinator regression coverage proving loop events now
+  create persisted `READY` scheduler tasks and record detector failures instead
+  of silently fabricating progress.
+- Added a shared `ActionGateway` so file edits and command execution evaluate
+  autonomy bounds before SafetyKernel decisions.
+- Added provider-neutral operational connector abstractions for Daily Triage,
+  CI Sweeper, and PR Babysitter loops, including paginated state ingestion and
+  idempotent draft-PR creation in controlled local fixtures.
+- Added scoped memory retrieval filters for repository, policy scope, task key,
+  file paths, validity, category, tags, and error fingerprints, with audit
+  events recording injected memory fact IDs.
+- Added observed task-level strategy comparison inputs so benchmark metrics can
+  be derived from outcomes rather than implementation constants.
+- Added `ruff check backend` to the GitHub Actions backend job.
+
+#### Fixed
+- Fixed scheduler rollback behavior so governed dispatch/runner reservation is
+  committed before pipeline execution; subsequent pipeline failures no longer
+  erase the dispatch evidence needed for audit and recovery.
+- Fixed runner capacity reservation to use atomic database updates and release
+  runner leases after successful pipeline completion.
+- Fixed `PR_READY` transitions to require explicit gate evidence through
+  `TaskService.mark_pr_ready` in the main PR factory/runtime/pipeline paths.
+- Fixed Light Swarm completion so required output artifacts must be present
+  before a run can be treated as ready.
+- Fixed Deep Swarm forcing so it requires registered decision-contract evidence
+  and otherwise remains disabled/experimental.
+- Fixed V6 phase 11 evidence labels to state that the previous corpus and
+  manifest data were historical/invalidated until regenerated from immutable
+  evidence.
+- Fixed repository-wide Ruff debt for `ruff check backend`, including imports,
+  unused variables, exception chaining, and remaining long-line policy.
+
+#### Verified
+- `python -m pytest backend/tests -q` passed with 294 tests.
+- `python -m mypy backend` passed across 209 source files.
+- `python -m ruff check backend` passed.
+- `npm run build --prefix frontend` passed.
+- `git diff --check` passed.
+
 ## [6.0.0] - 2026-07-28
 
 ### LocalForge OS V6 — Full Contract Release

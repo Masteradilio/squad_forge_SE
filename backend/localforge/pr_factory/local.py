@@ -1,12 +1,12 @@
 import os
 from dataclasses import dataclass
 
+from localforge.contracts.verifier import ContractVerifier
 from localforge.models import domain
 from localforge.models.enums import AuditEventActorType, AuditEventType, TaskStatus
 from localforge.pr_factory.github import GitHubPRAdapter
 from localforge.storage import UnitOfWork
 from localforge.storage.artifacts import ArtifactStore
-from localforge.contracts.verifier import ContractVerifier
 from localforge.visual.gate import VisualFidelityGate
 from localforge.visual.screenshot import capture_html_screenshot
 
@@ -68,14 +68,13 @@ class LocalPRFactory:
         visual_ref_rel = None
         visual_actual_rel = None
         visual_threshold = 0.90
-        visual_viewport = "1280,720"
 
         if isinstance(contract, dict):
             visual_required = bool(contract.get("visual_required", False))
             visual_ref_rel = contract.get("visual_reference_image")
             visual_actual_rel = contract.get("visual_actual_output")
             visual_threshold = float(contract.get("visual_similarity_threshold", 0.90))
-            visual_viewport = str(contract.get("visual_viewport", "1280,720"))
+            str(contract.get("visual_viewport", "1280,720"))
 
         if not visual_required:
             visual_required = bool(task.metadata.get("visual_required", False))
@@ -86,7 +85,7 @@ class LocalPRFactory:
         if "visual_similarity_threshold" in task.metadata:
             visual_threshold = float(task.metadata["visual_similarity_threshold"])
         if "visual_viewport" in task.metadata:
-            visual_viewport = str(task.metadata["visual_viewport"])
+            str(task.metadata["visual_viewport"])
 
         if visual_required and worktree_path:
             ref_image_path = None
@@ -122,9 +121,13 @@ class LocalPRFactory:
                     html_abs_path = html_files[0]
 
             if visual_ref_rel and not ref_image_path:
-                reasons.append(f"Visual mismatch: Reference image not found for path '{visual_ref_rel}'.")
+                reasons.append(
+                    f"Visual mismatch: Reference image not found for path '{visual_ref_rel}'."
+                )
             elif not html_abs_path:
-                reasons.append(f"Visual mismatch: Actual HTML output not found for path '{visual_actual_rel}'.")
+                reasons.append(
+                    f"Visual mismatch: Actual HTML output not found for path '{visual_actual_rel}'."
+                )
             else:
                 actual_image_path = os.path.join(worktree_path, "actual_layout.png")
                 captured = capture_html_screenshot(html_abs_path, actual_image_path)
@@ -144,7 +147,9 @@ class LocalPRFactory:
         cost_report_md = ""
         try:
             assert self.uow.cost_benchmark is not None
-            cost_report_md = await self.uow.cost_benchmark.generate_markdown_report(self.project_id, self.run_id)
+            cost_report_md = await self.uow.cost_benchmark.generate_markdown_report(
+                self.project_id, self.run_id
+            )
             cost_artifact = await ArtifactStore(self.uow).write_artifact(
                 project_root=project.root_path,
                 task_run_id=task_run_id,
@@ -160,7 +165,9 @@ class LocalPRFactory:
         if not any(path.endswith("cost_benchmark.md") for path in artifact_paths):
             reasons.append("cost_benchmark.md missing")
 
-        pr_body = self._render_pr_body(task, task_run, sorted(artifact_paths), reasons, cost_report_md=cost_report_md)
+        pr_body = self._render_pr_body(
+            task, task_run, sorted(artifact_paths), reasons, cost_report_md=cost_report_md
+        )
 
         pr_artifact = await ArtifactStore(self.uow).write_artifact(
             project_root=project.root_path,
@@ -179,7 +186,15 @@ class LocalPRFactory:
         )
         ready = not reasons
         if ready and task.status == TaskStatus.REVIEWING:
-            await self.uow.tasks.update_task_status(task_id, TaskStatus.PR_READY)
+            await self.uow.tasks.mark_pr_ready(
+                task_id,
+                gate_evidence={
+                    "source": "pr_factory",
+                    "task_run_id": task_run_id,
+                    "pr_artifact": pr_artifact.path,
+                    "remote_url": remote_url,
+                },
+            )
 
         await self.uow.audits.append_audit_event(
             domain.AuditEvent(

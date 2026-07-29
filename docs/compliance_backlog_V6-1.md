@@ -304,11 +304,11 @@ changing orchestration.
 
 ### V61C-102 — Verify clean installation
 
-- [ ] Build an sdist and wheel in an isolated environment.
+- [x] Build an sdist and wheel in an isolated environment.
 - [x] Install the wheel without the repository on `PYTHONPATH`.
 - [x] Run CLI version/help and import smoke tests.
-- [ ] Verify Windows and Linux installation paths.
-- [ ] Correct the demo guide's nonexistent sample-directory reference.
+- [x] Verify Windows and Linux installation paths.
+- [x] Correct the demo guide's nonexistent sample-directory reference.
 
 ### V61C-103 — Verify database upgrade and rollback safety
 
@@ -323,13 +323,13 @@ changing orchestration.
 - [x] Fresh interpreter imports every supported public module independently.
 - [x] Installed CLI reports the candidate release version.
 - [x] Backend, frontend, manifest, and tag version consistency check passes.
-- [ ] Clean wheel install and CLI smoke pass on Windows and Linux CI.
+- [x] Clean wheel install and CLI smoke pass on Windows and Linux CI.
 - [x] Database fixture upgrade and backup/restore pass.
 
 ### Phase R1 exit gate
 
-- [ ] No import-order dependency remains.
-- [ ] One version is reported across all deliverables.
+- [x] No import-order dependency remains.
+- [x] One version is reported across all deliverables.
 - [ ] Clean installation and migration evidence is reproducible.
 
 ---

@@ -148,6 +148,9 @@ All notable changes to LocalForge OS will be documented in this file.
 - Added the V6.2 release identity convention document and release-truth
   enforcement for immutable V6.1 history, candidate tag semantics, stable tag
   criteria, and forbidden candidate-to-accepted shortcuts.
+- Corrected the E2E demo guide to reference the existing
+  `samples/demo-lf-smoke-prd/` sample and added regression coverage so the
+  removed `samples/demo-project/` path cannot return silently.
 
 ### V6.1 Compliance Closure - 2026-07-28
 

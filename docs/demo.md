@@ -6,7 +6,8 @@ Este guia demonstra como executar e auditar um ciclo de desenvolvimento de softw
 
 ## Ciclo de Vida do Desenvolvimento: Importar, Planejar e Executar
 
-Siga os passos a seguir em uma pasta de projeto de teste limpa (como a fornecida em `samples/demo-project/`):
+Siga os passos a seguir em uma pasta de projeto de teste limpa, como a fornecida
+em `samples/demo-lf-smoke-prd/`:
 
 ### 1. Inicializar o Workspace
 Inicializa a estrutura interna do LocalForge no diretório atual (criando a pasta `.localforge/` contendo bancos de dados, políticas e caches):
@@ -17,7 +18,7 @@ localforge init
 ### 2. Importar o PRD (Product Requirement Document)
 Importa o arquivo de requisitos do produto em Markdown, dividindo-o em tarefas e épicos estruturados no backlog:
 ```bash
-localforge import-prd docs/examples/PRD_SAMPLE.md
+localforge import-prd PRD.md
 ```
 Após a importação, as tarefas recém-criadas estarão no estado `BACKLOG` ou `PLANNING` aguardando a sua revisão e aprovação.
 

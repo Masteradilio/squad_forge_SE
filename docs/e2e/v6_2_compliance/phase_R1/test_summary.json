@@ -14,6 +14,11 @@
       "summary": "Built localforge_os-6.2.0 sdist/wheel, rejected packaged backend tests, clean-installed wheel, and verified import/CLI smoke on Windows local validation"
     },
     {
+      "command": "python -m pytest backend/tests/test_release_truth.py::test_demo_guide_references_existing_sample_project -q",
+      "exit_code": 0,
+      "summary": "Demo guide references the existing samples/demo-lf-smoke-prd/ workspace and its local PRD.md"
+    },
+    {
       "command": "python -m mypy backend scripts/check_candidate_evidence.py scripts/check_clean_package_install.py",
       "exit_code": 0,
       "summary": "Success: no issues found in 224 source files"
@@ -25,7 +30,7 @@
     }
   ],
   "remaining_gates": [
-    "Linux and Windows package smoke must pass in GitHub Actions for the exact PR head",
+    "Full legacy database upgrade must still prove preservation of projects, runs, tasks, audit events, memory, graphs, leases, and artifacts",
     "Human review, merge, and final post-merge evidence remain required"
   ]
 }

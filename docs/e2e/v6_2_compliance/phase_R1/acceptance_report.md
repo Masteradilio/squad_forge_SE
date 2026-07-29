@@ -27,6 +27,7 @@ post-merge evidence is generated from GitHub state.
 | Canonical version source | `backend/localforge/version.py` drives backend/API/CLI, and `scripts/check_version_consistency.py` fails on package or frontend drift. |
 | Import hygiene | `localforge.services` and `localforge.storage` now use lazy public boundaries; `scripts/check_import_matrix.py` imports public modules in a clean interpreter. |
 | Clean install | `backend/tests/test_phase_r1_release_integrity.py` and `scripts/check_clean_package_install.py` build both sdist and wheel, reject wheels that package backend tests, install the wheel into an isolated venv without repository `PYTHONPATH`, and verify import, CLI version, and CLI help smoke. |
+| Demo guide sample path | `docs/demo.md` now references the existing `samples/demo-lf-smoke-prd/` workspace and imports its local `PRD.md`. |
 | Migration and backup safety | `backup_sqlite_database`, `restore_sqlite_database`, and future-schema rejection are covered by legacy SQLite fixture tests. |
 | Cross-platform package CI | `.github/workflows/ci.yml` runs package smoke validation on `ubuntu-latest` and `windows-latest` and uploads the JSON result as a workflow artifact. |
 
@@ -47,6 +48,9 @@ exit code 0
 
 python scripts/check_clean_package_install.py
 exit code 0
+
+python -m pytest backend/tests/test_release_truth.py::test_demo_guide_references_existing_sample_project -q
+1 passed
 
 python -m pytest backend/tests/test_phase_r1_release_integrity.py -q
 8 passed in 11.89s

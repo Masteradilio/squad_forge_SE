@@ -95,6 +95,14 @@ def test_release_truth_requires_release_identity_conventions(
     assert "Candidate evidence verdict: `EVIDENCE_READY`" in missing
 
 
+def test_demo_guide_references_existing_sample_project() -> None:
+    guide = Path("docs/demo.md").read_text(encoding="utf-8")
+
+    assert "samples/demo-project" not in guide
+    assert Path("samples/demo-lf-smoke-prd/PRD.md").is_file()
+    assert "localforge import-prd PRD.md" in guide
+
+
 def test_release_truth_detects_stable_claim_leak(tmp_path: Path) -> None:
     _init_repo(tmp_path)
     (tmp_path / "docs").mkdir()

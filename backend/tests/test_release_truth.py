@@ -17,6 +17,7 @@ def test_release_truth_script_passes_current_repository() -> None:
     assert report["passed"] is True
     assert historical_manifest["verdict"] == "INVALID"
     assert backlog["unresolved_checkbox_count"] > 0
+    assert backlog["phase_status"]
     assert report["accepted_final_manifests"] == []
     assert audit_of_audit["passed"] is True
     assert audit_of_audit["missing_ids"] == []
@@ -35,6 +36,46 @@ def test_release_truth_requires_audit_of_audit_matrix(tmp_path: Path, monkeypatc
     assert status["passed"] is False
     assert "AOA-12" in missing_ids
     assert "## AOA Findings Matrix" in missing_sections
+
+
+def test_release_truth_reports_backlog_status_by_phase(tmp_path: Path) -> None:
+    backlog = tmp_path / "backlog.md"
+    backlog.write_text(
+        "\n".join(
+            [
+                "# Test backlog",
+                "",
+                "## Phase R0 - First",
+                "- [x] done",
+                "- [ ] open",
+                "",
+                "## Phase R1 - Second",
+                "- [x] done",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    status = release_truth.phase_backlog_status(backlog)
+
+    assert status == [
+        {
+            "heading": "Phase R0 - First",
+            "line": 3,
+            "open": 1,
+            "closed": 1,
+            "total": 2,
+            "status": "OPEN",
+        },
+        {
+            "heading": "Phase R1 - Second",
+            "line": 7,
+            "open": 0,
+            "closed": 1,
+            "total": 1,
+            "status": "CHECKBOXES_CLOSED",
+        },
+    ]
 
 
 def test_release_truth_detects_stable_claim_leak(tmp_path: Path) -> None:

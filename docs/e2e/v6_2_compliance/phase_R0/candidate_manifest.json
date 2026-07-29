@@ -34,18 +34,18 @@
       "exit_code": 0
     }
   ],
-  "manifest_sha256": "01d16ff426896dd66f7962faa3be779ebbb1ac0ed02dbbb56c90af289f432814",
+  "manifest_sha256": "9ccd8160f1a29119b2db0867fd21078aa7033556bae1ec1fe8798c455184f956",
   "input_hashes": {
     "README.md": "231d38f5e6b992bd6c6177e2badd2de8e41e705a13c87d6dfc5c346aff7cf688",
-    "CHANGELOG.md": "0f7d68613fdf99f17180f65f6f5403fd9b07c64dd949d9634ebad85dfda26b82",
+    "CHANGELOG.md": "9e41dab8e53a2ee12b42194e97c8f64d0192c26514e5895459a21cedfa07032c",
     ".github/workflows/ci.yml": "463c8ac144651b84ee25d74577c464c5cf0ef467fa875bad57b351d89dd2ab53",
-    "docs/compliance_backlog_V6-1.md": "dd06fa9ccf954d840b97fabe4b15a2377336fb894c166ac9ecff20f376009b27",
+    "docs/compliance_backlog_V6-1.md": "d00219de150d0cb686c569e9bdb996cf378c409fb60db8d73f1807d827f324a7",
     "docs/e2e/v6_1_compliance/manifest.json": "3d6e6216d8ad510ec583def4a3658821eeead634755f3e597889807a105d4808",
     "docs/e2e/v6_2_compliance/phase_R0/acceptance_report.md": "92370200562db531e18e7df0c1cee4338b47ba9d7d18b91c82987c4e9ae04272",
-    "docs/e2e/v6_2_compliance/phase_R0/audit_of_audit.md": "b7be4e6bfcae8b6847e9c072f9ed5b8dfd5957721344a95a68cb7498679a7346",
-    "docs/e2e/v6_2_compliance/phase_R0/test_summary.json": "bb84ca93e817f8526741ec1fbd5eefff6973bbb3f6a6485e40b855016fa0723c",
+    "docs/e2e/v6_2_compliance/phase_R0/audit_of_audit.md": "a217736648fc3e17c4d2b98d5e96da4583c5c88de8d3157848153d0e961131af",
+    "docs/e2e/v6_2_compliance/phase_R0/test_summary.json": "3a105add33cc5a005d58fc84a454457a1e132a34efca7c821a70bf6cf95b5c70",
     "docs/e2e/v6_2_compliance/phase_R0/known_limitations.md": "6077cfea65275b046651e5dfc6eff09bd3c46816cb75cf84393a804588930d04",
-    "scripts/check_release_truth.py": "cbb3871572d9fab4acc4f2521bdfa3f6e0c754fb826929ca3d328a079d4d60a5",
-    "backend/tests/test_release_truth.py": "ddc192c21de672aaf60c9d54e3849bc2a31594d8944ed03a13f5e4d4c0f9816f"
+    "scripts/check_release_truth.py": "03af70f736bbd3e2bb19069a5e4d8c3a33cba54b5f96d4ac3825e3055dd20eec",
+    "backend/tests/test_release_truth.py": "bb048e5fbd52ec0a852cafb22b5ab8652e580d34792cee804ebc1368061a1854"
   }
 }

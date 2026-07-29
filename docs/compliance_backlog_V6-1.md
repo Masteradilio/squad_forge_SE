@@ -253,7 +253,7 @@ make the ten audited defects reproducible.
 - [x] Remove the contradiction between 470 unchecked items and the accepted
       closure block.
 - [x] Preserve completed work as implementation history, not compliance proof.
-- [ ] Generate backlog status from validated task evidence where practical.
+- [x] Generate backlog status from validated task evidence where practical.
 - [x] Prevent a final release verdict while mandatory checkboxes or phase
       records remain unresolved.
 

@@ -6,7 +6,7 @@ import subprocess
 import sys
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 
 ROOT = Path(__file__).resolve().parents[1]
 BACKEND = ROOT / "backend"
@@ -26,12 +26,58 @@ STABLE_PHRASE_ALLOWLIST = {
 AOA_IDS = {f"AOA-{index:02d}" for index in range(1, 13)}
 
 
+class PhaseBacklogStatus(TypedDict):
+    heading: str
+    line: int
+    open: int
+    closed: int
+    total: int
+    status: str
+
+
 def open_backlog_checkboxes(backlog_path: Path) -> list[dict[str, object]]:
     entries: list[dict[str, object]] = []
     for line_number, line in enumerate(backlog_path.read_text(encoding="utf-8").splitlines(), start=1):
         if line.lstrip().startswith("- [ ]"):
             entries.append({"line": line_number, "text": line.strip()})
     return entries
+
+
+def phase_backlog_status(backlog_path: Path) -> list[PhaseBacklogStatus]:
+    phases: list[PhaseBacklogStatus] = []
+    current: PhaseBacklogStatus | None = None
+
+    for line_number, line in enumerate(backlog_path.read_text(encoding="utf-8").splitlines(), start=1):
+        if line.startswith("## Phase "):
+            current = PhaseBacklogStatus(
+                heading=line.removeprefix("## ").strip(),
+                line=line_number,
+                open=0,
+                closed=0,
+                total=0,
+                status="NO_CHECKBOXES",
+            )
+            phases.append(current)
+            continue
+
+        if current is None:
+            continue
+        stripped = line.lstrip()
+        if stripped.startswith("- [ ]") or stripped.startswith("- [x]"):
+            current["total"] += 1
+            if stripped.startswith("- [ ]"):
+                current["open"] += 1
+            else:
+                current["closed"] += 1
+
+    for phase in phases:
+        if phase["total"] == 0:
+            phase["status"] = "NO_CHECKBOXES"
+        elif phase["open"] == 0:
+            phase["status"] = "CHECKBOXES_CLOSED"
+        else:
+            phase["status"] = "OPEN"
+    return phases
 
 
 def tracked_text_paths(root: Path) -> list[Path]:
@@ -148,6 +194,7 @@ def build_report(root: Path) -> dict[str, object]:
             "path": BACKLOG_PATH.as_posix(),
             "unresolved_checkbox_count": len(unresolved),
             "unresolved_preview": unresolved[:10],
+            "phase_status": phase_backlog_status(backlog_path),
         },
         "accepted_final_manifests": final_accepted,
         "stable_claim_leaks": phrase_leaks,

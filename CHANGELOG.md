@@ -142,6 +142,9 @@ All notable changes to LocalForge OS will be documented in this file.
   AOA-12 to exact files, lines, reproduction commands, and observed results,
   with release-truth validation enforcing the matrix before candidate evidence
   can pass.
+- Extended release-truth output with generated per-phase backlog status so
+  unresolved compliance work is reported from the current backlog instead of
+  hand-authored closure claims.
 
 ### V6.1 Compliance Closure - 2026-07-28
 

@@ -288,43 +288,43 @@ changing orchestration.
 
 ### V61C-100 — Create one release-version source
 
-- [ ] Define one canonical version source.
-- [ ] Derive Python package, `localforge --version`, backend metadata, frontend
+- [x] Define one canonical version source.
+- [x] Derive Python package, `localforge --version`, backend metadata, frontend
       package, container labels, manifests, and release notes from it.
-- [ ] Add a CI check that fails on version drift.
-- [ ] Verify candidate tags match the derived version.
+- [x] Add a CI check that fails on version drift.
+- [x] Verify candidate tags match the derived version.
 
 ### V61C-101 — Eliminate circular imports
 
-- [ ] Remove eager re-export cycles among `services`, `storage`,
+- [x] Remove eager re-export cycles among `services`, `storage`,
       `transactions`, and `audit`.
-- [ ] Define supported public import boundaries.
-- [ ] Avoid test-order-dependent import success.
-- [ ] Verify modules under a clean interpreter, not only through pytest.
+- [x] Define supported public import boundaries.
+- [x] Avoid test-order-dependent import success.
+- [x] Verify modules under a clean interpreter, not only through pytest.
 
 ### V61C-102 — Verify clean installation
 
 - [ ] Build an sdist and wheel in an isolated environment.
-- [ ] Install the wheel without the repository on `PYTHONPATH`.
-- [ ] Run CLI version/help and import smoke tests.
+- [x] Install the wheel without the repository on `PYTHONPATH`.
+- [x] Run CLI version/help and import smoke tests.
 - [ ] Verify Windows and Linux installation paths.
 - [ ] Correct the demo guide's nonexistent sample-directory reference.
 
 ### V61C-103 — Verify database upgrade and rollback safety
 
-- [ ] Create a versioned V5/V6 fixture database.
+- [x] Create a versioned V5/V6 fixture database.
 - [ ] Upgrade it to the current schema without losing projects, runs, tasks,
       audit events, memory, graphs, leases, or artifacts.
-- [ ] Document backup and restore.
-- [ ] Fail safely on an unsupported future schema.
+- [x] Document backup and restore.
+- [x] Fail safely on an unsupported future schema.
 
 ### Required regression tests
 
-- [ ] Fresh interpreter imports every supported public module independently.
-- [ ] Installed CLI reports the candidate release version.
-- [ ] Backend, frontend, manifest, and tag version consistency check passes.
+- [x] Fresh interpreter imports every supported public module independently.
+- [x] Installed CLI reports the candidate release version.
+- [x] Backend, frontend, manifest, and tag version consistency check passes.
 - [ ] Clean wheel install and CLI smoke pass on Windows and Linux CI.
-- [ ] Database fixture upgrade and backup/restore pass.
+- [x] Database fixture upgrade and backup/restore pass.
 
 ### Phase R1 exit gate
 

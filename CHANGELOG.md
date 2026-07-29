@@ -19,6 +19,17 @@ All notable changes to LocalForge OS will be documented in this file.
 #### Added
 - Added phase R0 audit-of-audit evidence under
   `docs/e2e/v6_2_compliance/phase_R0/`.
+- Added Phase R1 candidate evidence under
+  `docs/e2e/v6_2_compliance/phase_R1/`.
+- Added release-integrity checks for version consistency, public import matrix,
+  clean wheel installation, and SQLite backup/restore migration behavior.
+
+#### Fixed
+- Removed the clean-interpreter import cycle exposed by importing
+  `localforge.api.app` before CLI modules by making the `storage` package
+  public boundary lazy.
+- Changed schema bootstrap to fail safely when a database reports a future
+  schema version instead of silently treating it as supported.
 
 ### V6.1 Compliance Closure - 2026-07-28
 

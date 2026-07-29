@@ -1,6 +1,9 @@
 import logging
 import os
+import shutil
 import tempfile
+from datetime import UTC, datetime
+from pathlib import Path
 
 from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
@@ -12,6 +15,46 @@ from localforge.storage.orm import Base, SchemaVersionORM
 logger = logging.getLogger(__name__)
 
 CURRENT_VERSION = 15
+
+
+class UnsupportedSchemaVersionError(RuntimeError):
+    """Raised when a database was written by a newer LocalForge schema."""
+
+
+def sqlite_path_from_url(db_url: str) -> Path | None:
+    if not db_url.startswith("sqlite+aiosqlite:///"):
+        return None
+    db_path = db_url[len("sqlite+aiosqlite:///") :]
+    if db_path == ":memory:":
+        return None
+    if db_path.startswith("/") and len(db_path) > 2 and db_path[2] == ":":
+        db_path = db_path[1:]
+    return Path(db_path).expanduser().resolve()
+
+
+def backup_sqlite_database(db_url: str, backup_dir: str | Path | None = None) -> Path:
+    db_path = sqlite_path_from_url(db_url)
+    if db_path is None:
+        raise ValueError("SQLite file backup requires a sqlite+aiosqlite file URL.")
+    if not db_path.exists():
+        raise FileNotFoundError(db_path)
+
+    target_dir = Path(backup_dir) if backup_dir is not None else db_path.parent / "backups"
+    target_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    backup_path = target_dir / f"{db_path.stem}.schema-backup.{timestamp}{db_path.suffix}"
+    shutil.copy2(db_path, backup_path)
+    return backup_path
+
+
+def restore_sqlite_database(backup_path: str | Path, target_path: str | Path) -> Path:
+    source = Path(backup_path).expanduser().resolve()
+    target = Path(target_path).expanduser().resolve()
+    if not source.exists():
+        raise FileNotFoundError(source)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source, target)
+    return target
 
 
 async def ensure_db_directory(db_url: str) -> None:
@@ -260,9 +303,14 @@ async def bootstrap_database(db_manager: DatabaseManager) -> int:
 
             return CURRENT_VERSION
 
-        else:
+        elif current_version == CURRENT_VERSION:
             logger.info("Database is already up to date.")
             return current_version
+
+        raise UnsupportedSchemaVersionError(
+            f"Database schema version {current_version} is newer than supported "
+            f"LocalForge schema {CURRENT_VERSION}. Refusing to mutate this database."
+        )
 
 
 async def seed_pricing_data(session: AsyncSession) -> None:

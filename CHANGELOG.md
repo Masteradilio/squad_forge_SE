@@ -86,6 +86,9 @@ All notable changes to LocalForge OS will be documented in this file.
 - Added worktree repository-state validation for cleanliness and target-branch
   drift, rejecting stale manifests whose persisted source commit no longer
   matches the project default branch.
+- Hardened orphan worktree cleanup so only manifest-registered, non-active
+  worktree paths are removed; unregistered directories under
+  `.localforge/worktrees` are preserved as user-owned or diagnostic state.
 - Added R5 regression coverage for runner stale-token rejection, path lease
   renewal, exact-path reclaim, and path separator/case normalization.
 - Added Phase R6 candidate evidence under

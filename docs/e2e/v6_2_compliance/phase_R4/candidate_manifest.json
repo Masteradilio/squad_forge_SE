@@ -52,7 +52,7 @@
       "exit_code": 0
     }
   ],
-  "manifest_sha256": "78923988bc0c77a168e79b611f99b1e491b9011ffd453d757305dcc3a97a6c1d",
+  "manifest_sha256": "214d5427a46fff0fa336df8902f95b8a6705cb9a2af5b32607f7d68c3c61bee1",
   "environment": {
     "os": "windows-local-and-github-actions-matrix",
     "python": "3.11-local / 3.12-ci",
@@ -76,8 +76,8 @@
     "backend/tests/test_phase6_loop_control_plane.py": "3e8625dd59d8d2598ddd5034c34c74ee7056b396028644b0eba4a096ff254224",
     "backend/tests/test_phase6_circuit_breakers.py": "f9fada8b824fbb79d0a7dec665844e732ab1438c42a1229eb1653c960b3d3c02",
     "backend/tests/test_phase_r4_loop_runtime.py": "7041c5efdface23058b2be1d4ce966ae028e16cdc9088f3f901685d14f6f5832",
-    "docs/compliance_backlog_V6-1.md": "90c8e771eec60506158f70cfc461da83cd9b3e5ab62e6579dca48b475bbc9bf6",
-    "CHANGELOG.md": "817460496a4273291eb6bbc8c35bd297382718cab81e2333d122653c2e912b35",
+    "docs/compliance_backlog_V6-1.md": "bd80da62e568bfee801180e6a75e43760f81e66683ad2b6976d5fe44faef995b",
+    "CHANGELOG.md": "b596f64437379ffdb88df9c55ca200069cfb15fe8d282218d5127d1e7e694c33",
     "backend/localforge/models/enums.py": "8ad6bca9afbf41c5c75c442b8b88bd5363332b191f3f93c555cd6b519635b583",
     "backend/localforge/services/runner_pool.py": "6d0b668b763cab92f8c91677b50d121e4a6e52cb020cfa6db721bc16263e2786",
     "backend/localforge/services/worktree.py": "f6190dd9d4d5ff6f77450f44db648b8c581284c8dc6f536bf2045c290197e895"

@@ -16,8 +16,8 @@ and immutable source commit into a persisted `WorktreeAttemptManifest`; worktree
 validation now rejects dirty or target-drifted manifests.
 
 This is candidate evidence only. Final R5 acceptance still requires
-database-level parent/child overlap fencing across concurrent transactions,
-stale worktree reconciliation, and failed worktree retention policy.
+database-level parent/child overlap fencing across concurrent transactions and
+failed worktree retention policy.
 
 ## Implemented Controls
 
@@ -40,6 +40,7 @@ stale worktree reconciliation, and failed worktree retention policy.
 | Governed worktree manifest | `GovernedExecutionService.start_task()` persists a `WorktreeAttemptManifest` with worktree path, branch, source commit, runner owner, task run, and attempt number when runner setup returns a source commit. |
 | Real worktree inspection | `WorktreeManager.setup_worktree_attempt()` resolves the base ref to an immutable source commit before creating the Git worktree; real temp-Git lifecycle coverage inspects the worktree on disk. |
 | Cleanliness and target drift validation | `WorktreeService.validate_repository_state()` checks `git status --porcelain`, current `HEAD`, project default branch commit, and persisted source commit, rejecting dirty or drifted manifests. |
+| Manifest-led orphan cleanup | `WorktreeManager.cleanup_orphan_worktrees()` removes only non-active worktree directories that are registered in `WorktreeAttemptManifest`; unregistered physical directories under `.localforge/worktrees` are preserved as user-owned/diagnostic paths. |
 
 ## Validation Commands
 
@@ -70,6 +71,18 @@ python -m pytest backend\tests\test_gitops.py::test_worktree_manager_setup_and_i
 
 python -m pytest backend\tests\test_phase6_worktrees_path_intents.py -q
 4 passed in 1.33s
+
+python -m pytest backend\tests\test_audit_store.py::test_orphan_worktrees_cleanup -q
+1 passed in 0.28s
+
+python -m pytest backend\tests\test_audit_store.py backend\tests\test_phase6_worktrees_path_intents.py backend\tests\test_phase_r5_coordination.py -q
+20 passed, 1 skipped in 2.21s
+
+python -m mypy backend\localforge\gitops\manager.py backend\tests\test_audit_store.py
+Success: no issues found in 2 source files
+
+python -m ruff check backend\localforge\gitops\manager.py backend\tests\test_audit_store.py
+All checks passed!
 ```
 
 ## Remaining Acceptance Requirements
@@ -85,6 +98,6 @@ python -m pytest backend\tests\test_phase6_worktrees_path_intents.py -q
 - RunnerPool backpressure is bounded and reported separately from permanent
   incompatibility.
 - Real Git worktree creation and branch/base-commit binding are covered.
-  Repository cleanliness and target-branch drift validation are covered. Stale
-  worktree reconciliation without user-path deletion and failed worktree
-  retention policy remain open.
+  Repository cleanliness, target-branch drift validation, and manifest-led
+  orphan cleanup that preserves unregistered user-owned paths are covered.
+  Failed worktree retention policy remains open.

@@ -13,6 +13,7 @@ from localforge.models.enums import (
 from localforge.services.audit import AuditService
 from localforge.services.project import ProjectService
 from localforge.services.task import TaskService
+from localforge.services.worktree import WorktreeService
 from localforge.storage import UnitOfWork
 from localforge.storage.artifacts import ArtifactStore, ArtifactStoreError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -196,6 +197,7 @@ async def test_orphan_worktrees_cleanup(tmp_path, db_session: AsyncSession):
     uow.projects = ProjectService(db_session)
     uow.tasks = TaskService(db_session)
     uow.audits = AuditService(db_session)
+    uow.worktrees = WorktreeService(db_session)
 
     proj = await uow.projects.create_project(
         domain.Project(name="CleanupProj", root_path=str(tmp_path), default_branch="main")
@@ -213,6 +215,8 @@ async def test_orphan_worktrees_cleanup(tmp_path, db_session: AsyncSession):
     # Orphan directory (completed/done task in database)
     orphan_dir = worktree_base / "lf-11"
     orphan_dir.mkdir()
+    user_owned_dir = worktree_base / "manual-debug-copy"
+    user_owned_dir.mkdir()
 
     # Create tasks: LF-10 is active (IMPLEMENTING), LF-11 is final (DONE)
     await uow.tasks.create_task(
@@ -224,7 +228,7 @@ async def test_orphan_worktrees_cleanup(tmp_path, db_session: AsyncSession):
             status=TaskStatus.IMPLEMENTING,
         )
     )
-    await uow.tasks.create_task(
+    done_task = await uow.tasks.create_task(
         domain.Task(
             project_id=proj.id,
             key="LF-11",
@@ -232,6 +236,19 @@ async def test_orphan_worktrees_cleanup(tmp_path, db_session: AsyncSession):
             description="",
             status=TaskStatus.DONE,
         )
+    )
+    assert done_task.id is not None
+    done_run = await uow.tasks.create_task_run(domain.TaskRun(task_id=done_task.id, run_id=1))
+    assert done_run.id is not None
+    assert uow.worktrees is not None
+    await uow.worktrees.create_attempt_manifest(
+        project_id=proj.id,
+        task_id=done_task.id,
+        task_run_id=done_run.id,
+        worktree_path=str(orphan_dir),
+        branch_name="localforge/lf-11-done-task",
+        source_commit="abc1234",
+        owner_agent_id="agent-cleanup",
     )
     await uow.session.commit()
 
@@ -243,3 +260,4 @@ async def test_orphan_worktrees_cleanup(tmp_path, db_session: AsyncSession):
     assert os.path.basename(cleaned[0]) == "lf-11"
     assert not orphan_dir.exists()
     assert active_dir.exists()
+    assert user_owned_dir.exists()

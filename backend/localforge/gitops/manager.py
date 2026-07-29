@@ -4,9 +4,12 @@ import os
 import re
 import shutil
 
+from sqlalchemy import select
+
 from localforge.gitops.adapter import GitAdapter
-from localforge.models.enums import RunMode, TaskStatus
+from localforge.models.enums import RunMode, TaskStatus, WorktreeAttemptStatus
 from localforge.storage import UnitOfWork
+from localforge.storage.orm import WorktreeAttemptManifestORM
 
 logger = logging.getLogger(__name__)
 
@@ -261,10 +264,11 @@ class WorktreeManager:
 
     async def cleanup_orphan_worktrees(self) -> list[str]:
         """Scan .localforge/worktrees/ directory and remove any worktrees
-        associated with non-active tasks.
+        associated with non-active tasks and registered in the manifest ledger.
         """
         assert self.uow.projects is not None
         assert self.uow.tasks is not None
+        assert self.uow.session is not None
 
         project = await self.uow.projects.get_project(self.project_id)
         if not project:
@@ -302,6 +306,24 @@ class WorktreeManager:
                 TaskStatus.CANCELLED,
             )
         }
+        manifest_result = await self.uow.session.execute(
+            select(WorktreeAttemptManifestORM).where(
+                WorktreeAttemptManifestORM.project_id == self.project_id,
+                WorktreeAttemptManifestORM.status.in_(
+                    [
+                        WorktreeAttemptStatus.ACTIVE.value,
+                        WorktreeAttemptStatus.VERIFIED.value,
+                        WorktreeAttemptStatus.REJECTED.value,
+                        WorktreeAttemptStatus.STALE.value,
+                        WorktreeAttemptStatus.CANCELLED.value,
+                    ]
+                ),
+            )
+        )
+        registered_paths = {
+            os.path.realpath(os.path.abspath(manifest.worktree_path))
+            for manifest in manifest_result.scalars().all()
+        }
 
         git = GitAdapter(
             project_id=self.project_id,
@@ -322,6 +344,8 @@ class WorktreeManager:
                         )
                     )
                 )
+                if worktree_path not in registered_paths:
+                    continue
 
                 lock = self._get_worktree_lock(worktree_path)
                 async with lock:

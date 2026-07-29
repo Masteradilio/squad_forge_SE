@@ -479,7 +479,7 @@ ownership, idempotency, cancellation, and restart recovery.
 - [x] Parse and validate interval and cron expressions.
 - [x] Define timezone and daylight-saving behavior.
 - [x] Persist `next_run_at`, last trigger, trigger revision, and misfire policy.
-- [ ] Claim due schedules atomically across multiple coordinator processes.
+- [x] Claim due schedules atomically across multiple coordinator processes.
 - [x] Support bounded catch-up after downtime without duplicate execution.
 
 ### V61C-401 — Implement authenticated external triggers
@@ -511,7 +511,7 @@ ownership, idempotency, cancellation, and restart recovery.
 ### Required regression tests
 
 - [x] Fake-clock interval and cron execution.
-- [ ] Two coordinators cannot claim the same trigger.
+- [x] Two coordinators cannot claim the same trigger.
 - [ ] Restart before/after triage and task creation does not duplicate work.
 - [ ] Authenticated webhook replay is deduplicated.
 - [ ] Kill cancels actual controlled worker processes and releases resources.

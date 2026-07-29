@@ -44,6 +44,8 @@ All notable changes to LocalForge OS will be documented in this file.
   schedule validation, timezone-aware UTC persistence, misfire policy handling,
   stable idempotency keys, and due-schedule execution through
   `LoopCoordinator.trigger_due_schedules()`.
+- Hardened due-schedule claiming with a database compare-and-swap fence so
+  stale concurrent coordinators cannot claim the same trigger.
 - Added Phase R5 candidate evidence under
   `docs/e2e/v6_2_compliance/phase_R5/`.
 - Added persisted runner lease fencing metadata to dispatch logs and path lease

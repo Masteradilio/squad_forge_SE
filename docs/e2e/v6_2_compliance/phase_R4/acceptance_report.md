@@ -24,6 +24,7 @@ entire ownership tree.
 | Misfire policy | `skip` advances past missed runs; `bounded_catchup` advances one occurrence at a time. |
 | Durable schedule state | `next_run_at`, `last_trigger_at`, `trigger_revision`, `last_idempotency_key`, `timezone`, and `misfire_policy` are persisted in `LoopTrigger.metadata`. |
 | Due schedule claim | `LoopService.claim_due_schedules()` advances schedule state and returns stable idempotency keys for due interval/cron loops. |
+| Atomic multi-coordinator claim | Schedule advancement uses a database compare-and-swap fence on the loop definition `updated_at`; stale coordinators receive no claim after another coordinator advances the trigger. |
 | Coordinator execution | `LoopCoordinator.trigger_due_schedules()` claims due schedules and executes them through `trigger_loop()`. |
 | Pause guard | Paused or disabled loop definitions are not claimable. |
 
@@ -31,7 +32,7 @@ entire ownership tree.
 
 ```text
 python -m pytest backend/tests/test_phase_r4_loop_runtime.py backend/tests/test_phase6_loop_control_plane.py -q
-13 passed in 0.86s
+14 passed in 0.92s
 
 python -m mypy backend/localforge/models/loop.py backend/localforge/services/loop_runtime.py backend/localforge/services/loop_service.py backend/localforge/services/loop_coordinator.py backend/tests/test_phase_r4_loop_runtime.py
 Success: no issues found in 5 source files
@@ -42,8 +43,6 @@ All checks passed!
 
 ## Remaining Acceptance Requirements
 
-- Claiming due schedules is not yet protected by a database compare-and-swap
-  fence across truly concurrent coordinator transactions.
 - Authenticated provider-neutral webhook adapters, signature verification,
   rate limits, bounded payloads, and replay windows remain open.
 - Restart before/after triage is idempotent for existing run/item identity, but

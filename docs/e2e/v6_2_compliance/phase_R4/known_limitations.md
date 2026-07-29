@@ -2,8 +2,7 @@
 
 - This is candidate evidence, not final release acceptance.
 - Interval and cron schedule execution now works through durable trigger
-  metadata and idempotency keys, but true multi-process atomic claim fencing is
-  still a remaining acceptance requirement.
+  metadata, idempotency keys, and database compare-and-swap claim fencing.
 - External event authentication, payload rate limits, replay windows, and
   provider-neutral webhook adapters remain open.
 - Pause prevents new due-schedule claims; kill/restart cascade over scheduler

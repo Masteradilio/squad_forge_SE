@@ -33,7 +33,7 @@
       "exit_code": 0
     }
   ],
-  "manifest_sha256": "ac09fe2e38ffb642bad08419fb1364f7a31645ce213e93a824e0bd732cde1d7f",
+  "manifest_sha256": "ce6a8d8a7df6b6a266a42e126f4cbf79e1587ad888e3aa8483db1b7bfc86f079",
   "environment": {
     "os": "windows-local-and-github-actions-matrix",
     "python": "3.11-local / 3.12-ci",
@@ -44,7 +44,11 @@
     "Candidate evidence remains EVIDENCE_READY until reviewed PR, merge commit, exact-head CI, owner-approved tag, and final release validation exist."
   ],
   "input_hashes": {
-    "docs/e2e/v6_2_compliance/phase_R4/acceptance_report.md": "4a033dd89292da54884d4dbc091324ce74de62132722e7e34f55613722f19d07",
-    "docs/e2e/v6_2_compliance/phase_R4/known_limitations.md": "50977fce9d9ce45d682aadb48a84f3f8ec3f83eed4b177f3be4d3c3875f44b6c"
+    "docs/e2e/v6_2_compliance/phase_R4/acceptance_report.md": "9341254961261ae8e9b8fb7b792ff28cf6858a69eea8d4ef26c60636aae293d6",
+    "docs/e2e/v6_2_compliance/phase_R4/known_limitations.md": "3de0c09626611313b7fd0d9789edd810ef9c48f7f0e1d8c97f3fd1025bd315c6",
+    "backend/localforge/services/loop_service.py": "01147991f99514ffdf8d19fe8207eb7089921c15ba98331ada4b6b589f2a0869",
+    "backend/tests/test_phase_r4_loop_runtime.py": "7041c5efdface23058b2be1d4ce966ae028e16cdc9088f3f901685d14f6f5832",
+    "docs/compliance_backlog_V6-1.md": "bcef3cbfe3055ece4b5c04e708b1eeae496b910d469e97818b9caf57c24b6aa1",
+    "CHANGELOG.md": "1f464c46aa3e5e822a339a41bacc074d697f9da89a383e8830c553c6e7f829e7"
   }
 }

@@ -3,8 +3,10 @@ from datetime import UTC, datetime
 import pytest
 from localforge.models import domain
 from localforge.models.enums import LoopStatus, TriggerKind
-from localforge.services.loop_runtime import next_run_at, validate_schedule
+from localforge.services.loop_runtime import claim_schedule_metadata, next_run_at, validate_schedule
 from localforge.storage import UnitOfWork
+from localforge.storage.orm import LoopDefinitionORM
+from sqlalchemy import select
 
 
 @pytest.mark.asyncio
@@ -40,6 +42,60 @@ async def test_interval_schedule_initializes_and_claims_once(db_manager) -> None
         assert claimed_loop.trigger.metadata["next_run_at"] == "2026-07-29T12:10:00Z"
         assert claimed_loop.trigger.metadata["trigger_revision"] == 1
         assert second == []
+
+
+@pytest.mark.asyncio
+async def test_two_coordinators_cannot_claim_same_due_schedule(db_manager) -> None:
+    now = datetime(2026, 7, 29, 12, 0, tzinfo=UTC)
+    async with UnitOfWork(db_manager) as seed:
+        assert seed.projects is not None
+        assert seed.loops is not None
+        project = await seed.projects.create_project(
+            domain.Project(name="R4 Atomic", root_path="/tmp/r4", default_branch="main")
+        )
+        loop = await seed.loops.create_loop(
+            domain.LoopDefinition(
+                project_id=project.id,  # type: ignore[arg-type]
+                name="atomic-interval",
+                repository_path="/tmp/r4",
+                trigger=domain.LoopTrigger(
+                    kind=TriggerKind.INTERVAL,
+                    schedule="10m",
+                    metadata={"next_run_at": "2026-07-29T12:00:00Z"},
+                ),
+            )
+        )
+
+    async with UnitOfWork(db_manager) as stale_uow:
+        assert stale_uow.session is not None
+        assert stale_uow.loops is not None
+        result = await stale_uow.session.execute(
+            select(LoopDefinitionORM).where(LoopDefinitionORM.id == loop.id)
+        )
+        stale_orm = result.scalar_one()
+        stale_loop = stale_orm.to_domain()
+        stale_trigger, stale_key = claim_schedule_metadata(stale_loop.trigger, now=now)
+        assert stale_trigger is not None
+        assert stale_key == "interval:2026-07-29T12:00:00Z:rev:0"
+
+        async with UnitOfWork(db_manager) as winning_uow:
+            assert winning_uow.loops is not None
+            first = await winning_uow.loops.claim_due_schedules(project.id, now=now)  # type: ignore[arg-type]
+            assert len(first) == 1
+
+        stale_claim = await stale_uow.loops._compare_and_swap_schedule_claim(
+            stale_orm,
+            trigger_json=stale_trigger.model_dump(mode="json"),
+        )
+        assert stale_claim is None
+
+    async with UnitOfWork(db_manager) as verify:
+        assert verify.loops is not None
+        duplicate = await verify.loops.claim_due_schedules(project.id, now=now)  # type: ignore[arg-type]
+        refreshed = await verify.loops.get_loop(loop.id or 0)
+        assert duplicate == []
+        assert refreshed is not None
+        assert refreshed.trigger.metadata["trigger_revision"] == 1
 
 
 @pytest.mark.asyncio

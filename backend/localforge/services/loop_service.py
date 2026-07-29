@@ -1,8 +1,10 @@
 import json
 import logging
 from datetime import UTC, datetime
+from typing import Any, cast
 
-from sqlalchemy import select
+from sqlalchemy import select, update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from localforge.models import domain
@@ -97,11 +99,42 @@ class LoopService:
             updated_trigger, idempotency_key = claim_schedule_metadata(loop_def.trigger, now=now)
             if updated_trigger is None or idempotency_key is None:
                 continue
-            orm_obj.trigger_json = updated_trigger.model_dump(mode="json")
-            orm_obj.updated_at = datetime.now(UTC)
-            await self.session.flush()
-            claimed.append((orm_obj.to_domain(), idempotency_key))
+            claimed_loop = await self._compare_and_swap_schedule_claim(
+                orm_obj,
+                trigger_json=updated_trigger.model_dump(mode="json"),
+            )
+            if claimed_loop is not None:
+                claimed.append((claimed_loop, idempotency_key))
         return claimed
+
+    async def _compare_and_swap_schedule_claim(
+        self,
+        orm_obj: LoopDefinitionORM,
+        *,
+        trigger_json: dict[str, object],
+    ) -> domain.LoopDefinition | None:
+        """Advance one schedule only if no other coordinator updated it first."""
+        claimed_at = datetime.now(UTC)
+        result = cast(
+            CursorResult[Any],
+            await self.session.execute(
+                update(LoopDefinitionORM)
+                .where(
+                    LoopDefinitionORM.id == orm_obj.id,
+                LoopDefinitionORM.updated_at == orm_obj.updated_at,
+                LoopDefinitionORM.enabled.is_(True),
+                LoopDefinitionORM.status.notin_(
+                    [LoopStatus.PAUSED.value, LoopStatus.DISABLED.value]
+                ),
+            )
+            .values(trigger_json=trigger_json, updated_at=claimed_at)
+            ),
+        )
+        if result.rowcount != 1:
+            return None
+        await self.session.flush()
+        refreshed = await self.get_loop(orm_obj.id)
+        return refreshed
 
     async def create_loop_run(self, loop_run: domain.LoopRun) -> domain.LoopRun:
         """Persist a new LoopRun."""

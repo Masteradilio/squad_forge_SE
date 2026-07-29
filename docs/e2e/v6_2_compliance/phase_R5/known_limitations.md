@@ -17,5 +17,7 @@
 - Governed task startup now persists worktree path, branch, immutable source
   commit, runner owner, task run, and attempt number. Repository cleanliness,
   target-branch drift validation, and manifest-led orphan cleanup that preserves
-  unregistered user-owned directories are candidate-implemented.
-  Failed-worktree diagnostic retention policy remains open.
+  unregistered user-owned directories are candidate-implemented. Failed
+  worktrees are retained for diagnostics and marked `REJECTED`; successful or
+  cancelled terminal cleanup removes the directory and marks manifests
+  `CLEANED`.

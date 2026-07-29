@@ -582,7 +582,7 @@ Make concurrent execution deterministic and restart-safe.
 - [x] Bind its branch and base commit to the task attempt.
 - [x] Validate repository cleanliness and target-branch drift.
 - [x] Reconcile stale worktrees without deleting user-owned paths.
-- [ ] Release or retain failed worktrees according to evidence/diagnostic
+- [x] Release or retain failed worktrees according to evidence/diagnostic
       policy.
 
 ### Required regression tests

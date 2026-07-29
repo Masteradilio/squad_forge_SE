@@ -9,6 +9,7 @@ from localforge.models.enums import (
     AuditEventActorType,
     AuditEventType,
     TaskStatus,
+    WorktreeAttemptStatus,
 )
 from localforge.services.audit import AuditService
 from localforge.services.project import ProjectService
@@ -261,3 +262,55 @@ async def test_orphan_worktrees_cleanup(tmp_path, db_session: AsyncSession):
     assert not orphan_dir.exists()
     assert active_dir.exists()
     assert user_owned_dir.exists()
+
+
+@pytest.mark.anyio
+async def test_failed_safe_worktree_is_retained_for_diagnostics(
+    tmp_path, db_session: AsyncSession
+):
+    uow = UnitOfWork()
+    uow.session = db_session
+    uow.projects = ProjectService(db_session)
+    uow.tasks = TaskService(db_session)
+    uow.audits = AuditService(db_session)
+    uow.worktrees = WorktreeService(db_session)
+
+    project = await uow.projects.create_project(
+        domain.Project(name="RetainFailed", root_path=str(tmp_path), default_branch="main")
+    )
+    assert project.id is not None
+    task = await uow.tasks.create_task(
+        domain.Task(
+            project_id=project.id,
+            key="LF-12",
+            title="Failed task",
+            description="",
+            status=TaskStatus.FAILED_SAFE,
+        )
+    )
+    assert task.id is not None
+    task_run = await uow.tasks.create_task_run(domain.TaskRun(task_id=task.id, run_id=1))
+    assert task_run.id is not None
+
+    worktree_dir = tmp_path / ".localforge" / "worktrees" / "lf-12"
+    worktree_dir.mkdir(parents=True)
+    assert uow.worktrees is not None
+    manifest = await uow.worktrees.create_attempt_manifest(
+        project_id=project.id,
+        task_id=task.id,
+        task_run_id=task_run.id,
+        worktree_path=str(worktree_dir),
+        branch_name="localforge/lf-12-failed-task",
+        source_commit="abc1234",
+        owner_agent_id="agent-retain",
+    )
+    assert manifest.id is not None
+    await uow.session.commit()
+
+    manager = WorktreeManager(project_id=project.id, uow=uow)
+    await manager.cleanup_worktree(task.id)
+
+    assert worktree_dir.exists()
+    retained = await uow.worktrees.get_manifest_by_task_run(task_run.id)
+    assert retained is not None
+    assert retained.status == WorktreeAttemptStatus.REJECTED

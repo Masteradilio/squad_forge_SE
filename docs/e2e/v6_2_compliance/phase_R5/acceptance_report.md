@@ -16,8 +16,7 @@ and immutable source commit into a persisted `WorktreeAttemptManifest`; worktree
 validation now rejects dirty or target-drifted manifests.
 
 This is candidate evidence only. Final R5 acceptance still requires
-database-level parent/child overlap fencing across concurrent transactions and
-failed worktree retention policy.
+database-level parent/child overlap fencing across concurrent transactions.
 
 ## Implemented Controls
 
@@ -41,6 +40,7 @@ failed worktree retention policy.
 | Real worktree inspection | `WorktreeManager.setup_worktree_attempt()` resolves the base ref to an immutable source commit before creating the Git worktree; real temp-Git lifecycle coverage inspects the worktree on disk. |
 | Cleanliness and target drift validation | `WorktreeService.validate_repository_state()` checks `git status --porcelain`, current `HEAD`, project default branch commit, and persisted source commit, rejecting dirty or drifted manifests. |
 | Manifest-led orphan cleanup | `WorktreeManager.cleanup_orphan_worktrees()` removes only non-active worktree directories that are registered in `WorktreeAttemptManifest`; unregistered physical directories under `.localforge/worktrees` are preserved as user-owned/diagnostic paths. |
+| Failed-worktree diagnostic retention | `WorktreeManager.cleanup_worktree()` retains `FAILED_SAFE` worktrees for post-failure diagnosis and marks their manifests `REJECTED`; successful/cancelled cleanup removes the directory and marks manifests `CLEANED`. |
 
 ## Validation Commands
 
@@ -83,6 +83,12 @@ Success: no issues found in 2 source files
 
 python -m ruff check backend\localforge\gitops\manager.py backend\tests\test_audit_store.py
 All checks passed!
+
+python -m pytest backend\tests\test_audit_store.py::test_failed_safe_worktree_is_retained_for_diagnostics -q
+1 passed in 0.27s
+
+python -m pytest backend\tests\test_audit_store.py backend\tests\test_gitops.py backend\tests\test_scheduler.py::test_scheduler_uses_runner_pool_to_prepare_task_execution -q
+11 passed in 3.76s
 ```
 
 ## Remaining Acceptance Requirements
@@ -100,4 +106,5 @@ All checks passed!
 - Real Git worktree creation and branch/base-commit binding are covered.
   Repository cleanliness, target-branch drift validation, and manifest-led
   orphan cleanup that preserves unregistered user-owned paths are covered.
-  Failed worktree retention policy remains open.
+  Failed worktrees are retained for diagnostics while successful/cancelled
+  terminal cleanup removes directories and records `CLEANED`.

@@ -9,14 +9,13 @@
     "V61C-502",
     "V61C-503"
   ],
-  "source_commit": "e6808f8",
+  "source_commit": "2efa41b",
   "candidate_branch": "codex/v62-truth-reset-foundation",
   "reviewed_pr_number": 14,
   "verdict": "EVIDENCE_READY",
   "known_limitations": [
     "Candidate evidence is not final release acceptance.",
-    "Parent/child overlap conflicts still need database-level atomic exclusion.",
-    "Failed-worktree diagnostic retention policy remains open."
+    "Parent/child overlap conflicts still need database-level atomic exclusion."
   ],
   "commands": [
     {
@@ -130,9 +129,17 @@
     {
       "command": ".\\.codex_venv\\Scripts\\python.exe -m ruff check backend\\localforge\\gitops\\manager.py backend\\tests\\test_audit_store.py",
       "exit_code": 0
+    },
+    {
+      "command": ".\\.codex_venv\\Scripts\\python.exe -m pytest backend\\tests\\test_audit_store.py::test_failed_safe_worktree_is_retained_for_diagnostics -q",
+      "exit_code": 0
+    },
+    {
+      "command": ".\\.codex_venv\\Scripts\\python.exe -m pytest backend\\tests\\test_audit_store.py backend\\tests\\test_gitops.py backend\\tests\\test_scheduler.py::test_scheduler_uses_runner_pool_to_prepare_task_execution -q",
+      "exit_code": 0
     }
   ],
-  "manifest_sha256": "49fd19d87562e5c8d30956ceadd1b14f4eef655e7c2ea2f967d3fe387c7813b4",
+  "manifest_sha256": "8c3b8ab9c199a3e6174456fe9b9ff53bd4fa7e89059e599e44ede195a321dadf",
   "environment": {
     "os": "windows-local-and-github-actions-matrix",
     "python": "3.11-local / 3.12-ci",
@@ -143,13 +150,13 @@
     "Candidate evidence remains EVIDENCE_READY until reviewed PR, merge commit, exact-head CI, owner-approved tag, and final release validation exist."
   ],
   "input_hashes": {
-    "docs/e2e/v6_2_compliance/phase_R5/acceptance_report.md": "9a745245518ab5630eee176e671af55d9008c6327799b07d86292f9c68fb1d97",
-    "docs/e2e/v6_2_compliance/phase_R5/known_limitations.md": "eef8f909a9a5b9825bacfbc30eff05e280a5550d7c8a4f139779f74b49af3280",
+    "docs/e2e/v6_2_compliance/phase_R5/acceptance_report.md": "18c96ed11ecf9968c4c95f1b85e75456172ddb68a5cdae75553ef52bb0d24746",
+    "docs/e2e/v6_2_compliance/phase_R5/known_limitations.md": "9ae74ad3f8265d344bea7c834a4805015ddf61cd2849fcbe832b0b93475dc5ed",
     "backend/localforge/services/runner_pool.py": "6d0b668b763cab92f8c91677b50d121e4a6e52cb020cfa6db721bc16263e2786",
     "backend/tests/test_phase_r5_coordination.py": "882871b454db343ae47a4ba5fe6746ec923139a5cd76d0a90ae21abef7ae5b47",
     "backend/tests/test_phase6_runner_pool_governance.py": "52089e8a35d82fd9ca4fa70e63c2f5041d990b805630b80e8e6785dbf9b5adae",
-    "docs/compliance_backlog_V6-1.md": "bd80da62e568bfee801180e6a75e43760f81e66683ad2b6976d5fe44faef995b",
-    "CHANGELOG.md": "b596f64437379ffdb88df9c55ca200069cfb15fe8d282218d5127d1e7e694c33",
+    "docs/compliance_backlog_V6-1.md": "827c695bd97338bda265bb427540457cd233aff554511fffb00b8d0160262d60",
+    "CHANGELOG.md": "1e58415f6d72f5df48f8e26b1ec75bca1da705e6a18111b5c2ab5f199be76769",
     "backend/localforge/services/path_lease.py": "d6f63db70123b3378ce8d48cc6ff8968c3cac10cef1502b16aba0f27a9cb85cf",
     "backend/localforge/models/enums.py": "8ad6bca9afbf41c5c75c442b8b88bd5363332b191f3f93c555cd6b519635b583",
     "backend/localforge/models/domain.py": "8577f6f2c5a8d510015749fb87843fd5c33b03afb7aa0b6cbdcd8fadf0e17983",
@@ -157,12 +164,12 @@
     "backend/localforge/storage/bootstrap.py": "f171a3e3cd3cdc95d72f65aa5ac3b6087b122cdcd695eb94f0c0388988b25fb7",
     "backend/localforge/services/runners.py": "8d1ce83e0b23bce02f8196f4e5cb101a184bfc28470ceb3e3e5fb619a7a42615",
     "backend/localforge/gitops/adapter.py": "ad83aa996c0e3cc48da8d805b56cf3a2aa8447b9a358e02aa77b6f7b6eade373",
-    "backend/localforge/gitops/manager.py": "0366481da977f19a86d187e1afd5497cec3bff55f7a49a1ad81dfac993558360",
+    "backend/localforge/gitops/manager.py": "920910a19a6d296ba0eb29e116097a3bef5acd0b4ad60b9ccf1ee1a150887c4f",
     "backend/localforge/services/governed_execution.py": "9265286a5ebfabe4e3ab2761e715b868e2255a77a545d8d81042d833dbefa683",
     "backend/tests/test_scheduler.py": "e7a47b49554df2cc5b75155803617d6d47c916f2dc54ca8428733537792f70c0",
     "backend/tests/test_gitops.py": "785f4762e53b6694cd36f72d212c1706ef5501cf2f8e5446cf6ef60f54edd6e6",
     "backend/localforge/services/worktree.py": "f6190dd9d4d5ff6f77450f44db648b8c581284c8dc6f536bf2045c290197e895",
     "backend/tests/test_phase6_worktrees_path_intents.py": "cf670c1da32915d80deb4856c36deb3f0f63779576685dd75ae6413461ea18f4",
-    "backend/tests/test_audit_store.py": "efd82d58346820396332afa71242216faf253279ed3fbbc6af8dc632e5405f8f"
+    "backend/tests/test_audit_store.py": "dc1c4401fd92be91d90440c92bcfaf7d4fa09f7180966e1f607c76e8944f5ca8"
   }
 }

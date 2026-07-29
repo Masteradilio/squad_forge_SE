@@ -214,8 +214,9 @@ class WorktreeManager:
             await git.reset_hard(checkpoint_hash)
 
     async def cleanup_worktree(self, task_id: int) -> None:
-        """Remove a task's worktree if eligible (DONE, FAILED_SAFE, CANCELLED)."""
+        """Remove or retain a task's worktree according to terminal-state policy."""
         assert self.uow.tasks is not None
+        assert self.uow.session is not None
         task = await self.uow.tasks.get_task(task_id)
         if not task:
             raise ValueError(f"Task with ID {task_id} not found.")
@@ -231,6 +232,10 @@ class WorktreeManager:
                 f"Task {task.key} status is '{task.status}'. "
                 f"Cleanup is only allowed for final states: {eligible_statuses}"
             )
+
+        if task.status == TaskStatus.FAILED_SAFE:
+            await self._mark_task_worktree_manifests(task_id, WorktreeAttemptStatus.REJECTED)
+            return
 
         task_runs = await self.uow.tasks.list_runs_for_task(task_id)
         if not task_runs or not task_runs[0].worktree_path:
@@ -261,6 +266,21 @@ class WorktreeManager:
                     shutil.rmtree(worktree_path)
                 except Exception:
                     pass
+            await self._mark_task_worktree_manifests(task_id, WorktreeAttemptStatus.CLEANED)
+
+    async def _mark_task_worktree_manifests(
+        self, task_id: int, status: WorktreeAttemptStatus
+    ) -> None:
+        assert self.uow.session is not None
+        result = await self.uow.session.execute(
+            select(WorktreeAttemptManifestORM).where(
+                WorktreeAttemptManifestORM.project_id == self.project_id,
+                WorktreeAttemptManifestORM.task_id == task_id,
+            )
+        )
+        for manifest in result.scalars().all():
+            manifest.status = status.value
+        await self.uow.session.flush()
 
     async def cleanup_orphan_worktrees(self) -> list[str]:
         """Scan .localforge/worktrees/ directory and remove any worktrees

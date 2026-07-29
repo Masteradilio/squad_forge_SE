@@ -74,6 +74,11 @@ All notable changes to LocalForge OS will be documented in this file.
 - Added `localforge demo --scenario ci-regression --deterministic`, exporting a
   sanitized CPU-only `demo_run.json`, static `demo_replay.html`, test logs,
   diff, and draft PR artifact without model, GPU, or paid API calls.
+- Added Phase R12 candidate evidence under
+  `docs/e2e/v6_2_compliance/phase_R12/`.
+- Added release-tree audit tooling for tracked-file inventory, SHA-256
+  checksums, forbidden runtime artifact detection, secret-pattern detection,
+  and personal path detection.
 
 #### Fixed
 - Removed the clean-interpreter import cycle exposed by importing

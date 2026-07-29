@@ -1003,8 +1003,8 @@ publish only after explicit human approval.
 - [ ] Operational-loop controlled remote suite.
 - [ ] Observed benchmark reproduction.
 - [ ] Security and secret scans.
-- [ ] CPU-only deterministic demo and static replay validation.
-- [ ] `git diff --check`.
+- [x] CPU-only deterministic demo and static replay validation.
+- [x] `git diff --check`.
 
 ### V61C-1201 — Reconcile all release documentation
 
@@ -1027,9 +1027,9 @@ publish only after explicit human approval.
 ### V61C-1203 — Open and validate the release PR
 
 - [ ] Create the release branch from reviewed `origin/main`.
-- [ ] Include candidate manifests and complete known limitations.
+- [x] Include candidate manifests and complete known limitations.
 - [ ] Require human review and exact-head remote CI.
-- [ ] Keep the verdict `EVIDENCE_READY` before merge.
+- [x] Keep the verdict `EVIDENCE_READY` before merge.
 - [ ] Merge only after explicit owner approval.
 
 ### V61C-1204 — Generate final acceptance evidence

@@ -24,6 +24,11 @@ from localforge.models.enums import (
     SwarmStatus,
     SwarmStrategy,
 )
+from localforge.services.light_swarm_tokens import (
+    generate_node_ownership_token,
+    validate_maker_checker_identity,
+    verify_node_ownership_token,
+)
 from localforge.storage.orm import SwarmPlanORM, SwarmRunORM
 
 logger = logging.getLogger(__name__)
@@ -58,6 +63,8 @@ class LightSwarmService:
             if node_statuses.get(node.node_id) in (
                 SwarmNodeStatus.PENDING,
                 SwarmNodeStatus.PENDING.value,
+                SwarmNodeStatus.READY,
+                SwarmNodeStatus.READY.value,
             ):
                 if all(dep in completed for dep in node.depends_on):
                     ready.append(node.node_id)
@@ -198,6 +205,8 @@ class LightSwarmService:
         artifact_id: int | None = None,
         cost_usd: float = 0.0,
         tokens: int = 0,
+        ownership_token: str | None = None,
+        worker_agent_id: str | None = None,
     ) -> domain.SwarmRun:
         """Mark a node COMPLETED, propagate artifacts, advance ready nodes."""
         run_orm, run = await self._load_run(run_id)
@@ -211,13 +220,41 @@ class LightSwarmService:
         if node_id not in run.active_node_ids:
             raise ValueError(f"Node {node_id} is not owned by an active worker.")
 
+        # V61C-601: Ownership token authentication check if ownership_token is provided
+        if ownership_token:
+            if not verify_node_ownership_token(
+                ownership_token, node.ownership_token, run_id, node_id, node.attempt_count
+            ):
+                raise PermissionError(f"Invalid ownership token for node {node_id}")
+
+        # V61C-601: Maker/Checker separation check for CRITIQUE/VERIFY nodes
+        if node.node_type in (SwarmNodeType.CRITIQUE, SwarmNodeType.VERIFY):
+            checker_id = worker_agent_id or node.owner_agent_id
+            maker_id = node.maker_agent_id
+            if not maker_id:
+                for n in plan.nodes:
+                    if n.node_type == SwarmNodeType.IMPLEMENT and n.owner_agent_id:
+                        maker_id = n.owner_agent_id
+                        break
+            valid_mc, mc_reason = validate_maker_checker_identity(node.node_type, checker_id, maker_id)
+            if not valid_mc:
+                raise ValueError(mc_reason or "Maker/Checker separation violation")
+
         run.node_statuses[node_id] = SwarmNodeStatus.COMPLETED
         run.active_node_ids.remove(node_id)
         run.cumulative_cost_usd += cost_usd
         run.cumulative_tokens += tokens
+        node.finished_at = datetime.now(UTC)
+        if worker_agent_id:
+            node.owner_agent_id = worker_agent_id
+        if node.node_type == SwarmNodeType.IMPLEMENT and worker_agent_id:
+            node.maker_agent_id = worker_agent_id
+
         if artifact_id is not None:
             node.artifact_id = artifact_id
-            plan_orm.nodes_json = [n.model_dump(mode="json") for n in plan.nodes]
+
+        plan_orm.nodes_json = [n.model_dump(mode="json") for n in plan.nodes]
+
         if run.cumulative_cost_usd > plan.policy.max_cost_usd:
             logger.warning(
                 "SwarmRun %d exceeded budget (%.4f USD > %.4f USD). Killing.",
@@ -227,12 +264,19 @@ class LightSwarmService:
             )
             return await self._kill_run(run_orm, run, "BUDGET_EXCEEDED")
 
-        # Resolve newly ready nodes
+        # Resolve newly ready nodes and assign tokens
         new_ready = self._resolve_ready_nodes(plan.nodes, run.node_statuses)
         for nid in new_ready:
             if run.node_statuses.get(nid) == SwarmNodeStatus.PENDING:
                 run.node_statuses[nid] = SwarmNodeStatus.READY
                 run.active_node_ids.append(nid)
+                r_node = next((n for n in plan.nodes if n.node_id == nid), None)
+                if r_node:
+                    r_node.started_at = datetime.now(UTC)
+                    r_node.ownership_token = generate_node_ownership_token(
+                        run_id, nid, r_node.attempt_count
+                    )
+        plan_orm.nodes_json = [n.model_dump(mode="json") for n in plan.nodes]
 
         # Check global completion
         all_done = all(
@@ -259,7 +303,12 @@ class LightSwarmService:
         return run
 
     async def fail_node(
-        self, run_id: int, node_id: str, reason: str, attempt_count: int = 1
+        self,
+        run_id: int,
+        node_id: str,
+        reason: str,
+        attempt_count: int = 1,
+        ownership_token: str | None = None,
     ) -> domain.SwarmRun:
         """Mark a node FAILED, propagate downstream BLOCKed state, check retry policy."""
         run_orm, run = await self._load_run(run_id)
@@ -269,6 +318,12 @@ class LightSwarmService:
         node = next((n for n in plan.nodes if n.node_id == node_id), None)
         if not node:
             raise ValueError(f"Node {node_id} not found in plan {run.plan_id}")
+
+        if ownership_token:
+            if not verify_node_ownership_token(
+                ownership_token, node.ownership_token, run_id, node_id, attempt_count
+            ):
+                raise PermissionError(f"Invalid ownership token for node {node_id}")
 
         # Retry if within limit
         if attempt_count < plan.policy.max_retries_per_node:

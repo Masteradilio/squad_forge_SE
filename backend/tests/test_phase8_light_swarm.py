@@ -368,3 +368,281 @@ async def test_light_swarm_completion_aggregates_evidence_without_task_pr_ready(
         assert run.verdict == "EVIDENCE_READY"
         assert refreshed_task is not None
         assert refreshed_task.status.value != "PR_READY"
+
+
+@pytest.mark.asyncio
+async def test_light_swarm_ownership_token_verification(db_manager) -> None:
+    """V61C-601: Ownership token verification rejects invalid callback tokens."""
+    from localforge.services.light_swarm_tokens import generate_node_ownership_token
+
+    async with UnitOfWork(db_manager) as uow:
+        assert uow.projects is not None
+        assert uow.tasks is not None
+        assert uow.light_swarm is not None
+
+        proj = await uow.projects.create_project(
+            domain.Project(name="Token Test", root_path="E:/tmp/token", default_branch="main")
+        )
+        task = await uow.tasks.create_task(
+            domain.Task(project_id=proj.id, key="SW-5", title="Token", description="desc")
+        )
+        task_run = await uow.tasks.create_task_run(domain.TaskRun(task_id=task.id, run_id=1))
+
+        nodes = [_make_node("n0", SwarmNodeType.RESEARCH)]
+        plan = await uow.light_swarm.create_plan(
+            project_id=proj.id,
+            task_run_id=task_run.id,
+            nodes=nodes,
+            edges=[],
+            policy=domain.SwarmPolicy(require_independent_checker=False),
+        )
+        run = await uow.light_swarm.start_swarm(plan.id)
+        assert run.id is not None
+
+        # Re-fetch plan to set ownership_token
+        p_orm = await uow.light_swarm._load_plan_orm(plan.id)
+        p_domain = p_orm.to_domain()
+        p_domain.nodes[0].ownership_token = generate_node_ownership_token(run.id, "n0", 1)
+        p_orm.nodes_json = [n.model_dump(mode="json") for n in p_domain.nodes]
+        await uow.light_swarm.session.flush()
+
+        # Wrong token should raise PermissionError
+        with pytest.raises(PermissionError, match="Invalid ownership token"):
+            await uow.light_swarm.complete_node(run.id, "n0", ownership_token="invalid_token")
+
+        # Correct token should succeed
+        valid_tok = generate_node_ownership_token(run.id, "n0", 1)
+        res = await uow.light_swarm.complete_node(run.id, "n0", ownership_token=valid_tok)
+        assert res.node_statuses["n0"] == SwarmNodeStatus.COMPLETED
+
+
+@pytest.mark.asyncio
+async def test_light_swarm_maker_checker_separation_enforced(db_manager) -> None:
+    """V61C-601: Same agent trying maker and checker node roles is rejected."""
+    async with UnitOfWork(db_manager) as uow:
+        assert uow.projects is not None
+        assert uow.tasks is not None
+        assert uow.light_swarm is not None
+
+        proj = await uow.projects.create_project(
+            domain.Project(name="MC Test", root_path="E:/tmp/mc", default_branch="main")
+        )
+        task = await uow.tasks.create_task(
+            domain.Task(project_id=proj.id, key="SW-6", title="MC", description="desc")
+        )
+        task_run = await uow.tasks.create_task_run(domain.TaskRun(task_id=task.id, run_id=1))
+
+        nodes = [
+            _make_node("impl", SwarmNodeType.IMPLEMENT),
+            _make_node("verify", SwarmNodeType.VERIFY, ["impl"]),
+        ]
+        edges = [("impl", "verify")]
+        plan = await uow.light_swarm.create_plan(
+            project_id=proj.id,
+            task_run_id=task_run.id,
+            nodes=nodes,
+            edges=edges,
+            policy=domain.SwarmPolicy(require_independent_checker=True),
+        )
+        run = await uow.light_swarm.start_swarm(plan.id)
+        assert run.id is not None
+
+        # Complete maker node as "agent_alpha"
+        run = await uow.light_swarm.complete_node(run.id, "impl", worker_agent_id="agent_alpha")
+        assert run.node_statuses["impl"] == SwarmNodeStatus.COMPLETED
+
+        # Attempt to complete verify node as same "agent_alpha" should raise ValueError
+        with pytest.raises(ValueError, match="Maker/Checker violation"):
+            await uow.light_swarm.complete_node(run.id, "verify", worker_agent_id="agent_alpha")
+
+        # Completing verify node as different "agent_beta" should succeed
+        res = await uow.light_swarm.complete_node(run.id, "verify", worker_agent_id="agent_beta")
+        assert res.node_statuses["verify"] == SwarmNodeStatus.COMPLETED
+
+
+@pytest.mark.asyncio
+async def test_light_swarm_governed_dispatch_with_runner_pool(db_manager) -> None:
+    """V61C-600: Ready nodes are dispatched through RunnerPool and assigned ownership tokens."""
+    from localforge.services.light_swarm_dispatcher import dispatch_ready_swarm_nodes
+
+    async with UnitOfWork(db_manager) as uow:
+        assert uow.projects is not None
+        assert uow.tasks is not None
+        assert uow.light_swarm is not None
+
+        proj = await uow.projects.create_project(
+            domain.Project(name="Dispatch Test", root_path="E:/tmp/dispatch", default_branch="main")
+        )
+        task = await uow.tasks.create_task(
+            domain.Task(project_id=proj.id, key="SW-7", title="Dispatch", description="desc")
+        )
+        task_run = await uow.tasks.create_task_run(domain.TaskRun(task_id=task.id, run_id=1))
+
+        nodes = [
+            _make_node("n0", SwarmNodeType.RESEARCH),
+            _make_node("n1", SwarmNodeType.IMPLEMENT, ["n0"]),
+        ]
+        edges = [("n0", "n1")]
+        plan = await uow.light_swarm.create_plan(
+            project_id=proj.id,
+            task_run_id=task_run.id,
+            nodes=nodes,
+            edges=edges,
+            policy=domain.SwarmPolicy(require_independent_checker=False),
+        )
+        run = await uow.light_swarm.start_swarm(plan.id)
+        assert run.id is not None
+
+        dispatched = await dispatch_ready_swarm_nodes(run.id, uow)
+        assert len(dispatched) == 1
+        assert dispatched[0].node_id == "n0"
+        assert dispatched[0].runner_id is not None
+        assert dispatched[0].ownership_token is not None
+
+
+@pytest.mark.asyncio
+async def test_light_swarm_kill_releases_resources(db_manager) -> None:
+    """V61C-602: Kill releases PathLease, RunnerPool leases and cancels active nodes."""
+    from localforge.services.light_swarm_lifecycle import release_swarm_run_resources
+
+    async with UnitOfWork(db_manager) as uow:
+        assert uow.projects is not None
+        assert uow.tasks is not None
+        assert uow.light_swarm is not None
+
+        proj = await uow.projects.create_project(
+            domain.Project(name="Kill Test", root_path="E:/tmp/kill_test", default_branch="main")
+        )
+        task = await uow.tasks.create_task(
+            domain.Task(project_id=proj.id, key="SW-8", title="Kill", description="desc")
+        )
+        task_run = await uow.tasks.create_task_run(domain.TaskRun(task_id=task.id, run_id=1))
+
+        nodes = [_make_node("n0", SwarmNodeType.IMPLEMENT)]
+        plan = await uow.light_swarm.create_plan(
+            project_id=proj.id,
+            task_run_id=task_run.id,
+            nodes=nodes,
+            edges=[],
+            policy=domain.SwarmPolicy(require_independent_checker=False),
+        )
+        run = await uow.light_swarm.start_swarm(plan.id)
+        assert run.id is not None
+
+        await release_swarm_run_resources(run.id, uow, reason="KILLED_BY_USER")
+
+        refreshed_run_orm, refreshed_run = await uow.light_swarm._load_run(run.id)
+        assert refreshed_run.status == SwarmStatus.KILLED
+        assert refreshed_run.verdict == "KILLED_BY_USER"
+        assert len(refreshed_run.active_node_ids) == 0
+
+
+@pytest.mark.asyncio
+async def test_light_swarm_typed_worker_node_handoff_binding(db_manager) -> None:
+    """V61C-601: Typed worker execution binds TypedHandoff artifact to DAG node."""
+    from localforge.services.light_swarm_workers import execute_typed_worker_node
+
+    async with UnitOfWork(db_manager) as uow:
+        assert uow.projects is not None
+        assert uow.tasks is not None
+        assert uow.light_swarm is not None
+
+        proj = await uow.projects.create_project(
+            domain.Project(name="Handoff Test", root_path="E:/tmp/handoff", default_branch="main")
+        )
+        task = await uow.tasks.create_task(
+            domain.Task(project_id=proj.id, key="SW-9", title="Handoff", description="desc")
+        )
+        task_run = await uow.tasks.create_task_run(domain.TaskRun(task_id=task.id, run_id=1))
+
+        nodes = [_make_node("n0", SwarmNodeType.RESEARCH)]
+        plan = await uow.light_swarm.create_plan(
+            project_id=proj.id,
+            task_run_id=task_run.id,
+            nodes=nodes,
+            edges=[],
+            policy=domain.SwarmPolicy(require_independent_checker=False),
+        )
+        run = await uow.light_swarm.start_swarm(plan.id)
+        assert run.id is not None
+
+        art = await execute_typed_worker_node(run.id, "n0", uow)
+        assert art is not None
+        assert art.artifact_type == domain.TypedArtifactType.RESEARCH
+        assert art.task_run_id == task_run.id
+
+
+@pytest.mark.asyncio
+async def test_light_swarm_recover_swarm_run_on_restart(db_manager) -> None:
+    """V61C-602: recover_swarm_run reconstructs active ready/running node IDs."""
+    from localforge.services.light_swarm_lifecycle import recover_swarm_run
+
+    async with UnitOfWork(db_manager) as uow:
+        assert uow.projects is not None
+        assert uow.tasks is not None
+        assert uow.light_swarm is not None
+
+        proj = await uow.projects.create_project(
+            domain.Project(name="Recover Test", root_path="E:/tmp/recover", default_branch="main")
+        )
+        task = await uow.tasks.create_task(
+            domain.Task(project_id=proj.id, key="SW-10", title="Recover", description="desc")
+        )
+        task_run = await uow.tasks.create_task_run(domain.TaskRun(task_id=task.id, run_id=1))
+
+        nodes = [_make_node("n0", SwarmNodeType.RESEARCH)]
+        plan = await uow.light_swarm.create_plan(
+            project_id=proj.id,
+            task_run_id=task_run.id,
+            nodes=nodes,
+            edges=[],
+            policy=domain.SwarmPolicy(require_independent_checker=False),
+        )
+        run = await uow.light_swarm.start_swarm(plan.id)
+        assert run.id is not None
+
+        recovered_run = await recover_swarm_run(run.id, uow)
+        assert recovered_run.status == SwarmStatus.RUNNING
+        assert "n0" in recovered_run.active_node_ids
+
+
+@pytest.mark.asyncio
+async def test_light_swarm_canonical_pr_ready_evidence_submission(db_manager) -> None:
+    """V61C-603: Complete swarm evidence bundle is submitted to TaskService.mark_pr_ready."""
+    from localforge.services.light_swarm_aggregation import aggregate_and_submit_pr_ready
+
+    async with UnitOfWork(db_manager) as uow:
+        assert uow.projects is not None
+        assert uow.tasks is not None
+        assert uow.light_swarm is not None
+
+        proj = await uow.projects.create_project(
+            domain.Project(name="R3 Gate Test", root_path="E:/tmp/r3_gate", default_branch="main")
+        )
+        task = await uow.tasks.create_task(
+            domain.Task(project_id=proj.id, key="SW-11", title="R3 Gate", description="desc")
+        )
+        task_run = await uow.tasks.create_task_run(domain.TaskRun(task_id=task.id, run_id=1))
+
+        nodes = [
+            _make_node("impl", SwarmNodeType.IMPLEMENT),
+            _make_node("verify", SwarmNodeType.VERIFY, ["impl"]),
+        ]
+        edges = [("impl", "verify")]
+        plan = await uow.light_swarm.create_plan(
+            project_id=proj.id,
+            task_run_id=task_run.id,
+            nodes=nodes,
+            edges=edges,
+            policy=domain.SwarmPolicy(require_independent_checker=True),
+        )
+        run = await uow.light_swarm.start_swarm(plan.id)
+        assert run.id is not None
+
+        await uow.light_swarm.complete_node(run.id, "impl", worker_agent_id="maker-agent-1")
+        await uow.light_swarm.complete_node(run.id, "verify", worker_agent_id="checker-agent-2")
+
+        updated_task = await aggregate_and_submit_pr_ready(run.id, uow)
+        assert updated_task is not None
+        assert updated_task.status == domain.TaskStatus.PR_READY
+        assert "pr_ready_gate" in (updated_task.metadata or {})

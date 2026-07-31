@@ -4,9 +4,46 @@ All notable changes to LocalForge OS will be documented in this file.
 
  ## [Unreleased]
 
+### Feature: Frontend Reforge (5 Core Minimalist Portfolio Menus) - 2026-07-30
+- **Minimalist 5-Menu Layout**: Reforged `AppSidebar.tsx` and `App.tsx` into 5 clean core navigation sections: 1. Chat & Mission Control, 2. Kanban & PR Review, 3. Compliance Tests, 4. Skills & Agent Editor, 5. Model Settings & `.env`.
+- **Menu 1 (PO Chat & Image Upload)**: Built `POChatView.tsx` with markdown messaging, drag-and-drop file attachment for `PRD.md` and UI design schemas (`.png`, `.jpg`, `.svg`), passing visual models to Squad.
+- **Menu 2 (Adaptive Kanban & PO PR Review)**: Adapted `KanbanBoard.tsx` into 4 columns (*Backlog*, *Em Andamento*, *Bloqueado*, *Finalizado*), adding bottom PR Review panel with PO **Approve (Merge to Main)** and **Reject (with Mandatory Rejection Reason Modal)**.
+- **Menu 3 (Compliance Tests & Dossier View)**: Built `ComplianceTestsView.tsx` with dual-pane real-time progress for Security Auditor and E2E Release Tester, rendering `relatorio_conformidade_seguranca.md`, `relatorio_conformidade_funcional.md`, and the Executive Release Dossier.
+- **Menu 4 (Full Squad Skills Editor)**: Refactored `SkillsEditorView.tsx` to list the complete 10-role Software Engineering Squad (Scrum Master, Chief Engineer, Senior Developer/UX/UI, Developer, QA Engineer, Bug Fixer, Reviewer, PR Writer, Security Auditor, E2E Release Tester).
+- **Agent-Reach Integration**: Embedded zero-API-fee multi-platform web browsing, deep code research, and repository navigation capabilities into all 10 squad system prompts (`.agents/skills/<role>/SKILL.md`) and user-created custom agents.
+- **UI/UX Pro Max Skill Integration**: Injected design system intelligence (curated HSL palettes, Google Fonts Inter/Outfit typography, micro-animations, glassmorphism, responsive CSS grid/flex, WCAG contrast audits) into Senior Developer & UX/UI Specialist (`senior-developer`).
+- **Cline/Kanban Architecture Adaptation**: Refactored `KanbanBoard.tsx` with live keyword search filter, WIP (Work In Progress) limits per column, and Git Worktree isolation badges (`task/<key>`) on every card.
+- **System Prompt Versioning & Rollback**: Added historical prompt version tracking and 1-click rollback modal (`📜 Histórico de Versões & Rollback`) to `SkillsEditorView.tsx`. Automatically logs timestamps, line counts, and version snapshots (`v1`, `v2`, etc.) upon saving, enabling instant restoration if a prompt edit causes unwanted squad behavior.
+- **Menu 4 UI Refinement**: Cleaned up `SkillsEditorView.tsx` by removing top header action buttons and locking action controls exclusively to `✏️ Editar System Prompt` and `💾 Salvar System Prompt` aligned at the bottom right.
+- **Full 5-Menu Router Fix**: Fixed hash routing and `renderTabContent` dispatcher in `App.tsx` and `AppSidebar.tsx` (`onTabChange`), removing legacy views and enabling instant mouse-click navigation across Menus 1, 2, 3, 4, and 5.
+- **Removed Artifact Button**: Removed the legacy yellow "Open HP 12C Calculator" button from the main LocalForge OS sidebar navigation.
+- **7-Step Lifecycle Architecture**: Established complete 7-step post-merge quality loop: PO PRD Import (1) -> Scrum Master Backlog (2) -> Squad Engineering Loop (3) -> Auto-Merge to Main (4) -> Security Auditor (5) -> E2E Release Tester (6) -> Scrum Master Audit & Remediation Loop (7).
+- **Security Auditor Skill (`security-auditor`)**: Created system prompt `.agents/skills/security-auditor/SKILL.md` for post-merge SAST, dependency vulnerability scanning, secret leakage prevention, and generating `relatorio_conformidade_seguranca.md`.
+- **E2E Release Tester Skill (`e2e-release-tester`)**: Created system prompt `.agents/skills/e2e-release-tester/SKILL.md` for universal product compliance verification against `PRD.md` using Playwright browser driver, HTTP client, CLI runner, and DB inspector to generate `relatorio_conformidade_funcional.md`.
+- **Historical Cycle Report Versioning**: Configured skills to persist audit reports in versioned iteration paths `.localforge/artifacts/reports/cycle_<N>/` for transparent tracking across remediation loops.
+- **Executive Release Dossier Generator (`localforge.prd.dossier`)**: Created generator module `dossier.py` to compile `dossie_executivo_liberacao.md` for the Product Owner upon 100% compliance closure in Etapa 7, embedding SHA-256 checksums, cycle convergence curves, and sign-offs.
+
+### Feature: PRD Assembly & Release Integration Task Compiler - 2026-07-30
+- **Automated Integration Task Generation**: Updated `localforge.prd.compiler` to automatically append a final governed `Integration & Release Assembly` task (`LF-PRD-INTEGRATION`) upon PRD import.
+- **Strict Dependency & Gating**: Configured the integration task's `dependency_task_ids` to include all preceding feature tasks in the PRD, holding it in backlog until 100% of feature tasks reach `PR_READY`.
+- **Chief Engineer Lead**: Assigned `seniority_override="chief_only"` and `risk_level="high"` to ensure the Chief Engineer oversees the final assembly of all created modules into the release entrypoints (`index.html`, `App.tsx`, `main.tsx`).
+
+### E2E Autonomous Benchmark: HP 12C Financial Calculator - 2026-07-30
+- **100% PR_READY Completion**: Executed end-to-end autonomous benchmark `samples/e2e-hp12c-platinum` under LocalForge OS V6.2 architecture without assistant intervention in product code.
+- **18/18 Tasks Delivered**: Squad autonomous pipeline (`run --unattended`) transformed the PRD into 18 fully implemented tasks across 6 Epics (Chassis Layout, RPN Engine, Financial TVM & Amortization, Irregular Cash Flows & Depreciation/Bonds, Standard Math & Calendar, Keyboard Shortcuts & Bundle).
+- **Automated Visual & Unit Testing**: Verified headless browser screenshot capture (`actual_layout.png`) and unit test assertions for every financial and mathematical operation.
+- **Kernel & Model Fallback Resilience**: Verified automatic Scrum Master recovery loops, `GitAdapter` backtick sanitization, `TaskService` commit binding validation, and Ollama offline fallback to Chief Engineer provider.
+
 ### V6.2 Compliance Remediation - 2026-07-28
 
 #### Changed
+- Completed Phase R12 (Final Regression, Release Candidate, and Stable Publication): executed full backend test suite, static linter & typechecker checks (`ruff`, `mypy`), security scan (`check_security_scans.py`), release truth verification (`check_release_truth.py`), release tree hygiene audit, and completed 100% closure of all 373 compliance backlog tasks across phases R0 through R12.
+- Completed Phase R11 (GPU-Free Demonstration and Public Portfolio Readiness): enhanced static browser evidence replay (`demo_replay.html`), produced 1-page recruiter technical case study (`recruiter_case_study.md`), 3-minute visual walkthrough guide (`walkthrough_guide.md`), and completed public portfolio readiness verification.
+- Completed Phase R10 (Production Hardening and Operability): documented production threat model (`threat_model.md`), implemented automated security scanner (`check_security_scans.py`), structured JSON log formatter & operator view diagnostics (`production_observability.py`), CPU-only deployment reference guide (`deployment_reference.md`), and comprehensive security negative & failure injection test suite (`test_phase10_production_hardening.py`).
+- Completed Phase R9 (Observed Comparative Evaluation): implemented reproducible benchmark publications generator (`generate_benchmark_publications.py`) producing `observations.jsonl`, `summary_aggregates.json`, and `benchmark_report.md` from canonical dataset with automated hash/row-count validation and Markdown table fidelity tests.
+- Completed Phase R8 (Real Operational Loops and Connectors): implemented GitHubRepositoryConnector with least-privilege L1/L2 credential separation, log credential sanitization, rate-limiting, and pagination; hardened Daily Triage for 0-mutation L1 operation; bounded CI Sweeper repairs with independent checker evidence and draft PR creation; bound PR Babysitter comments to exact line/SHA with conflict escalation; added controlled remote E2E fixtures.
+- Completed Phase R7 (Governed Deep Swarm Execution): implemented experimental gating with automatic fallback to LIGHT strategy, atomic graph mutation validation with version & parent checks, governed dynamic node dispatch through RunnerPool with TypedHandoff dependency verification, and deterministic descendant cancellation with replay side-effect deduplication.
+- Completed Phase R6 (Real Light Swarm Execution): implemented HMAC-SHA256 ownership tokens, Maker/Checker identity separation, GovernedExecution & RunnerPool ready node dispatch, PathLease pre-acquisition for code mutation nodes, atomic resource release on kill/pause, TypedHandoff DAG edge bindings, process restart recovery, and canonical R3 PRReadyEvidence submission to TaskService.mark_pr_ready().
 - Reclassified V6.1 as a historical experimental release with disputed
   compliance acceptance; production readiness now depends on
   `docs/compliance_backlog_V6-1.md` and the next `v6.2.0` release gates.

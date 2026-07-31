@@ -80,12 +80,20 @@ def parse_action_proposals(raw: object) -> list[RuntimeActionProposal]:
                 pass
         if not isinstance(item, dict):
             continue
-        if str(item.get("kind") or item.get("action") or item.get("type") or "").lower() in {
-            "noop",
-            "no_op",
-            "none",
-        }:
+        norm_item = RuntimeActionProposal.normalize_model_aliases(item)
+        if isinstance(norm_item, dict):
+            item = norm_item
+        kind_val = str(item.get("kind") or item.get("action") or item.get("type") or "").lower()
+        if kind_val in {"noop", "no_op", "none"}:
             continue
+
+        if kind_val not in ("write_file", "append_content", "run_command"):
+            if item.get("command"):
+                item["kind"] = "run_command"
+            elif item.get("path") or item.get("file") or item.get("filename"):
+                item["kind"] = "write_file"
+            else:
+                continue
 
         try:
             proposal = RuntimeActionProposal.model_validate(item)

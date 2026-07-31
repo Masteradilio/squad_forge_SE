@@ -892,3 +892,181 @@ async def test_crash_recovery_reconciliation(db_manager) -> None:
         assert not await uow.task_graph.claim_external_side_effect(deep_run.id, "n0", "deploy:n0")
         clean_report = await uow.task_graph.reconcile_after_restart(plan.id)
         assert clean_report["status"] == "CLEAN"
+
+
+def _make_node(
+    node_id: str, node_type: SwarmNodeType, depends_on: list[str] | None = None
+) -> domain.SwarmNode:
+    return domain.SwarmNode(
+        node_id=node_id,
+        node_type=node_type,
+        status=SwarmNodeStatus.PENDING,
+        title=f"Node {node_id}",
+        description=f"Description for {node_id}",
+        depends_on=depends_on or [],
+    )
+
+
+@pytest.mark.asyncio
+async def test_phase7_deep_swarm_experimental_gating_and_fallback(db_manager) -> None:
+    """V61C-703: Experimental gating defaults to False and falls back to Light Swarm strategy."""
+    from localforge.services.deep_swarm_governor import check_deep_swarm_opt_in
+
+    async with UnitOfWork(db_manager) as uow:
+        assert uow.projects is not None
+        assert uow.tasks is not None
+        assert uow.light_swarm is not None
+        assert uow.task_graph is not None
+
+        proj = await uow.projects.create_project(
+            domain.Project(name="Gating Test", root_path="E:/tmp/gating", default_branch="main")
+        )
+        task = await uow.tasks.create_task(
+            domain.Task(project_id=proj.id, key="DS-1", title="Gating", description="desc")
+        )
+        task_run = await uow.tasks.create_task_run(domain.TaskRun(task_id=task.id, run_id=1))
+
+        nodes = [_make_node("n0", SwarmNodeType.RESEARCH)]
+        plan = await uow.light_swarm.create_plan(
+            project_id=proj.id,
+            task_run_id=task_run.id,
+            nodes=nodes,
+            edges=[],
+            policy=domain.SwarmPolicy(require_independent_checker=False),
+        )
+        await uow.task_graph.create_initial_graph_version(plan.id)
+
+        # Flag disabled -> False, fallback to LIGHT
+        allowed, reason, fallback = await check_deep_swarm_opt_in(plan.id, uow, enable_flag=False)
+        assert not allowed
+        assert reason == "DEEP_SWARM_FEATURE_DISABLED"
+        assert fallback == domain.SwarmStrategy.LIGHT
+
+
+@pytest.mark.asyncio
+async def test_phase7_deep_swarm_mutation_governance_validation(db_manager) -> None:
+    """V61C-701: Mutation governance rejects stale parent versions or empty proponsers."""
+    from localforge.services.deep_swarm_governor import validate_mutation_governance
+
+    async with UnitOfWork(db_manager) as uow:
+        assert uow.projects is not None
+        assert uow.tasks is not None
+        assert uow.light_swarm is not None
+        assert uow.task_graph is not None
+
+        proj = await uow.projects.create_project(
+            domain.Project(name="Gov Test", root_path="E:/tmp/gov", default_branch="main")
+        )
+        task = await uow.tasks.create_task(
+            domain.Task(project_id=proj.id, key="DS-2", title="Gov", description="desc")
+        )
+        task_run = await uow.tasks.create_task_run(domain.TaskRun(task_id=task.id, run_id=1))
+
+        nodes = [_make_node("n0", SwarmNodeType.RESEARCH)]
+        plan = await uow.light_swarm.create_plan(
+            project_id=proj.id,
+            task_run_id=task_run.id,
+            nodes=nodes,
+            edges=[],
+            policy=domain.SwarmPolicy(require_independent_checker=False),
+        )
+        await uow.task_graph.create_initial_graph_version(plan.id)
+
+        # Stale parent version -> reject
+        stale_payload = {"parent_graph_version": 99}
+        valid, msg = await validate_mutation_governance(plan.id, "agent-1", stale_payload, uow)
+        assert not valid
+        assert "Stale graph mutation" in msg
+
+
+@pytest.mark.asyncio
+async def test_phase7_deep_swarm_governed_node_dispatch(db_manager) -> None:
+    """V61C-700: Dynamic ready nodes are dispatched through RunnerPool and assigned tokens."""
+    from localforge.services.deep_swarm_dispatcher import dispatch_dynamic_ready_nodes
+
+    async with UnitOfWork(db_manager) as uow:
+        assert uow.projects is not None
+        assert uow.tasks is not None
+        assert uow.light_swarm is not None
+        assert uow.task_graph is not None
+
+        proj = await uow.projects.create_project(
+            domain.Project(name="Deep Dispatch", root_path="E:/tmp/deep_dispatch", default_branch="main")
+        )
+        task = await uow.tasks.create_task(
+            domain.Task(project_id=proj.id, key="DS-3", title="Deep Dispatch", description="desc")
+        )
+        task_run = await uow.tasks.create_task_run(domain.TaskRun(task_id=task.id, run_id=1))
+
+        nodes = [_make_node("n0", SwarmNodeType.RESEARCH)]
+        plan = await uow.light_swarm.create_plan(
+            project_id=proj.id,
+            task_run_id=task_run.id,
+            nodes=nodes,
+            edges=[],
+            policy=domain.SwarmPolicy(require_independent_checker=False),
+        )
+        await uow.task_graph.create_initial_graph_version(plan.id)
+        deep_run = await uow.task_graph.create_deep_swarm_run(
+            plan.id,
+            domain.DeepSwarmPolicy(
+                enabled=True,
+                prefer_light_swarm=False,
+                registered_decision_contract_ids=["test-contract"],
+            ),
+        )
+        await uow.task_graph.enable_deep_swarm(deep_run.id)
+
+        dispatched = await dispatch_dynamic_ready_nodes(deep_run.id, uow)
+        assert len(dispatched) == 1
+        assert dispatched[0].node_id == "n0"
+        assert dispatched[0].runner_id is not None
+        assert dispatched[0].ownership_token is not None
+
+
+@pytest.mark.asyncio
+async def test_phase7_deep_swarm_descendant_cancellation(db_manager) -> None:
+    """V61C-702: Failure in parent node deterministically cancels descendants."""
+    from localforge.services.deep_swarm_dispatcher import reconcile_and_cancel_descendants
+
+    async with UnitOfWork(db_manager) as uow:
+        assert uow.projects is not None
+        assert uow.tasks is not None
+        assert uow.light_swarm is not None
+        assert uow.task_graph is not None
+
+        proj = await uow.projects.create_project(
+            domain.Project(name="Descendant Test", root_path="E:/tmp/descendant", default_branch="main")
+        )
+        task = await uow.tasks.create_task(
+            domain.Task(project_id=proj.id, key="DS-4", title="Descendant", description="desc")
+        )
+        task_run = await uow.tasks.create_task_run(domain.TaskRun(task_id=task.id, run_id=1))
+
+        nodes = [
+            _make_node("n0", SwarmNodeType.IMPLEMENT),
+            _make_node("n1", SwarmNodeType.VERIFY, ["n0"]),
+        ]
+        edges = [("n0", "n1")]
+        plan = await uow.light_swarm.create_plan(
+            project_id=proj.id,
+            task_run_id=task_run.id,
+            nodes=nodes,
+            edges=edges,
+            policy=domain.SwarmPolicy(require_independent_checker=False),
+        )
+        await uow.task_graph.create_initial_graph_version(plan.id)
+        deep_run = await uow.task_graph.create_deep_swarm_run(
+            plan.id,
+            domain.DeepSwarmPolicy(
+                enabled=True,
+                prefer_light_swarm=False,
+                registered_decision_contract_ids=["test-contract-2"],
+            ),
+        )
+
+        cancelled = await reconcile_and_cancel_descendants(plan.id, "n0", uow)
+        assert "n1" in cancelled
+
+        refreshed_orm, refreshed_run = await uow.task_graph._load_deep_run(deep_run.id)
+        assert refreshed_run.node_statuses["n1"] == SwarmNodeStatus.BLOCKED.value

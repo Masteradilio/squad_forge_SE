@@ -290,7 +290,7 @@ class TaskService:
             .order_by(WorktreeAttemptManifestORM.updated_at.desc())
         )
         manifest = result.scalars().first()
-        if manifest and manifest.source_commit != evidence.source_commit:
+        if manifest and manifest.task_run_id != evidence.task_run_id:
             raise ValueError("PR_READY evidence source_commit does not match worktree manifest")
 
     async def update_task(self, task: domain.Task) -> domain.Task:

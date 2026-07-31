@@ -197,12 +197,15 @@ async def test_import_prd_dry_run_does_not_persist_and_normal_import_creates_tas
 
     imported = await import_prd(prd_path, project.id, db_manager=db_manager, dry_run=False)
     assert imported.persisted is True
-    assert imported.tasks_created == 1
+    assert imported.tasks_created == 2  # 1 feature task + 1 integration task
 
     async with UnitOfWork(db_manager) as uow:
         assert uow.tasks is not None
         tasks = await uow.tasks.list_tasks_for_project(project.id)
     assert tasks[0].title == "Load Markdown"
+    assert "Integration" in tasks[1].title
+    assert tasks[1].dependency_task_ids == [tasks[0].id]
+
 
 
 @pytest.mark.anyio
@@ -340,3 +343,35 @@ async def test_import_prd_persists_explicit_contract_dependencies(db_manager, tm
     assert by_title["Create audit dashboard"].dependency_task_ids == [
         by_title["Create audit API"].id
     ]
+
+
+@pytest.mark.anyio
+async def test_import_prd_appends_integration_task_depending_on_all_preceding_tasks(db_manager, tmp_path):
+    prd_path = tmp_path / "PRD.md"
+    prd_path.write_text(
+        "# App\n\n## Core\n- Task A\n- Task B\n- Task C\n",
+        encoding="utf-8",
+    )
+    async with UnitOfWork(db_manager) as uow:
+        assert uow.projects is not None
+        project = await uow.projects.create_project(
+            domain.Project(name="IntegrationApp", root_path=str(tmp_path), default_branch="main")
+        )
+        assert project.id is not None
+
+    imported = await import_prd(prd_path, project.id, db_manager=db_manager, dry_run=False)
+
+    async with UnitOfWork(db_manager) as uow:
+        assert uow.tasks is not None
+        tasks = await uow.tasks.list_tasks_for_project(project.id)
+
+    by_title = {task.title: task for task in tasks}
+    assert "Task A" in by_title
+    assert "Task B" in by_title
+    assert "Task C" in by_title
+    integration_task = next(t for t in tasks if "Integration & Release Assembly" in t.title)
+    assert integration_task.metadata.get("is_integration_task") is True
+
+    feature_ids = {by_title["Task A"].id, by_title["Task B"].id, by_title["Task C"].id}
+    assert set(integration_task.dependency_task_ids) == feature_ids
+

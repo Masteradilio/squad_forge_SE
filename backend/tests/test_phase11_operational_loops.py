@@ -428,3 +428,148 @@ def test_strategy_comparator_marks_missing_ledger_values_unknown() -> None:
         "total_cost_usd",
         "total_tokens",
     ]
+
+
+def test_github_connector_least_privilege_boundary() -> None:
+    """V61C-800: Production GitHub connector enforces least-privilege L1/L2 separation and sanitizes logs."""
+    from localforge.connectors.github_connector import GitHubRepositoryConnector, sanitize_log_credential
+
+    connector = GitHubRepositoryConnector(
+        l1_read_token="ghp_l1_secret_token",
+        l2_draft_token="ghp_l2_secret_token",
+    )
+    connector.set_mock_data(
+        issues=[IssueRecord(external_id="iss-1", number=1, title="Bug", body="Desc")],
+        check_runs=[CheckRunRecord(external_id="chk-1", build_id="b-1", commit_sha="abc", name="test", conclusion="failure")],
+    )
+
+    page = connector.list_issues()
+    assert len(page.items) == 1
+    assert not hasattr(connector, "merge_pr")
+    assert not hasattr(connector, "approve_pr")
+    assert not hasattr(connector, "deploy")
+
+    masked = sanitize_log_credential("ghp_l1_secret_token")
+    assert masked == "[MASKED_GITHUB_TOKEN]"
+
+
+def test_daily_triage_zero_external_mutations() -> None:
+    """V61C-801: Daily triage performs 0 external mutations and persists idempotency state."""
+    from localforge.connectors.github_connector import GitHubRepositoryConnector
+
+    connector = GitHubRepositoryConnector()
+    connector.set_mock_data(
+        issues=[IssueRecord(external_id="iss-2", number=2, title="Leak", body="Memory leak")],
+    )
+    svc = DailyTriageLoopService()
+    findings = svc.run_from_connector(connector)
+
+    assert len(findings) == 1
+    assert findings[0].acting_on is True
+    assert findings[0].cost_usd == 0.0
+
+
+def test_ci_sweeper_isolated_worktree_repair() -> None:
+    """V61C-802: CI sweeper performs allowlisted repair and creates draft PR through connector."""
+    from localforge.connectors.github_connector import GitHubRepositoryConnector
+
+    connector = GitHubRepositoryConnector()
+    svc = CISweeperLoopService()
+
+    classif = svc.classify_ci_event(
+        LabeledEvent(
+            id="ci-1",
+            category="CI_CODE_REGRESSION",
+            title="Regression",
+            payload={"build_id": "101", "failed_test": "test_auth"},
+            expected_classification="CODE_REGRESSION",
+            allowed_action="AUTO_FIX",
+            required_approval="HUMAN_MERGE",
+        )
+    )
+
+    res = svc.execute_repair(classif, connector=connector)
+    assert res.status == "REPAIRED_DRAFT_PR"
+    assert res.draft_pr_created is True
+    assert res.test_weakened_or_deleted is False
+    assert res.requires_human_merge is True
+
+
+def test_pr_babysitter_exact_line_mapping_and_conflict_escalation() -> None:
+    """V61C-803: PR babysitter maps review comments to line and escalates merge conflicts."""
+    svc = PRBabysitterLoopService()
+
+    comment_action = svc.process_pr_event(
+        LabeledEvent(
+            id="rev-1",
+            category="PR_REVIEW_COMMENT",
+            title="Fix typo",
+            payload={"pr_id": 5, "file_path": "main.py", "line_number": 42},
+            expected_classification="SMALL_FIX",
+            allowed_action="AUTO_FIX",
+            required_approval="HUMAN_MERGE",
+        )
+    )
+    assert comment_action.action_type == "SMALL_FIX_WORKTREE"
+    assert comment_action.target_file == "main.py"
+    assert comment_action.target_line == 42
+    assert comment_action.approved_self_pr is False
+    assert comment_action.merged_self_pr is False
+
+    conflict_action = svc.process_pr_event(
+        LabeledEvent(
+            id="conf-1",
+            category="PR_MERGE_CONFLICT",
+            title="Conflict",
+            payload={"pr_id": 6, "conflicting_files": ["app.py"]},
+            expected_classification="MERGE_CONFLICT",
+            allowed_action="ESCALATE",
+            required_approval="HUMAN_REVIEW",
+        )
+    )
+    assert conflict_action.action_type == "ESCALATE_CONFLICT"
+
+
+def test_remote_e2e_connector_fixtures() -> None:
+    """V61C-804: Controlled remote fixture simulates rate limits and idempotency without external side-effects."""
+    from localforge.connectors.github_connector import GitHubRepositoryConnector
+
+    connector = GitHubRepositoryConnector()
+    pr1 = connector.create_draft_pr(
+        title="fix: typo",
+        branch="fix/typo",
+        body="details",
+        idempotency_key="key-123",
+    )
+    pr2 = connector.create_draft_pr(
+        title="fix: typo",
+        branch="fix/typo",
+        body="details",
+        idempotency_key="key-123",
+    )
+    assert pr1.external_id == pr2.external_id
+    assert pr1.draft is True
+
+
+def test_generated_benchmark_publications_match_json_aggregates(tmp_path) -> None:
+    """V61C-904: Generated Markdown report tables match JSON aggregates exactly."""
+    import json
+
+    from scripts.generate_benchmark_publications import generate_benchmark_publications
+
+    generate_benchmark_publications(tmp_path)
+    aggregates_file = tmp_path / "summary_aggregates.json"
+    report_file = tmp_path / "benchmark_report.md"
+    obs_file = tmp_path / "observations.jsonl"
+
+    assert aggregates_file.is_file()
+    assert report_file.is_file()
+    assert obs_file.is_file()
+
+    aggr_data = json.loads(aggregates_file.read_text(encoding="utf-8"))
+    md_content = report_file.read_text(encoding="utf-8")
+
+    assert aggr_data["corpus_version"] in md_content
+    assert aggr_data["manifest_hash"] in md_content
+    for strat, _m in aggr_data["metrics"].items():
+        assert f"`{strat}`" in md_content

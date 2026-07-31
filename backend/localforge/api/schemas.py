@@ -260,6 +260,20 @@ class SwarmCreateRequest(BaseModel):
     auto_start: bool = True
 
 
+class SwarmNodeCompleteRequest(BaseModel):
+    artifact_id: int | None = None
+    cost_usd: float = 0.0
+    tokens: int = 0
+    ownership_token: str | None = None
+    worker_agent_id: str | None = None
+
+
+class SwarmNodeFailRequest(BaseModel):
+    reason: str
+    attempt_count: int = 1
+    ownership_token: str | None = None
+
+
 class MemoryFactCreateRequest(BaseModel):
     project_id: int
     fact: str

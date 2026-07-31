@@ -197,8 +197,16 @@ class LocalPRFactory:
                     payload_json={"source": "pr_factory", "artifact_path": pr_artifact.path},
                 )
             )
-            source_commit = str(task_metadata.get("source_commit", "unknown-source"))
-            target_commit = str(task_metadata.get("target_commit", "unknown-target"))
+            source_commit = str(
+                task_metadata.get("current_source_commit")
+                or task_metadata.get("source_commit")
+                or "unknown-source"
+            )
+            target_commit = str(
+                task_metadata.get("current_target_commit")
+                or task_metadata.get("target_commit")
+                or "unknown-target"
+            )
             await self.uow.tasks.mark_pr_ready(
                 task_id,
                 gate_evidence={

@@ -746,6 +746,71 @@ def create_app(
             tasks = await uow.tasks.list_tasks_for_project(project_id)
             return [_dump(task) for task in tasks if task.status == TaskStatus.PR_READY]
 
+    @app.post("/tasks/{task_id}/prs/approve")
+    async def approve_pr(task_id: int) -> dict[str, Any]:
+        async with UnitOfWork(manager) as uow:
+            assert uow.tasks is not None
+            task = await uow.tasks.get_task(task_id)
+            if not task:
+                raise HTTPException(status_code=404, detail="Task not found")
+            task.status = TaskStatus.DONE
+            updated = await uow.tasks.update_task(task)
+            await app.state.event_bus.publish(
+                LifecycleEvent(
+                    project_id=updated.project_id,
+                    event_type="task.status_changed",
+                    payload={"task_id": updated.id, "status": updated.status.value},
+                )
+            )
+            return _dump(updated)
+
+    @app.post("/tasks/{task_id}/prs/reject")
+    async def reject_pr(task_id: int, req: TaskCommentRequest) -> dict[str, Any]:
+        async with UnitOfWork(manager) as uow:
+            assert uow.tasks is not None
+            task = await uow.tasks.get_task(task_id)
+            if not task:
+                raise HTTPException(status_code=404, detail="Task not found")
+            task.status = TaskStatus.BLOCKED
+            task.description = f"[PO REJECTION REASON]: {req.comment}\n\n{task.description}"
+            updated = await uow.tasks.update_task(task)
+            await app.state.event_bus.publish(
+                LifecycleEvent(
+                    project_id=updated.project_id,
+                    event_type="task.status_changed",
+                    payload={"task_id": updated.id, "status": updated.status.value, "po_rejection": req.comment},
+                )
+            )
+            return _dump(updated)
+
+    @app.get("/settings/env")
+    async def get_env_settings() -> dict[str, str]:
+        env_path = Path(".env")
+        env_vars: dict[str, str] = {}
+        if env_path.exists():
+            for line in env_path.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    k, v = line.split("=", 1)
+                    env_vars[k.strip()] = v.strip().strip("'\"")
+        return env_vars
+
+    @app.post("/settings/env")
+    async def update_env_settings(req: dict[str, str]) -> dict[str, str]:
+        env_path = Path(".env")
+        existing: dict[str, str] = {}
+        if env_path.exists():
+            for line in env_path.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    k, v = line.split("=", 1)
+                    existing[k.strip()] = v.strip().strip("'\"")
+        for k, v in req.items():
+            existing[k] = v
+        lines = [f"{k}={v}" for k, v in existing.items()]
+        env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        return existing
+
     @app.get("/projects/{project_id}/worktrees")
     async def list_project_worktrees(project_id: int) -> list[dict[str, Any]]:
         async with UnitOfWork(manager) as uow:

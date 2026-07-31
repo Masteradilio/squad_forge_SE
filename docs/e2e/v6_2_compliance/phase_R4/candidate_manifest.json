@@ -52,7 +52,7 @@
       "exit_code": 0
     }
   ],
-  "manifest_sha256": "8baf7ca5abb13716175d6bdfe9d0e439bc2e78f8b99bec3e3b224893f0dfbebe",
+  "manifest_sha256": "d5a1481a42900a316555d925cdd082c3babd0ba1e415c17560fe85c67df99104",
   "environment": {
     "os": "windows-local-and-github-actions-matrix",
     "python": "3.11-local / 3.12-ci",
@@ -72,12 +72,12 @@
     "backend/localforge/services/loop_service.py": "5ef7cbb95896e9e061331ae98b62b8d399891c73254be6f6080116ce1badb2c1",
     "backend/localforge/services/loop_coordinator.py": "193f5afeca041f2b08c340b34338fb2a99805a7653377c2a4238614465b9ce6b",
     "backend/localforge/api/routes/loops.py": "341b126e8c4087423c8a9c9af5fb54f8ff40408f90f3e3bc888a3b3286bbd946",
-    "backend/localforge/api/schemas.py": "2db44bea65f86d2fa6c0150a95d60cdff8ca45bec8e621c093249064120718e5",
+    "backend/localforge/api/schemas.py": "9feb63e81e44df1cc2b1d619d1c46d4f25c859f3c5bf7a424609c5dfecb2ff17",
     "backend/tests/test_phase6_loop_control_plane.py": "3e8625dd59d8d2598ddd5034c34c74ee7056b396028644b0eba4a096ff254224",
     "backend/tests/test_phase6_circuit_breakers.py": "f9fada8b824fbb79d0a7dec665844e732ab1438c42a1229eb1653c960b3d3c02",
     "backend/tests/test_phase_r4_loop_runtime.py": "7041c5efdface23058b2be1d4ce966ae028e16cdc9088f3f901685d14f6f5832",
-    "docs/compliance_backlog_V6-1.md": "72ef3975e5dd557f02f6cbad835ec689c94386a5491fe0f14f9cb653653e1b57",
-    "CHANGELOG.md": "fd97a16b1fcb02d5fc95e6531a7a56723efbbace80e9fd704557705923681f68",
+    "docs/compliance_backlog_V6-1.md": "b7f5312a2c69d4c832ac226bb3b4ae2c52cb65e52d35c2b9c3d6c3220db36a1e",
+    "CHANGELOG.md": "2e69640ee910a369ecc5cc669b3cdc0c2ae3f78b1991d2ae7b135704e5833b6e",
     "backend/localforge/models/enums.py": "8ad6bca9afbf41c5c75c442b8b88bd5363332b191f3f93c555cd6b519635b583",
     "backend/localforge/services/runner_pool.py": "6d0b668b763cab92f8c91677b50d121e4a6e52cb020cfa6db721bc16263e2786",
     "backend/localforge/services/worktree.py": "f6190dd9d4d5ff6f77450f44db648b8c581284c8dc6f536bf2045c290197e895"

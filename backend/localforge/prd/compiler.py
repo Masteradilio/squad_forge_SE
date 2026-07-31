@@ -44,6 +44,7 @@ async def import_prd(
             if llm_provider is not None
             else deterministic
         )
+        _ensure_integration_task(plan)
 
         if dry_run:
             return _result(False, loaded.content_hash, loaded.changed, plan)
@@ -169,3 +170,45 @@ def _result(
 
 def _summary(plan: ExtractedPlan) -> str:
     return f"{len(plan.epics)} epics, {len(plan.tasks)} tasks"
+
+
+def _ensure_integration_task(plan: ExtractedPlan) -> None:
+    """Ensure the plan includes a final integration and release assembly task depending on preceding tasks."""
+    if not plan.tasks:
+        return
+    has_integration = any(
+        "integration" in t.title.lower() and "assembly" in t.title.lower()
+        for t in plan.tasks
+    )
+    if has_integration:
+        return
+
+    from localforge.prd.schemas import ExtractedTask
+
+    preceding_titles = [t.title for t in plan.tasks]
+    epic_title = plan.epics[-1].title if plan.epics else None
+    integration_task = ExtractedTask(
+        title="Integration & Release Assembly: Consolidate touched modules into main release entrypoints",
+        description=(
+            "Unify, integrate, and bundle all feature modules, components, and worktree artifacts "
+            "created across preceding PRD tasks into the main application entrypoint (e.g., index.html, "
+            "App.tsx) and main release branch."
+        ),
+        acceptance_criteria=[
+            "All feature modules created in preceding tasks are imported, linked, and functionally active in the main release bundle.",
+            "Single-page entrypoint index.html/App.tsx renders the complete integrated application.",
+        ],
+        risk_level="high",
+        expected_files=[
+            "frontend/index.html",
+            "frontend/src/App.tsx",
+            "frontend/src/main.tsx",
+        ],
+        epic_title=epic_title,
+        metadata={
+            "is_integration_task": True,
+            "depends_on": preceding_titles,
+        },
+    )
+    plan.tasks.append(integration_task)
+

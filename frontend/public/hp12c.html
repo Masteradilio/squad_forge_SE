@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HP 12C Platinum Financial Calculator</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Inter:wght@400;600;700;800&display=swap');
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+
+    body {
+      background-color: #0d0f12;
+      color: #e2e8f0;
+      font-family: 'Inter', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .calculator-container {
+      width: 100%;
+      max-width: 920px;
+      background: linear-gradient(145deg, #1f232b, #15181e);
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8), 0 0 35px rgba(212, 175, 55, 0.2);
+      border: 1px solid #333a48;
+    }
+
+    /* Metallic Chassis Header */
+    .chassis {
+      background: linear-gradient(180deg, #d4af37 0%, #aa820a 15%, #d4af37 30%, #8a6805 100%);
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: inset 0 2px 4px rgba(255, 255, 255, 0.4), inset 0 -4px 8px rgba(0, 0, 0, 0.6), 0 10px 20px rgba(0, 0, 0, 0.5);
+      border: 2px solid #594303;
+    }
+
+    .chassis-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+      padding: 0 4px;
+    }
+
+    .brand-title {
+      font-weight: 800;
+      font-size: 24px;
+      letter-spacing: 1px;
+      color: #111;
+      text-shadow: 0 1px 0 rgba(255, 255, 255, 0.3);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .brand-title span.hp {
+      background: #111;
+      color: #d4af37;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 20px;
+    }
+
+    .model-badge {
+      font-size: 14px;
+      font-weight: 700;
+      color: #222;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+    }
+
+    /* LCD Screen */
+    .lcd-frame {
+      background: #0f140d;
+      border: 4px solid #1a2017;
+      border-radius: 8px;
+      padding: 12px 18px;
+      box-shadow: inset 0 3px 8px rgba(0, 0, 0, 0.9), 0 2px 4px rgba(255, 255, 255, 0.2);
+      margin-bottom: 24px;
+    }
+
+    .lcd-status-bar {
+      display: flex;
+      gap: 16px;
+      height: 16px;
+      font-size: 11px;
+      font-weight: 700;
+      font-family: 'Share Tech Mono', monospace;
+      color: #283624;
+      margin-bottom: 4px;
+    }
+
+    .lcd-status-bar .active {
+      color: #9fe88d;
+      text-shadow: 0 0 8px rgba(159, 232, 141, 0.6);
+    }
+
+    .lcd-display {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 44px;
+      color: #a4f593;
+      text-shadow: 0 0 12px rgba(164, 245, 147, 0.5);
+      text-align: right;
+      letter-spacing: 2px;
+      min-height: 54px;
+      line-height: 54px;
+      overflow: hidden;
+    }
+
+    /* Keypad Grid */
+    .keypad-panel {
+      background: #181b20;
+      border-radius: 8px;
+      padding: 18px;
+      border: 2px solid #2d333f;
+      box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.6);
+    }
+
+    .key-grid {
+      display: grid;
+      grid-template-columns: repeat(10, 1fr);
+      gap: 10px;
+    }
+
+    .key-wrapper {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .legend-f {
+      font-size: 10px;
+      font-weight: 700;
+      color: #eab308;
+      height: 14px;
+      line-height: 14px;
+      text-align: center;
+      white-space: nowrap;
+    }
+
+    .calc-btn {
+      width: 100%;
+      height: 48px;
+      background: linear-gradient(180deg, #374151 0%, #1f2937 100%);
+      color: #f9fafb;
+      border: 1px solid #4b5563;
+      border-bottom: 3px solid #111827;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+      transition: all 0.05s ease;
+    }
+
+    .calc-btn:active, .calc-btn.pressed {
+      transform: translateY(2px);
+      border-bottom-width: 1px;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+    }
+
+    .calc-btn.gold-btn {
+      background: linear-gradient(180deg, #ca8a04 0%, #854d0e 100%);
+      color: #fff;
+      border-color: #eab308;
+    }
+
+    .calc-btn.blue-btn {
+      background: linear-gradient(180deg, #2563eb 0%, #1e40af 100%);
+      color: #fff;
+      border-color: #60a5fa;
+    }
+
+    .calc-btn.enter-btn {
+      background: linear-gradient(180deg, #4b5563 0%, #374151 100%);
+      grid-row: span 2;
+      height: 108px;
+    }
+
+    .legend-g {
+      font-size: 10px;
+      font-weight: 700;
+      color: #60a5fa;
+      height: 14px;
+      line-height: 14px;
+      text-align: center;
+      margin-top: 2px;
+      white-space: nowrap;
+    }
+
+    /* Stack Monitor Footer */
+    .stack-footer {
+      margin-top: 20px;
+      background: #15181e;
+      border-radius: 8px;
+      padding: 12px 16px;
+      display: flex;
+      gap: 20px;
+      font-size: 13px;
+      color: #94a3b8;
+      border: 1px solid #272d37;
+    }
+
+    .stack-item {
+      display: flex;
+      gap: 6px;
+    }
+
+    .stack-item span.val {
+      color: #f1f5f9;
+      font-family: 'Share Tech Mono', monospace;
+      font-weight: 700;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="calculator-container">
+    <div class="chassis">
+      <div class="chassis-header">
+        <div class="brand-title">
+          <span class="hp">hp</span> 12c platinum
+        </div>
+        <div class="model-badge">Financial Calculator</div>
+      </div>
+
+      <!-- LCD Display -->
+      <div class="lcd-frame">
+        <div class="lcd-status-bar">
+          <span id="flag-rpn" class="active">RPN</span>
+          <span id="flag-alg">ALG</span>
+          <span id="flag-f">f</span>
+          <span id="flag-g">g</span>
+          <span id="flag-prgm">PRGM</span>
+          <span id="flag-begin">BEGIN</span>
+        </div>
+        <div id="lcd" class="lcd-display">0.00</div>
+      </div>
+
+      <!-- Keypad -->
+      <div class="keypad-panel">
+        <div class="key-grid">
+          
+          <!-- ROW 1 -->
+          <div class="key-wrapper">
+            <div class="legend-f">AMORT</div>
+            <button class="calc-btn" onclick="pressKey('n')">n</button>
+            <div class="legend-g">12×</div>
+          </div>
+
+          <div class="key-wrapper">
+            <div class="legend-f">INT</div>
+            <button class="calc-btn" onclick="pressKey('i')">i</button>
+            <div class="legend-g">12÷</div>
+          </div>
+
+          <div class="key-wrapper">
+            <div class="legend-f">NPV</div>
+            <button class="calc-btn" onclick="pressKey('PV')">PV</button>
+            <div class="legend-g">CF0</div>
+          </div>
+
+          <div class="key-wrapper">
+            <div class="legend-f">RND</div>
+            <button class="calc-btn" onclick="pressKey('PMT')">PMT</button>
+            <div class="legend-g">CFj</div>
+          </div>
+
+          <div class="key-wrapper">
+            <div class="legend-f">IRR</div>
+            <button class="calc-btn" onclick="pressKey('FV')">FV</button>
+            <div class="legend-g">Nj</div>
+          </div>
+
+          <div class="key-wrapper">
+            <div class="legend-f">PRICE</div>
+            <button class="calc-btn" onclick="pressKey('CHS')">CHS</button>
+            <div class="legend-g">DATE</div>
+          </div>
+
+          <div class="key-wrapper">
+            <div class="legend-f">YTM</div>
+            <button class="calc-btn" onclick="pressKey('7')">7</button>
+            <div class="legend-g">BEG</div>
+          </div>
+
+          <div class="key-wrapper">
+            <div class="legend-f">SL</div>
+            <button class="calc-btn" onclick="pressKey('8')">8</button>
+            <div class="legend-g">END</div>
+          </div>
+
+          <div class="key-wrapper">
+            <div class="legend-f">SOYD</div>
+            <button class="calc-btn" onclick="pressKey('9')">9</button>
+            <div class="legend-g">MEM</div>
+          </div>
+
+          <div class="key-wrapper">
+            <div class="legend-f">DB</div>
+            <button class="calc-btn" onclick="pressKey('/')">÷</button>
+            <div class="legend-g"></div>
+          </div>
+
+          <!-- ROW 2 -->
+          <div class="key-wrapper">
+            <div class="legend-f">P/R</div>
+            <button class="calc-btn" onclick="pressKey('y^x')">y^x</button>
+            <div class="legend-g">√x</div>
+          </div>
+
+          <div class="key-wrapper">
+            <div class="legend-f">1/x</div>
+            <button class="calc-btn" onclick="pressKey('1/x')">1/x</button>
+            <div class="legend-g">e^x</div>
+          </div>
+
+          <div class="key-wrapper">
+            <div class="legend-f">%T</div>
+            <button class="calc-btn" onclick="pressKey('%T')">%T</button>
+            <div class="legend-g">LN</div>
+          </div>
+
+          <div class="key-wrapper">
+            <div class="legend-f">Δ%</div>
+            <button class="calc-btn" onclick="pressKey('Δ%')">Δ%</button>
+            <div class="legend-g">FRAC</div>
+          </div>
+
+          <div class="key-wrapper">
+            <div class="legend-f">%</div>
+            <button class="calc-btn" onclick="pressKey('%')">%</button>
+            <div class="legend-g">INTG</div>
+          </div>
+
+          <div class="key-wrapper">
+            <div class="legend-f">EEX</div>
+            <button class="calc-btn" onclick="pressKey('EEX')">EEX</button>
+            <div class="legend-g">ΔDYS</div>
+          </div>
+
+          <div class="key-wrapper">
+            <div class="legend-f">4</div>
+            <button class="calc-btn" onclick="pressKey('4')">4</button>
+            <div class="legend-g">D.MY</div>
+          </div>
+
+          <div class="key-wrapper">
+            <div class="legend-f">5</div>
+            <button class="calc-btn" onclick="pressKey('5')">5</button>
+            <div class="legend-g">M.DY</div>
+          </div>
+
+          <div class="key-wrapper">
+            <div class="legend-f">6</div>
+            <button class="calc-btn" onclick="pressKey('6')">6</button>
+            <div class="legend-g">x̄w</div>
+          </div>
+
+          <div class="key-wrapper">
+            <div class="legend-f"></div>
+            <button class="calc-btn" onclick="pressKey('*')">×</button>
+            <div class="legend-g"></div>
+          </div>
+
+          <!-- ROW 3 -->
+          <div class="key-wrapper">
+            <div class="legend-f">R/S</div>
+            <button class="calc-btn" onclick="pressKey('RS')">R/S</button>
+            <div class="legend-g">PSE</div>
+          </div>
+
+          <div class="key-wrapper">
+            <div class="legend-f">SST</div>
+            <button class="calc-btn" onclick="pressKey('SST')">SST</button>
+            <div class="legend-g">BST</div>
+          </div>
+
+          <div class="key-wrapper">
+            <div class="legend-f">R↓</div>
+            <button class="calc-btn" onclick="pressKey('Rdown')">R↓</button>
+            <div class="legend-g">GTO</div>
+          </div>
+
+          <div class="key-wrapper">
+            <div class="legend-f">x≷y</div>
+            <button class="calc-btn" onclick="pressKey('swap')">x≷y</button>
+            <div class="legend-g">x≤y</div>
+          </div>
+
+          <div class="key-wrapper">
+            <div class="legend-f">CLX</div>
+            <button class="calc-btn" onclick="pressKey('CLX')">CLX</button>
+            <div class="legend-g">x=0</div>
+          </div>
+
+          <div class="key-wrapper" style="grid-column: span 2; grid-row: span 2;">
+            <div class="legend-f">LSTx</div>
+            <button class="calc-btn enter-btn" onclick="pressKey('ENTER')">ENTER</button>
+            <div class="legend-g"></div>
+          </div>
+
+          <div class="key-wrapper">
+            <div class="legend-f">1</div>
+            <button class="calc-btn" onclick="pressKey('1')">1</button>
+            <div class="legend-g">x̄</div>
+          </div>
+
+          <div class="key-wrapper">
+            <div class="legend-f">2</div>
+            <button class="calc-btn" onclick="pressKey('2')">2</button>
+            <div class="legend-g">s</div>
+          </div>
+
+          <div class="key-wrapper">
+            <div class="legend-f">3</div>
+            <button class="calc-btn" onclick="pressKey('3')">3</button>
+            <div class="legend-g">ŷ,r</div>
+          </div>
+
+          <div class="key-wrapper">
+            <div class="legend-f"></div>
+            <button class="calc-btn" onclick="pressKey('-')">-</button>
+            <div class="legend-g"></div>
+          </div>
+
+          <!-- ROW 4 -->
+          <div class="key-wrapper">
+            <div class="legend-f">ON</div>
+            <button class="calc-btn" onclick="pressKey('ON')">ON</button>
+            <div class="legend-g">OFF</div>
+          </div>
+
+          <div class="key-wrapper">
+            <div class="legend-f">f</div>
+            <button class="calc-btn gold-btn" onclick="pressKey('f')">f</button>
+            <div class="legend-g"></div>
+          </div>
+
+          <div class="key-wrapper">
+            <div class="legend-f">g</div>
+            <button class="calc-btn blue-btn" onclick="pressKey('g')">g</button>
+            <div class="legend-g"></div>
+          </div>
+
+          <div class="key-wrapper">
+            <div class="legend-f">STO</div>
+            <button class="calc-btn" onclick="pressKey('STO')">STO</button>
+            <div class="legend-g">REG</div>
+          </div>
+
+          <div class="key-wrapper">
+            <div class="legend-f">RCL</div>
+            <button class="calc-btn" onclick="pressKey('RCL')">RCL</button>
+            <div class="legend-g">PREFIX</div>
+          </div>
+
+          <div class="key-wrapper">
+            <div class="legend-f">0</div>
+            <button class="calc-btn" onclick="pressKey('0')">0</button>
+            <div class="legend-g">x!</div>
+          </div>
+
+          <div class="key-wrapper">
+            <div class="legend-f">.</div>
+            <button class="calc-btn" onclick="pressKey('.')">.</button>
+            <div class="legend-g">SHOW</div>
+          </div>
+
+          <div class="key-wrapper">
+            <div class="legend-f">Σ+</div>
+            <button class="calc-btn" onclick="pressKey('SUM+')">Σ+</button>
+            <div class="legend-g">Σ-</div>
+          </div>
+
+          <div class="key-wrapper">
+            <div class="legend-f"></div>
+            <button class="calc-btn" onclick="pressKey('+')">+</button>
+            <div class="legend-g"></div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- Stack Monitor -->
+    <div class="stack-footer">
+      <div class="stack-item">T: <span id="stack-t" class="val">0.00</span></div>
+      <div class="stack-item">Z: <span id="stack-z" class="val">0.00</span></div>
+      <div class="stack-item">Y: <span id="stack-y" class="val">0.00</span></div>
+      <div class="stack-item">X: <span id="stack-x" class="val">0.00</span></div>
+      <div class="stack-item" style="margin-left: auto;">Mode: <span id="mode-text" class="val">RPN</span></div>
+    </div>
+  </div>
+
+  <script>
+    // HP 12C RPN Stack & Financial Engine
+    let stack = [0, 0, 0, 0]; // [X, Y, Z, T]
+    let inputBuffer = '';
+    let isNewInput = true;
+    let mode = 'RPN'; // RPN or ALG
+    let flagF = false;
+    let flagG = false;
+    let tvm = { n: 0, i: 0, pv: 0, pmt: 0, fv: 0 };
+
+    function updateDisplay() {
+      const lcd = document.getElementById('lcd');
+      if (inputBuffer !== '') {
+        lcd.innerText = inputBuffer;
+      } else {
+        lcd.innerText = stack[0].toFixed(2);
+      }
+
+      document.getElementById('stack-x').innerText = stack[0].toFixed(4);
+      document.getElementById('stack-y').innerText = stack[1].toFixed(4);
+      document.getElementById('stack-z').innerText = stack[2].toFixed(4);
+      document.getElementById('stack-t').innerText = stack[3].toFixed(4);
+
+      document.getElementById('flag-f').className = flagF ? 'active' : '';
+      document.getElementById('flag-g').className = flagG ? 'active' : '';
+      document.getElementById('flag-rpn').className = mode === 'RPN' ? 'active' : '';
+      document.getElementById('flag-alg').className = mode === 'ALG' ? 'active' : '';
+      document.getElementById('mode-text').innerText = mode;
+    }
+
+    function pushStack(val) {
+      stack[3] = stack[2];
+      stack[2] = stack[1];
+      stack[1] = stack[0];
+      stack[0] = val;
+    }
+
+    function popStack() {
+      const x = stack[0];
+      stack[0] = stack[1];
+      stack[1] = stack[2];
+      stack[2] = stack[3];
+      return x;
+    }
+
+    function commitInput() {
+      if (inputBuffer !== '') {
+        pushStack(parseFloat(inputBuffer));
+        inputBuffer = '';
+        isNewInput = true;
+      }
+    }
+
+    let pendingAction = null; // 'STO' or 'RCL'
+    let registers = new Array(10).fill(0);
+
+    function pressKey(key) {
+      if (key === 'f') {
+        flagF = !flagF;
+        flagG = false;
+        updateDisplay();
+        return;
+      }
+      if (key === 'g') {
+        flagG = !flagG;
+        flagF = false;
+        updateDisplay();
+        return;
+      }
+
+      if (flagG && key === '1') {
+        mode = 'RPN';
+        flagG = false;
+        updateDisplay();
+        return;
+      }
+      if (flagG && key === '2') {
+        mode = 'ALG';
+        flagG = false;
+        updateDisplay();
+        return;
+      }
+
+      // Handle STO & RCL pending digit selection
+      if (pendingAction === 'STO' && /^[0-9]$/.test(key)) {
+        commitInput();
+        const regIdx = parseInt(key, 10);
+        registers[regIdx] = stack[0];
+        pendingAction = null;
+        updateDisplay();
+        return;
+      }
+      if (pendingAction === 'RCL' && /^[0-9]$/.test(key)) {
+        const regIdx = parseInt(key, 10);
+        pushStack(registers[regIdx]);
+        pendingAction = null;
+        inputBuffer = '';
+        isNewInput = true;
+        updateDisplay();
+        return;
+      }
+
+      if (key === 'STO') {
+        pendingAction = 'STO';
+        flagF = false;
+        flagG = false;
+        updateDisplay();
+        return;
+      }
+      if (key === 'RCL') {
+        pendingAction = 'RCL';
+        flagF = false;
+        flagG = false;
+        updateDisplay();
+        return;
+      }
+
+      // Digits, Dot, EEX
+      if (key === 'EEX') {
+        if (inputBuffer === '') inputBuffer = '1e';
+        else if (!inputBuffer.includes('e')) inputBuffer += 'e';
+        isNewInput = false;
+        updateDisplay();
+        return;
+      }
+
+      if (/^[0-9\.]$/.test(key)) {
+        if (isNewInput) {
+          inputBuffer = key === '.' ? '0.' : key;
+          isNewInput = false;
+        } else {
+          if (key === '.' && inputBuffer.includes('.')) return;
+          inputBuffer += key;
+        }
+        flagF = false;
+        flagG = false;
+        updateDisplay();
+        return;
+      }
+
+      if (key === 'y^x') {
+        if (flagG) { // g √x
+          commitInput();
+          const x = popStack();
+          stack[0] = x >= 0 ? Math.sqrt(x) : 0;
+        } else { // y^x
+          commitInput();
+          const x = popStack();
+          const y = popStack();
+          stack[0] = Math.pow(y, x);
+        }
+        isNewInput = true;
+        flagF = false;
+        flagG = false;
+        updateDisplay();
+        return;
+      }
+
+      if (key === '1/x') {
+        commitInput();
+        const x = popStack();
+        stack[0] = x !== 0 ? 1 / x : 0;
+        isNewInput = true;
+        flagF = false;
+        flagG = false;
+        updateDisplay();
+        return;
+      }
+
+      if (key === '%') {
+        commitInput();
+        const x = popStack();
+        const y = stack[0];
+        stack[0] = (y * x) / 100;
+        isNewInput = true;
+        flagF = false;
+        flagG = false;
+        updateDisplay();
+        return;
+      }
+
+      if (key === 'Δ%') {
+        commitInput();
+        const x = popStack();
+        const y = popStack();
+        stack[0] = y !== 0 ? ((x - y) / y) * 100 : 0;
+        isNewInput = true;
+        flagF = false;
+        flagG = false;
+        updateDisplay();
+        return;
+      }
+
+      if (key === '%T') {
+        commitInput();
+        const x = popStack();
+        const y = popStack();
+        stack[0] = y !== 0 ? (x / y) * 100 : 0;
+        isNewInput = true;
+        flagF = false;
+        flagG = false;
+        updateDisplay();
+        return;
+      }
+
+      if (key === 'ENTER') {
+        if (inputBuffer !== '') {
+          stack[3] = stack[2];
+          stack[2] = stack[1];
+          stack[1] = parseFloat(inputBuffer);
+          stack[0] = parseFloat(inputBuffer);
+          inputBuffer = '';
+          isNewInput = true;
+        } else {
+          pushStack(stack[0]);
+        }
+        flagF = false;
+        flagG = false;
+        updateDisplay();
+        return;
+      }
+
+      if (['+', '-', '*', '/'].includes(key)) {
+        commitInput();
+        const y = popStack();
+        const x = popStack();
+        let res = 0;
+        if (key === '+') res = x + y;
+        if (key === '-') res = x - y;
+        if (key === '*') res = x * y;
+        if (key === '/') res = y !== 0 ? x / y : 0;
+        stack[0] = res;
+        isNewInput = true;
+        flagF = false;
+        flagG = false;
+        updateDisplay();
+        return;
+      }
+
+      if (key === 'CHS') {
+        if (inputBuffer !== '') {
+          if (inputBuffer.startsWith('-')) inputBuffer = inputBuffer.slice(1);
+          else inputBuffer = '-' + inputBuffer;
+        } else {
+          stack[0] = -stack[0];
+        }
+        updateDisplay();
+        return;
+      }
+
+      if (key === 'CLX') {
+        inputBuffer = '';
+        stack[0] = 0;
+        isNewInput = true;
+        flagF = false;
+        flagG = false;
+        updateDisplay();
+        return;
+      }
+
+      if (key === 'Rdown') {
+        commitInput();
+        const temp = stack[0];
+        stack[0] = stack[1];
+        stack[1] = stack[2];
+        stack[2] = stack[3];
+        stack[3] = temp;
+        updateDisplay();
+        return;
+      }
+
+      if (key === 'swap') {
+        commitInput();
+        const temp = stack[0];
+        stack[0] = stack[1];
+        stack[1] = temp;
+        updateDisplay();
+        return;
+      }
+
+      if (['n', 'i', 'PV', 'PMT', 'FV'].includes(key)) {
+        if (inputBuffer !== '') {
+          tvm[key.toLowerCase()] = parseFloat(inputBuffer);
+          stack[0] = parseFloat(inputBuffer);
+          inputBuffer = '';
+          isNewInput = true;
+        }
+        updateDisplay();
+        return;
+      }
+
+      flagF = false;
+      flagG = false;
+      updateDisplay();
+    }
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key >= '0' && e.key <= '9') pressKey(e.key);
+      else if (e.key === '.' || e.key === ',') pressKey('.');
+      else if (e.key === 'Enter') pressKey('ENTER');
+      else if (e.key === '+') pressKey('+');
+      else if (e.key === '-') pressKey('-');
+      else if (e.key === '*') pressKey('*');
+      else if (e.key === '/') pressKey('/');
+      else if (e.key === 'Backspace' || e.key === 'Escape') pressKey('CLX');
+      else if (e.key.toLowerCase() === 'f') pressKey('f');
+      else if (e.key.toLowerCase() === 'g') pressKey('g');
+    });
+
+    updateDisplay();
+  </script>
+</body>
+</html>

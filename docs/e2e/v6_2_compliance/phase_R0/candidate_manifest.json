@@ -34,12 +34,12 @@
       "exit_code": 0
     }
   ],
-  "manifest_sha256": "e8cc06b35b1133fea23dcb9cbf871c95328a899e32b13a32a22321c2a8a43fd4",
+  "manifest_sha256": "d4a2776b1e43e7c4cd5a82ec3996ed51757949121186fc961253c1d4ac7f0926",
   "input_hashes": {
     "README.md": "231d38f5e6b992bd6c6177e2badd2de8e41e705a13c87d6dfc5c346aff7cf688",
-    "CHANGELOG.md": "fd97a16b1fcb02d5fc95e6531a7a56723efbbace80e9fd704557705923681f68",
+    "CHANGELOG.md": "2e69640ee910a369ecc5cc669b3cdc0c2ae3f78b1991d2ae7b135704e5833b6e",
     ".github/workflows/ci.yml": "463c8ac144651b84ee25d74577c464c5cf0ef467fa875bad57b351d89dd2ab53",
-    "docs/compliance_backlog_V6-1.md": "72ef3975e5dd557f02f6cbad835ec689c94386a5491fe0f14f9cb653653e1b57",
+    "docs/compliance_backlog_V6-1.md": "b7f5312a2c69d4c832ac226bb3b4ae2c52cb65e52d35c2b9c3d6c3220db36a1e",
     "docs/e2e/v6_2_compliance/release_identity.md": "fbd0f56d9239886eb660c0aeac62af08c6b50391e4cf4a124b8870d59a3e50d1",
     "docs/e2e/v6_1_compliance/manifest.json": "3d6e6216d8ad510ec583def4a3658821eeead634755f3e597889807a105d4808",
     "docs/e2e/v6_2_compliance/phase_R0/acceptance_report.md": "92370200562db531e18e7df0c1cee4338b47ba9d7d18b91c82987c4e9ae04272",
@@ -47,7 +47,7 @@
     "docs/e2e/v6_2_compliance/phase_R0/test_summary.json": "f7f6c7ba9d9bb997eee13b25d27ce624bf4e47c699a14c0ff2c7447e4e57c1db",
     "docs/e2e/v6_2_compliance/phase_R0/known_limitations.md": "6077cfea65275b046651e5dfc6eff09bd3c46816cb75cf84393a804588930d04",
     "scripts/check_release_truth.py": "34002c692b4af0b52f9bdb64e723cbb610c38d9846524e93a708988e3c320787",
-    "backend/tests/test_release_truth.py": "bb2e9dd34a157a297734d5f6f5d67b4c35bcabcc508b56a51850cc1c09df5792"
+    "backend/tests/test_release_truth.py": "b004b9b35f9fd8b6aed2e7373223ab130e897d9036c08d6ac45c5b073744a118"
   },
   "environment": {
     "os": "windows-local-and-github-actions-matrix",

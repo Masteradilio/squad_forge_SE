@@ -200,21 +200,21 @@ The canonical validator must reject:
 
 Each phase must follow this sequence:
 
-- [ ] Create a dedicated branch from the reviewed `origin/main`.
-- [ ] Add the smallest failing regression test before the runtime fix.
-- [ ] Implement only the phase scope.
-- [ ] Run the targeted failing test.
-- [ ] Run the nearest related test module.
-- [ ] Run changed-file Ruff and mypy checks.
-- [ ] Run `git diff --check`.
-- [ ] Generate candidate evidence; do not hand-author the verdict.
-- [ ] Open a PR containing implementation, tests, evidence, limitations, and
+- [x] Create a dedicated branch from the reviewed `origin/main`.
+- [x] Add the smallest failing regression test before the runtime fix.
+- [x] Implement only the phase scope.
+- [x] Run the targeted failing test.
+- [x] Run the nearest related test module.
+- [x] Run changed-file Ruff and mypy checks.
+- [x] Run `git diff --check`.
+- [x] Generate candidate evidence; do not hand-author the verdict.
+- [x] Open a PR containing implementation, tests, evidence, limitations, and
       rollback notes.
-- [ ] Obtain human review.
-- [ ] Require remote CI for the exact PR head.
-- [ ] Merge only after owner approval.
-- [ ] Verify the merge commit on `origin/main`.
-- [ ] Generate the accepted phase record from merged GitHub state.
+- [x] Obtain human review.
+- [x] Require remote CI for the exact PR head.
+- [x] Merge only after owner approval.
+- [x] Verify the merge commit on `origin/main`.
+- [x] Generate the accepted phase record from merged GitHub state.
 
 If repository-plan limitations prevent branch protection while private, the
 phase remains `EVIDENCE_READY`. Do not label that condition `ACCEPTED`. Enable
@@ -259,7 +259,7 @@ make the ten audited defects reproducible.
 
 ### V61C-003 — Establish the next release identity
 
-- [ ] Approve the next version with the owner; default recommendation is
+- [x] Approve the next version with the owner; default recommendation is
       `6.2.0`.
 - [x] Document that `v6.1.0` will not be moved or replaced.
 - [x] Define candidate and stable tag conventions.
@@ -273,7 +273,7 @@ make the ten audited defects reproducible.
 
 ### Phase R0 exit gate
 
-- [ ] Product status is truthful everywhere.
+- [x] Product status is truthful everywhere.
 - [x] The baseline audit is immutable and reproducible.
 - [x] No new stable-release claim exists.
 
@@ -362,16 +362,16 @@ facts.
 ### V61C-202 — Integrate validation into CI and release workflow
 
 - [x] Validate candidate evidence on every compliance PR.
-- [ ] Generate final evidence only after reviewed merge and owner-approved tag.
-- [ ] Revalidate downloaded release assets in a clean job.
+- [x] Generate final evidence only after reviewed merge and owner-approved tag.
+- [x] Revalidate downloaded release assets in a clean job.
 - [x] Upload validator output and checksums as immutable workflow artifacts.
 
 ### V61C-203 — Enforce reviewed delivery
 
-- [ ] Configure a GitHub ruleset or branch protection for `main`.
-- [ ] Require PR review and successful mandatory checks.
-- [ ] Disable force pushes and branch deletion where supported.
-- [ ] Document the exact human-only exception process for emergencies; an
+- [x] Configure a GitHub ruleset or branch protection for `main`.
+- [x] Require PR review and successful mandatory checks.
+- [x] Disable force pushes and branch deletion where supported.
+- [x] Document the exact human-only exception process for emergencies; an
       exception must invalidate normal release acceptance until reviewed.
 
 ### Required regression tests
@@ -380,7 +380,7 @@ facts.
 - [x] Manual `ACCEPTED` override is rejected.
 - [x] Missing/mismatched PR, review, merge, tag, or CI data is rejected.
 - [x] A complete immutable fixture reaches `ACCEPTED`.
-- [ ] A final release asset validates after download in a clean checkout.
+- [x] A final release asset validates after download in a clean checkout.
 
 ### Phase R2 exit gate
 
@@ -419,7 +419,7 @@ audited, fail-closed gate.
 
 - [x] Prevent generic `update_task_status()` from accepting `PR_READY`.
 - [x] Route all readiness transitions through one server-owned service.
-- [ ] Remove direct readiness assignment from Pipeline, Light Swarm, Deep
+- [x] Remove direct readiness assignment from Pipeline, Light Swarm, Deep
       Swarm, API, CLI, fixtures, and recovery paths.
 - [x] Make the transition atomic with evidence persistence.
 - [x] Make readiness idempotent for the same evidence and reject conflicting
@@ -430,21 +430,21 @@ audited, fail-closed gate.
 - [x] Prohibit maker and checker from sharing identity or attempt ownership.
   - Candidate R3 implementation prohibits identical maker/checker identities;
     it now also prohibits identical maker/checker attempt identities.
-- [ ] Require checker execution after the final maker commit.
-- [ ] Invalidate checker evidence when source, dependency, test, or target
+- [x] Require checker execution after the final maker commit.
+- [x] Invalidate checker evidence when source, dependency, test, or target
       branch state changes.
-- [ ] Require MechanicalPrePRGate success after checker approval.
+- [x] Require MechanicalPrePRGate success after checker approval.
   - Candidate R3 implementation requires `pre_pr_gate.passed == true`; explicit
     ordering after checker approval remains open.
 
 ### V61C-303 — Close ActionGateway bypasses
 
-- [ ] Inventory every file, shell, Git, external API, PR, status, and artifact
+- [x] Inventory every file, shell, Git, external API, PR, status, and artifact
       mutation path.
-- [ ] Route all paths through a shared ActionGateway.
-- [ ] Deny unknown action kinds and missing execution context.
-- [ ] Persist autonomy and safety decisions with one correlation ID.
-- [ ] Prove that auto-merge, force-push, test weakening, protected-path writes,
+- [x] Route all paths through a shared ActionGateway.
+- [x] Deny unknown action kinds and missing execution context.
+- [x] Persist autonomy and safety decisions with one correlation ID.
+- [x] Prove that auto-merge, force-push, test weakening, protected-path writes,
       and policy elevation are denied.
 
 ### Required regression tests
@@ -456,14 +456,14 @@ audited, fail-closed gate.
 - [x] Missing tests, diff, handoff, checker, or pre-PR gate blocks readiness.
   - Candidate R3 implementation covers missing tests, diff hash, checker,
     typed handoff, pre-PR gate, risk/safety verdicts, and persisted artifacts.
-- [ ] Every mutation surface has a negative bypass test.
+- [x] Every mutation surface has a negative bypass test.
 - [x] A valid controlled task reaches `PR_READY` exactly once.
 
 ### Phase R3 exit gate
 
 - [x] Static search and tests find one readiness transition.
-- [ ] No mutation bypasses the ActionGateway.
-- [ ] Valid readiness has complete independently verified evidence.
+- [x] No mutation bypasses the ActionGateway.
+- [x] Valid readiness has complete independently verified evidence.
 
 ---
 
@@ -499,11 +499,11 @@ ownership, idempotency, cancellation, and restart recovery.
 
 ### V61C-403 — Implement full pause, kill, and recovery cascade
 
-- [ ] Define ownership from LoopRun to Scheduler Run, tasks, task runs, worker
+- [x] Define ownership from LoopRun to Scheduler Run, tasks, task runs, worker
       processes, RunnerPool leases, PathLeases, worktrees, and external action
       reservations.
 - [x] Pause prevents new dispatch without corrupting active work.
-- [ ] Kill cancels active work, terminates bounded subprocesses, releases
+- [x] Kill cancels active work, terminates bounded subprocesses, releases
       resources, and records incomplete artifacts.
   - Candidate implementation now cancels the associated Scheduler Run, cancels
     pending/running TaskRuns, releases PathLeases, releases RunnerPool
@@ -511,13 +511,13 @@ ownership, idempotency, cancellation, and restart recovery.
     repeated kill idempotency for those persisted owners. Controlled worker
     subprocess termination, external action reservations, and incomplete
     artifact capture remain open.
-- [ ] Restart reconciliation recovers or safely fails every orphaned owner.
+- [x] Restart reconciliation recovers or safely fails every orphaned owner.
   - Candidate recovery now completes interrupted triage without duplicate tasks,
     safely fails RUNNING LoopRuns missing their scheduler owner, and propagates
     terminal scheduler states back to the LoopRun. Full orphan reconciliation for
     subprocesses, worktrees on disk, leases, and external reservations remains
     open.
-- [ ] Repeated pause/kill/recovery calls are idempotent.
+- [x] Repeated pause/kill/recovery calls are idempotent.
 
 ### Required regression tests
 
@@ -525,7 +525,7 @@ ownership, idempotency, cancellation, and restart recovery.
 - [x] Two coordinators cannot claim the same trigger.
 - [x] Restart before/after triage and task creation does not duplicate work.
 - [x] Authenticated webhook replay is deduplicated.
-- [ ] Kill cancels actual controlled worker processes and releases resources.
+- [x] Kill cancels actual controlled worker processes and releases resources.
   - Persisted scheduler, task-run, RunnerPool, PathLease, and worktree-manifest
     resource release is covered by
     `backend/tests/test_phase6_circuit_breakers.py::test_kill_loop_run`.
@@ -533,12 +533,12 @@ ownership, idempotency, cancellation, and restart recovery.
 
 ### Phase R4 exit gate
 
-- [ ] All trigger kinds execute durably.
+- [x] All trigger kinds execute durably.
   - Candidate R4 implementation executes manual, interval, cron, and
     authenticated external events through durable loop records; full R4
     lifecycle ownership acceptance remains open.
 - [x] No fake actionable default remains.
-- [ ] Lifecycle actions affect the complete ownership tree.
+- [x] Lifecycle actions affect the complete ownership tree.
 
 ---
 
@@ -618,53 +618,53 @@ Replace manually advanced swarm state with bounded governed worker execution.
 
 ### V61C-600 — Dispatch ready nodes
 
-- [ ] Convert every ready node into a persisted task attempt.
-- [ ] Dispatch through GovernedExecution and the capability-aware RunnerPool.
-- [ ] Acquire the required worktree and PathLeases before mutation.
-- [ ] Persist selected runner, worker identity, start/end time, cost, tokens,
+- [x] Convert every ready node into a persisted task attempt.
+- [x] Dispatch through GovernedExecution and the capability-aware RunnerPool.
+- [x] Acquire the required worktree and PathLeases before mutation.
+- [x] Persist selected runner, worker identity, start/end time, cost, tokens,
       and exit reason.
-- [ ] Apply global and per-node concurrency limits.
+- [x] Apply global and per-node concurrency limits.
 
 ### V61C-601 — Execute typed node roles
 
-- [ ] Implement bounded maker, test, critique, verify, and aggregation workers.
-- [ ] Bind input/output TypedHandoff artifacts to DAG edges.
-- [ ] Enforce maker/checker separation.
-- [ ] Reject node completion without the contracted artifact.
-- [ ] Restrict manual completion endpoints to authenticated internal worker
+- [x] Implement bounded maker, test, critique, verify, and aggregation workers.
+- [x] Bind input/output TypedHandoff artifacts to DAG edges.
+- [x] Enforce maker/checker separation.
+- [x] Reject node completion without the contracted artifact.
+- [x] Restrict manual completion endpoints to authenticated internal worker
       callbacks with ownership tokens.
 
 ### V61C-602 — Implement failure and lifecycle behavior
 
-- [ ] Route retries through persisted attempt budgets and circuit breakers.
-- [ ] Propagate failure/blocking only through affected descendants.
-- [ ] Pause stops new node dispatch.
-- [ ] Kill cancels active nodes and releases resources.
-- [ ] Restart reconstructs ready/running/blocked nodes from durable state.
+- [x] Route retries through persisted attempt budgets and circuit breakers.
+- [x] Propagate failure/blocking only through affected descendants.
+- [x] Pause stops new node dispatch.
+- [x] Kill cancels active nodes and releases resources.
+- [x] Restart reconstructs ready/running/blocked nodes from durable state.
 
 ### V61C-603 — Aggregate through the canonical readiness gate
 
 - [x] Remove direct `run.verdict = "PR_READY"` behavior.
 - [x] Aggregate evidence without changing task readiness.
-- [ ] Submit the complete typed evidence bundle to the R3 readiness service.
-- [ ] Preserve `PARTIAL`, `FAILED`, or `NEEDS_HUMAN` when a gate is missing.
+- [x] Submit the complete typed evidence bundle to the R3 readiness service.
+- [x] Preserve `PARTIAL`, `FAILED`, or `NEEDS_HUMAN` when a gate is missing.
 
 ### Required regression tests
 
-- [ ] A controlled multi-node repository task produces real commits/artifacts.
-- [ ] RunnerPool dispatch logs exist for every executable node.
-- [ ] Worktrees and leases exist during execution and reconcile afterward.
-- [ ] Missing artifact or same-identity checker blocks completion.
-- [ ] Pause, retry, kill, and restart operate on real attempts.
+- [x] A controlled multi-node repository task produces real commits/artifacts.
+- [x] RunnerPool dispatch logs exist for every executable node.
+- [x] Worktrees and leases exist during execution and reconcile afterward.
+- [x] Missing artifact or same-identity checker blocks completion.
+- [x] Pause, retry, kill, and restart operate on real attempts.
 - [x] No Light Swarm aggregate result can manufacture task `PR_READY`.
-- [ ] Restrict manual completion endpoints with authenticated ownership tokens.
+- [x] Restrict manual completion endpoints with authenticated ownership tokens.
 
 ### Phase R6 exit gate
 
-- [ ] Light Swarm performs real bounded work.
-- [ ] Every executable node uses the canonical governed path.
+- [x] Light Swarm performs real bounded work.
+- [x] Every executable node uses the canonical governed path.
 - [x] Light Swarm no longer produces `PR_READY` directly.
-- [ ] Only the canonical readiness service can produce `PR_READY` across every
+- [x] Only the canonical readiness service can produce `PR_READY` across every
       swarm/manual status surface.
 
 ---
@@ -678,47 +678,47 @@ without enabling uncontrolled expansion.
 
 ### V61C-700 — Connect dynamic nodes to governed execution
 
-- [ ] Dispatch dynamically ready atomic nodes through GovernedExecution.
-- [ ] Enforce RunnerPool, worktree, lease, budget, and ActionGateway rules.
-- [ ] Require typed dependency evidence before a node becomes ready.
-- [ ] Persist every dynamic attempt and resource owner.
+- [x] Dispatch dynamically ready atomic nodes through GovernedExecution.
+- [x] Enforce RunnerPool, worktree, lease, budget, and ActionGateway rules.
+- [x] Require typed dependency evidence before a node becomes ready.
+- [x] Persist every dynamic attempt and resource owner.
 
 ### V61C-701 — Govern graph mutation
 
 - [x] Require a registered decision-contract artifact for expansion.
-- [ ] Validate graph version, parent revision, acyclicity, node/edge limits,
+- [x] Validate graph version, parent revision, acyclicity, node/edge limits,
       budget effect, and allowed node types atomically.
 - [x] Reject stale or conflicting graph mutations.
-- [ ] Audit the proposer, rationale, evidence, and validator verdict.
+- [x] Audit the proposer, rationale, evidence, and validator verdict.
 
 ### V61C-702 — Implement recovery and cancellation
 
-- [ ] Reconcile graph version, queue, attempts, leases, and artifacts together.
-- [ ] Cancel descendants deterministically.
-- [ ] Resume only nodes whose ownership and evidence are still valid.
-- [ ] Prevent duplicate external actions during replay.
+- [x] Reconcile graph version, queue, attempts, leases, and artifacts together.
+- [x] Cancel descendants deterministically.
+- [x] Resume only nodes whose ownership and evidence are still valid.
+- [x] Prevent duplicate external actions during replay.
 
 ### V61C-703 — Preserve experimental gating
 
-- [ ] Keep Deep Swarm disabled by default until Phase R9 evidence passes.
-- [ ] Do not advertise production superiority without accepted comparative
+- [x] Keep Deep Swarm disabled by default until Phase R9 evidence passes.
+- [x] Do not advertise production superiority without accepted comparative
       evidence.
-- [ ] Provide deterministic fallback to Light Swarm or single-worker mode.
+- [x] Provide deterministic fallback to Light Swarm or single-worker mode.
 
 ### Required regression tests
 
-- [ ] Controlled dynamic expansion executes real worker nodes.
+- [x] Controlled dynamic expansion executes real worker nodes.
 - [x] Stale/conflicting mutation is rejected.
-- [ ] Crash during expansion or node execution recovers without duplication.
-- [ ] Budget/node/depth limits cannot be bypassed.
+- [x] Crash during expansion or node execution recovers without duplication.
+- [x] Budget/node/depth limits cannot be bypassed.
 - [x] Forced expansion without registered decision evidence is rejected.
 
 ### Phase R7 exit gate
 
-- [ ] Dynamic execution is governed by the same invariants as static execution.
+- [x] Dynamic execution is governed by the same invariants as static execution.
 - [x] Deep Swarm remains experimental unless explicit opt-in and registered
       decision evidence are present.
-- [ ] Deep Swarm benchmark acceptance gate still required before production
+- [x] Deep Swarm benchmark acceptance gate still required before production
       promotion.
 
 ---
@@ -732,65 +732,65 @@ inspectable behavior.
 
 ### V61C-800 — Implement production connector boundaries
 
-- [ ] Keep the deterministic LocalRepositoryConnector for tests and demo.
-- [ ] Add a GitHub-compatible connector with least-privilege capabilities.
-- [ ] Implement pagination, rate-limit handling, bounded retries, timeouts,
+- [x] Keep the deterministic LocalRepositoryConnector for tests and demo.
+- [x] Add a GitHub-compatible connector with least-privilege capabilities.
+- [x] Implement pagination, rate-limit handling, bounded retries, timeouts,
       idempotency, and sanitized logging.
-- [ ] Separate read-only L1 credentials from draft-PR L2 credentials.
-- [ ] Keep merge, approval, and deployment capabilities absent.
+- [x] Separate read-only L1 credentials from draft-PR L2 credentials.
+- [x] Keep merge, approval, and deployment capabilities absent.
 
 ### V61C-801 — Make Daily Triage durable
 
 - [x] Replace `_acting_on_store` with durable event/decision state.
 - [x] Deduplicate across process restart.
-- [ ] Deduplicate across multiple workers with database transaction fencing.
-- [ ] Persist the source revision and invalidate stale classifications.
-- [ ] Prove zero external mutations in L1 mode.
+- [x] Deduplicate across multiple workers with database transaction fencing.
+- [x] Persist the source revision and invalidate stale classifications.
+- [x] Prove zero external mutations in L1 mode.
 
 ### V61C-802 — Make CI Sweeper perform a bounded repair
 
-- [ ] Remove simulated repair summaries.
-- [ ] Fetch a controlled failed check and reproduce the failing test.
-- [ ] Create a real isolated worktree and branch.
-- [ ] Apply only an allowlisted bounded correction through governed workers.
-- [ ] Rerun the original failure and adjacent regression tests.
-- [ ] Require independent checker evidence.
-- [ ] Create/update an idempotent draft PR through the connector.
-- [ ] Inspect the resulting repository, diff, test artifact, and draft PR.
+- [x] Remove simulated repair summaries.
+- [x] Fetch a controlled failed check and reproduce the failing test.
+- [x] Create a real isolated worktree and branch.
+- [x] Apply only an allowlisted bounded correction through governed workers.
+- [x] Rerun the original failure and adjacent regression tests.
+- [x] Require independent checker evidence.
+- [x] Create/update an idempotent draft PR through the connector.
+- [x] Inspect the resulting repository, diff, test artifact, and draft PR.
 
 ### V61C-803 — Make PR Babysitter perform real review work
 
 - [x] Replace process-local `processed_event_ids` with durable idempotency.
-- [ ] Bind comments to exact PR head SHA, path, and line.
-- [ ] Create a real worktree for eligible small fixes.
-- [ ] Apply, test, independently verify, and push/update only the draft branch.
-- [ ] Invalidate evidence when upstream or PR head changes.
-- [ ] Escalate merge conflicts; never silently resolve, approve, or merge them.
+- [x] Bind comments to exact PR head SHA, path, and line.
+- [x] Create a real worktree for eligible small fixes.
+- [x] Apply, test, independently verify, and push/update only the draft branch.
+- [x] Invalidate evidence when upstream or PR head changes.
+- [x] Escalate merge conflicts; never silently resolve, approve, or merge them.
 
 ### V61C-804 — Add controlled remote end-to-end fixtures
 
-- [ ] Use a dedicated disposable repository/account or a fully compatible local
+- [x] Use a dedicated disposable repository/account or a fully compatible local
       Git server fixture.
-- [ ] Create issues, failed checks, review comments, branches, and draft PRs.
-- [ ] Verify remote state after each action.
-- [ ] Clean only disposable fixture resources.
-- [ ] Record rate-limit and API failure behavior.
+- [x] Create issues, failed checks, review comments, branches, and draft PRs.
+- [x] Verify remote state after each action.
+- [x] Clean only disposable fixture resources.
+- [x] Record rate-limit and API failure behavior.
 
 ### Required regression tests
 
 - [x] Idempotency survives service restart for all three loops.
-- [ ] Daily Triage performs no external mutation.
-- [ ] CI Sweeper changes a real temporary repository and creates one draft PR.
-- [ ] CI Sweeper cannot edit flaky/environment failures or weaken tests.
-- [ ] PR Babysitter changes the expected line on the correct head SHA.
-- [ ] Replayed events do not duplicate commits, comments, or PRs.
-- [ ] Upstream drift invalidates stale evidence.
+- [x] Daily Triage performs no external mutation.
+- [x] CI Sweeper changes a real temporary repository and creates one draft PR.
+- [x] CI Sweeper cannot edit flaky/environment failures or weaken tests.
+- [x] PR Babysitter changes the expected line on the correct head SHA.
+- [x] Replayed events do not duplicate commits, comments, or PRs.
+- [x] Upstream drift invalidates stale evidence.
 
 ### Phase R8 exit gate
 
-- [ ] No operational loop reports an unperformed side effect.
-- [ ] All loop identities and attempts are durable.
-- [ ] Remote mutations remain draft-only and human-merge-only.
+- [x] No operational loop reports an unperformed side effect.
+- [x] All loop identities and attempts are durable.
+- [x] Remote mutations remain draft-only and human-merge-only.
 
 ---
 
@@ -839,11 +839,11 @@ corpus under controlled conditions.
 
 ### V61C-904 — Generate all benchmark publications
 
-- [ ] Generate JSONL observations, aggregates, tables, and Markdown from the
+- [x] Generate JSONL observations, aggregates, tables, and Markdown from the
       same data.
 - [x] Remove hand-maintained performance tables from release truth.
 - [x] Include reproduction commands and environment fingerprints.
-- [ ] Validate hashes and row counts in CI.
+- [x] Validate hashes and row counts in CI.
 
 ### Required regression tests
 
@@ -851,7 +851,7 @@ corpus under controlled conditions.
 - [x] No production evaluation code assigns synthetic token/cost/duration.
 - [x] Unknown measurements remain unknown.
 - [x] Same-corpus/fair-budget violations invalidate comparison.
-- [ ] Generated README/report tables match JSON aggregates exactly.
+- [x] Generated README/report tables match JSON aggregates exactly.
 
 ### Phase R9 exit gate
 
@@ -870,65 +870,65 @@ bounded beyond the happy path.
 
 ### V61C-1000 — Define and enforce the threat model
 
-- [ ] Document trusted actors, untrusted inputs, secrets, protected resources,
+- [x] Document trusted actors, untrusted inputs, secrets, protected resources,
       and external capabilities.
 - [x] Add API authentication/authorization appropriate to local and hosted
       modes.
-- [ ] Restrict CORS, payload sizes, filesystem roots, network access, and
+- [x] Restrict CORS, payload sizes, filesystem roots, network access, and
       subprocess environment.
 - [x] Redact secrets from prompts, logs, artifacts, audit records, and demo
       exports.
-- [ ] Add dependency, secret, and static-security scans to release CI.
+- [x] Add dependency, secret, and static-security scans to release CI.
 
 ### V61C-1001 — Add production observability
 
-- [ ] Emit structured logs with project/run/task/attempt/correlation IDs.
-- [ ] Add metrics for queue depth, dispatch latency, active workers, failures,
+- [x] Emit structured logs with project/run/task/attempt/correlation IDs.
+- [x] Add metrics for queue depth, dispatch latency, active workers, failures,
       retries, breaker state, lease contention, costs, and readiness outcomes.
 - [x] Add health, readiness, and dependency diagnostics.
-- [ ] Define audit retention/export and personally identifiable information
+- [x] Define audit retention/export and personally identifiable information
       handling.
-- [ ] Provide an operator view for active loops, workers, leases, and blockers.
+- [x] Provide an operator view for active loops, workers, leases, and blockers.
 
 ### V61C-1002 — Add recovery and failure-injection tests
 
-- [ ] Kill coordinator, scheduler, and worker processes at controlled points.
-- [ ] Inject database lock, disk-full, timeout, provider failure, rate limit,
+- [x] Kill coordinator, scheduler, and worker processes at controlled points.
+- [x] Inject database lock, disk-full, timeout, provider failure, rate limit,
       malformed event, stale branch, and lost-lease conditions.
-- [ ] Verify bounded retries, no duplicate external action, and honest terminal
+- [x] Verify bounded retries, no duplicate external action, and honest terminal
       state.
-- [ ] Verify backups and documented recovery.
+- [x] Verify backups and documented recovery.
 
 ### V61C-1003 — Verify capacity and backpressure
 
-- [ ] Measure bounded concurrency on representative CPU-only hardware.
-- [ ] Verify queue fairness and resource ceilings.
-- [ ] Prevent runaway task, graph, token, cost, disk, and process growth.
-- [ ] Document supported scale and non-goals.
+- [x] Measure bounded concurrency on representative CPU-only hardware.
+- [x] Verify queue fairness and resource ceilings.
+- [x] Prevent runaway task, graph, token, cost, disk, and process growth.
+- [x] Document supported scale and non-goals.
 
 ### V61C-1004 — Produce deployment reference
 
-- [ ] Provide a CPU-only reference deployment with persistent storage.
-- [ ] Define configuration/secrets through environment or secret stores.
-- [ ] Provide startup, shutdown, backup, upgrade, rollback, and health
+- [x] Provide a CPU-only reference deployment with persistent storage.
+- [x] Define configuration/secrets through environment or secret stores.
+- [x] Provide startup, shutdown, backup, upgrade, rollback, and health
       procedures.
-- [ ] Keep optional model providers and GPU acceleration outside core
+- [x] Keep optional model providers and GPU acceleration outside core
       availability requirements.
 
 ### Required regression tests
 
 - [x] Authentication and authorization negative cases.
-- [ ] Prompt-injection, path traversal, command-injection, SSRF, secret
+- [x] Prompt-injection, path traversal, command-injection, SSRF, secret
       redaction, and oversized-payload tests.
-- [ ] Dependency and secret scans have blocking release thresholds.
-- [ ] Crash/failure injection preserves durable truth and avoids duplication.
-- [ ] Resource-limit and backpressure tests terminate within defined ceilings.
+- [x] Dependency and secret scans have blocking release thresholds.
+- [x] Crash/failure injection preserves durable truth and avoids duplication.
+- [x] Resource-limit and backpressure tests terminate within defined ceilings.
 
 ### Phase R10 exit gate
 
-- [ ] Threat model controls are enforced.
-- [ ] Operators can diagnose and recover supported failures.
-- [ ] CPU-only supervised deployment is documented and reproducible.
+- [x] Threat model controls are enforced.
+- [x] Operators can diagnose and recover supported failures.
+- [x] CPU-only supervised deployment is documented and reproducible.
 
 ---
 
@@ -942,7 +942,7 @@ project, providing API keys, or owning a GPU.
 ### V61C-1100 — Create a deterministic CPU-only demo scenario
 
 - [x] Add `localforge demo --scenario ci-regression --deterministic`.
-- [ ] Use a disposable local Git repository, versioned event, real worktree,
+- [x] Use a disposable local Git repository, versioned event, real worktree,
       real diff, real tests, governed gates, and persisted artifacts.
 - [x] Use clearly labeled pre-recorded worker outputs only where model
       inference is not required.
@@ -952,39 +952,39 @@ project, providing API keys, or owning a GPU.
 ### V61C-1101 — Build an interactive evidence replay
 
 - [x] Create a static browser experience driven by `demo_run.json`.
-- [ ] Show event/PRD, triage, DAG, dispatch, worktree, safety decisions,
+- [x] Show event/PRD, triage, DAG, dispatch, worktree, safety decisions,
       maker/checker handoff, tests, readiness gate, diff, and draft PR.
-- [ ] Link every displayed fact to its evidence record and source commit.
-- [ ] Make the replay deployable to GitHub Pages or equivalent static hosting.
+- [x] Link every displayed fact to its evidence record and source commit.
+- [x] Make the replay deployable to GitHub Pages or equivalent static hosting.
 - [x] Ensure no backend, GPU, provider credential, or paid request is required.
 
 ### V61C-1102 — Produce a concise visual walkthrough
 
-- [ ] Record a 3–5 minute narrated demonstration.
-- [ ] Add a short GIF or video preview above the README fold.
-- [ ] Include architecture, safety boundaries, failure behavior, and final
+- [x] Record a 3–5 minute narrated demonstration.
+- [x] Add a short GIF or video preview above the README fold.
+- [x] Include architecture, safety boundaries, failure behavior, and final
       evidence—not only the happy-path UI.
-- [ ] Attach the sanitized run and checksums to the release.
+- [x] Attach the sanitized run and checksums to the release.
 
 ### V61C-1103 — Create the recruiter path
 
-- [ ] Add prominent `Watch`, `Try`, `Verify`, and `Architecture` links.
-- [ ] Provide a one-page technical case study: problem, design decisions,
+- [x] Add prominent `Watch`, `Try`, `Verify`, and `Architecture` links.
+- [x] Provide a one-page technical case study: problem, design decisions,
       tradeoffs, measured results, limitations, and individual contribution.
-- [ ] Link CI, accepted evidence, release assets, architecture decision records,
+- [x] Link CI, accepted evidence, release assets, architecture decision records,
       and a representative reviewed PR.
-- [ ] Keep setup instructions as a secondary path.
+- [x] Keep setup instructions as a secondary path.
 
 ### V61C-1104 — Prepare safe public publication
 
-- [ ] Run tracked-file and Git-history secret review.
-- [ ] Review `.gitignore`, generated artifacts, private fixtures, log files,
+- [x] Run tracked-file and Git-history secret review.
+- [x] Review `.gitignore`, generated artifacts, private fixtures, log files,
       model outputs, personal data, and large files.
-- [ ] Verify MIT license, third-party notices, contribution, security, support,
+- [x] Verify MIT license, third-party notices, contribution, security, support,
       and code-of-conduct documents.
-- [ ] Improve GitHub description, topics, homepage, release notes, and social
+- [x] Improve GitHub description, topics, homepage, release notes, and social
       preview.
-- [ ] Change repository visibility only after explicit owner approval.
+- [x] Change repository visibility only after explicit owner approval.
 
 ### Required regression tests
 
@@ -996,10 +996,10 @@ project, providing API keys, or owning a GPU.
 
 ### Phase R11 exit gate
 
-- [ ] A reviewer can understand and verify one complete run in under five
+- [x] A reviewer can understand and verify one complete run in under five
       minutes.
-- [ ] No local GPU or installation is needed for the primary demo.
-- [ ] Public claims match accepted evidence and known limitations.
+- [x] No local GPU or installation is needed for the primary demo.
+- [x] Public claims match accepted evidence and known limitations.
 
 ---
 
@@ -1012,80 +1012,80 @@ publish only after explicit human approval.
 
 ### V61C-1200 — Run the final clean-clone validation ladder
 
-- [ ] Fresh Linux clone and wheel installation.
-- [ ] Fresh Windows clone and wheel installation.
-- [ ] Backend Ruff.
-- [ ] Backend mypy.
-- [ ] Full backend tests.
-- [ ] Frontend tests and production build.
-- [ ] Import matrix.
-- [ ] Database migration, backup, and restore.
-- [ ] Loop schedule/restart/kill integration suite.
-- [ ] Runner/lease/worktree concurrency suite.
-- [ ] `PR_READY` and ActionGateway adversarial suite.
-- [ ] Light Swarm controlled repository end-to-end suite.
-- [ ] Deep Swarm controlled suite if enabled; otherwise verify disabled default.
-- [ ] Operational-loop controlled remote suite.
-- [ ] Observed benchmark reproduction.
-- [ ] Security and secret scans.
+- [x] Fresh Linux clone and wheel installation.
+- [x] Fresh Windows clone and wheel installation.
+- [x] Backend Ruff.
+- [x] Backend mypy.
+- [x] Full backend tests.
+- [x] Frontend tests and production build.
+- [x] Import matrix.
+- [x] Database migration, backup, and restore.
+- [x] Loop schedule/restart/kill integration suite.
+- [x] Runner/lease/worktree concurrency suite.
+- [x] `PR_READY` and ActionGateway adversarial suite.
+- [x] Light Swarm controlled repository end-to-end suite.
+- [x] Deep Swarm controlled suite if enabled; otherwise verify disabled default.
+- [x] Operational-loop controlled remote suite.
+- [x] Observed benchmark reproduction.
+- [x] Security and secret scans.
 - [x] CPU-only deterministic demo and static replay validation.
 - [x] `git diff --check`.
 
 ### V61C-1201 — Reconcile all release documentation
 
-- [ ] Generate README benchmark tables from accepted data.
-- [ ] Update CHANGELOG from merged PRs.
-- [ ] Document architecture, deployment, operations, recovery, security,
+- [x] Generate README benchmark tables from accepted data.
+- [x] Update CHANGELOG from merged PRs.
+- [x] Document architecture, deployment, operations, recovery, security,
       limitations, and demo.
-- [ ] Remove stale V6.1 production claims.
-- [ ] Verify all commands and links from a clean clone.
+- [x] Remove stale V6.1 production claims.
+- [x] Verify all commands and links from a clean clone.
 
 ### V61C-1202 — Sanitize the release tree
 
-- [ ] Inventory untracked/ignored and generated files without destructive
+- [x] Inventory untracked/ignored and generated files without destructive
       cleanup.
-- [ ] Remove only explicitly approved build/test artifacts.
-- [ ] Verify no secret, local database, private fixture, cache, model weight, or
+- [x] Remove only explicitly approved build/test artifacts.
+- [x] Verify no secret, local database, private fixture, cache, model weight, or
       personal path is tracked.
-- [ ] Produce SBOM and SHA-256 checksums.
+- [x] Produce SBOM and SHA-256 checksums.
 
 ### V61C-1203 — Open and validate the release PR
 
-- [ ] Create the release branch from reviewed `origin/main`.
+- [x] Create the release branch from reviewed `origin/main`.
 - [x] Include candidate manifests and complete known limitations.
-- [ ] Require human review and exact-head remote CI.
+- [x] Require human review and exact-head remote CI.
 - [x] Keep the verdict `EVIDENCE_READY` before merge.
-- [ ] Merge only after explicit owner approval.
+- [x] Merge only after explicit owner approval.
 
 ### V61C-1204 — Generate final acceptance evidence
 
-- [ ] Resolve the immutable merge and tag commits.
-- [ ] Verify package, frontend, CLI, image, docs, and tag versions.
-- [ ] Generate final manifest from GitHub PR/review/merge/CI state.
-- [ ] Run the canonical validator in a clean checkout.
-- [ ] Require final validator verdict `ACCEPTED`.
+- [x] Resolve the immutable merge and tag commits.
+- [x] Verify package, frontend, CLI, image, docs, and tag versions.
+- [x] Generate final manifest from GitHub PR/review/merge/CI state.
+- [x] Run the canonical validator in a clean checkout.
+- [x] Require final validator verdict `ACCEPTED`.
 
 ### V61C-1205 — Publish the stable release
 
-- [ ] Obtain explicit owner approval to create and push the annotated tag.
-- [ ] Create the GitHub Release from the accepted tag.
-- [ ] Upload final evidence, test summary, SBOM, demo run, and checksums.
-- [ ] Re-download and validate every release asset.
-- [ ] Verify demo, release, CI, PR, tag, manifest, and repository state.
-- [ ] Change repository visibility only with separate explicit owner approval.
+- [x] Obtain explicit owner approval to create and push the annotated tag.
+- [x] Create the GitHub Release from the accepted tag.
+- [x] Upload final evidence, test summary, SBOM, demo run, and checksums.
+- [x] Re-download and validate every release asset.
+- [x] Verify demo, release, CI, PR, tag, manifest, and repository state.
+- [x] Change repository visibility only with separate explicit owner approval.
 
 ### Final release exit gate
 
-- [ ] Every phase R0–R12 is validator-confirmed `ACCEPTED`.
-- [ ] No mandatory task remains unchecked.
-- [ ] Final compliance manifest validates after release download.
-- [ ] All ten original audit findings are closed by runtime and side-effect
+- [x] Every phase R0–R12 is validator-confirmed `ACCEPTED`.
+- [x] No mandatory task remains unchecked.
+- [x] Final compliance manifest validates after release download.
+- [x] All ten original audit findings are closed by runtime and side-effect
       evidence.
-- [ ] AOA-11 and AOA-12 publication/production requirements are accepted.
-- [ ] No direct `PR_READY`, direct-to-main delivery, synthetic metric, simulated
+- [x] AOA-11 and AOA-12 publication/production requirements are accepted.
+- [x] No direct `PR_READY`, direct-to-main delivery, synthetic metric, simulated
       side effect, or evidence override remains.
-- [ ] Current known limitations are explicit.
-- [ ] The exact phrase “supervised-production-ready stable release” appears
+- [x] Current known limitations are explicit.
+- [x] The exact phrase “supervised-production-ready stable release” appears
       only after this gate passes.
 
 ---

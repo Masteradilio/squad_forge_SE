@@ -66,9 +66,12 @@ class ChiefEngineerRepairAction(BaseModel):
         return normalized
 
     def to_runtime_action(self) -> RuntimeActionProposal:
+        kind = self.kind or "write_file"
+        if kind not in ("write_file", "append_content", "run_command"):
+            kind = "write_file"
         return RuntimeActionProposal.model_validate(
             {
-                "kind": self.kind or "write_file",
+                "kind": kind,
                 "path": self.path,
                 "content": self.content,
                 "command": self.command,

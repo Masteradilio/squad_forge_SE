@@ -76,6 +76,24 @@ BUILTIN_SKILLS = [
         failure_modes=["destructive reset", "untracked user changes"],
         examples=["Use non-destructive inspection before changing Git state."],
     ),
+    SkillDefinition(
+        name="security-auditor",
+        purpose="Perform post-merge security audit, vulnerability scanning, secret leakage prevention, and generate relatorio_conformidade_seguranca.md.",
+        triggers=["security", "audit", "vulnerability", "secret", "cve", "sast"],
+        allowed_actions=["audit source code", "scan secrets", "scan dependencies", "generate relatorio_conformidade_seguranca.md"],
+        expected_artifacts=["relatorio_conformidade_seguranca.md"],
+        failure_modes=["hardcoded secrets", "cve vulnerabilities", "bypassed security gates"],
+        examples=["Check for plain-text secrets and unauthenticated endpoints."],
+    ),
+    SkillDefinition(
+        name="e2e-release-tester",
+        purpose="Universal post-merge E2E quality & PRD compliance verification using Playwright, HTTP client, CLI runner, and DB inspector to generate relatorio_conformidade_funcional.md.",
+        triggers=["e2e", "test", "compliance", "prd", "release", "quality", "functional"],
+        allowed_actions=["browser automation", "http api request", "run subprocess", "inspect database", "generate relatorio_conformidade_funcional.md"],
+        expected_artifacts=["relatorio_conformidade_funcional.md"],
+        failure_modes=["prd non-conformity", "broken user flows", "untested acceptance criteria"],
+        examples=["Execute Playwright user journeys and compare against PRD.md criteria."],
+    ),
 ]
 
 

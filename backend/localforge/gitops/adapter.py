@@ -130,15 +130,17 @@ class GitAdapter:
 
     async def commit(self, message: str) -> None:
         """Add all unstaged edits and commit changes into the active branch."""
+        clean_msg = message.replace("`", "'")
         await self._execute_git(["add", "-A"])
-        await self._execute_git(["commit", "-m", message, "--allow-empty"])
+        await self._execute_git(["commit", "-m", clean_msg, "--allow-empty"])
 
     async def commit_paths(self, paths: list[str], message: str) -> None:
         """Commit only selected relative paths in the active branch."""
         if not paths:
             return
+        clean_msg = message.replace("`", "'")
         await self._execute_git(["add", "--", *paths])
-        await self._execute_git(["commit", "-m", message, "--allow-empty"])
+        await self._execute_git(["commit", "-m", clean_msg, "--allow-empty"])
 
     async def reset_hard(self, ref: str) -> None:
         """Perform a hard reset to a specific git reference and clean directories."""

@@ -24,7 +24,7 @@
       "exit_code": 0
     }
   ],
-  "manifest_sha256": "788abd89211d9b0d04d3d5b3db6bcd4ec2ddd47313f679bfba408abbe1675217",
+  "manifest_sha256": "1aa08a38d59f0ed4b7a4f3b701e1b03a8b1bf2761f5149e55975af8fd66c0d3b",
   "environment": {
     "os": "windows-local-and-github-actions-matrix",
     "python": "3.11-local / 3.12-ci",
@@ -37,17 +37,17 @@
   "input_hashes": {
     "docs/e2e/v6_2_compliance/phase_R3/acceptance_report.md": "aed63b03d29232537ea3c9ca295b30b4bff3ee38994f294ca5c05debe14c6920",
     "docs/e2e/v6_2_compliance/phase_R3/known_limitations.md": "76fa81d6fd35da3f3ec646563a9e802d2ff6bfa19adeb8da2eaaa8c4fa83cc4b",
-    "backend/localforge/models/domain.py": "8577f6f2c5a8d510015749fb87843fd5c33b03afb7aa0b6cbdcd8fadf0e17983",
-    "backend/localforge/pr_factory/local.py": "240c56a205d08101408279e5f8d9f000311c96da3fbdf094429265daa0ddbe49",
+    "backend/localforge/models/domain.py": "87dab6c488ba3fcab241944f8a13cccfa26ab726b4133f30c54038bc418556b9",
+    "backend/localforge/pr_factory/local.py": "83c99e33fab8afdb7f036b59869703f8ae74178f1175207fdfae7ec79f8874c9",
     "backend/localforge/runtime/lead_agent.py": "3a1a2baea520274db7df10dd44206e2ac1bcfe1dc6b3b7a0b70f2726317023bf",
-    "backend/localforge/pipeline/engine.py": "aff76535a140e33309a786c55c9d89d0e074fea654c7711b5840f19d1ab3c83b",
+    "backend/localforge/pipeline/engine.py": "bcbc19b501eb1bf6ed9d9b8e00bcffb2b5555da9abce6313af3054427e5b6422",
     "backend/tests/test_services.py": "9061bae4726ecfd02c400a00cf00f296cea350b22c0a84b28e1a6c08a6dbe942",
     "backend/tests/test_gitops.py": "785f4762e53b6694cd36f72d212c1706ef5501cf2f8e5446cf6ef60f54edd6e6",
     "backend/tests/test_scheduler.py": "e7a47b49554df2cc5b75155803617d6d47c916f2dc54ca8428733537792f70c0",
     "backend/tests/test_phase27_unattended.py": "0d919b769dae55f9d009a017dfe747b311bdb2f49db4ff91eafa06181f8823c5",
-    "docs/compliance_backlog_V6-1.md": "72ef3975e5dd557f02f6cbad835ec689c94386a5491fe0f14f9cb653653e1b57",
-    "backend/localforge/services/task.py": "152429170d4b8187659651c74437a43d6b6a2de100ece852fdedcaad826a5848",
-    "CHANGELOG.md": "fd97a16b1fcb02d5fc95e6531a7a56723efbbace80e9fd704557705923681f68",
-    "backend/tests/test_release_truth.py": "bb2e9dd34a157a297734d5f6f5d67b4c35bcabcc508b56a51850cc1c09df5792"
+    "docs/compliance_backlog_V6-1.md": "b7f5312a2c69d4c832ac226bb3b4ae2c52cb65e52d35c2b9c3d6c3220db36a1e",
+    "backend/localforge/services/task.py": "da5a3a21236ed3fe3f56b744e1cb1c9002beb6a074fffe7a60f601b3a3b932d5",
+    "CHANGELOG.md": "2e69640ee910a369ecc5cc669b3cdc0c2ae3f78b1991d2ae7b135704e5833b6e",
+    "backend/tests/test_release_truth.py": "b004b9b35f9fd8b6aed2e7373223ab130e897d9036c08d6ac45c5b073744a118"
   }
 }

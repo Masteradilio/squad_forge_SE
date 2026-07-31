@@ -533,4 +533,28 @@ export const apiClient = {
       { method: 'POST' }
     );
   },
+
+  approvePR(taskId: number): Promise<Task> {
+    return request<Task>(`/api/tasks/${taskId}/prs/approve`, {
+      method: 'POST',
+    });
+  },
+
+  rejectPR(taskId: number, comment: string): Promise<Task> {
+    return request<Task>(`/api/tasks/${taskId}/prs/reject`, {
+      method: 'POST',
+      body: JSON.stringify({ comment }),
+    });
+  },
+
+  getEnvSettings(): Promise<Record<string, string>> {
+    return request<Record<string, string>>('/api/settings/env');
+  },
+
+  updateEnvSettings(envVars: Record<string, string>): Promise<Record<string, string>> {
+    return request<Record<string, string>>('/api/settings/env', {
+      method: 'POST',
+      body: JSON.stringify(envVars),
+    });
+  },
 };

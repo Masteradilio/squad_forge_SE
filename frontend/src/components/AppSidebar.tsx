@@ -1,34 +1,18 @@
 import type { Project } from '../api/client';
 
 export type AppTab =
-  | 'mission-control'
-  | 'prd-backlog'
-  | 'agents'
-  | 'runs'
-  | 'prs'
-  | 'worktrees'
-  | 'models'
-  | 'skills'
-  | 'memory'
-  | 'safety'
-  | 'v3-dashboard'
+  | 'chat'
   | 'kanban'
+  | 'tests'
+  | 'skills'
   | 'settings';
 
-const TABS: AppTab[] = [
-  'mission-control',
-  'prd-backlog',
-  'agents',
-  'runs',
-  'prs',
-  'worktrees',
-  'models',
-  'skills',
-  'memory',
-  'safety',
-  'v3-dashboard',
-  'kanban',
-  'settings',
+export const CORE_MENUS: { id: AppTab; label: string; icon: string }[] = [
+  { id: 'chat', label: '1. PO Chat & Mission Control', icon: '💬' },
+  { id: 'kanban', label: '2. Kanban & Revisão de PRs', icon: '📋' },
+  { id: 'tests', label: '3. Testes de Conformidade', icon: '🧪' },
+  { id: 'skills', label: '4. Skills & Agentes', icon: '🧩' },
+  { id: 'settings', label: '5. Modelos & Ambiente (.env)', icon: '⚙️' },
 ];
 
 interface AppSidebarProps {
@@ -38,6 +22,7 @@ interface AppSidebarProps {
   backendHealthy: boolean | null;
   sseConnected: boolean;
   onProjectChange: (project: Project) => void;
+  onTabChange?: (tab: AppTab) => void;
 }
 
 export function AppSidebar({
@@ -47,6 +32,7 @@ export function AppSidebar({
   backendHealthy,
   sseConnected,
   onProjectChange,
+  onTabChange,
 }: AppSidebarProps) {
   return (
     <aside style={{
@@ -59,69 +45,82 @@ export function AppSidebar({
       gap: '24px',
       flexShrink: 0,
     }}>
-      <h2 style={{ fontSize: '18px', fontWeight: 700, letterSpacing: '0.5px' }}>
-        LocalForge OS
-      </h2>
-
-      <div>
-        <label htmlFor="active-project" style={{
-          display: 'block',
-          fontSize: '11px',
-          textTransform: 'uppercase',
-          fontWeight: 600,
-          color: 'var(--text-muted)',
-          marginBottom: '8px',
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div style={{
+          width: '32px',
+          height: '32px',
+          borderRadius: '8px',
+          backgroundColor: 'var(--color-primary)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontWeight: 'bold',
+          color: '#fff',
         }}>
+          LF
+        </div>
+        <h1 style={{ fontSize: '18px', fontWeight: 800, margin: 0, letterSpacing: '-0.02em' }}>
+          LocalForge OS
+        </h1>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <label htmlFor="active-project-select" style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 600 }}>
           Active Project
         </label>
-        {projects.length > 0 ? (
-          <select
-            id="active-project"
-            value={activeProject?.id || ''}
-            onChange={(event) => {
-              const project = projects.find(
-                (item) => item.id === Number.parseInt(event.target.value, 10),
-              );
-              if (project) onProjectChange(project);
-            }}
-            style={{
-              width: '100%',
-              padding: '10px',
-              borderRadius: '8px',
-              backgroundColor: 'var(--bg-input)',
-              border: '1px solid var(--border-color)',
-              color: 'var(--text-primary)',
-            }}
-          >
-            {projects.map((project) => (
-              <option key={project.id} value={project.id}>{project.name}</option>
-            ))}
-          </select>
-        ) : (
-          <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>No projects</span>
-        )}
+        <select
+          id="active-project-select"
+          aria-label="Active Project"
+          value={activeProject?.id || ''}
+          onChange={(e) => {
+            const proj = projects.find((p) => p.id === Number(e.target.value));
+            if (proj) onProjectChange(proj);
+          }}
+          style={{
+            width: '100%',
+            padding: '8px 12px',
+            borderRadius: '6px',
+            backgroundColor: 'var(--bg-input)',
+            border: '1px solid var(--border-color)',
+            color: 'var(--text-primary)',
+            fontSize: '13px',
+          }}
+        >
+          {projects.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
+          {projects.length === 0 && <option value="">No projects</option>}
+        </select>
       </div>
 
       <nav aria-label="LocalForge sections" style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1 }}>
-        {TABS.map((tab) => {
-          const active = currentTab === tab;
+        {CORE_MENUS.map((menu) => {
+          const active = currentTab === menu.id;
           return (
             <a
-              key={tab}
-              href={`#/${tab}`}
+              key={menu.id}
+              href={`#/${menu.id}`}
+              onClick={(e) => {
+                onTabChange?.(menu.id);
+              }}
               aria-current={active ? 'page' : undefined}
               style={{
-                display: 'block',
-                padding: '10px 16px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                padding: '12px 16px',
                 borderRadius: '8px',
                 fontSize: '14px',
-                fontWeight: 500,
+                fontWeight: active ? 700 : 500,
                 color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
                 backgroundColor: active ? 'var(--color-primary)' : 'transparent',
                 textDecoration: 'none',
               }}
             >
-              {tab.split('-').map((word) => word[0].toUpperCase() + word.slice(1)).join(' ')}
+              <span>{menu.icon}</span>
+              <span>{menu.label}</span>
             </a>
           );
         })}

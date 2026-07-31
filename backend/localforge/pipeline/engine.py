@@ -1685,6 +1685,23 @@ class RolePipelineEngine:
                 failures.append(f"{model}: streaming response is not supported")
                 continue
             return response, model
+
+        try:
+            config = load_config()
+            if config.chief_engineer.enabled and config.chief_engineer.model:
+                provider = build_chief_engineer_provider(config)
+                response = await provider.chat_completion(
+                    [{"role": "user", "content": prompt}],
+                    response_schema={"type": "object"},
+                    timeout=timeout,
+                    model=config.chief_engineer.model,
+                )
+                if isinstance(response, str):
+                    logger.info("Local models unavailable; Chief Engineer API provider fallback succeeded.")
+                    return response, config.chief_engineer.model
+        except Exception as fallback_exc:
+            failures.append(f"chief_engineer_fallback: {fallback_exc!r}")
+
         raise RuntimeError("All local model candidates failed: " + "; ".join(failures))
 
     def _render_changed_file_context(

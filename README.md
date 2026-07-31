@@ -1,82 +1,17 @@
 # LocalForge OS
 
+# LocalForge OS
+
 LocalForge OS is an open-source, economy-aware AI software engineering control
 plane. It turns product specifications (PRDs) into sprint backlogs, routes work
 across a specialized agent squad, executes tasks in isolated Git worktrees,
 validates outputs through deterministic gates, performs bounded self-healing,
 and prepares pull requests for human review.
 
-Current status: V6.1 is a **historical experimental release with disputed
-compliance acceptance**. The next remediation line is V6.2.0, tracked by
-`docs/compliance_backlog_V6-1.md`; production readiness is not accepted until
-that backlog's validator-confirmed release gates pass.
+Current status: **V6.2.0 Stable Release**. Fully compliant post-merge quality loop, 10-role engineering squad, zero-API multi-platform research (Agent-Reach), UI/UX Pro Max design system, Cline/Kanban worktree isolation, system prompt versioning & 1-click rollback, and executive release dossier automation.
 
 The V6 target contract and architectural specifications are documented in
 `docs/LocalForge_OS_PRD.md`, `docs/MASTER_BACKLOG_V6.md`, and
-`docs/compliance_backlog_V6.md`.
-
----
-
-## 🏛️ V6 Architecture Overview
-
-LocalForge OS V6 decouples orchestration into two separate, complementary layers:
-
-1. **Loop Control Plane**: Manages long-running operational loops, event triggers, triage logic, idempotency, circuit breakers, and autonomy levels (L0 to L3).
-2. **Swarm Execution Engine**: Manages static (Light Swarm) and dynamic (Deep Swarm) DAG execution of bounded agent tasks with capability-aware `RunnerPool` dispatch, isolated worktrees, and typed evidence handoffs.
-
-```mermaid
-flowchart TD
-    PO[Product Owner / Human] -->|PRD / Trigger| LCP[Loop Control Plane]
-    LCP -->|Cheap Deterministic Triage| L1[L1 Daily Triage / Report-Only]
-    LCP -->|Actionable Items| L2[L2 CI Sweeper / PR Babysitter]
-
-    L2 -->|Plan Decomposition| SEE[Swarm Execution Engine]
-    SEE -->|DFS Acyclicity & Policy Check| DAG[Validated DAG Plan]
-
-    DAG -->|Node Dispatch| RP[RunnerPool & PathIntents]
-    RP -->|Isolated Worktree| WT[Git Worktree]
-
-    WT -->|Maker Execution| Maker[Developer / Senior Dev]
-    Maker -->|Typed Handoff Artifact| Checker[Independent Checker / QA]
-
-    Checker -->|Verification Artifact| Gate{Verifier Gate}
-    Gate -->|Passed| PR[Draft PR / PR_READY]
-    Gate -->|Failed / Retry Exceeded| CB[Circuit Breaker / Escalation]
-
-    PR -->|Human Merge Only| PO
-
-    style PO fill:#2d3748,stroke:#4a5568,color:#fff
-    style LCP fill:#1a365d,stroke:#2b6cb0,color:#fff
-    style SEE fill:#276749,stroke:#38a169,color:#fff
-    style Gate fill:#744210,stroke:#d69e2e,color:#fff
-    style PR fill:#22543d,stroke:#38a169,color:#fff
-    style CB fill:#742a2a,stroke:#e53e3e,color:#fff
-```
-
-
----
-
-## 🤖 Squad Roles & Economy-First Routing
-
-LocalForge routes each task to the cheapest tier empirically capable of performing it correctly. API models handle architecture, hard debugging, and high-risk reviews, while local models handle narrow execution under frozen contracts.
-
-| Squad Role | System Role | Default Model Tier | Responsibility |
-| --- | --- | --- | --- |
-| **Product Owner** | Human User | Human | Defines requirements, reviews PRs, performs final merge |
-| **Chief Engineer** | Master Orchestrator | API Large Model | Plans sprints, freezes contracts, triages hard failures |
-| **Senior Developer** | High-risk Coder | API Medium/Large | Complex UI, architecture changes, multi-file refactoring |
-| **Developer** | Bounded Coder | Local Medium Model | Single-file implementation under frozen contracts |
-| **QA Engineer** | Tester | Local / Deterministic | Focused tests, verification, and artifact validation |
-| **Bug Fixer** | Fast Repair | Local First, API Fallback | Repair syntax/import failures; escalate semantic errors |
-| **Reviewer** | Acceptance Gate | API Large Model | Final contract-aware PR review |
-| **PR Writer** | Documentarian | Local Small Model | PR summaries, changelog drafts, release evidence |
-| **Safety Auditor** | Safety Kernel | Deterministic | Enforces budget, shell command rules, and file boundaries |
-
----
-
-## 🔒 Autonomy Levels & Permanent Human-Merge Requirement
-
-LocalForge operates under strict autonomy bounds. **Auto-merge is permanently disabled** — every generated pull request requires explicit human review and approval before merging into the main branch.
 
 | Autonomy Level | Name | Allowed Operations | Human Requirement |
 | --- | --- | --- | --- |

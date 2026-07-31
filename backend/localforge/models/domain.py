@@ -793,6 +793,10 @@ class SwarmNode(BaseModel):
     artifact_id: int | None = None
     attempt_count: int = 0
     error_reason: str | None = None
+    ownership_token: str | None = None
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+    maker_agent_id: str | None = None
 
 
 class SwarmPlan(BaseModel):

@@ -2,7 +2,11 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, status
 
-from localforge.api.schemas import SwarmCreateRequest
+from localforge.api.schemas import (
+    SwarmCreateRequest,
+    SwarmNodeCompleteRequest,
+    SwarmNodeFailRequest,
+)
 from localforge.models import domain
 from localforge.models.enums import SwarmNodeType, SwarmStrategy, TypedArtifactType
 from localforge.storage import UnitOfWork, db_manager
@@ -120,3 +124,49 @@ async def kill_swarm(run_id: int) -> dict[str, Any]:
             return {"run_id": run_id, "status": run.status, "verdict": run.verdict}
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/swarms/{run_id}/nodes/{node_id}/complete")
+async def complete_swarm_node(
+    run_id: int, node_id: str, req: SwarmNodeCompleteRequest
+) -> dict[str, Any]:
+    """Complete a swarm node with evidence and ownership token verification."""
+    async with UnitOfWork(db_manager) as uow:
+        assert uow.light_swarm is not None
+        try:
+            run = await uow.light_swarm.complete_node(
+                run_id,
+                node_id,
+                artifact_id=req.artifact_id,
+                cost_usd=req.cost_usd,
+                tokens=req.tokens,
+                ownership_token=req.ownership_token,
+                worker_agent_id=req.worker_agent_id,
+            )
+            return {"run_id": run_id, "node_id": node_id, "status": run.status, "verdict": run.verdict}
+        except PermissionError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/swarms/{run_id}/nodes/{node_id}/fail")
+async def fail_swarm_node(
+    run_id: int, node_id: str, req: SwarmNodeFailRequest
+) -> dict[str, Any]:
+    """Fail a swarm node with error propagation and ownership token verification."""
+    async with UnitOfWork(db_manager) as uow:
+        assert uow.light_swarm is not None
+        try:
+            run = await uow.light_swarm.fail_node(
+                run_id,
+                node_id,
+                reason=req.reason,
+                attempt_count=req.attempt_count,
+                ownership_token=req.ownership_token,
+            )
+            return {"run_id": run_id, "node_id": node_id, "status": run.status, "verdict": run.verdict}
+        except PermissionError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc

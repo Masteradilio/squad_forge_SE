@@ -19,8 +19,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy pyproject.toml and dependencies
-COPY pyproject.toml README.md requirements.txt* /app/
+# Copy pyproject.toml, README.md, LICENSE, and backend code
+COPY pyproject.toml README.md LICENSE requirements.txt* /app/
+COPY backend /app/backend
 
 # Install Python packages (including pgvector, chromadb, tree-sitter, playwright)
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
@@ -40,8 +41,6 @@ RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
 RUN npx playwright install-deps chromium || true && \
     playwright install chromium || true
 
-# Copy backend code and configuration
-COPY backend /app/backend
 COPY .env.example /app/.env.example
 
 EXPOSE 8000

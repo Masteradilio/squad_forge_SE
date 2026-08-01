@@ -40,13 +40,13 @@ jobs:
       - name: Validate V6.2 release truth
         run: python scripts/check_release_truth.py --output artifacts/release-truth.json
       - name: Upload candidate evidence validator output
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: candidate-evidence-${{ github.job }}
           path: artifacts/candidate-evidence.json
           if-no-files-found: error
       - name: Upload release truth validator output
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-truth-${{ github.job }}
           path: artifacts/release-truth.json
@@ -75,7 +75,7 @@ jobs:
       - name: Build sdist/wheel and clean-install package
         run: python scripts/check_clean_package_install.py --output artifacts/package-smoke-${{ matrix.os }}.json
       - name: Upload package smoke output
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: package-smoke-${{ matrix.os }}
           path: artifacts/package-smoke-${{ matrix.os }}.json

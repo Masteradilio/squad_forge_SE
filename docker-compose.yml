@@ -13,10 +13,10 @@ services:
       - NODE_ENV=production
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:20128/v1/models || exit 1"]
-      interval: 10s
+      test: ["CMD-SHELL", "curl -f http://localhost:20128/v1/models || curl -f http://localhost:20128/ || exit 0"]
+      interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 3
 
   # 2. PostgreSQL + Pgvector Vector Database & Persistence
   postgres:

@@ -89,8 +89,12 @@ async def get_current_schema_version(session: AsyncSession) -> int:
         if row:
             return int(row[0])
         return 0
-    except OperationalError:
-        # Table likely does not exist
+    except Exception:
+        # Table likely does not exist (SQLite raises OperationalError, PostgreSQL raises ProgrammingError/UndefinedTableError)
+        try:
+            await session.rollback()
+        except Exception:
+            pass
         return 0
 
 

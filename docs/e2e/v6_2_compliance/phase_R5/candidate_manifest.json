@@ -171,7 +171,7 @@
     "backend/localforge/services/runner_pool.py": "6d0b668b763cab92f8c91677b50d121e4a6e52cb020cfa6db721bc16263e2786",
     "backend/localforge/services/runners.py": "8d1ce83e0b23bce02f8196f4e5cb101a184bfc28470ceb3e3e5fb619a7a42615",
     "backend/localforge/services/worktree.py": "f6190dd9d4d5ff6f77450f44db648b8c581284c8dc6f536bf2045c290197e895",
-    "backend/localforge/storage/bootstrap.py": "c5126584b6cd35c54d817e452afd6abbd997344da8f3a8f4dd9f2f102d4bc933",
+    "backend/localforge/storage/bootstrap.py": "686c0db17b9816246739af54286703b93f6a86f34697e64f0903014a60a3bbf5",
     "backend/localforge/storage/orm.py": "54320186d45b2743c72c35150ba004d7e19a484b8ddb24948dd77db4fda3b001",
     "backend/tests/test_audit_store.py": "dc1c4401fd92be91d90440c92bcfaf7d4fa09f7180966e1f607c76e8944f5ca8",
     "backend/tests/test_gitops.py": "785f4762e53b6694cd36f72d212c1706ef5501cf2f8e5446cf6ef60f54edd6e6",
@@ -186,7 +186,7 @@
   "known_limitations": [
     "Candidate evidence is not final release acceptance."
   ],
-  "manifest_sha256": "f09df97f42923277505593f5cc346ad7c6206236b3630d7fa2e9509a10b51917",
+  "manifest_sha256": "135d303cd6ff18399373e18d34b732ca547df0cd05f3fb2a34b60ff2e3e7ac23",
   "phase": "R5",
   "release_tag": "v6.2.0",
   "release_version": "6.2.0",

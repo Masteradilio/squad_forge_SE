@@ -1,23 +1,5 @@
 {
-  "schema_version": "localforge.v6_2.candidate_manifest.v1",
-  "release_version": "6.2.0",
-  "release_tag": "v6.2.0",
-  "phase": "R1",
-  "task_ids": [
-    "V61C-100",
-    "V61C-101",
-    "V61C-102",
-    "V61C-103"
-  ],
-  "source_commit": "413507fbf3d920642b58424a490abe80f9adb862",
   "candidate_branch": "codex/v62-truth-reset-foundation",
-  "reviewed_pr_number": 14,
-  "verdict": "EVIDENCE_READY",
-  "known_limitations": [
-    "Candidate evidence is not final release acceptance.",
-    "Human review, merge, post-merge GitHub metadata, and final release asset validation remain required.",
-    "Windows local validation was performed in the development checkout; Linux clean-install validation depends on remote CI."
-  ],
   "commands": [
     {
       "command": "python -m pytest backend/tests/test_phase_r1_release_integrity.py -q",
@@ -48,30 +30,48 @@
       "exit_code": 0
     }
   ],
-  "manifest_sha256": "52b38bf3d5165697fde61be7b60ddb11fcc5a279a378061e79132aa5219868a4",
-  "input_hashes": {
-    "pyproject.toml": "4ce389aa25b157607a6b9bf42cb84f08ae342ad3e894b185c3a56252ccd09508",
-    ".github/workflows/ci.yml": "463c8ac144651b84ee25d74577c464c5cf0ef467fa875bad57b351d89dd2ab53",
-    "scripts/check_version_consistency.py": "3be60aed9c2962127f031d28774918340682d99247add3a4a55b064d034a9243",
-    "scripts/check_import_matrix.py": "941ecca70d75ff6ba7eaccdcb7308534ff8f506ab55e5ba61b206512dccacc2a",
-    "scripts/check_candidate_evidence.py": "32fe7422d28b433f73e00df58a3c84b0ea813e8ccae0a6e316c90649687bf34e",
-    "scripts/check_clean_package_install.py": "a7cb4635f5e1447c9f0ed8b8e5f5586aa625f6268141daeabd357163c2326bb7",
-    "backend/localforge/services/file_hashes.py": "f0015dce9e0312685674b59a96236e55f4bc0347d100e847fac7685406f435f1",
-    "backend/tests/test_phase_r1_release_integrity.py": "a74c8109e265d3e386097d30553f55b27363cad3b23dde2dd916ce4534be1883",
-    "docs/e2e/v6_2_compliance/phase_R1/acceptance_report.md": "1275586e6f9a8ed7e58604c80fe1e786cb743a64b3a0bfacb392d11562c34e97",
-    "docs/e2e/v6_2_compliance/phase_R1/test_summary.json": "073c061ae3bc5c2b6c9dcd30d4a8d675f6ed343f0de8dcc12acf4f0eecf10596",
-    "docs/e2e/v6_2_compliance/phase_R1/known_limitations.md": "3ba5468f79a7da1e1a395cafe6c4b9251e493231f2eee3bd6637fa0f5615f451",
-    "docs/demo.md": "b7e8ca3d28b575a8d4cf02521ecdbd34ff919f90f1c3bc0c5cde42343a29c388",
-    "backend/tests/test_release_truth.py": "b004b9b35f9fd8b6aed2e7373223ab130e897d9036c08d6ac45c5b073744a118",
-    "docs/compliance_backlog_V6-1.md": "b7f5312a2c69d4c832ac226bb3b4ae2c52cb65e52d35c2b9c3d6c3220db36a1e"
-  },
   "environment": {
+    "ci_workflow": ".github/workflows/ci.yml",
     "os": "windows-local-and-github-actions-matrix",
     "python": "3.11-local / 3.12-ci",
-    "validation_scope": "V6.2 candidate compliance evidence",
-    "ci_workflow": ".github/workflows/ci.yml"
+    "validation_scope": "V6.2 candidate compliance evidence"
   },
   "generated_gate_reasons": [
     "Candidate evidence remains EVIDENCE_READY until reviewed PR, merge commit, exact-head CI, owner-approved tag, and final release validation exist."
-  ]
+  ],
+  "input_hashes": {
+    ".github/workflows/ci.yml": "463c8ac144651b84ee25d74577c464c5cf0ef467fa875bad57b351d89dd2ab53",
+    "backend/localforge/services/file_hashes.py": "f0015dce9e0312685674b59a96236e55f4bc0347d100e847fac7685406f435f1",
+    "backend/tests/test_phase_r1_release_integrity.py": "a74c8109e265d3e386097d30553f55b27363cad3b23dde2dd916ce4534be1883",
+    "backend/tests/test_release_truth.py": "b004b9b35f9fd8b6aed2e7373223ab130e897d9036c08d6ac45c5b073744a118",
+    "docs/compliance_backlog_V6-1.md": "b7f5312a2c69d4c832ac226bb3b4ae2c52cb65e52d35c2b9c3d6c3220db36a1e",
+    "docs/demo.md": "b7e8ca3d28b575a8d4cf02521ecdbd34ff919f90f1c3bc0c5cde42343a29c388",
+    "docs/e2e/v6_2_compliance/phase_R1/acceptance_report.md": "1275586e6f9a8ed7e58604c80fe1e786cb743a64b3a0bfacb392d11562c34e97",
+    "docs/e2e/v6_2_compliance/phase_R1/known_limitations.md": "3ba5468f79a7da1e1a395cafe6c4b9251e493231f2eee3bd6637fa0f5615f451",
+    "docs/e2e/v6_2_compliance/phase_R1/test_summary.json": "073c061ae3bc5c2b6c9dcd30d4a8d675f6ed343f0de8dcc12acf4f0eecf10596",
+    "pyproject.toml": "dc5ff53fa6d71a4e070852a2b6b0b37a1bc01af27fe1bc7c4e27d32d02df9d82",
+    "scripts/check_candidate_evidence.py": "32fe7422d28b433f73e00df58a3c84b0ea813e8ccae0a6e316c90649687bf34e",
+    "scripts/check_clean_package_install.py": "a7cb4635f5e1447c9f0ed8b8e5f5586aa625f6268141daeabd357163c2326bb7",
+    "scripts/check_import_matrix.py": "941ecca70d75ff6ba7eaccdcb7308534ff8f506ab55e5ba61b206512dccacc2a",
+    "scripts/check_version_consistency.py": "3be60aed9c2962127f031d28774918340682d99247add3a4a55b064d034a9243"
+  },
+  "known_limitations": [
+    "Candidate evidence is not final release acceptance.",
+    "Human review, merge, post-merge GitHub metadata, and final release asset validation remain required.",
+    "Windows local validation was performed in the development checkout; Linux clean-install validation depends on remote CI."
+  ],
+  "manifest_sha256": "1c4cce92e92b1880944936efd8507281b4b10281ae841ac0fec790dddd9533bb",
+  "phase": "R1",
+  "release_tag": "v6.2.0",
+  "release_version": "6.2.0",
+  "reviewed_pr_number": 14,
+  "schema_version": "localforge.v6_2.candidate_manifest.v1",
+  "source_commit": "413507fbf3d920642b58424a490abe80f9adb862",
+  "task_ids": [
+    "V61C-100",
+    "V61C-101",
+    "V61C-102",
+    "V61C-103"
+  ],
+  "verdict": "EVIDENCE_READY"
 }

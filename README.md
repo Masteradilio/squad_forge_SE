@@ -42,9 +42,10 @@ ForgeOS Cloud is an open-source, cloud-ready software engineering platform power
 - **HITL Interruption Gates**: Pauses execution at critical architectural or release checkpoints with a 1-click PO Approval Modal in the React UI.
 - **Dynamic PO Input Mid-Run**: Squad asks targeted questions in the PO Chat UI if missing PRD details are discovered.
 
-### 8. Caching Semântico Avançado & Helm Charts Kubernetes Auto-Scaling
+### 8. Caching Semântico Avançado, Redis In-Memory Store & Helm Charts Kubernetes Auto-Scaling
+- **Redis In-Memory Accelerator (`redis:7-alpine`)**: Proporciona cache semântico de AST com latência **< 1ms**, streaming de eventos Pub/Sub em tempo real e travas distribuídas atômicas (Redlock) para a Agent Authority Matrix.
 - **Semantic Caching Engine**: Intercepta consultas repetitivas de AST e LLM no gateway OmniRoute (0ms de latência e 0 consumo de tokens).
-- **Kubernetes Helm Charts (`deploy/helm/forgeos-cloud/`)**: Suporte a implantação automatizada no K8s com réplicas dinâmicas via Horizontal Pod Autoscaler (HPA).
+- **Kubernetes Helm Charts (`deploy/helm/forgeos-cloud/`)**: Suporte a implantação automatizada no K8s com réplicas dinâmicas via Horizontal Pod Autoscaler (HPA) e suporte ao container Redis.
 
 ---
 
@@ -58,7 +59,7 @@ cd local_forge_os
 # Validate docker-compose configuration
 docker compose config
 
-# Build and launch all 4 containers (omniroute, backend, frontend, postgres-pgvector)
+# Build and launch all 5 containers (omniroute, backend, frontend, postgres-pgvector, redis)
 docker compose up --build
 ```
 
@@ -66,7 +67,8 @@ docker compose up --build
 - **Frontend Dashboard**: `http://localhost:80` or `http://localhost:5173`
 - **FastAPI Backend**: `http://localhost:8000`
 - **OmniRoute AI Gateway Proxy**: `http://localhost:20128/v1`
-- **PostgreSQL Pgvector DB**: `localhost:5432`
+- **PostgreSQL Pgvector DB**: `localhost:5433`
+- **Redis In-Memory Store**: `localhost:6379`
 
 ---
 

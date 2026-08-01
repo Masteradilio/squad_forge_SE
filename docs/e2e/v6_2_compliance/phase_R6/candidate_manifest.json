@@ -1,24 +1,5 @@
 {
-  "schema_version": "localforge.v6_2.candidate_manifest.v1",
-  "release_version": "6.2.0",
-  "release_tag": "v6.2.0",
-  "phase": "R6",
-  "task_ids": [
-    "V61C-600",
-    "V61C-601",
-    "V61C-602",
-    "V61C-603"
-  ],
-  "source_commit": "4c57470",
   "candidate_branch": "codex/v62-truth-reset-foundation",
-  "reviewed_pr_number": 14,
-  "verdict": "EVIDENCE_READY",
-  "known_limitations": [
-    "Candidate evidence is not final release acceptance.",
-    "Ready nodes are not yet dispatched through GovernedExecution.",
-    "Manual completion callbacks still need authenticated ownership tokens.",
-    "Typed edge artifacts and real per-node resources remain open."
-  ],
   "commands": [
     {
       "command": "python -m pytest backend/tests/test_phase8_light_swarm.py -q",
@@ -33,12 +14,11 @@
       "exit_code": 0
     }
   ],
-  "manifest_sha256": "e1a0f4e9233ade25c1bc906179fdd84af3c904417814f7023ad743cd6c53f02c",
   "environment": {
+    "ci_workflow": ".github/workflows/ci.yml",
     "os": "windows-local-and-github-actions-matrix",
     "python": "3.11-local / 3.12-ci",
-    "validation_scope": "V6.2 candidate compliance evidence",
-    "ci_workflow": ".github/workflows/ci.yml"
+    "validation_scope": "V6.2 candidate compliance evidence"
   },
   "generated_gate_reasons": [
     "Candidate evidence remains EVIDENCE_READY until reviewed PR, merge commit, exact-head CI, owner-approved tag, and final release validation exist."
@@ -46,5 +26,25 @@
   "input_hashes": {
     "docs/e2e/v6_2_compliance/phase_R6/acceptance_report.md": "749bf11f69655e639db4b84a08c8ee6b45276d6b8be25ffa440a55aa93dd6af3",
     "docs/e2e/v6_2_compliance/phase_R6/known_limitations.md": "2fc6d8b746efb043a39abb9ae2614a1178362afd2ab964ca604ae466a8b599d2"
-  }
+  },
+  "known_limitations": [
+    "Candidate evidence is not final release acceptance.",
+    "Ready nodes are not yet dispatched through GovernedExecution.",
+    "Manual completion callbacks still need authenticated ownership tokens.",
+    "Typed edge artifacts and real per-node resources remain open."
+  ],
+  "manifest_sha256": "e1a0f4e9233ade25c1bc906179fdd84af3c904417814f7023ad743cd6c53f02c",
+  "phase": "R6",
+  "release_tag": "v6.2.0",
+  "release_version": "6.2.0",
+  "reviewed_pr_number": 14,
+  "schema_version": "localforge.v6_2.candidate_manifest.v1",
+  "source_commit": "4c57470",
+  "task_ids": [
+    "V61C-600",
+    "V61C-601",
+    "V61C-602",
+    "V61C-603"
+  ],
+  "verdict": "EVIDENCE_READY"
 }

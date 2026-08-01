@@ -37,7 +37,20 @@ services:
       timeout: 3s
       retries: 5
 
-  # 3. ForgeOS Backend (Python 3.11 / FastAPI / Playwright / Squad Engine)
+  # 3. Redis In-Memory Data Store (Sub-millisecond AST Cache & Pub/Sub Events)
+  redis:
+    image: redis:7-alpine
+    container_name: forgeos-redis
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # 4. ForgeOS Backend (Python 3.11 / FastAPI / Playwright / Squad Engine)
   backend:
     build:
       context: .
@@ -48,11 +61,15 @@ services:
     environment:
       - DATABASE_URL=postgresql+asyncpg://forgeos:forgeos_secret@postgres:5432/forgeos
       - LOCALFORGE_DATABASE_URL=postgresql+asyncpg://forgeos:forgeos_secret@postgres:5432/forgeos
+      - LOCALFORGE_REDIS_URL=redis://redis:6379/0
+      - REDIS_URL=redis://redis:6379/0
       - LOCALFORGE_MODEL_BASE_URL=http://omniroute:20128/v1
       - OMNIROUTE_URL=http://omniroute:20128/v1
       - FORGEOS_ENV=development
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
       omniroute:
         condition: service_healthy

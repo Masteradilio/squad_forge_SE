@@ -30,6 +30,7 @@ RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
     pgvector \
     psycopg2-binary \
     asyncpg \
+    redis \
     chromadb \
     tree-sitter \
     tree-sitter-languages \

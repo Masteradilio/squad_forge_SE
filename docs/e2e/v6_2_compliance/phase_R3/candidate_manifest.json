@@ -1,53 +1,53 @@
 {
-  "schema_version": "localforge.v6_2.candidate_manifest.v1",
-  "release_version": "6.2.0",
-  "release_tag": "v6.2.0",
-  "phase": "R3",
-  "task_ids": [
-    "V61C-300",
-    "V61C-301",
-    "V61C-302",
-    "V61C-303"
-  ],
-  "source_commit": "d92bb475ef7efe9fa38843a19a9dd191a4241995",
   "candidate_branch": "codex/v62-truth-reset-foundation",
-  "reviewed_pr_number": 14,
-  "verdict": "EVIDENCE_READY",
-  "known_limitations": [
-    "Candidate evidence is not final release acceptance.",
-    "Full mutation-surface ActionGateway inventory remains required.",
-    "Dependency and test-content stale evidence invalidation remain required."
-  ],
   "commands": [
     {
       "command": "python -m pytest backend\\tests\\test_services.py backend\\tests\\test_gitops.py backend\\tests\\test_scheduler.py backend\\tests\\test_phase27_unattended.py -q",
       "exit_code": 0
     }
   ],
-  "manifest_sha256": "e24542ccc46860ee38d4e99fb4b44354eefe4dec988381726eab8e87629c4c9d",
   "environment": {
+    "ci_workflow": ".github/workflows/ci.yml",
     "os": "windows-local-and-github-actions-matrix",
     "python": "3.11-local / 3.12-ci",
-    "validation_scope": "V6.2 candidate compliance evidence",
-    "ci_workflow": ".github/workflows/ci.yml"
+    "validation_scope": "V6.2 candidate compliance evidence"
   },
   "generated_gate_reasons": [
     "Candidate evidence remains EVIDENCE_READY until reviewed PR, merge commit, exact-head CI, owner-approved tag, and final release validation exist."
   ],
   "input_hashes": {
-    "docs/e2e/v6_2_compliance/phase_R3/acceptance_report.md": "aed63b03d29232537ea3c9ca295b30b4bff3ee38994f294ca5c05debe14c6920",
-    "docs/e2e/v6_2_compliance/phase_R3/known_limitations.md": "76fa81d6fd35da3f3ec646563a9e802d2ff6bfa19adeb8da2eaaa8c4fa83cc4b",
+    "CHANGELOG.md": "4b79d4ebbca6d44b9ffe224f6f0a6e458416b799cdd81a248c70a052bb5faf6a",
     "backend/localforge/models/domain.py": "87dab6c488ba3fcab241944f8a13cccfa26ab726b4133f30c54038bc418556b9",
+    "backend/localforge/pipeline/engine.py": "bcbc19b501eb1bf6ed9d9b8e00bcffb2b5555da9abce6313af3054427e5b6422",
     "backend/localforge/pr_factory/local.py": "83c99e33fab8afdb7f036b59869703f8ae74178f1175207fdfae7ec79f8874c9",
     "backend/localforge/runtime/lead_agent.py": "3a1a2baea520274db7df10dd44206e2ac1bcfe1dc6b3b7a0b70f2726317023bf",
-    "backend/localforge/pipeline/engine.py": "bcbc19b501eb1bf6ed9d9b8e00bcffb2b5555da9abce6313af3054427e5b6422",
-    "backend/tests/test_services.py": "9061bae4726ecfd02c400a00cf00f296cea350b22c0a84b28e1a6c08a6dbe942",
-    "backend/tests/test_gitops.py": "785f4762e53b6694cd36f72d212c1706ef5501cf2f8e5446cf6ef60f54edd6e6",
-    "backend/tests/test_scheduler.py": "e7a47b49554df2cc5b75155803617d6d47c916f2dc54ca8428733537792f70c0",
-    "backend/tests/test_phase27_unattended.py": "0d919b769dae55f9d009a017dfe747b311bdb2f49db4ff91eafa06181f8823c5",
-    "docs/compliance_backlog_V6-1.md": "b7f5312a2c69d4c832ac226bb3b4ae2c52cb65e52d35c2b9c3d6c3220db36a1e",
     "backend/localforge/services/task.py": "da5a3a21236ed3fe3f56b744e1cb1c9002beb6a074fffe7a60f601b3a3b932d5",
-    "CHANGELOG.md": "cbf6adf35036edc07747e34143c89c599e6715e3871b88843c3965cc3dbf5cdd",
-    "backend/tests/test_release_truth.py": "b004b9b35f9fd8b6aed2e7373223ab130e897d9036c08d6ac45c5b073744a118"
-  }
+    "backend/tests/test_gitops.py": "785f4762e53b6694cd36f72d212c1706ef5501cf2f8e5446cf6ef60f54edd6e6",
+    "backend/tests/test_phase27_unattended.py": "0d919b769dae55f9d009a017dfe747b311bdb2f49db4ff91eafa06181f8823c5",
+    "backend/tests/test_release_truth.py": "b004b9b35f9fd8b6aed2e7373223ab130e897d9036c08d6ac45c5b073744a118",
+    "backend/tests/test_scheduler.py": "e7a47b49554df2cc5b75155803617d6d47c916f2dc54ca8428733537792f70c0",
+    "backend/tests/test_services.py": "9061bae4726ecfd02c400a00cf00f296cea350b22c0a84b28e1a6c08a6dbe942",
+    "docs/compliance_backlog_V6-1.md": "b7f5312a2c69d4c832ac226bb3b4ae2c52cb65e52d35c2b9c3d6c3220db36a1e",
+    "docs/e2e/v6_2_compliance/phase_R3/acceptance_report.md": "aed63b03d29232537ea3c9ca295b30b4bff3ee38994f294ca5c05debe14c6920",
+    "docs/e2e/v6_2_compliance/phase_R3/known_limitations.md": "76fa81d6fd35da3f3ec646563a9e802d2ff6bfa19adeb8da2eaaa8c4fa83cc4b"
+  },
+  "known_limitations": [
+    "Candidate evidence is not final release acceptance.",
+    "Full mutation-surface ActionGateway inventory remains required.",
+    "Dependency and test-content stale evidence invalidation remain required."
+  ],
+  "manifest_sha256": "a11f26feb95a2795abdd3091b91b4d4d056562e95bd156908bb214b0d5f5a776",
+  "phase": "R3",
+  "release_tag": "v6.2.0",
+  "release_version": "6.2.0",
+  "reviewed_pr_number": 14,
+  "schema_version": "localforge.v6_2.candidate_manifest.v1",
+  "source_commit": "d92bb475ef7efe9fa38843a19a9dd191a4241995",
+  "task_ids": [
+    "V61C-300",
+    "V61C-301",
+    "V61C-302",
+    "V61C-303"
+  ],
+  "verdict": "EVIDENCE_READY"
 }

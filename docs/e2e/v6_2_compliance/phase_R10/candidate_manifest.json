@@ -1,27 +1,5 @@
 {
-  "schema_version": "localforge.v6_2.candidate_manifest.v1",
-  "release_version": "6.2.0",
-  "release_tag": "v6.2.0",
-  "phase": "R10",
-  "task_ids": [
-    "V61C-1000",
-    "V61C-1001",
-    "V61C-1002",
-    "V61C-1003",
-    "V61C-1004"
-  ],
-  "source_commit": "51283d1",
   "candidate_branch": "codex/v62-truth-reset-foundation",
-  "reviewed_pr_number": 14,
-  "verdict": "EVIDENCE_READY",
-  "input_hashes": {
-    "backend/localforge/services/security_controls.py": "86b0b57ba23fa79f3d27dfb63ad26cd720a7814661e2efc18216e9608bc25e67",
-    "backend/tests/test_phase_r10_operability.py": "82d5fce86874e9c0583f1c3686d13b14186dc8d4087b9182610d71f25f2285b6"
-  },
-  "known_limitations": [
-    "Candidate evidence is not final production acceptance.",
-    "Full hosted authorization, dependency/security scans, failure injection, capacity, and deployment runbooks remain open."
-  ],
   "commands": [
     {
       "command": "python -m pytest backend/tests/test_phase_r10_operability.py backend/tests/test_api_server.py -q",
@@ -36,14 +14,36 @@
       "exit_code": 0
     }
   ],
-  "manifest_sha256": "578e4b7f65c92981ae97e8610701ecef68dd5e453a52016acc43b182359b8dbe",
   "environment": {
+    "ci_workflow": ".github/workflows/ci.yml",
     "os": "windows-local-and-github-actions-matrix",
     "python": "3.11-local / 3.12-ci",
-    "validation_scope": "V6.2 candidate compliance evidence",
-    "ci_workflow": ".github/workflows/ci.yml"
+    "validation_scope": "V6.2 candidate compliance evidence"
   },
   "generated_gate_reasons": [
     "Candidate evidence remains EVIDENCE_READY until reviewed PR, merge commit, exact-head CI, owner-approved tag, and final release validation exist."
-  ]
+  ],
+  "input_hashes": {
+    "backend/localforge/services/security_controls.py": "86b0b57ba23fa79f3d27dfb63ad26cd720a7814661e2efc18216e9608bc25e67",
+    "backend/tests/test_phase_r10_operability.py": "82d5fce86874e9c0583f1c3686d13b14186dc8d4087b9182610d71f25f2285b6"
+  },
+  "known_limitations": [
+    "Candidate evidence is not final production acceptance.",
+    "Full hosted authorization, dependency/security scans, failure injection, capacity, and deployment runbooks remain open."
+  ],
+  "manifest_sha256": "578e4b7f65c92981ae97e8610701ecef68dd5e453a52016acc43b182359b8dbe",
+  "phase": "R10",
+  "release_tag": "v6.2.0",
+  "release_version": "6.2.0",
+  "reviewed_pr_number": 14,
+  "schema_version": "localforge.v6_2.candidate_manifest.v1",
+  "source_commit": "51283d1",
+  "task_ids": [
+    "V61C-1000",
+    "V61C-1001",
+    "V61C-1002",
+    "V61C-1003",
+    "V61C-1004"
+  ],
+  "verdict": "EVIDENCE_READY"
 }

@@ -1,29 +1,5 @@
 {
-  "schema_version": "localforge.v6_2.candidate_manifest.v1",
-  "release_version": "6.2.0",
-  "release_tag": "v6.2.0",
-  "phase": "R9",
-  "task_ids": [
-    "V61C-900",
-    "V61C-901",
-    "V61C-902",
-    "V61C-903",
-    "V61C-904"
-  ],
-  "source_commit": "e449972",
   "candidate_branch": "codex/v62-truth-reset-foundation",
-  "reviewed_pr_number": 14,
-  "verdict": "EVIDENCE_READY",
-  "corpus_hash": "db14971b596340a196354f0b82c5b0bd5e1cf7543f255fbcb6d5fcf4ef995eb9",
-  "input_hashes": {
-    "docs/e2e/v6_2_compliance/phase_R9/observed_corpus.json": "47d4e02770f0a4aa427018d9fb3f64350436a9aac6b9436ec25d5b1f867e0b35"
-  },
-  "known_limitations": [
-    "Candidate evidence is not final release acceptance.",
-    "Observed corpus is controlled compliance evidence, not broad production statistics.",
-    "JSONL publication export and CI row-count validation remain open.",
-    "Deep Swarm remains opt-in and PARTIAL until repeated controlled runs justify it."
-  ],
   "commands": [
     {
       "command": "python -m pytest backend/tests/test_phase11_operational_loops.py -q",
@@ -38,14 +14,38 @@
       "exit_code": 0
     }
   ],
-  "manifest_sha256": "7f76306274c295d67b7aa0d01438bdbe9b8d49b1ca9db29f2a9bb2f91cd04312",
+  "corpus_hash": "db14971b596340a196354f0b82c5b0bd5e1cf7543f255fbcb6d5fcf4ef995eb9",
   "environment": {
+    "ci_workflow": ".github/workflows/ci.yml",
     "os": "windows-local-and-github-actions-matrix",
     "python": "3.11-local / 3.12-ci",
-    "validation_scope": "V6.2 candidate compliance evidence",
-    "ci_workflow": ".github/workflows/ci.yml"
+    "validation_scope": "V6.2 candidate compliance evidence"
   },
   "generated_gate_reasons": [
     "Candidate evidence remains EVIDENCE_READY until reviewed PR, merge commit, exact-head CI, owner-approved tag, and final release validation exist."
-  ]
+  ],
+  "input_hashes": {
+    "docs/e2e/v6_2_compliance/phase_R9/observed_corpus.json": "47d4e02770f0a4aa427018d9fb3f64350436a9aac6b9436ec25d5b1f867e0b35"
+  },
+  "known_limitations": [
+    "Candidate evidence is not final release acceptance.",
+    "Observed corpus is controlled compliance evidence, not broad production statistics.",
+    "JSONL publication export and CI row-count validation remain open.",
+    "Deep Swarm remains opt-in and PARTIAL until repeated controlled runs justify it."
+  ],
+  "manifest_sha256": "7f76306274c295d67b7aa0d01438bdbe9b8d49b1ca9db29f2a9bb2f91cd04312",
+  "phase": "R9",
+  "release_tag": "v6.2.0",
+  "release_version": "6.2.0",
+  "reviewed_pr_number": 14,
+  "schema_version": "localforge.v6_2.candidate_manifest.v1",
+  "source_commit": "e449972",
+  "task_ids": [
+    "V61C-900",
+    "V61C-901",
+    "V61C-902",
+    "V61C-903",
+    "V61C-904"
+  ],
+  "verdict": "EVIDENCE_READY"
 }

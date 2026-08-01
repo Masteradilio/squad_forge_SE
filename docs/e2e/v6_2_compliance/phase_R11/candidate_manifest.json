@@ -1,29 +1,5 @@
 {
-  "schema_version": "localforge.v6_2.candidate_manifest.v1",
-  "release_version": "6.2.0",
-  "release_tag": "v6.2.0",
-  "phase": "R11",
-  "task_ids": [
-    "V61C-1100",
-    "V61C-1101",
-    "V61C-1102",
-    "V61C-1103",
-    "V61C-1104"
-  ],
-  "source_commit": "ea382ab",
   "candidate_branch": "codex/v62-truth-reset-foundation",
-  "reviewed_pr_number": 14,
-  "verdict": "EVIDENCE_READY",
-  "input_hashes": {
-    "backend/localforge/demo.py": "a567f8f31cada6abf914fe640a29abc5905033a624237489914da9f25b5db770",
-    "backend/tests/test_phase_r11_demo.py": "f25baed46239541196c7ed59e010f3a047b546cf979d1c97c1610110cdc6674c",
-    "docs/e2e/v6_2_compliance/phase_R11/demo/demo_run.json": "046859c37dd431a3ffcfd9e12b5aae6c3d42c639383725eb920b177bfa3eb5a2",
-    "docs/e2e/v6_2_compliance/phase_R11/demo/demo_replay.html": "64ca4339dd0a29da04a927387a95888172dc4489a27f0f7cead647afd720f4ae"
-  },
-  "known_limitations": [
-    "Candidate evidence is not final public release evidence.",
-    "Narrated video, README recruiter path, GitHub Pages deployment, and publication metadata remain open."
-  ],
   "commands": [
     {
       "command": "python -m pytest backend/tests/test_phase_r11_demo.py backend/tests/test_cli.py::test_cli_deterministic_demo_exports_replay -q",
@@ -38,14 +14,38 @@
       "exit_code": 0
     }
   ],
-  "manifest_sha256": "d6ad02d9f196392308848d0133f43a141da8971d7e7f44aba543672e96e37d48",
   "environment": {
+    "ci_workflow": ".github/workflows/ci.yml",
     "os": "windows-local-and-github-actions-matrix",
     "python": "3.11-local / 3.12-ci",
-    "validation_scope": "V6.2 candidate compliance evidence",
-    "ci_workflow": ".github/workflows/ci.yml"
+    "validation_scope": "V6.2 candidate compliance evidence"
   },
   "generated_gate_reasons": [
     "Candidate evidence remains EVIDENCE_READY until reviewed PR, merge commit, exact-head CI, owner-approved tag, and final release validation exist."
-  ]
+  ],
+  "input_hashes": {
+    "backend/localforge/demo.py": "a567f8f31cada6abf914fe640a29abc5905033a624237489914da9f25b5db770",
+    "backend/tests/test_phase_r11_demo.py": "f25baed46239541196c7ed59e010f3a047b546cf979d1c97c1610110cdc6674c",
+    "docs/e2e/v6_2_compliance/phase_R11/demo/demo_replay.html": "64ca4339dd0a29da04a927387a95888172dc4489a27f0f7cead647afd720f4ae",
+    "docs/e2e/v6_2_compliance/phase_R11/demo/demo_run.json": "046859c37dd431a3ffcfd9e12b5aae6c3d42c639383725eb920b177bfa3eb5a2"
+  },
+  "known_limitations": [
+    "Candidate evidence is not final public release evidence.",
+    "Narrated video, README recruiter path, GitHub Pages deployment, and publication metadata remain open."
+  ],
+  "manifest_sha256": "d6ad02d9f196392308848d0133f43a141da8971d7e7f44aba543672e96e37d48",
+  "phase": "R11",
+  "release_tag": "v6.2.0",
+  "release_version": "6.2.0",
+  "reviewed_pr_number": 14,
+  "schema_version": "localforge.v6_2.candidate_manifest.v1",
+  "source_commit": "ea382ab",
+  "task_ids": [
+    "V61C-1100",
+    "V61C-1101",
+    "V61C-1102",
+    "V61C-1103",
+    "V61C-1104"
+  ],
+  "verdict": "EVIDENCE_READY"
 }

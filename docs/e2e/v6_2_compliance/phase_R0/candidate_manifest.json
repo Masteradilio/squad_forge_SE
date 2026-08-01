@@ -1,21 +1,4 @@
 {
-  "schema_version": "localforge.v6_2.candidate_manifest.v1",
-  "release_version": "6.2.0",
-  "release_tag": "v6.2.0",
-  "phase": "R0",
-  "task_ids": [
-    "V61C-000",
-    "V61C-001",
-    "V61C-002",
-    "V61C-003"
-  ],
-  "source_commit": "e2cc2a32fb0c1bb97dbb8fa54f5c9468398b636e",
-  "parent_commit": "27836a2a8b18d9d24e8155ea30a6e7dcce2eec50",
-  "verdict": "EVIDENCE_READY",
-  "known_limitations": [
-    "R0 truth reset is not final production acceptance.",
-    "Reviewed PR, remote CI for the remediation branch, and final release assets are still required."
-  ],
   "commands": [
     {
       "command": "python -m pytest backend/tests/test_compliance_evidence.py backend/tests/test_bootstrap.py backend/tests/test_cli.py backend/tests/test_api_server.py backend/tests/test_services.py -q",
@@ -34,28 +17,45 @@
       "exit_code": 0
     }
   ],
-  "manifest_sha256": "5dfe8f5ce93354f90b1cb3f81b38ca0d969bbb87d9a02810c364f154b56eaa60",
-  "input_hashes": {
-    "README.md": "921b287901a054f7cdc581f17bdb6c586bb65875c56b5eeeec75cf051247bc1e",
-    "CHANGELOG.md": "cbf6adf35036edc07747e34143c89c599e6715e3871b88843c3965cc3dbf5cdd",
-    ".github/workflows/ci.yml": "463c8ac144651b84ee25d74577c464c5cf0ef467fa875bad57b351d89dd2ab53",
-    "docs/compliance_backlog_V6-1.md": "b7f5312a2c69d4c832ac226bb3b4ae2c52cb65e52d35c2b9c3d6c3220db36a1e",
-    "docs/e2e/v6_2_compliance/release_identity.md": "fbd0f56d9239886eb660c0aeac62af08c6b50391e4cf4a124b8870d59a3e50d1",
-    "docs/e2e/v6_1_compliance/manifest.json": "3d6e6216d8ad510ec583def4a3658821eeead634755f3e597889807a105d4808",
-    "docs/e2e/v6_2_compliance/phase_R0/acceptance_report.md": "92370200562db531e18e7df0c1cee4338b47ba9d7d18b91c82987c4e9ae04272",
-    "docs/e2e/v6_2_compliance/phase_R0/audit_of_audit.md": "c4958503829c40d857a944d4c1ded82970f3da68e8a82c0f959938a1e8ee2f5e",
-    "docs/e2e/v6_2_compliance/phase_R0/test_summary.json": "f7f6c7ba9d9bb997eee13b25d27ce624bf4e47c699a14c0ff2c7447e4e57c1db",
-    "docs/e2e/v6_2_compliance/phase_R0/known_limitations.md": "6077cfea65275b046651e5dfc6eff09bd3c46816cb75cf84393a804588930d04",
-    "scripts/check_release_truth.py": "34002c692b4af0b52f9bdb64e723cbb610c38d9846524e93a708988e3c320787",
-    "backend/tests/test_release_truth.py": "b004b9b35f9fd8b6aed2e7373223ab130e897d9036c08d6ac45c5b073744a118"
-  },
   "environment": {
+    "ci_workflow": ".github/workflows/ci.yml",
     "os": "windows-local-and-github-actions-matrix",
     "python": "3.11-local / 3.12-ci",
-    "validation_scope": "V6.2 candidate compliance evidence",
-    "ci_workflow": ".github/workflows/ci.yml"
+    "validation_scope": "V6.2 candidate compliance evidence"
   },
   "generated_gate_reasons": [
     "Candidate evidence remains EVIDENCE_READY until reviewed PR, merge commit, exact-head CI, owner-approved tag, and final release validation exist."
-  ]
+  ],
+  "input_hashes": {
+    ".github/workflows/ci.yml": "463c8ac144651b84ee25d74577c464c5cf0ef467fa875bad57b351d89dd2ab53",
+    "CHANGELOG.md": "4b79d4ebbca6d44b9ffe224f6f0a6e458416b799cdd81a248c70a052bb5faf6a",
+    "README.md": "ae9444d0517df944f6ce40e56f37573f7af02b2d59cc62307fd8588e3a26f79f",
+    "backend/tests/test_release_truth.py": "b004b9b35f9fd8b6aed2e7373223ab130e897d9036c08d6ac45c5b073744a118",
+    "docs/compliance_backlog_V6-1.md": "b7f5312a2c69d4c832ac226bb3b4ae2c52cb65e52d35c2b9c3d6c3220db36a1e",
+    "docs/e2e/v6_1_compliance/manifest.json": "3d6e6216d8ad510ec583def4a3658821eeead634755f3e597889807a105d4808",
+    "docs/e2e/v6_2_compliance/phase_R0/acceptance_report.md": "92370200562db531e18e7df0c1cee4338b47ba9d7d18b91c82987c4e9ae04272",
+    "docs/e2e/v6_2_compliance/phase_R0/audit_of_audit.md": "c4958503829c40d857a944d4c1ded82970f3da68e8a82c0f959938a1e8ee2f5e",
+    "docs/e2e/v6_2_compliance/phase_R0/known_limitations.md": "6077cfea65275b046651e5dfc6eff09bd3c46816cb75cf84393a804588930d04",
+    "docs/e2e/v6_2_compliance/phase_R0/test_summary.json": "f7f6c7ba9d9bb997eee13b25d27ce624bf4e47c699a14c0ff2c7447e4e57c1db",
+    "docs/e2e/v6_2_compliance/release_identity.md": "fbd0f56d9239886eb660c0aeac62af08c6b50391e4cf4a124b8870d59a3e50d1",
+    "scripts/check_release_truth.py": "34002c692b4af0b52f9bdb64e723cbb610c38d9846524e93a708988e3c320787"
+  },
+  "known_limitations": [
+    "R0 truth reset is not final production acceptance.",
+    "Reviewed PR, remote CI for the remediation branch, and final release assets are still required."
+  ],
+  "manifest_sha256": "bd65c2a1db36a330f2b8d02dabd170a5cbaaa56ff501026f0028a7aec9cc202e",
+  "parent_commit": "27836a2a8b18d9d24e8155ea30a6e7dcce2eec50",
+  "phase": "R0",
+  "release_tag": "v6.2.0",
+  "release_version": "6.2.0",
+  "schema_version": "localforge.v6_2.candidate_manifest.v1",
+  "source_commit": "e2cc2a32fb0c1bb97dbb8fa54f5c9468398b636e",
+  "task_ids": [
+    "V61C-000",
+    "V61C-001",
+    "V61C-002",
+    "V61C-003"
+  ],
+  "verdict": "EVIDENCE_READY"
 }

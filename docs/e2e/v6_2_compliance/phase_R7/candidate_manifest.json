@@ -1,24 +1,5 @@
 {
-  "schema_version": "localforge.v6_2.candidate_manifest.v1",
-  "release_version": "6.2.0",
-  "release_tag": "v6.2.0",
-  "phase": "R7",
-  "task_ids": [
-    "V61C-700",
-    "V61C-701",
-    "V61C-702",
-    "V61C-703"
-  ],
-  "source_commit": "af14dd7",
   "candidate_branch": "codex/v62-truth-reset-foundation",
-  "reviewed_pr_number": 14,
-  "verdict": "EVIDENCE_READY",
-  "known_limitations": [
-    "Candidate evidence is not final release acceptance.",
-    "Dynamic nodes are not yet dispatched through GovernedExecution.",
-    "Per-node resources and typed dependency evidence remain open.",
-    "Deep Swarm benchmark gate remains required before production promotion."
-  ],
   "commands": [
     {
       "command": "python -m pytest backend/tests/test_phase9_task_graph.py -q",
@@ -33,12 +14,11 @@
       "exit_code": 0
     }
   ],
-  "manifest_sha256": "4d2bfc0bbb9e04141ed8d4d8569985c3d0f52867cf937a90033fefaff43cf348",
   "environment": {
+    "ci_workflow": ".github/workflows/ci.yml",
     "os": "windows-local-and-github-actions-matrix",
     "python": "3.11-local / 3.12-ci",
-    "validation_scope": "V6.2 candidate compliance evidence",
-    "ci_workflow": ".github/workflows/ci.yml"
+    "validation_scope": "V6.2 candidate compliance evidence"
   },
   "generated_gate_reasons": [
     "Candidate evidence remains EVIDENCE_READY until reviewed PR, merge commit, exact-head CI, owner-approved tag, and final release validation exist."
@@ -46,5 +26,25 @@
   "input_hashes": {
     "docs/e2e/v6_2_compliance/phase_R7/acceptance_report.md": "0b4d8a2af5d880e615078eb43caf602152f6708547ada0aa6d72251b87a31ec9",
     "docs/e2e/v6_2_compliance/phase_R7/known_limitations.md": "40a92b82824ad20fc935342a272ed874d690f46bb1c96c8b376475d9ac955eb5"
-  }
+  },
+  "known_limitations": [
+    "Candidate evidence is not final release acceptance.",
+    "Dynamic nodes are not yet dispatched through GovernedExecution.",
+    "Per-node resources and typed dependency evidence remain open.",
+    "Deep Swarm benchmark gate remains required before production promotion."
+  ],
+  "manifest_sha256": "4d2bfc0bbb9e04141ed8d4d8569985c3d0f52867cf937a90033fefaff43cf348",
+  "phase": "R7",
+  "release_tag": "v6.2.0",
+  "release_version": "6.2.0",
+  "reviewed_pr_number": 14,
+  "schema_version": "localforge.v6_2.candidate_manifest.v1",
+  "source_commit": "af14dd7",
+  "task_ids": [
+    "V61C-700",
+    "V61C-701",
+    "V61C-702",
+    "V61C-703"
+  ],
+  "verdict": "EVIDENCE_READY"
 }

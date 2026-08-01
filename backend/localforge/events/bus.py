@@ -83,6 +83,19 @@ class EventBus:
                 created_at=event.created_at,
             )
             self._next_memory_id += 1
+
+        # Stream event to Redis Pub/Sub channel if available
+        try:
+            import json
+            from localforge.services.redis_manager import redis_manager
+            if redis_manager.is_available:
+                channel = f"events:project:{event.project_id}"
+                asyncio.create_task(
+                    redis_manager.publish(channel, json.dumps(event.to_sse_payload()))
+                )
+        except Exception:
+            pass
+
         for queue in list(self._subscribers.get(event.project_id, set())):
             if queue.full():
                 try:

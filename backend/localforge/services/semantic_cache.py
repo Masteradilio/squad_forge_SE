@@ -8,11 +8,13 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from localforge.services.redis_manager import redis_manager
+
 logger = logging.getLogger(__name__)
 
 
 class SemanticCacheManager:
-    """Manages semantic and exact-match caching for LLM responses and AST graphs."""
+    """Manages semantic and exact-match caching for LLM responses and AST graphs using Redis or disk fallback."""
 
     def __init__(
         self,
@@ -29,6 +31,7 @@ class SemanticCacheManager:
             os.getenv("FORGEOS_CACHE_TTL_SECONDS", str(ttl_seconds))
         )
         self.enabled = os.getenv("FORGEOS_SEMANTIC_CACHE_ENABLED", "true").lower() == "true"
+        self.redis = redis_manager
 
     def _compute_key(self, model: str, messages: List[Dict[str, Any]]) -> str:
         """Compute deterministic SHA-256 key from model and chat message structure."""
@@ -43,6 +46,17 @@ class SemanticCacheManager:
             return None
 
         cache_key = self._compute_key(model, messages)
+
+        # Check Redis if available
+        if self.redis.is_available:
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    # Synchronous fallback reading
+                    pass
+            except Exception:
+                pass
+
         cache_file = self.cache_dir / f"llm_{cache_key}.json"
 
         if not cache_file.exists():

@@ -1,5 +1,5 @@
 import { useState, useRef, type ChangeEvent } from 'react';
-import type { Project } from '../api/client';
+import { apiClient, type Project } from '../api/client';
 import { Card } from './Card';
 import { Button } from './Button';
 
@@ -14,9 +14,10 @@ interface Message {
 interface POChatViewProps {
   activeProject: Project | null;
   onNavigateToTab: (tab: string) => void;
+  onProjectCreated?: (project: Project) => void;
 }
 
-export function POChatView({ activeProject, onNavigateToTab }: POChatViewProps) {
+export function POChatView({ activeProject, onNavigateToTab, onProjectCreated }: POChatViewProps) {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
@@ -53,17 +54,35 @@ export function POChatView({ activeProject, onNavigateToTab }: POChatViewProps) 
     setSelectedFiles([]);
     setIsProcessing(true);
 
-    // Simulate Scrum Master Processing & Backlog Generation (Etapa 2)
-    setTimeout(() => {
+    try {
+      const chatRes = await apiClient.poChat(
+        inputText,
+        fileNames,
+        activeProject?.id
+      );
+
+      if (chatRes.project && onProjectCreated) {
+        onProjectCreated(chatRes.project);
+      }
+
       const smResponse: Message = {
         id: (Date.now() + 1).toString(),
         sender: 'Scrum Master',
-        text: `Recebido! Processamos o seu PRD e ${fileNames.length} arquivo(s) de referência visual.\n\n**Etapa 2 Concluída**: O backlog de tarefas foi gerado, priorizado por ordem de execução lógica e atribuído aos agentes da Squad. Você já pode acompanhar a execução em tempo real no menu **Kanban**!`,
+        text: chatRes.reply,
         timestamp: new Date().toLocaleTimeString(),
       };
       setMessages((prev) => [...prev, smResponse]);
+    } catch (err: any) {
+      const errorResponse: Message = {
+        id: (Date.now() + 1).toString(),
+        sender: 'Scrum Master',
+        text: `Erro ao comunicar com a Squad/OmniRoute: ${err.message || err}`,
+        timestamp: new Date().toLocaleTimeString(),
+      };
+      setMessages((prev) => [...prev, errorResponse]);
+    } finally {
       setIsProcessing(false);
-    }, 1500);
+    }
   };
 
   return (

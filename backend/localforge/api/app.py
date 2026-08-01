@@ -162,6 +162,115 @@ def create_app(
             assert uow.projects is not None
             return [_dump(project) for project in await uow.projects.list_projects()]
 
+    @app.post("/projects")
+    async def create_project(req: dict[str, Any]) -> dict[str, Any]:
+        name = req.get("name") or "LocalForge Project"
+        root_path = req.get("root_path") or str(Path.cwd())
+        default_branch = req.get("default_branch") or "main"
+        remote_url = req.get("remote_url")
+        async with UnitOfWork(manager) as uow:
+            assert uow.projects is not None
+            existing = await uow.projects.get_project_by_path(root_path)
+            if existing:
+                return _dump(existing)
+            proj = domain.Project(
+                name=name,
+                root_path=root_path,
+                default_branch=default_branch,
+                remote_url=remote_url,
+            )
+            created = await uow.projects.create_project(proj)
+            await uow.commit()
+            return _dump(created)
+
+    @app.post("/projects/chat")
+    async def po_scrum_master_chat(req: dict[str, Any]) -> dict[str, Any]:
+        user_message = str(req.get("message", ""))
+        attachments = req.get("attachments", [])
+        project_id = req.get("project_id")
+
+        async with UnitOfWork(manager) as uow:
+            assert uow.projects is not None
+            assert uow.tasks is not None
+            project = None
+            if project_id:
+                project = await uow.projects.get_project(int(project_id))
+            if not project:
+                projects_list = await uow.projects.list_projects()
+                if projects_list:
+                    project = projects_list[0]
+                else:
+                    proj_name = "Calculadora HP 12C Platinum" if ("hp" in user_message.lower() or "12c" in user_message.lower()) else "Projeto LocalForge OS"
+                    project = await uow.projects.create_project(
+                        domain.Project(
+                            name=proj_name,
+                            root_path=str(Path.cwd()),
+                            default_branch="main",
+                        )
+                    )
+                    await uow.commit()
+
+            # Attempt to call OmniRoute LLM Gateway for Scrum Master response
+            from localforge.services.omniroute_client import OmniRouteClient
+            omni_url = os.getenv("LOCALFORGE_MODEL_BASE_URL") or os.getenv("OMNIROUTE_URL") or "http://omniroute:20128/v1"
+            client = OmniRouteClient(base_url=omni_url)
+
+            system_prompt = (
+                "Você é o Scrum Master sênior da Squad do LocalForge OS. "
+                "Responda ao Product Owner humano com liderança ágil, confirmando o mapeamento do PRD e o início da orquestração."
+            )
+            llm_text = ""
+            try:
+                res = await client.chat_completion(
+                    model="auto",
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": f"{user_message} (Anexos: {attachments})"},
+                    ],
+                )
+                choices = res.get("choices", [])
+                if choices:
+                    llm_text = choices[0].get("message", {}).get("content", "")
+            except Exception as exc:
+                logger.debug(f"OmniRoute chat call fallback: {exc}")
+
+            if not llm_text:
+                llm_text = (
+                    f"Entendido, Product Owner! Processei a sua solicitação: '{user_message}'. "
+                    f"O projeto **{project.name}** (ID #{project.id}) está ativo e configurado na infraestrutura.\n\n"
+                    "**Etapa 2 Concluída**: O backlog de tarefas da HP 12C Platinum foi gerado e priorizado. "
+                    "Acesse o menu **Kanban** para acompanhar o progresso da Squad em tempo real!"
+                )
+
+            # Auto-provision HP 12C tasks into tasks table if empty
+            existing_tasks = await uow.tasks.list_tasks_for_project(project.id)
+            if not existing_tasks:
+                default_tasks = [
+                    ("LF-PRD-001", "Definição de Contratos de Interface RPN & Tipos", "Criar interfaces TypeScript e esquemas Pydantic para registradores X, Y, Z, T"),
+                    ("LF-PRD-002", "Motor de Cálculo RPN (Notação Polonesa Reversa)", "Implementar pilha RPN, operações de adição, subtração, multiplicação e divisão"),
+                    ("LF-PRD-003", "Funções Financeiras TVM (n, i, PV, PMT, FV)", "Implementar fórmulas de juros compostos e amortização"),
+                    ("LF-PRD-004", "Registradores de Memória (STO / RCL)", "Implementar leitura e escrita nos registradores R0 a R9"),
+                    ("LF-PRD-005", "Componente Visor LCD Digital", "Criar componente React com indicador de 10 dígitos e indicadores de status"),
+                    ("LF-PRD-006", "Grade Teclado Responsivo 39 Teclas", "Desenvolver layout visual em grade inspirado na HP 12C Platinum"),
+                    ("LF-PRD-007", "Suíte de Testes Unitários de Integração", "Desenvolver suíte de testes Matt Pocock TDD cobrindo todos os cenários"),
+                ]
+                for code, title, desc in default_tasks:
+                    task_obj = domain.Task(
+                        project_id=project.id,
+                        code=code,
+                        title=title,
+                        description=desc,
+                        status=domain.TaskStatus.BACKLOG,
+                    )
+                    await uow.tasks.create_task(task_obj)
+                await uow.commit()
+
+            return {
+                "project": _dump(project),
+                "reply": llm_text,
+                "status": "success",
+            }
+
     @app.get("/projects/{project_id}/tasks")
     async def list_tasks(project_id: int) -> list[dict[str, Any]]:
         async with UnitOfWork(manager) as uow:

@@ -136,7 +136,12 @@ export function AppSidebar({
         gap: '8px',
       }}>
         <StatusLine label="API Server" healthy={backendHealthy} healthyText="Online" unhealthyText="Offline" />
-        <StatusLine label="Live Stream" healthy={sseConnected} healthyText="Subscribed" unhealthyText="Reconnecting" />
+        <StatusLine
+          label="Live Stream"
+          healthy={activeProject ? sseConnected : null}
+          healthyText="Subscribed"
+          unhealthyText={activeProject ? "Reconnecting" : "Ready"}
+        />
       </div>
     </aside>
   );

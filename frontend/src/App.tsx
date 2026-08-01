@@ -811,6 +811,15 @@ export default function App() {
           <POChatView
             activeProject={activeProject}
             onNavigateToTab={(tab) => setCurrentTab(tab as AppTab)}
+            onProjectCreated={(project) => {
+              setActiveProject(project);
+              apiClient.fetchProjects().then((projs) => {
+                setProjects(projs);
+                if (project.id) {
+                  apiClient.fetchTasks(project.id).then(setTasks).catch(() => {});
+                }
+              });
+            }}
           />
         );
       case 'kanban':
@@ -837,6 +846,15 @@ export default function App() {
           <POChatView
             activeProject={activeProject}
             onNavigateToTab={(tab) => setCurrentTab(tab as AppTab)}
+            onProjectCreated={(project) => {
+              setActiveProject(project);
+              apiClient.fetchProjects().then((projs) => {
+                setProjects(projs);
+                if (project.id) {
+                  apiClient.fetchTasks(project.id).then(setTasks).catch(() => {});
+                }
+              });
+            }}
           />
         );
     }

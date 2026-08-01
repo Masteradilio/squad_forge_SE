@@ -277,6 +277,26 @@ export const apiClient = {
     return request<Project[]>('/api/projects');
   },
 
+  createProject(payload: { name: string; root_path?: string }): Promise<Project> {
+    return request<Project>('/api/projects', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  poChat(
+    message: string,
+    attachments?: string[],
+    projectId?: number
+  ): Promise<{ project: Project; reply: string; status: string }> {
+    return request<{ project: Project; reply: string; status: string }>('/api/projects/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message, attachments, project_id: projectId }),
+    });
+  },
+
   fetchTasks(projectId: number): Promise<Task[]> {
     return request<Task[]>(`/api/projects/${projectId}/tasks`);
   },

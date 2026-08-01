@@ -1,7 +1,7 @@
 import React from 'react';
 
 export interface TraceSpanItem {
-  span_id: str;
+  span_id: string;
   role_name: string;
   action_name: string;
   start_time: number;

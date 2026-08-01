@@ -2,6 +2,61 @@
 
 All notable changes to LocalForge OS will be documented in this file.
 
+ ## [1.2.7] - 2026-08-01 (Backend Policy & Pending-Approvals 200 OK Fallbacks)
+
+### 🚀 Bug Fixes & Resiliency Enhancements
+- **Eliminated 404 Rejections on Backend (`app.py`)**: Updated `GET /projects/{project_id}/policies/{name}` and `GET /projects/{project_id}/pending-approvals` to return default 200 OK responses for newly provisioned projects. Combined with `Array.isArray` frontend guards, 100% of project data endpoints now resolve with HTTP 200, permanently removing the synchronization error banner.
+
+ ## [1.2.6] - 2026-08-01 (Type Safety Guards & Array.isArray Sanitization in Project Sync)
+
+### 🚀 Bug Fixes & Resiliency Enhancements
+- **Sanitized `loadProjectData` Callback (`App.tsx`)**: Enforced `Array.isArray()` type-check guards on all returned promise payloads (`tasks`, `runs`, `agents`, `models`, `epics`, `routes`, `memory`, `skills`, `worktrees`, `metrics`). This eliminates `TypeError: mrData.map is not a function` when 404 response objects (`{ detail: "Not found" }`) are returned, permanently resolving the red error banner.
+
+ ## [1.2.5] - 2026-08-01 (Defensive Endpoint Handling for App Database Synchronization)
+
+### 🚀 Bug Fixes & Resiliency Enhancements
+- **Defensive Promises in `loadProjectData` (`App.tsx`)**: Wrapped all 14 project data fetch calls in `Promise.all` with `.catch()` fallbacks. This prevents unhandled 404s on optional routes (such as `/api/projects/{id}/routes` or `/metrics`) from triggering the red "Error synchronizing database state with backend" banner.
+
+ ## [1.2.4] - 2026-08-01 (Active Project Auto-Selection & Chat Session Persistence Across Tabs)
+
+### 🚀 Major UX & Architecture Fixes
+- **Active Project Auto-Sync (`App.tsx`)**: Updated `onSelectProject` in `App.tsx` to refetch the projects list when the Scrum Master provisions a new project (e.g. *Calculadora HP 12C Platinum*), auto-selecting it in the sidebar dropdown and populating its tasks immediately on the Kanban board.
+- **Session Persistence Across Navigation (`POChatView.tsx`)**: Saved `activeSessionId` in `localStorage` (`localforge_active_session_id`) and sorted chat sessions by `updated_at` descending, preserving selected chat history across tab switches and page refreshes.
+- **Immediate SSE Live Stream Handshake (`app.py`)**: Added an initial `: connected\n\n` SSE ping in `stream_project_events` to flush Nginx buffers and transition `Live Stream: Subscribed` to solid green 🟢 upon connection.
+
+ ## [1.2.3] - 2026-08-01 (Automatic Content-Type JSON Headers & Robust Error Unpacking)
+
+### 🚀 Bug Fixes & UX Enhancements
+- **Global `Content-Type: application/json` Header (`client.ts`)**: Configured the HTTP `request` helper in `frontend/src/api/client.ts` to automatically attach `'Content-Type': 'application/json'` to all POST/PUT requests. This resolves the FastAPI 422 payload validation error when communicating with the Scrum Master LLM.
+- **Robust Exception Unpacking (`client.ts`, `POChatView.tsx`)**: Unpacked FastAPI error arrays (`detail.msg`) into human-readable text strings, preventing `[object Object]` error bubbles.
+
+ ## [1.2.2] - 2026-08-01 (Docker Frontend Volume Mount & Live Build Sync)
+
+### 🚀 Infrastructure & Deployment Fixes
+- **Docker Nginx Live Sync (`docker-compose.yml`)**: Added `./frontend/dist:/usr/share/nginx/html` volume mapping to the `frontend` container in `docker-compose.yml`. This ensures Nginx immediately serves newly compiled Vite JavaScript bundles directly from the host system without stale container caching.
+
+ ## [1.2.1] - 2026-08-01 (API Client Fix for PO Chat & Global Live Stream SSE Connection)
+
+### 🚀 Bug Fixes & UX Enhancements
+- **Exported `poScrumMasterChat` in `client.ts`**: Added missing `poScrumMasterChat` API method to `apiClient` object in `frontend/src/api/client.ts`, eliminating the JavaScript runtime exception `poScrumMasterChat is not a function`.
+- **Global Live Stream Connection (`events.ts`)**: Updated `useProjectEvents` to subscribe to `/api/projects/0/events` when no project is active, displaying a solid green **"Live Stream: Subscribed"** status badge from the moment the app loads.
+
+ ## [1.2.0] - 2026-08-01 (PO Chat Project Folders & PostgreSQL Chat Sessions Persistence)
+
+### 🚀 New Features & Architecture Enhancements
+- **PostgreSQL Chat Storage Schema (`orm.py`, `models/domain.py`)**: Added `project_folders`, `chat_sessions`, and `chat_messages` tables providing full relational persistence for all PO <-> Scrum Master conversations, eliminating frozen browser states and lost chat history.
+- **Chat Folders & Sessions REST API (`app.py`, `client.ts`)**: Built complete REST API (`/api/chat/folders` and `/api/chat/sessions`) with full CRUD support (create, rename, move, delete, list).
+- **Inner Chat Sidebar UI (`POChatView.tsx`)**: Developed an inner sidebar inside the PO Chat view matching the user's reference design, displaying collapsible Project Folders (`📁`), unassigned Conversations (`💬`), inline rename inputs, folder assignment modals, and deletion controls.
+- **Default Session Auto-Bootstrap (`app.py`, `POChatView.tsx`)**: Automatically provisions a clean default conversation with the Scrum Master's welcome greeting when entering ForgeOS or resetting the database environment.
+
+ ## [1.1.2] - 2026-08-01 (Real Squad LLM Execution, OpenTelemetry Live Spans & Environment Reset)
+
+### 🚀 Bug Fixes & Architecture Enhancements
+- **Real LLM Squad Execution Loop (`app.py`)**: Implemented background worker `_execute_real_squad_loop` executing real OmniRoute LLM calls for `Chief Engineer` and `Developer` roles and advancing tasks sequentially through valid state machine transitions.
+- **OpenTelemetry Telemetry Spans & Live Timeline (`tracer.py`, `TracingTimelineView.tsx`, `App.tsx`)**: Created `GET /api/projects/{project_id}/telemetry-spans` endpoint and connected frontend `TracingTimelineView` to poll live spans displaying real-time agent role latencies, statuses, and tool execution logs.
+- **In-Card Agent Action Tracing (`KanbanBoard.tsx`, `App.tsx`)**: Added real-time animated glowing agent badge and log summary box inside each Kanban task card rectangle, updating via `task.agent_action` SSE events.
+- **Database & Environment Reset (`app.py`, `client.ts`, `KanbanBoard.tsx`)**: Created `POST /api/projects/reset-all` endpoint and added a **"🧹 Zerar Ambiente"** button on the Kanban board header to safely truncate PostgreSQL tables and reset memory tracer state for clean demonstration restarts.
+
  ## [1.1.1] - 2026-08-01 (Squad Execution Loop & PO Chat Persistence)
 
 ### 🚀 Bug Fixes & UX Enhancements

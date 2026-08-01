@@ -32,16 +32,16 @@ export function useProjectEvents(
   const lastEventIdRef = useRef<number>(0);
 
   useEffect(() => {
-    if (!projectId) return;
-
     let active = true;
     let eventSource: EventSource | null = null;
     let reconnectTimer: number | null = null;
 
+    const pid = projectId && projectId > 0 ? projectId : 0;
+
     const connect = () => {
       if (!active) return;
 
-      const url = `/api/projects/${projectId}/events?last_event_id=${lastEventIdRef.current}`;
+      const url = `/api/projects/${pid}/events?last_event_id=${lastEventIdRef.current}`;
       eventSource = new EventSource(url);
 
       eventSource.onopen = () => {
@@ -67,7 +67,7 @@ export function useProjectEvents(
               lastEventIdRef.current = eventId;
             }
             onEvent({
-              project_id: projectId,
+              project_id: pid,
               event_type: type,
               payload: data.payload || data,
               id: eventId || undefined,

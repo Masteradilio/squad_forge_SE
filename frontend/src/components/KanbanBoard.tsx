@@ -11,6 +11,7 @@ interface KanbanBoardProps {
   onTaskClick?: (task: Task) => void;
   onRefresh?: () => void;
   onStartSquad?: () => void;
+  onResetAll?: () => void;
 }
 
 export interface KanbanColumnConfig {
@@ -32,11 +33,12 @@ export function tasksForColumn(tasks: Task[], statuses: readonly string[]): Task
   return tasks.filter((task) => statuses.includes(task.status));
 }
 
-export function KanbanBoard({ tasks, activeProjectId, onTaskClick, onRefresh, onStartSquad }: KanbanBoardProps) {
+export function KanbanBoard({ tasks, activeProjectId, onTaskClick, onRefresh, onStartSquad, onResetAll }: KanbanBoardProps) {
   const [rejectModalTask, setRejectModalTask] = useState<Task | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
   const [processingPR, setProcessingPR] = useState(false);
   const [startingSquad, setStartingSquad] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
   // Filter tasks based on search query
@@ -54,12 +56,25 @@ export function KanbanBoard({ tasks, activeProjectId, onTaskClick, onRefresh, on
     try {
       setStartingSquad(true);
       await apiClient.startSquad(activeProjectId);
-      alert('🚀 Execução da Squad disparada com sucesso! As primeiras tarefas foram movidas para Em Andamento (WIP).');
       onRefresh?.();
     } catch (err: any) {
       alert(`Falha ao iniciar Squad: ${err.message || err}`);
     } finally {
       setStartingSquad(false);
+    }
+  };
+
+  const handleResetEnvironment = async () => {
+    if (!confirm('Deseja realmente apagar todos os registros do banco de dados e reiniciar o ambiente do zero?')) return;
+    try {
+      setResetting(true);
+      await apiClient.resetAll();
+      alert('🧹 Ambiente e banco de dados zerados com sucesso!');
+      onResetAll?.();
+    } catch (err: any) {
+      alert(`Falha ao resetar ambiente: ${err.message || err}`);
+    } finally {
+      setResetting(false);
     }
   };
 
@@ -110,6 +125,15 @@ export function KanbanBoard({ tasks, activeProjectId, onTaskClick, onRefresh, on
             title="Disparar a execução da Squad de Agentes para implementar as tarefas do backlog"
           >
             {startingSquad ? 'Disparando Execução...' : '🚀 Iniciar Execução da Squad'}
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={handleResetEnvironment}
+            disabled={resetting}
+            title="Zerar projetos, tarefas e telemetria para reiniciar o processo do zero"
+            style={{ backgroundColor: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.4)' }}
+          >
+            {resetting ? 'Zerando...' : '🧹 Zerar Ambiente'}
           </Button>
           <input
             type="text"
@@ -201,11 +225,44 @@ export function KanbanBoard({ tasks, activeProjectId, onTaskClick, onRefresh, on
 
                     <div style={{ fontWeight: '600', marginBottom: '8px', fontSize: '0.95rem' }}>{task.title}</div>
 
-                    {/* Git Worktree Isolation Badge (Cline Kanban Feature) */}
-                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', backgroundColor: 'rgba(255,255,255,0.03)', padding: '4px 8px', borderRadius: '4px', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px', fontFamily: 'monospace' }}>
+                    {/* Git Worktree Isolation Badge */}
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', backgroundColor: 'rgba(255,255,255,0.03)', padding: '4px 8px', borderRadius: '4px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px', fontFamily: 'monospace' }}>
                       <span>🌿</span>
                       <span>{worktreeBranch}</span>
                     </div>
+
+                    {/* Real-time Agent Action Tracing Box inside Task Card */}
+                    {(task as any).agent_action && (
+                      <div
+                        style={{
+                          marginTop: '6px',
+                          marginBottom: '10px',
+                          padding: '8px 10px',
+                          borderRadius: '6px',
+                          backgroundColor: 'rgba(59, 130, 246, 0.15)',
+                          border: '1px solid rgba(59, 130, 246, 0.4)',
+                          fontSize: '11px',
+                          textAlign: 'left',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700, color: '#60a5fa' }}>
+                          <span
+                            style={{
+                              display: 'inline-block',
+                              width: '7px',
+                              height: '7px',
+                              borderRadius: '50%',
+                              backgroundColor: '#3b82f6',
+                              boxShadow: '0 0 8px #3b82f6',
+                            }}
+                          />
+                          {(task as any).agent_action.agent_role}
+                        </div>
+                        <div style={{ marginTop: '4px', color: '#e2e8f0', fontFamily: 'monospace', fontSize: '10px' }}>
+                          {(task as any).agent_action.action_summary}
+                        </div>
+                      </div>
+                    )}
 
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <StatusBadge status={task.status} />

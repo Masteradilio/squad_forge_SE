@@ -71,6 +71,94 @@ class ProjectORM(Base):
         )
 
 
+class ProjectFolderORM(Base):
+    __tablename__ = "project_folders"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    icon: Mapped[str] = mapped_column(String(50), default="folder")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=_now_naive, onupdate=_now_naive
+    )
+
+    def to_domain(self) -> domain.ProjectFolder:
+        return domain.ProjectFolder.model_validate(self)
+
+    @classmethod
+    def from_domain(cls, d: domain.ProjectFolder) -> "ProjectFolderORM":
+        created = d.created_at.replace(tzinfo=None) if (d.created_at and d.created_at.tzinfo) else d.created_at
+        updated = d.updated_at.replace(tzinfo=None) if (d.updated_at and d.updated_at.tzinfo) else d.updated_at
+        return cls(
+            id=d.id,
+            name=d.name,
+            icon=d.icon,
+            created_at=created,
+            updated_at=updated,
+        )
+
+
+class ChatSessionORM(Base):
+    __tablename__ = "chat_sessions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False, default="Nova Conversa")
+    folder_id: Mapped[int | None] = mapped_column(
+        ForeignKey("project_folders.id", ondelete="SET NULL"), nullable=True
+    )
+    project_id: Mapped[int | None] = mapped_column(
+        ForeignKey("projects.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=_now_naive, onupdate=_now_naive
+    )
+
+    def to_domain(self) -> domain.ChatSession:
+        return domain.ChatSession.model_validate(self)
+
+    @classmethod
+    def from_domain(cls, d: domain.ChatSession) -> "ChatSessionORM":
+        created = d.created_at.replace(tzinfo=None) if (d.created_at and d.created_at.tzinfo) else d.created_at
+        updated = d.updated_at.replace(tzinfo=None) if (d.updated_at and d.updated_at.tzinfo) else d.updated_at
+        return cls(
+            id=d.id,
+            title=d.title,
+            folder_id=d.folder_id,
+            project_id=d.project_id,
+            created_at=created,
+            updated_at=updated,
+        )
+
+
+class ChatMessageORM(Base):
+    __tablename__ = "chat_messages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    session_id: Mapped[int] = mapped_column(
+        ForeignKey("chat_sessions.id", ondelete="CASCADE"), nullable=False
+    )
+    sender: Mapped[str] = mapped_column(String(50), nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    attachments: Mapped[dict | list | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive)
+
+    def to_domain(self) -> domain.ChatMessage:
+        return domain.ChatMessage.model_validate(self)
+
+    @classmethod
+    def from_domain(cls, d: domain.ChatMessage) -> "ChatMessageORM":
+        created = d.created_at.replace(tzinfo=None) if (d.created_at and d.created_at.tzinfo) else d.created_at
+        return cls(
+            id=d.id,
+            session_id=d.session_id,
+            sender=d.sender,
+            text=d.text,
+            attachments=d.attachments,
+            created_at=created,
+        )
+
+
 class ProductDocumentORM(Base):
     __tablename__ = "product_documents"
 

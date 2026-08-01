@@ -76,6 +76,38 @@ class Project(BaseModel):
     updated_at: datetime = Field(default_factory=utc_now)
 
 
+class ProjectFolder(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int | None = None
+    name: str
+    icon: str = "folder"
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
+
+
+class ChatSession(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int | None = None
+    title: str = "Nova Conversa"
+    folder_id: int | None = None
+    project_id: int | None = None
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
+
+
+class ChatMessage(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int | None = None
+    session_id: int
+    sender: str
+    text: str
+    attachments: list[str] = Field(default_factory=list)
+    created_at: datetime = Field(default_factory=utc_now)
+
+
 class ProductDocument(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

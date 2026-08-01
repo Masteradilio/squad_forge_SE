@@ -6,6 +6,34 @@ export interface Project {
   localforge_config_path?: string;
 }
 
+export interface ChatFolder {
+  id: number;
+  name: string;
+  icon: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ChatSession {
+  id: number;
+  title: string;
+  folder_id?: number | null;
+  project_id?: number | null;
+  message_count?: number;
+  messages?: ChatMessageItem[];
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ChatMessageItem {
+  id: number;
+  session_id: number;
+  sender: 'PO' | 'Scrum Master' | 'System';
+  text: string;
+  attachments?: string[];
+  created_at?: string;
+}
+
 export interface Epic {
   id: number;
   project_id: number;
@@ -264,10 +292,20 @@ export interface PRDetails {
 }
 
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(url, options);
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(options?.headers || {}),
+  };
+  const response = await fetch(url, { ...options, headers });
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.detail || `Request failed with status ${response.status}`);
+    const detailMsg =
+      typeof errorData.detail === 'string'
+        ? errorData.detail
+        : Array.isArray(errorData.detail)
+        ? errorData.detail.map((d: any) => d.msg || JSON.stringify(d)).join(', ')
+        : `Request failed with status ${response.status}`;
+    throw new Error(detailMsg);
   }
   return response.json();
 }
@@ -297,10 +335,20 @@ export const apiClient = {
     });
   },
 
-  startSquad(projectId: number): Promise<{ status: string; moved_tasks: Task[] }> {
-    return request<{ status: string; moved_tasks: Task[] }>(`/api/projects/${projectId}/start-squad`, {
+  startSquad(projectId: number): Promise<{ status: string; message: string }> {
+    return request<{ status: string; message: string }>(`/api/projects/${projectId}/start-squad`, {
       method: 'POST',
     });
+  },
+
+  resetAll(): Promise<{ status: string; message: string }> {
+    return request<{ status: string; message: string }>('/api/projects/reset-all', {
+      method: 'POST',
+    });
+  },
+
+  fetchTelemetrySpans(projectId: number): Promise<any[]> {
+    return request<any[]>(`/api/projects/${projectId}/telemetry-spans`);
   },
 
   fetchTasks(projectId: number): Promise<Task[]> {
@@ -346,7 +394,7 @@ export const apiClient = {
   },
 
   fetchPolicy(projectId: number, name: string): Promise<Policy> {
-    return request<Policy>(`/api/projects/${projectId}/policies/${name}`);
+    return request<Policy>(`/api/projects/${projectId}/policies/${name}`).catch(() => null as any);
   },
 
   updatePolicy(
@@ -582,5 +630,82 @@ export const apiClient = {
       method: 'POST',
       body: JSON.stringify(envVars),
     });
+  },
+
+  // Chat Folders CRUD
+  fetchChatFolders(): Promise<ChatFolder[]> {
+    return request<ChatFolder[]>('/api/chat/folders');
+  },
+
+  createChatFolder(name: string, icon = 'folder'): Promise<ChatFolder> {
+    return request<ChatFolder>('/api/chat/folders', {
+      method: 'POST',
+      body: JSON.stringify({ name, icon }),
+    });
+  },
+
+  updateChatFolder(folderId: number, data: { name?: string; icon?: string }): Promise<ChatFolder> {
+    return request<ChatFolder>(`/api/chat/folders/${folderId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  deleteChatFolder(folderId: number): Promise<{ status: string; folder_id: number }> {
+    return request<{ status: string; folder_id: number }>(`/api/chat/folders/${folderId}`, {
+      method: 'DELETE',
+    });
+  },
+
+  // Chat Sessions CRUD
+  fetchChatSessions(): Promise<ChatSession[]> {
+    return request<ChatSession[]>('/api/chat/sessions');
+  },
+
+  createChatSession(title = 'Nova Conversa', folderId?: number | null): Promise<ChatSession> {
+    return request<ChatSession>('/api/chat/sessions', {
+      method: 'POST',
+      body: JSON.stringify({ title, folder_id: folderId }),
+    });
+  },
+
+  fetchChatSessionDetails(sessionId: number): Promise<ChatSession> {
+    return request<ChatSession>(`/api/chat/sessions/${sessionId}`);
+  },
+
+  updateChatSession(
+    sessionId: number,
+    data: { title?: string; folder_id?: number | null; project_id?: number | null }
+  ): Promise<ChatSession> {
+    return request<ChatSession>(`/api/chat/sessions/${sessionId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  deleteChatSession(sessionId: number): Promise<{ status: string; session_id: number }> {
+    return request<{ status: string; session_id: number }>(`/api/chat/sessions/${sessionId}`, {
+      method: 'DELETE',
+    });
+  },
+
+  poScrumMasterChat(
+    message: string,
+    attachments: string[],
+    projectId?: number,
+    sessionId?: number
+  ): Promise<{ project: Project; reply: string; session_id: number; status: string }> {
+    return request<{ project: Project; reply: string; session_id: number; status: string }>(
+      '/api/projects/chat',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          message,
+          attachments,
+          project_id: projectId,
+          session_id: sessionId,
+        }),
+      }
+    );
   },
 };

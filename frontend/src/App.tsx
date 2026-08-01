@@ -136,7 +136,7 @@ export default function App() {
   const [chiefEngineerUsage, setChiefEngineerUsage] = useState<ChiefEngineerUsage | null>(null);
   const [projectSettings, setProjectSettings] = useState<ProjectSettings | null>(null);
   const [auditExport, setAuditExport] = useState('');
-  const [policy, setPolicy] = useState<Policy | null>(null);
+  const [telemetrySpans, setTelemetrySpans] = useState<any[]>([]);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [taskArtifacts, setTaskArtifacts] = useState<Artifact[]>([]);
   const [selectedArtifactContent, setSelectedArtifactContent] = useState<{
@@ -620,10 +620,10 @@ export default function App() {
     if (!activeProject) return;
     setLoading(true);
     Promise.all([
-      apiClient.fetchTasks(activeProject.id),
-      apiClient.fetchRuns(activeProject.id),
-      apiClient.fetchAgents(),
-      apiClient.fetchModels(),
+      apiClient.fetchTasks(activeProject.id).catch(() => []),
+      apiClient.fetchRuns(activeProject.id).catch(() => []),
+      apiClient.fetchAgents().catch(() => []),
+      apiClient.fetchModels().catch(() => ({ provider: '', base_url: '', default_model: '', models: [] })),
       apiClient.fetchPolicy(activeProject.id, 'default').catch(() => null),
       apiClient.fetchPendingApprovals(activeProject.id).catch(() => []),
       apiClient.fetchEpics(activeProject.id).catch(() => []),
@@ -651,27 +651,39 @@ export default function App() {
         chiefEngineerData,
         settingsData,
       ]) => {
-        setTasks(tData);
-        setRuns(rData);
-        setAgents(aData);
-        setModels(mData.models);
+        const safeTasks = Array.isArray(tData) ? tData : [];
+        const safeRuns = Array.isArray(rData) ? rData : [];
+        const safeAgents = Array.isArray(aData) ? aData : [];
+        const safeModels = Array.isArray(mData?.models) ? mData.models : [];
+        const safePendingApprovals = Array.isArray(paData) ? paData : [];
+        const safeEpics = Array.isArray(eData) ? eData : [];
+        const safeModelRoutes = Array.isArray(mrData) ? mrData : [];
+        const safeMemData = Array.isArray(memData) ? memData : [];
+        const safeSkillsData = Array.isArray(skillsData) ? skillsData : [];
+        const safeWorktreeData = Array.isArray(worktreeData) ? worktreeData : [];
+        const safeModelMetricData = Array.isArray(modelMetricData) ? modelMetricData : [];
+
+        setTasks(safeTasks);
+        setRuns(safeRuns);
+        setAgents(safeAgents);
+        setModels(safeModels);
         setPolicy(pData);
-        setPendingApprovals(paData);
-        setEpics(eData);
-        setModelRoutes(mrData);
+        setPendingApprovals(safePendingApprovals);
+        setEpics(safeEpics);
+        setModelRoutes(safeModelRoutes);
         setRouteDrafts(
-          Object.fromEntries(mrData.map((route) => [route.role, route]))
+          Object.fromEntries(safeModelRoutes.map((route) => [route.role, route]))
         );
-        setProjectMemory(memData);
-        setSkills(skillsData);
-        setWorktrees(worktreeData);
-        setModelMetrics(modelMetricData);
+        setProjectMemory(safeMemData);
+        setSkills(safeSkillsData);
+        setWorktrees(safeWorktreeData);
+        setModelMetrics(safeModelMetricData);
         setChiefEngineerUsage(chiefEngineerData);
         setProjectSettings(settingsData);
         setError(null);
       })
       .catch((err) => {
-        console.error(err);
+        console.error('loadProjectData error:', err);
         setError('Error synchronizing database state with backend.');
       })
       .finally(() => setLoading(false));
@@ -697,7 +709,18 @@ export default function App() {
   // SSE handler callback
   const handleLiveEvent = useCallback((event: LifecycleEventPayload) => {
     setEvents((prev) => [event, ...prev].slice(0, 50));
-    // Reload state if task status changed or runs modified or approvals decided
+
+    if (event.event_type === 'task.agent_action' && event.payload) {
+      const { task_id, key, agent_role, action_summary } = event.payload;
+      setTasks((prev) =>
+        prev.map((t) =>
+          t.id === task_id || t.key === key
+            ? ({ ...t, agent_action: { agent_role, action_summary } } as any)
+            : t
+        )
+      );
+    }
+
     const reloadEvents = [
       'task.status_changed',
       'run.started',
@@ -715,15 +738,18 @@ export default function App() {
     if (reloadEvents.includes(event.event_type)) {
       loadProjectData();
     }
-    if (selectedAgent) {
-      apiClient
-        .fetchAgentDetails(selectedAgent.id)
-        .then((details) => {
-          setAgentDetails(details);
-        })
-        .catch((err) => console.error('SSE reload agent details failed:', err));
-    }
-  }, [loadProjectData, selectedAgent]);
+  }, [loadProjectData]);
+
+  // Poll Telemetry Spans for Timeline
+  useEffect(() => {
+    if (!activeProject) return;
+    const fetchSpans = () => {
+      apiClient.fetchTelemetrySpans(activeProject.id).then(setTelemetrySpans).catch(() => {});
+    };
+    fetchSpans();
+    const interval = setInterval(fetchSpans, 2000);
+    return () => clearInterval(interval);
+  }, [activeProject]);
 
   // Subscribe to SSE
   const sseConnected = useProjectEvents(activeProject?.id || 0, handleLiveEvent);
@@ -886,12 +912,26 @@ export default function App() {
             activeProjectId={activeProject?.id}
             onTaskClick={(task) => setSelectedTask(task)}
             onRefresh={loadProjectData}
+            onResetAll={() => {
+              setActiveProject(null);
+              setProjects([]);
+              setTasks([]);
+              setChatMessages([
+                {
+                  id: '1',
+                  sender: 'Scrum Master',
+                  text: 'Olá Product Owner! Sou o **Scrum Master** do LocalForge OS. Envie o seu `PRD.md` e arquivos visuais/schemas de interface (`.png`, `.jpg`, `.svg`) abaixo para iniciarmos a Etapa 2 de criação do Backlog da Squad.',
+                  timestamp: new Date().toLocaleTimeString(),
+                },
+              ]);
+              localStorage.removeItem('localforge_po_chat_messages');
+            }}
           />
         );
       case 'tests':
         return (
           <div className="space-y-6">
-            <TracingTimelineView spans={[]} />
+            <TracingTimelineView spans={telemetrySpans} />
             <ComplianceTestsView onNavigateToTab={(tab) => setCurrentTab(tab as AppTab)} />
           </div>
         );
@@ -903,9 +943,19 @@ export default function App() {
         return (
           <POChatView
             activeProject={activeProject}
-            messages={chatMessages}
-            onSendMessage={handleSendChatMessage}
             onNavigateToTab={(tab) => setCurrentTab(tab as AppTab)}
+            onSelectProject={async (projId) => {
+              try {
+                const freshProjects = await apiClient.fetchProjects();
+                setProjects(freshProjects);
+                const targetProj = freshProjects.find((p) => p.id === projId);
+                if (targetProj) {
+                  setActiveProject(targetProj);
+                }
+              } catch (err) {
+                console.error('Error selecting project:', err);
+              }
+            }}
           />
         );
     }

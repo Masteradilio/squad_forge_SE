@@ -37,9 +37,8 @@ RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
     opentelemetry-sdk \
     cryptography
 
-# Install Playwright browser dependencies and chromium
-RUN npx playwright install-deps chromium || true && \
-    playwright install chromium || true
+# Install Playwright chromium (optional headless browser)
+RUN playwright install chromium || true
 
 COPY .env.example /app/.env.example
 

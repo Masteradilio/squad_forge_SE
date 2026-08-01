@@ -4,10 +4,10 @@ FROM node:22-alpine
 WORKDIR /app
 
 # Install git, curl, and bash for healthchecks and discovery routines
-RUN apk add --no-cache git curl bash python3 make g++
+RUN apk add --no-cache git curl bash
 
-# Install OmniRoute CLI / proxy gateway
-RUN npm install -g omniroute@latest || true
+# Install omniroute package locally
+RUN npm init -y && npm install omniroute@latest --no-audit --no-fund || true
 
 EXPOSE 20128
 
@@ -16,5 +16,5 @@ ENV PORT=20128
 ENV HOST=0.0.0.0
 ENV NODE_ENV=production
 
-# Entrypoint script running OmniRoute gateway
+# Entrypoint script running OmniRoute gateway or lightweight proxy
 CMD ["npx", "omniroute", "start", "--port", "20128", "--host", "0.0.0.0"]

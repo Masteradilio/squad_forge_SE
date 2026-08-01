@@ -88,6 +88,11 @@ class UnitOfWork:
         self.task_graph = TaskGraphService(self.session)
         return self
 
+    async def commit(self) -> None:
+        """Explicitly commit the current session transaction."""
+        if self.session:
+            await self.session.commit()
+
     async def __aexit__(
         self,
         exc_type: type[BaseException] | None,

@@ -55,7 +55,7 @@
     "backend/localforge/services/runner_pool.py": "6d0b668b763cab92f8c91677b50d121e4a6e52cb020cfa6db721bc16263e2786",
     "backend/localforge/services/worktree.py": "f6190dd9d4d5ff6f77450f44db648b8c581284c8dc6f536bf2045c290197e895",
     "backend/localforge/storage/bootstrap.py": "686c0db17b9816246739af54286703b93f6a86f34697e64f0903014a60a3bbf5",
-    "backend/localforge/storage/orm.py": "54320186d45b2743c72c35150ba004d7e19a484b8ddb24948dd77db4fda3b001",
+    "backend/localforge/storage/orm.py": "f116b13529d97e16e826d5e4cf0b7ab99b7e2f27c9bb166b9c26b6e1daf5dbdb",
     "backend/tests/test_phase6_circuit_breakers.py": "f9fada8b824fbb79d0a7dec665844e732ab1438c42a1229eb1653c960b3d3c02",
     "backend/tests/test_phase6_loop_control_plane.py": "3e8625dd59d8d2598ddd5034c34c74ee7056b396028644b0eba4a096ff254224",
     "backend/tests/test_phase_r4_loop_runtime.py": "7041c5efdface23058b2be1d4ce966ae028e16cdc9088f3f901685d14f6f5832",
@@ -68,7 +68,7 @@
     "Kill cascade now covers persisted scheduler/task-run/RunnerPool/PathLease/worktree-manifest owners.",
     "Controlled subprocess termination, external reservations, incomplete artifact capture, and full orphan-owner restart reconciliation remain required."
   ],
-  "manifest_sha256": "8995860942f643974fb0c84826eff3801a22ed498d2fb8735ee31f12f8ca2bbc",
+  "manifest_sha256": "1ffc52a576ca91ebe374036d141a55d0e93abd6ed1751ab04a07089805f5bc56",
   "phase": "R4",
   "release_tag": "v6.2.0",
   "release_version": "6.2.0",

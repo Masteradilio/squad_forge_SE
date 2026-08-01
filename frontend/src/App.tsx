@@ -527,7 +527,7 @@ export default function App() {
       .then((data) => {
         setProjects(data);
         if (data.length > 0) {
-          setActiveProject(data[0]);
+          setActiveProject(data[data.length - 1]);
         }
         setBackendHealthy(true);
       })

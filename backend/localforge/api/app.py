@@ -254,10 +254,10 @@ def create_app(
                     ("LF-PRD-006", "Grade Teclado Responsivo 39 Teclas", "Desenvolver layout visual em grade inspirado na HP 12C Platinum"),
                     ("LF-PRD-007", "Suíte de Testes Unitários de Integração", "Desenvolver suíte de testes Matt Pocock TDD cobrindo todos os cenários"),
                 ]
-                for code, title, desc in default_tasks:
+                for key_val, title, desc in default_tasks:
                     task_obj = domain.Task(
                         project_id=project.id,
-                        code=code,
+                        key=key_val,
                         title=title,
                         description=desc,
                         status=domain.TaskStatus.BACKLOG,

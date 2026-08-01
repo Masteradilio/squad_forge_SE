@@ -47,6 +47,8 @@ class ProjectORM(Base):
 
     @classmethod
     def from_domain(cls, d: domain.Project) -> "ProjectORM":
+        created = d.created_at.replace(tzinfo=None) if (d.created_at and d.created_at.tzinfo) else d.created_at
+        updated = d.updated_at.replace(tzinfo=None) if (d.updated_at and d.updated_at.tzinfo) else d.updated_at
         return cls(
             id=d.id,
             name=d.name,
@@ -54,8 +56,8 @@ class ProjectORM(Base):
             default_branch=d.default_branch,
             remote_url=d.remote_url,
             localforge_config_path=d.localforge_config_path,
-            created_at=d.created_at,
-            updated_at=d.updated_at,
+            created_at=created,
+            updated_at=updated,
         )
 
 
@@ -168,6 +170,8 @@ class TaskORM(Base):
 
     @classmethod
     def from_domain(cls, d: domain.Task) -> "TaskORM":
+        created = d.created_at.replace(tzinfo=None) if (d.created_at and d.created_at.tzinfo) else d.created_at
+        updated = d.updated_at.replace(tzinfo=None) if (d.updated_at and d.updated_at.tzinfo) else d.updated_at
         return cls(
             id=d.id,
             project_id=d.project_id,
@@ -181,8 +185,8 @@ class TaskORM(Base):
             status=d.status.value,
             assigned_agent_id=d.assigned_agent_id,
             metadata_json=d.metadata,
-            created_at=d.created_at,
-            updated_at=d.updated_at,
+            created_at=created,
+            updated_at=updated,
         )
 
 
@@ -237,13 +241,15 @@ class RunORM(Base):
 
     @classmethod
     def from_domain(cls, d: domain.Run) -> "RunORM":
+        started = d.started_at.replace(tzinfo=None) if (d.started_at and d.started_at.tzinfo) else d.started_at
+        ended = d.ended_at.replace(tzinfo=None) if (d.ended_at and d.ended_at.tzinfo) else d.ended_at
         return cls(
             id=d.id,
             project_id=d.project_id,
             mode=d.mode.value,
             status=d.status.value,
-            started_at=d.started_at,
-            ended_at=d.ended_at,
+            started_at=started,
+            ended_at=ended,
             initiated_by=d.initiated_by,
             resource_limits=d.resource_limits,
             summary=d.summary,
@@ -270,17 +276,19 @@ class TaskRunORM(Base):
 
     @classmethod
     def from_domain(cls, d: domain.TaskRun) -> "TaskRunORM":
+        started = d.started_at.replace(tzinfo=None) if (d.started_at and d.started_at.tzinfo) else d.started_at
+        ended = d.ended_at.replace(tzinfo=None) if (d.ended_at and d.ended_at.tzinfo) else d.ended_at
         return cls(
             id=d.id,
             run_id=d.run_id,
             task_id=d.task_id,
-            status=d.status.value,
+            status=d.status if isinstance(d.status, str) else d.status.value,
             worktree_path=d.worktree_path,
             branch_name=d.branch_name,
             sandbox_id=d.sandbox_id,
             attempt_count=d.attempt_count,
-            started_at=d.started_at,
-            ended_at=d.ended_at,
+            started_at=started,
+            ended_at=ended,
             final_summary=d.final_summary,
         )
 

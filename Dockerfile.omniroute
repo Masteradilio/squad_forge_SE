@@ -16,5 +16,5 @@ ENV PORT=20128
 ENV HOST=0.0.0.0
 ENV NODE_ENV=production
 
-# Entrypoint script running OmniRoute gateway or lightweight proxy
-CMD ["npx", "omniroute", "start", "--port", "20128", "--host", "0.0.0.0"]
+# Entrypoint script running OmniRoute gateway
+CMD ["npx", "omniroute", "serve", "--port", "20128", "--no-open", "--no-tray"]

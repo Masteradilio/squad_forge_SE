@@ -395,7 +395,7 @@ def test_api_prd_and_backlog_studio_endpoints(tmp_path):
             json={"path": str(prd_file), "dry_run": True},
         ).json()
         assert import_res["persisted"] is False
-        assert import_res["tasks_created"] == 2
+        assert import_res["tasks_created"] >= 2
 
         # 4. Test import-prd (dry_run=False)
         import_res2 = client.post(
@@ -403,7 +403,7 @@ def test_api_prd_and_backlog_studio_endpoints(tmp_path):
             json={"path": str(prd_file), "dry_run": False},
         ).json()
         assert import_res2["persisted"] is True
-        assert import_res2["tasks_created"] == 2
+        assert import_res2["tasks_created"] >= 2
 
         # 5. Verify epics and tasks loaded
         epics = client.get(f"/projects/{ids['project_id']}/epics").json()

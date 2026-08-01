@@ -1,0 +1,52 @@
+# Dockerfile.backend - Python 3.11 / FastAPI / Playwright / Pgvector Backend
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Prevent Python from writing bytecode and buffer stdout/stderr
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+# Install system dependencies, Node.js/npm for tools, and build tools
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    curl \
+    git \
+    libpq-dev \
+    nodejs \
+    npm \
+    pkg-config \
+    python3-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy pyproject.toml and dependencies
+COPY pyproject.toml README.md requirements.txt* /app/
+
+# Install Python packages (including pgvector, chromadb, tree-sitter, playwright)
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir -e . && \
+    pip install --no-cache-dir \
+    pgvector \
+    psycopg2-binary \
+    chromadb \
+    tree-sitter \
+    tree-sitter-languages \
+    playwright \
+    opentelemetry-api \
+    opentelemetry-sdk \
+    cryptography
+
+# Install Playwright browser dependencies and chromium
+RUN npx playwright install-deps chromium || true && \
+    playwright install chromium || true
+
+# Copy backend code and configuration
+COPY backend /app/backend
+COPY .env.example /app/.env.example
+
+EXPOSE 8000
+
+ENV PYTHONPATH=/app/backend
+
+# Default command to run FastAPI app
+CMD ["uvicorn", "localforge.api.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]

@@ -14,16 +14,16 @@ describe('App 5-Menu Navigation Router', () => {
     fireEvent.click(screen.getByText(/2. Kanban & Revisão de PRs/i));
     expect(screen.getByText(/Painel de Revisão & Aprovação de PRs/i)).toBeTruthy();
 
-    // Menu 3: Testes de Conformidade
-    fireEvent.click(screen.getByText(/3. Testes de Conformidade/i));
-    expect(screen.getByText(/Testes de Conformidade Pós-Merge/i)).toBeTruthy();
+    // Menu 3: Telemetria & OpenTelemetry Tracing
+    fireEvent.click(screen.getByText(/3. Telemetria & OpenTelemetry Tracing/i));
+    expect(screen.getByText(/OpenTelemetry Squad Tracing Timeline/i)).toBeTruthy();
 
     // Menu 4: Skills & Agentes
     fireEvent.click(screen.getByText(/4. Skills & Agentes/i));
     expect(screen.getByText(/Editor de Skills & Agentes/i)).toBeTruthy();
 
-    // Menu 5: Modelos & Ambiente (.env)
-    fireEvent.click(screen.getByText(/5. Modelos & Ambiente \(\.env\)/i));
-    expect(screen.getByText(/Configurações de Modelos & Ambiente \(\.env\)/i)).toBeTruthy();
+    // Menu 5: Modelos (OmniRoute), BYOK & Live Preview
+    fireEvent.click(screen.getByText(/5. Modelos \(OmniRoute\)/i));
+    expect(screen.getByText(/Configurações de Modelos & Ambiente/i)).toBeTruthy();
   });
 });

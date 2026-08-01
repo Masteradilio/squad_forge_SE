@@ -1,0 +1,78 @@
+version: "3.8"
+
+services:
+  # 1. OmniRoute AI Gateway Proxy (Node.js 22 - 290+ Free Tier LLMs)
+  omniroute:
+    build:
+      context: .
+      dockerfile: Dockerfile.omniroute
+    container_name: forgeos-omniroute
+    ports:
+      - "20128:20128"
+    environment:
+      - PORT=20128
+      - HOST=0.0.0.0
+      - NODE_ENV=production
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:20128/v1/models || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 2. PostgreSQL + Pgvector Vector Database & Persistence
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: forgeos-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=forgeos
+      - POSTGRES_USER=forgeos
+      - POSTGRES_PASSWORD=forgeos_secret
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U forgeos -d forgeos"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # 3. ForgeOS Backend (Python 3.11 / FastAPI / Playwright / Squad Engine)
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: forgeos-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://forgeos:forgeos_secret@postgres:5432/forgeos
+      - OMNIROUTE_URL=http://omniroute:20128/v1
+      - FORGEOS_ENV=development
+    depends_on:
+      postgres:
+        condition: service_healthy
+      omniroute:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app/backend
+      - ./.localforge:/app/.localforge
+    restart: unless-stopped
+
+  # 4. ForgeOS Frontend (Nginx / React 19 Web App)
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: forgeos-frontend
+    ports:
+      - "80:80"
+      - "5173:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  pgdata:

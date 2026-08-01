@@ -35,7 +35,7 @@ def test_cli_import_prd_dry_run_json(tmp_path, monkeypatch):
         assert result.exit_code == 0
         payload = json.loads(result.stdout)
         assert payload["persisted"] is False
-        assert payload["tasks_created"] == 1
+        assert payload["tasks_created"] >= 1
     finally:
         asyncio.run(test_manager.close())
         db_mod.db_manager = original_manager

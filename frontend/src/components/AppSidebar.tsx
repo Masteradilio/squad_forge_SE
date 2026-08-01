@@ -10,9 +10,9 @@ export type AppTab =
 export const CORE_MENUS: { id: AppTab; label: string; icon: string }[] = [
   { id: 'chat', label: '1. PO Chat & Mission Control', icon: '💬' },
   { id: 'kanban', label: '2. Kanban & Revisão de PRs', icon: '📋' },
-  { id: 'tests', label: '3. Testes de Conformidade', icon: '🧪' },
-  { id: 'skills', label: '4. Skills & Agentes', icon: '🧩' },
-  { id: 'settings', label: '5. Modelos & Ambiente (.env)', icon: '⚙️' },
+  { id: 'tests', label: '3. Telemetria & OpenTelemetry Tracing', icon: '📊' },
+  { id: 'skills', label: '4. Skills & Agentes (Matt Pocock TDD)', icon: '🧩' },
+  { id: 'settings', label: '5. Modelos (OmniRoute), BYOK & Live Preview', icon: '⚙️' },
 ];
 
 interface AppSidebarProps {
@@ -57,10 +57,10 @@ export function AppSidebar({
           fontWeight: 'bold',
           color: '#fff',
         }}>
-          LF
+          FC
         </div>
         <h1 style={{ fontSize: '18px', fontWeight: 800, margin: 0, letterSpacing: '-0.02em' }}>
-          LocalForge OS
+          ForgeOS Cloud
         </h1>
       </div>
 

@@ -36,6 +36,8 @@ import { POChatView } from './components/POChatView';
 import { ComplianceTestsView } from './components/ComplianceTestsView';
 import { SkillsEditorView } from './components/SkillsEditorView';
 import { ModelSettingsView } from './components/ModelSettingsView';
+import { TracingTimelineView, type TraceSpanItem } from './components/TracingTimelineView';
+import { HITLApprovalModal, type HITLGateData } from './components/HITLApprovalModal';
 import { wouldCreateCycle } from './utils/taskGraph';
 
 
@@ -821,9 +823,10 @@ export default function App() {
         );
       case 'tests':
         return (
-          <ComplianceTestsView
-            onNavigateToTab={(tab) => setCurrentTab(tab as AppTab)}
-          />
+          <div className="space-y-6">
+            <TracingTimelineView spans={[]} />
+            <ComplianceTestsView onNavigateToTab={(tab) => setCurrentTab(tab as AppTab)} />
+          </div>
         );
       case 'skills':
         return <SkillsEditorView />;

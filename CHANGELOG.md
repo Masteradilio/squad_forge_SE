@@ -2,6 +2,31 @@
 
 All notable changes to LocalForge OS will be documented in this file.
 
+ ## [1.0.0] - 2026-08-01 (ForgeOS Cloud 1.0.0 SaaS Release)
+
+### 🚀 ForgeOS Cloud Release Summary
+- **Zero-Cost Inference Engine (OmniRoute Integration)**: Full integration with Node.js 22 OmniRoute AI Gateway, tapping into 290+ free-tier and freemium LLMs (Google AI Studio, Groq, Cerebras, SambaNova) with zero token costs.
+- **Pre-Flight Discovery Engine**: Implemented `backend/localforge/discovery/engine.py` for fine-grained daily recency sorting, native agentic tool-calling capability filtering (`tools: true`, `json_schema: true`), and parameter capacity ranking.
+- **ForgeOS HyperMemory Matrix**: Integrated 3-tiered memory architecture:
+  - **Graphify Engine (`graphify_engine.py`)**: AST Tree-Sitter parsing (0 API tokens) producing `GRAPH_REPORT.md` for low-token LLM recontextualization during model handoffs.
+  - **MemPalace Service (`mempalace_service.py`)**: Verbatim spatial memory vault (ChromaDB + YAML) preserving session history and ADRs without lossy LLM summarization.
+  - **Claude-Mem Synthesizer (`rule_synthesizer.py`)**: Learns from user feedback and test failures to auto-update `AGENTS.md` & `GEMINI.md`.
+- **Matt Pocock Engineering Methodology**:
+  - **`grill-with-docs`**: Requirement stress-testing against existing codebase before task creation.
+  - **`to-tickets` / Tracer Bullets (`tracer_compiler.py`)**: Decomposes PRDs into full-stack vertical slices (*DB Schema + API Endpoint + UI Component + Unit Test* per ticket).
+  - **`tdd` / Red-Green-Refactor**: Enforces writing failing unit tests first (`RED`) before implementation (`GREEN`).
+- **Context7 MCP Live Documentation (`context7_mcp.py`)**: Real-time version-specific documentation pre-fetching for Next.js 15, React 19, Tailwind v4, Pydantic v2, and FastAPI via `@upstash/context7-mcp`.
+- **Escudo Anti-Alucinação & Prevenção de Conflitos**:
+  - **Compiler Feedback Loop (`compiler_feedback.py`)**: Line-precise error traceback capture (`tsc --noEmit` / `pyright`) fed to Bug Fixer.
+  - **Interface Contracts First (`contracts_service.py`)**: Freezes `.types.ts` and Pydantic schemas before implementation.
+  - **File Scope Locking (`scope_validator.py`)**: Bounds tickets to modifying max 3-5 files.
+  - **Strict Package Version Locking (`package_locker.py`)**: Freezes `package-lock.json` and `uv.lock`.
+- **Agent Authority Matrix for 10 Squad Roles (`authority_matrix.py`)**: Enforces strict file path write permissions per role at the `ActionGateway` level (e.g. `@developer` blocked from editing `tests/*`).
+- **Telemetria OpenTelemetry & HITL Gates**:
+  - **OpenTelemetry Tracing (`tracer.py`)**: Real-time visual latency timeline in the UI.
+  - **Human-in-the-Loop Gates (`hitl_engine.py`)**: Interruption gates with 1-click PO Approval Modal and Dynamic Input Question in React UI.
+- **Docker Compose Production Stack**: Complete 4-container stack (`Dockerfile.omniroute`, `Dockerfile.backend`, `Dockerfile.frontend`, `docker-compose.yml` with `postgres-pgvector`).
+
  ## [Unreleased]
 
 ### Feature: Frontend Reforge (5 Core Minimalist Portfolio Menus) - 2026-07-30

@@ -24,7 +24,7 @@
       "exit_code": 0
     }
   ],
-  "manifest_sha256": "1aa08a38d59f0ed4b7a4f3b701e1b03a8b1bf2761f5149e55975af8fd66c0d3b",
+  "manifest_sha256": "3c076959a5c6ad8a2b6743ca2aefe1000029cb21a4fbaa210bc4c96660b3bad9",
   "environment": {
     "os": "windows-local-and-github-actions-matrix",
     "python": "3.11-local / 3.12-ci",
@@ -47,7 +47,7 @@
     "backend/tests/test_phase27_unattended.py": "0d919b769dae55f9d009a017dfe747b311bdb2f49db4ff91eafa06181f8823c5",
     "docs/compliance_backlog_V6-1.md": "b7f5312a2c69d4c832ac226bb3b4ae2c52cb65e52d35c2b9c3d6c3220db36a1e",
     "backend/localforge/services/task.py": "da5a3a21236ed3fe3f56b744e1cb1c9002beb6a074fffe7a60f601b3a3b932d5",
-    "CHANGELOG.md": "2e69640ee910a369ecc5cc669b3cdc0c2ae3f78b1991d2ae7b135704e5833b6e",
+    "CHANGELOG.md": "1b6c05ce8b4826a658328b2b6d9d267be603864b63b03612006a9919fc27aba7",
     "backend/tests/test_release_truth.py": "b004b9b35f9fd8b6aed2e7373223ab130e897d9036c08d6ac45c5b073744a118"
   }
 }

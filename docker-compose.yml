@@ -46,7 +46,9 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql://forgeos:forgeos_secret@postgres:5432/forgeos
+      - DATABASE_URL=postgresql+asyncpg://forgeos:forgeos_secret@postgres:5432/forgeos
+      - LOCALFORGE_DATABASE_URL=postgresql+asyncpg://forgeos:forgeos_secret@postgres:5432/forgeos
+      - LOCALFORGE_MODEL_BASE_URL=http://omniroute:20128/v1
       - OMNIROUTE_URL=http://omniroute:20128/v1
       - FORGEOS_ENV=development
     depends_on:

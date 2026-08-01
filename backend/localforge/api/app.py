@@ -90,12 +90,7 @@ def create_app(
     if allowed_origins_raw:
         origins = [o.strip() for o in allowed_origins_raw.split(",") if o.strip()]
     else:
-        origins = [
-            "http://localhost:5173",
-            "http://127.0.0.1:5173",
-            "http://localhost:8000",
-            "http://127.0.0.1:8000",
-        ]
+        origins = ["*"]
     app.add_middleware(
         CORSMiddleware,
         allow_origins=origins,
@@ -104,6 +99,15 @@ def create_app(
         allow_headers=["*"],
     )
     app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+    @app.on_event("startup")
+    async def startup_event() -> None:
+        try:
+            from localforge.storage.bootstrap import bootstrap_database
+            await bootstrap_database(manager)
+            logger.info("Database bootstrapped on API startup.")
+        except Exception as exc:
+            logger.error(f"Error bootstrapping database on API startup: {exc}")
 
     @app.middleware("http")
     async def enforce_security_controls(request: Request, call_next: Any) -> Response:
@@ -202,14 +206,20 @@ def create_app(
     @app.get("/models")
     async def list_models() -> dict[str, Any]:
         config = load_config()
+        base_url = os.getenv("LOCALFORGE_MODEL_BASE_URL") or os.getenv("OMNIROUTE_URL") or config.models.base_url
         provider = llm_provider or OpenAICompatibleProvider(
-            base_url=config.models.base_url, default_model=config.models.default_model
+            base_url=base_url, default_model=config.models.default_model
         )
+        try:
+            models = await provider.list_models()
+        except Exception as exc:
+            logger.warning(f"Could not list models: {exc}")
+            models = []
         return {
             "provider": config.models.provider,
-            "base_url": config.models.base_url,
+            "base_url": base_url,
             "default_model": config.models.default_model,
-            "models": await provider.list_models(),
+            "models": models,
         }
 
     @app.get("/projects/{project_id}/models/metrics")

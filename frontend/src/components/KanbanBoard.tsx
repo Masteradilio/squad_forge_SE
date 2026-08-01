@@ -7,8 +7,10 @@ import { apiClient } from '../api/client';
 
 interface KanbanBoardProps {
   tasks: Task[];
+  activeProjectId?: number;
   onTaskClick?: (task: Task) => void;
   onRefresh?: () => void;
+  onStartSquad?: () => void;
 }
 
 export interface KanbanColumnConfig {
@@ -30,10 +32,11 @@ export function tasksForColumn(tasks: Task[], statuses: readonly string[]): Task
   return tasks.filter((task) => statuses.includes(task.status));
 }
 
-export function KanbanBoard({ tasks, onTaskClick, onRefresh }: KanbanBoardProps) {
+export function KanbanBoard({ tasks, activeProjectId, onTaskClick, onRefresh, onStartSquad }: KanbanBoardProps) {
   const [rejectModalTask, setRejectModalTask] = useState<Task | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
   const [processingPR, setProcessingPR] = useState(false);
+  const [startingSquad, setStartingSquad] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
   // Filter tasks based on search query
@@ -45,6 +48,20 @@ export function KanbanBoard({ tasks, onTaskClick, onRefresh }: KanbanBoardProps)
   );
 
   const prReadyTasks = tasks.filter((t) => t.status === 'PR_READY');
+
+  const handleStartSquadExecution = async () => {
+    if (!activeProjectId) return;
+    try {
+      setStartingSquad(true);
+      await apiClient.startSquad(activeProjectId);
+      alert('🚀 Execução da Squad disparada com sucesso! As primeiras tarefas foram movidas para Em Andamento (WIP).');
+      onRefresh?.();
+    } catch (err: any) {
+      alert(`Falha ao iniciar Squad: ${err.message || err}`);
+    } finally {
+      setStartingSquad(false);
+    }
+  };
 
   const handleApprovePR = async (taskId: number) => {
     try {
@@ -86,13 +103,21 @@ export function KanbanBoard({ tasks, onTaskClick, onRefresh }: KanbanBoardProps)
           </p>
         </div>
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          <Button
+            variant="primary"
+            onClick={handleStartSquadExecution}
+            disabled={startingSquad || !activeProjectId}
+            title="Disparar a execução da Squad de Agentes para implementar as tarefas do backlog"
+          >
+            {startingSquad ? 'Disparando Execução...' : '🚀 Iniciar Execução da Squad'}
+          </Button>
           <input
             type="text"
-            placeholder="🔍 Filtrar por palavra-chave ou chave (ex: LF-001)..."
+            placeholder="🔍 Filtrar por palavra-chave..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             style={{
-              width: '280px',
+              width: '240px',
               padding: '8px 14px',
               borderRadius: '8px',
               backgroundColor: 'var(--bg-input)',

@@ -2,6 +2,14 @@
 
 All notable changes to LocalForge OS will be documented in this file.
 
+ ## [1.1.1] - 2026-08-01 (Squad Execution Loop & PO Chat Persistence)
+
+### 🚀 Bug Fixes & UX Enhancements
+- **Persistent Chat History (`POChatView.tsx`, `App.tsx`)**: Preserved PO and Scrum Master conversation history across tab navigation and browser refreshes using React state and `localStorage`.
+- **Live Stream SSE Reconnection Fix (`app.py`)**: Fixed SSE event stream loop in `stream_project_events` to keep HTTP connection open with 15s keep-alive pings, ensuring `Live Stream: Subscribed` status in green.
+- **Squad Execution Loop Trigger (`app.py`, `KanbanBoard.tsx`)**: Created `POST /projects/{project_id}/start-squad` endpoint and added a prominent **"🚀 Iniciar Execução da Squad"** button on the Kanban board to launch the 10-role Squad loop.
+- **PostgreSQL Naive Datetime Conversion (`orm.py`)**: Handled UTC-naive datetime conversion across all ORM models for PostgreSQL `asyncpg` compatibility.
+
  ## [1.1.0] - 2026-08-01 (ForgeOS Cloud 1.1.0 — Redis In-Memory Store, Semantic Caching & K8s Auto-Scaling)
 
 ### ⚡ Infrastructure & Performance Improvements

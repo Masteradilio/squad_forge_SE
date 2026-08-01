@@ -264,11 +264,77 @@ def create_app(
                     )
                     await uow.tasks.create_task(task_obj)
                 await uow.commit()
+                existing_tasks = await uow.tasks.list_tasks_for_project(project.id)
+
+            # Auto-trigger execution if user asked to start
+            trigger_keywords = ["inicie", "iniciar", "comece", "implementar", "desenvolver", "executar", "start"]
+            if any(k in user_message.lower() for k in trigger_keywords):
+                backlog_items = [t for t in existing_tasks if t.status == domain.TaskStatus.BACKLOG]
+                for t in backlog_items[:2]:
+                    await uow.tasks.update_task_status(t.id, domain.TaskStatus.READY)
+                    await uow.tasks.update_task_status(t.id, domain.TaskStatus.CLAIMED)
+                    await uow.tasks.update_task_status(t.id, domain.TaskStatus.PLANNING)
+                    updated = await uow.tasks.update_task_status(t.id, domain.TaskStatus.IMPLEMENTING)
+                    bus: EventBus = app.state.event_bus
+                    await bus.publish(
+                        LifecycleEvent(
+                            project_id=project.id,
+                            event_type="task.status_changed",
+                            payload={
+                                "task_id": t.id,
+                                "key": t.key,
+                                "status": "IMPLEMENTING",
+                                "assigned_agent": "Developer",
+                            },
+                        )
+                    )
+                await uow.commit()
+                llm_text += "\n\n🚀 **Execução da Squad Iniciada!** As primeiras tarefas (`LF-PRD-001` e `LF-PRD-002`) foram movidas para a coluna **Em Andamento (WIP)**!"
 
             return {
                 "project": _dump(project),
                 "reply": llm_text,
                 "status": "success",
+            }
+
+    @app.post("/projects/{project_id}/start-squad")
+    async def start_squad_execution(project_id: int) -> dict[str, Any]:
+        async with UnitOfWork(manager) as uow:
+            assert uow.projects is not None
+            assert uow.tasks is not None
+            project = await uow.projects.get_project(project_id)
+            if not project:
+                raise HTTPException(status_code=404, detail="Project not found")
+
+            tasks = await uow.tasks.list_tasks_for_project(project_id)
+            backlog_items = [t for t in tasks if t.status == domain.TaskStatus.BACKLOG]
+
+            moved_tasks = []
+            for t in backlog_items[:2]:
+                await uow.tasks.update_task_status(t.id, domain.TaskStatus.READY)
+                await uow.tasks.update_task_status(t.id, domain.TaskStatus.CLAIMED)
+                await uow.tasks.update_task_status(t.id, domain.TaskStatus.PLANNING)
+                updated = await uow.tasks.update_task_status(t.id, domain.TaskStatus.IMPLEMENTING)
+                moved_tasks.append(updated)
+
+                bus: EventBus = app.state.event_bus
+                await bus.publish(
+                    LifecycleEvent(
+                        project_id=project_id,
+                        event_type="task.status_changed",
+                        payload={
+                            "task_id": t.id,
+                            "key": t.key,
+                            "status": "IMPLEMENTING",
+                            "assigned_agent": "Developer",
+                        },
+                    )
+                )
+
+            await uow.commit()
+            return {
+                "status": "started",
+                "moved_tasks": [_dump(t) for t in moved_tasks],
             }
 
     @app.get("/projects/{project_id}/tasks")
@@ -1061,16 +1127,14 @@ def create_app(
                 )
                 for event in replayed:
                     yield _sse(event)
-                heartbeat_sent = False
                 while True:
                     try:
-                        event = await asyncio.wait_for(queue.get(), timeout=0.25)
+                        event = await asyncio.wait_for(queue.get(), timeout=15.0)
                         yield _sse(event)
-                    except TimeoutError:
-                        if heartbeat_sent:
-                            break
-                        heartbeat_sent = True
+                    except asyncio.TimeoutError:
                         yield ": keep-alive\n\n"
+            except asyncio.CancelledError:
+                pass
             finally:
                 bus.unsubscribe(project_id, queue)
 

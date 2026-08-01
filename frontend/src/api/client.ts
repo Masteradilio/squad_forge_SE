@@ -297,6 +297,12 @@ export const apiClient = {
     });
   },
 
+  startSquad(projectId: number): Promise<{ status: string; moved_tasks: Task[] }> {
+    return request<{ status: string; moved_tasks: Task[] }>(`/api/projects/${projectId}/start-squad`, {
+      method: 'POST',
+    });
+  },
+
   fetchTasks(projectId: number): Promise<Task[]> {
     return request<Task[]>(`/api/projects/${projectId}/tasks`);
   },

@@ -21,11 +21,21 @@ class Base(DeclarativeBase):
     pass
 
 
+def _naive_dt(dt: datetime | None) -> datetime | None:
+    if dt is None:
+        return None
+    return dt.replace(tzinfo=None) if dt.tzinfo else dt
+
+
+def _now_naive() -> datetime:
+    return datetime.now(UTC).replace(tzinfo=None)
+
+
 class SchemaVersionORM(Base):
     __tablename__ = "schema_versions"
 
     version: Mapped[int] = mapped_column(Integer, primary_key=True)
-    applied_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    applied_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive)
 
 
 class ProjectORM(Base):
@@ -37,9 +47,9 @@ class ProjectORM(Base):
     default_branch: Mapped[str] = mapped_column(String(100), nullable=False)
     remote_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     localforge_config_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC)
+        DateTime, default=_now_naive, onupdate=_now_naive
     )
 
     def to_domain(self) -> domain.Project:
@@ -71,7 +81,7 @@ class ProductDocumentORM(Base):
     kind: Mapped[str] = mapped_column(String(50), nullable=False)
     path: Mapped[str] = mapped_column(String(1024), nullable=False)
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
-    imported_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    imported_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive)
     parsed_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     def to_domain(self) -> domain.ProductDocument:
@@ -144,9 +154,9 @@ class TaskORM(Base):
         ForeignKey("agents.id", ondelete="SET NULL"), nullable=True
     )
     metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC)
+        DateTime, default=_now_naive, onupdate=_now_naive
     )
 
     def to_domain(self) -> domain.Task:
@@ -230,7 +240,7 @@ class RunORM(Base):
     )
     mode: Mapped[str] = mapped_column(String(50), nullable=False)
     status: Mapped[str] = mapped_column(String(50), default="PENDING", nullable=False)
-    started_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    started_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive)
     ended_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     initiated_by: Mapped[str] = mapped_column(String(100), nullable=False)
     resource_limits: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
@@ -267,7 +277,7 @@ class TaskRunORM(Base):
     branch_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     sandbox_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     attempt_count: Mapped[int] = mapped_column(Integer, default=1)
-    started_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    started_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive)
     ended_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     final_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -306,7 +316,7 @@ class HandoffORM(Base):
     payload_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
     priority: Mapped[int] = mapped_column(Integer, default=1)
     status: Mapped[str] = mapped_column(String(50), default="PENDING", nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive)
     consumed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     def to_domain(self) -> domain.Handoff:
@@ -339,7 +349,7 @@ class ArtifactORM(Base):
     path: Mapped[str] = mapped_column(String(1024), nullable=False)
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive)
 
     def to_domain(self) -> domain.Artifact:
         return domain.Artifact.model_validate(self)
@@ -370,7 +380,7 @@ class ModelRouteORM(Base):
     endpoint_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     fallback_model_profile_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC)
+        DateTime, default=_now_naive, onupdate=_now_naive
     )
 
     def to_domain(self) -> domain.ModelRoute:
@@ -422,7 +432,7 @@ class ModelCallLedgerORM(Base):
     error_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     duration_ms: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive)
 
     def to_domain(self) -> domain.ModelCallLedger:
         return domain.ModelCallLedger(
@@ -488,9 +498,9 @@ class MemoryFactORM(Base):
     confidence: Mapped[float] = mapped_column(Float, default=1.0, nullable=False)
     policy_scope: Mapped[str | None] = mapped_column(String(255), nullable=True)
     category: Mapped[str] = mapped_column(String(50), default="OBSERVED_FACT", nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC)
+        DateTime, default=_now_naive, onupdate=_now_naive
     )
 
     def to_domain(self) -> domain.MemoryFact:
@@ -563,7 +573,7 @@ class MemoryRelationORM(Base):
     )
     relation_type: Mapped[str] = mapped_column(String(50), nullable=False)
     provenance_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive)
 
     def to_domain(self) -> domain.MemoryRelation:
         from localforge.models.enums import MemoryRelationType
@@ -600,9 +610,9 @@ class PolicyORM(Base):
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     rules: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC)
+        DateTime, default=_now_naive, onupdate=_now_naive
     )
 
     def to_domain(self) -> domain.Policy:
@@ -637,7 +647,7 @@ class AuditEventORM(Base):
     actor_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     event_type: Mapped[str] = mapped_column(String(50), nullable=False)
     payload_redacted: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive)
 
     def to_domain(self) -> domain.AuditEvent:
         return domain.AuditEvent.model_validate(self)
@@ -653,7 +663,7 @@ class AuditEventORM(Base):
             actor_id=d.actor_id,
             event_type=d.event_type.value,
             payload_redacted=d.payload_redacted,
-            created_at=d.created_at,
+            created_at=_naive_dt(d.created_at),
         )
 
 
@@ -675,7 +685,7 @@ class ActionApprovalORM(Base):
     purpose: Mapped[str] = mapped_column(Text, nullable=False)
     risk_level: Mapped[str] = mapped_column(String(20), nullable=False)
     status: Mapped[str] = mapped_column(String(50), default="PENDING", nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive)
     decided_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     decided_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
@@ -707,8 +717,8 @@ class ActionApprovalORM(Base):
             purpose=d.purpose,
             risk_level=d.risk_level,
             status=d.status.value,
-            created_at=d.created_at,
-            decided_at=d.decided_at,
+            created_at=_naive_dt(d.created_at),
+            decided_at=_naive_dt(d.decided_at),
             decided_by=d.decided_by,
         )
 
@@ -725,7 +735,7 @@ class TaskCommentORM(Base):
     body: Mapped[str] = mapped_column(Text, nullable=False)
     thread_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive)
 
     def to_domain(self) -> domain.TaskComment:
         return domain.TaskComment(
@@ -766,10 +776,10 @@ class RuntimeRegistrationORM(Base):
     status: Mapped[str] = mapped_column(String(50), default="ONLINE", nullable=False)
     capabilities: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
     metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
-    heartbeat_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
-    registered_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    heartbeat_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive)
+    registered_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC)
+        DateTime, default=_now_naive, onupdate=_now_naive
     )
 
     def to_domain(self) -> domain.RuntimeRegistration:
@@ -816,9 +826,9 @@ class SquadORM(Base):
     roles: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
     agent_ids: Mapped[list[int]] = mapped_column(JSON, default=list, nullable=False)
     metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC)
+        DateTime, default=_now_naive, onupdate=_now_naive
     )
 
     def to_domain(self) -> domain.Squad:
@@ -855,7 +865,7 @@ class PricingSourceORM(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     provider: Mapped[str] = mapped_column(String(100), nullable=False)
     url: Mapped[str] = mapped_column(String(1024), nullable=False)
-    retrieved_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    retrieved_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive)
     notes: Mapped[str] = mapped_column(Text, default="", nullable=False)
 
     def to_domain(self) -> domain.PricingSource:
@@ -892,7 +902,7 @@ class ModelPricingSnapshotORM(Base):
         Float, default=0.0, nullable=False
     )
     is_manual: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive)
 
     def to_domain(self) -> domain.ModelPricingSnapshot:
         return domain.ModelPricingSnapshot(
@@ -978,9 +988,9 @@ class LoopDefinitionORM(Base):
         JSON, default=dict, nullable=False
     )
     schema_version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC)
+        DateTime, default=_now_naive, onupdate=_now_naive
     )
 
     def to_domain(self) -> domain.LoopDefinition:
@@ -1051,7 +1061,7 @@ class LoopRunORM(Base):
     triage_decision: Mapped[str] = mapped_column(Text, default="PENDING", nullable=False)
     triage_task_ids_json: Mapped[list[int]] = mapped_column(JSON, default=list, nullable=False)
     cost_usd: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
-    started_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    started_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -1116,7 +1126,7 @@ class LoopItemORM(Base):
         ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True
     )
     idempotency_key: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive)
 
     def to_domain(self) -> domain.LoopItem:
         return domain.LoopItem(
@@ -1153,7 +1163,7 @@ class LoopStateSnapshotORM(Base):
     loop_id: Mapped[int] = mapped_column(
         ForeignKey("loop_definitions.id", ondelete="CASCADE"), nullable=False
     )
-    snapshot_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    snapshot_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive)
     active_run_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     last_run_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     next_eligible_run_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -1210,9 +1220,9 @@ class CircuitBreakerStateORM(Base):
     reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     evidence_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
     schema_version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC)
+        DateTime, default=_now_naive, onupdate=_now_naive
     )
 
     def to_domain(self) -> domain.CircuitBreakerState:
@@ -1275,9 +1285,9 @@ class MakerCheckerVerificationORM(Base):
 
     deterministic_passed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     checker_feedback: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC)
+        DateTime, default=_now_naive, onupdate=_now_naive
     )
 
     def to_domain(self) -> domain.MakerCheckerVerification:
@@ -1337,9 +1347,9 @@ class WorktreeAttemptManifestORM(Base):
     expected_paths_json: Mapped[Any] = mapped_column(JSON, default=list, nullable=False)
     leases_held_json: Mapped[Any] = mapped_column(JSON, default=list, nullable=False)
     status: Mapped[str] = mapped_column(String(50), default="ACTIVE", nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC)
+        DateTime, default=_now_naive, onupdate=_now_naive
     )
 
     def to_domain(self) -> domain.WorktreeAttemptManifest:
@@ -1404,12 +1414,12 @@ class PathLeaseORM(Base):
     is_directory: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     ttl_seconds: Mapped[int] = mapped_column(Integer, default=3600, nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
-    heartbeat_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    heartbeat_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive)
     attempt_number: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     worktree_path: Mapped[str | None] = mapped_column(Text, nullable=True)
     fencing_token: Mapped[str] = mapped_column(String(255), nullable=False)
     release_reason: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive)
 
     def to_domain(self) -> domain.PathLease:
         return domain.PathLease(
@@ -1464,7 +1474,7 @@ class PathLeaseProjectLockORM(Base):
     project_id: Mapped[int] = mapped_column(
         ForeignKey("projects.id", ondelete="CASCADE"), primary_key=True
     )
-    touched_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    touched_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive)
 
 
 class PathLeaseWaitORM(Base):
@@ -1487,7 +1497,7 @@ class PathLeaseWaitORM(Base):
     status: Mapped[str] = mapped_column(String(50), default="WAITING", nullable=False)
     queue_position: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     contention_count: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
-    requested_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    requested_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive)
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     escalated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -1548,9 +1558,9 @@ class RunnerPoolStateORM(Base):
     capabilities_json: Mapped[Any] = mapped_column(JSON, default=dict, nullable=False)
     success_rate: Mapped[float] = mapped_column(Float, default=1.0, nullable=False)
     quarantine_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC)
+        DateTime, default=_now_naive, onupdate=_now_naive
     )
 
     def to_domain(self) -> domain.RunnerPoolState:
@@ -1610,7 +1620,7 @@ class RunnerDispatchLogORM(Base):
     dispatch_status: Mapped[str] = mapped_column(String(50), default="SUCCESS", nullable=False)
     ranking_scores_json: Mapped[Any] = mapped_column(JSON, default=dict, nullable=False)
     rejection_reasons_json: Mapped[Any] = mapped_column(JSON, default=dict, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive)
 
     def to_domain(self) -> domain.RunnerDispatchLog:
         return domain.RunnerDispatchLog(
@@ -1674,7 +1684,7 @@ class TypedHandoffArtifactORM(Base):
     not_checked_json: Mapped[Any] = mapped_column(JSON, default=list, nullable=False)
     content_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     is_consumed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive)
 
     def to_domain(self) -> domain.TypedHandoffArtifact:
         return domain.TypedHandoffArtifact(
@@ -1748,9 +1758,9 @@ class SwarmPlanORM(Base):
     nodes_json: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
     edges_json: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
     paused_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC)
+        DateTime, default=_now_naive, onupdate=_now_naive
     )
 
     def to_domain(self) -> domain.SwarmPlan:
@@ -1815,7 +1825,7 @@ class SwarmRunORM(Base):
     verdict: Mapped[str | None] = mapped_column(String(50), nullable=True)
     started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive)
 
     def to_domain(self) -> domain.SwarmRun:
         from localforge.models.enums import SwarmStatus
@@ -1872,7 +1882,7 @@ class GraphMutationEntryORM(Base):
     reason: Mapped[str] = mapped_column(Text, nullable=False)
     payload_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive)
 
     def to_domain(self) -> domain.GraphMutationEntry:
         from localforge.models.enums import GraphMutationType
@@ -1927,7 +1937,7 @@ class TaskGraphVersionORM(Base):
     mutation_id: Mapped[int | None] = mapped_column(
         ForeignKey("graph_mutation_journal.id", ondelete="SET NULL"), nullable=True
     )
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive)
 
     def to_domain(self) -> domain.TaskGraphVersion:
         return domain.TaskGraphVersion(
@@ -1983,7 +1993,7 @@ class DeepSwarmRunORM(Base):
     verdict: Mapped[str | None] = mapped_column(String(50), nullable=True)
     started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive)
 
     def to_domain(self) -> domain.DeepSwarmRun:
         from localforge.models.domain import DeepSwarmPolicy

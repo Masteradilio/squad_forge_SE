@@ -62,6 +62,70 @@ export default function App() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeProject, setActiveProject] = useState<Project | null>(null);
 
+  // Persistent Chat Messages across tab navigation
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>(() => {
+    const saved = localStorage.getItem('localforge_po_chat_messages');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    return [
+      {
+        id: '1',
+        sender: 'Scrum Master',
+        text: 'Olá Product Owner! Sou o **Scrum Master** do LocalForge OS. Envie o seu `PRD.md` e arquivos visuais/schemas de interface (`.png`, `.jpg`, `.svg`) abaixo para iniciarmos a Etapa 2 de criação do Backlog da Squad.',
+        timestamp: new Date().toLocaleTimeString(),
+      },
+    ];
+  });
+
+  useEffect(() => {
+    localStorage.setItem('localforge_po_chat_messages', JSON.stringify(chatMessages));
+  }, [chatMessages]);
+
+  const handleSendChatMessage = async (text: string, files: File[]) => {
+    const fileNames = files.map((f) => f.name);
+    const poMsg: ChatMessage = {
+      id: Date.now().toString(),
+      sender: 'PO',
+      text,
+      timestamp: new Date().toLocaleTimeString(),
+      attachments: fileNames.length > 0 ? fileNames : undefined,
+    };
+    setChatMessages((prev) => [...prev, poMsg]);
+
+    try {
+      const chatRes = await apiClient.poChat(text, fileNames, activeProject?.id);
+      if (chatRes.project) {
+        setActiveProject(chatRes.project);
+        const [projs, tData] = await Promise.all([
+          apiClient.fetchProjects(),
+          apiClient.fetchTasks(chatRes.project.id),
+        ]);
+        setProjects(projs);
+        setTasks(tData);
+      }
+      const smResponse: ChatMessage = {
+        id: (Date.now() + 1).toString(),
+        sender: 'Scrum Master',
+        text: chatRes.reply,
+        timestamp: new Date().toLocaleTimeString(),
+      };
+      setChatMessages((prev) => [...prev, smResponse]);
+    } catch (err: any) {
+      const errorMsg: ChatMessage = {
+        id: (Date.now() + 1).toString(),
+        sender: 'Scrum Master',
+        text: `Erro ao comunicar com a Squad: ${err.message || err}`,
+        timestamp: new Date().toLocaleTimeString(),
+      };
+      setChatMessages((prev) => [...prev, errorMsg]);
+    }
+  };
+
   // Data states
   const [tasks, setTasks] = useState<Task[]>([]);
   const [runs, setRuns] = useState<Run[]>([]);
@@ -810,22 +874,16 @@ export default function App() {
         return (
           <POChatView
             activeProject={activeProject}
+            messages={chatMessages}
+            onSendMessage={handleSendChatMessage}
             onNavigateToTab={(tab) => setCurrentTab(tab as AppTab)}
-            onProjectCreated={(project) => {
-              setActiveProject(project);
-              apiClient.fetchProjects().then((projs) => {
-                setProjects(projs);
-                if (project.id) {
-                  apiClient.fetchTasks(project.id).then(setTasks).catch(() => {});
-                }
-              });
-            }}
           />
         );
       case 'kanban':
         return (
           <KanbanBoard
             tasks={tasks}
+            activeProjectId={activeProject?.id}
             onTaskClick={(task) => setSelectedTask(task)}
             onRefresh={loadProjectData}
           />
@@ -845,16 +903,9 @@ export default function App() {
         return (
           <POChatView
             activeProject={activeProject}
+            messages={chatMessages}
+            onSendMessage={handleSendChatMessage}
             onNavigateToTab={(tab) => setCurrentTab(tab as AppTab)}
-            onProjectCreated={(project) => {
-              setActiveProject(project);
-              apiClient.fetchProjects().then((projs) => {
-                setProjects(projs);
-                if (project.id) {
-                  apiClient.fetchTasks(project.id).then(setTasks).catch(() => {});
-                }
-              });
-            }}
           />
         );
     }

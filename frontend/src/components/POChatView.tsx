@@ -3,7 +3,7 @@ import { apiClient, type Project } from '../api/client';
 import { Card } from './Card';
 import { Button } from './Button';
 
-interface Message {
+export interface ChatMessage {
   id: string;
   sender: 'PO' | 'Scrum Master';
   text: string;
@@ -13,19 +13,20 @@ interface Message {
 
 interface POChatViewProps {
   activeProject: Project | null;
+  messages: ChatMessage[];
+  onSendMessage: (text: string, files: File[]) => Promise<void>;
   onNavigateToTab: (tab: string) => void;
   onProjectCreated?: (project: Project) => void;
+  onStartSquad?: () => void;
 }
 
-export function POChatView({ activeProject, onNavigateToTab, onProjectCreated }: POChatViewProps) {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: '1',
-      sender: 'Scrum Master',
-      text: 'Olá Product Owner! Sou o **Scrum Master** do LocalForge OS. Envie o seu `PRD.md` e arquivos visuais/schemas de interface (`.png`, `.jpg`, `.svg`) abaixo para iniciarmos a Etapa 2 de criação do Backlog da Squad.',
-      timestamp: new Date().toLocaleTimeString(),
-    },
-  ]);
+export function POChatView({
+  activeProject,
+  messages,
+  onSendMessage,
+  onNavigateToTab,
+  onStartSquad,
+}: POChatViewProps) {
   const [inputText, setInputText] = useState('');
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -37,49 +38,15 @@ export function POChatView({ activeProject, onNavigateToTab, onProjectCreated }:
     }
   };
 
-  const handleSendMessage = async () => {
+  const handleSend = async () => {
     if (!inputText.trim() && selectedFiles.length === 0) return;
-
-    const fileNames = selectedFiles.map((f) => f.name);
-    const poMsg: Message = {
-      id: Date.now().toString(),
-      sender: 'PO',
-      text: inputText,
-      timestamp: new Date().toLocaleTimeString(),
-      attachments: fileNames.length > 0 ? fileNames : undefined,
-    };
-
-    setMessages((prev) => [...prev, poMsg]);
+    const textToSend = inputText;
+    const filesToSend = selectedFiles;
     setInputText('');
     setSelectedFiles([]);
     setIsProcessing(true);
-
     try {
-      const chatRes = await apiClient.poChat(
-        inputText,
-        fileNames,
-        activeProject?.id
-      );
-
-      if (chatRes.project && onProjectCreated) {
-        onProjectCreated(chatRes.project);
-      }
-
-      const smResponse: Message = {
-        id: (Date.now() + 1).toString(),
-        sender: 'Scrum Master',
-        text: chatRes.reply,
-        timestamp: new Date().toLocaleTimeString(),
-      };
-      setMessages((prev) => [...prev, smResponse]);
-    } catch (err: any) {
-      const errorResponse: Message = {
-        id: (Date.now() + 1).toString(),
-        sender: 'Scrum Master',
-        text: `Erro ao comunicar com a Squad/OmniRoute: ${err.message || err}`,
-        timestamp: new Date().toLocaleTimeString(),
-      };
-      setMessages((prev) => [...prev, errorResponse]);
+      await onSendMessage(textToSend, filesToSend);
     } finally {
       setIsProcessing(false);
     }
@@ -172,7 +139,7 @@ export function POChatView({ activeProject, onNavigateToTab, onProjectCreated }:
             type="text"
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+            onKeyDown={(e) => e.key === 'Enter' && handleSend()}
             placeholder="Digite suas instruções ou solicitações para o Scrum Master..."
             style={{
               flex: 1,
@@ -184,7 +151,7 @@ export function POChatView({ activeProject, onNavigateToTab, onProjectCreated }:
               fontSize: '14px',
             }}
           />
-          <Button variant="primary" onClick={handleSendMessage} disabled={isProcessing}>
+          <Button variant="primary" onClick={handleSend} disabled={isProcessing}>
             Enviar 🚀
           </Button>
         </div>

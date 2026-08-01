@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   # 1. OmniRoute AI Gateway Proxy (Node.js 22 - 290+ Free Tier LLMs)
   omniroute:

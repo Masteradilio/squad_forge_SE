@@ -1,0 +1,19 @@
+# Docker build context ignore rules
+.git
+.venv
+venv
+node_modules
+.pip-audit-cache
+.cache
+.pytest_cache
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.localforge
+frontend/node_modules
+frontend/dist
+tmp
+*.log
+.DS_Store
+Thumbs.db

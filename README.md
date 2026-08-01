@@ -42,6 +42,10 @@ ForgeOS Cloud is an open-source, cloud-ready software engineering platform power
 - **HITL Interruption Gates**: Pauses execution at critical architectural or release checkpoints with a 1-click PO Approval Modal in the React UI.
 - **Dynamic PO Input Mid-Run**: Squad asks targeted questions in the PO Chat UI if missing PRD details are discovered.
 
+### 8. Caching Semântico Avançado & Helm Charts Kubernetes Auto-Scaling
+- **Semantic Caching Engine**: Intercepta consultas repetitivas de AST e LLM no gateway OmniRoute (0ms de latência e 0 consumo de tokens).
+- **Kubernetes Helm Charts (`deploy/helm/forgeos-cloud/`)**: Suporte a implantação automatizada no K8s com réplicas dinâmicas via Horizontal Pod Autoscaler (HPA).
+
 ---
 
 ## 🚀 Docker & Docker Compose Quickstart

@@ -2,6 +2,15 @@
 
 All notable changes to LocalForge OS will be documented in this file.
 
+ ## [1.1.0] - 2026-08-01 (ForgeOS Cloud 1.1.0 — Semantic Caching & K8s Auto-Scaling)
+
+### ⚡ Infrastructure & Performance Improvements
+- **Semantic Caching Engine (`semantic_cache.py`)**: Built SHA-256 / similarity-matched cache layer intercepting repetitive LLM completions and AST Graphify queries, providing 0ms latency responses and 0 API token consumption.
+- **AST Graphify Cache Integration (`graphify_engine.py`)**: Automatic file-hash checking preventing redundant codebase re-indexing when source files remain unmodified.
+- **OmniRoute Gateway Semantic Cache (`omniroute_client.py`)**: Integrated transparent caching layer into `OmniRouteClient.chat_completion`.
+- **Kubernetes Helm Charts (`deploy/helm/forgeos-cloud/`)**: Created production Helm Chart packaging `omniroute`, `backend`, `frontend`, and `postgres-pgvector` services with ConfigMaps, Secret bindings, and HPA templates.
+- **Horizontal Pod Autoscaler (HPA) (`hpa-sandbox.yaml`)**: Implemented dynamic pod auto-scaling (min 2, max 10 replicas) based on CPU (70%) and Memory (80%) utilization thresholds for isolated backend sandbox workloads.
+
  ## [1.0.0] - 2026-08-01 (ForgeOS Cloud 1.0.0 SaaS Release)
 
 ### 🚀 ForgeOS Cloud Release Summary

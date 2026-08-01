@@ -5,6 +5,8 @@ from typing import Any, Dict, List
 import json
 import logging
 
+from localforge.services.semantic_cache import SemanticCacheManager
+
 logger = logging.getLogger(__name__)
 
 
@@ -13,9 +15,14 @@ class GraphifyEngine:
 
     def __init__(self, workspace_path: Path):
         self.workspace_path = workspace_path
+        self.cache = SemanticCacheManager()
 
     def build_codebase_graph(self) -> Dict[str, Any]:
         """Parse source code files deterministically and build structural AST call graph."""
+        cached_graph = self.cache.get_ast_graph(self.workspace_path)
+        if cached_graph:
+            return cached_graph
+
         nodes = []
         edges = []
 
@@ -56,6 +63,7 @@ class GraphifyEngine:
             report_content += f"- ... and {len(nodes) - 20} more files.\n"
 
         graph_report_path.write_text(report_content, encoding="utf-8")
+        self.cache.set_ast_graph(self.workspace_path, graph_data)
         logger.info(f"Graphify built AST graph with {len(nodes)} nodes cleanly.")
 
         return graph_data

@@ -1,0 +1,24 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "forgeos-cloud.fullname" . }}-omniroute
+  labels:
+    app.kubernetes.io/component: omniroute
+spec:
+  replicas: {{ .Values.omniroute.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: omniroute
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: omniroute
+    spec:
+      containers:
+        - name: omniroute
+          image: "{{ .Values.omniroute.image.repository }}:{{ .Values.omniroute.image.tag }}"
+          imagePullPolicy: {{ .Values.omniroute.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.omniroute.port }}
+          resources:
+            {{- toYaml .Values.omniroute.resources | nindent 12 }}

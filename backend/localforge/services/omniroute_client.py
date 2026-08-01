@@ -5,6 +5,8 @@ import os
 from typing import Any, Dict, List, Optional
 import httpx
 
+from localforge.services.semantic_cache import SemanticCacheManager
+
 logger = logging.getLogger(__name__)
 
 
@@ -18,6 +20,7 @@ class OmniRouteClient:
             or "http://localhost:20128/v1"
         ).rstrip("/")
         self.client = httpx.AsyncClient(timeout=60.0)
+        self.cache = SemanticCacheManager()
 
     async def get_models(self) -> List[Dict[str, Any]]:
         """Fetch catalog of available LLMs from OmniRoute."""
@@ -45,11 +48,15 @@ class OmniRouteClient:
     async def chat_completion(
         self,
         model: str,
-        messages: List[Dict[str, str]],
+        messages: List[Dict[str, Any]],
         tools: Optional[List[Dict[str, Any]]] = None,
         temperature: float = 0.2,
     ) -> Dict[str, Any]:
-        """Send a chat completion request to OmniRoute with standard OpenAI protocol."""
+        """Send a chat completion request to OmniRoute with standard OpenAI protocol & semantic caching."""
+        cached_result = self.cache.get_llm_completion(model, messages)
+        if cached_result:
+            return cached_result
+
         url = f"{self.base_url}/chat/completions"
         payload: Dict[str, Any] = {
             "model": model,
@@ -61,7 +68,9 @@ class OmniRouteClient:
 
         response = await self.client.post(url, json=payload)
         response.raise_for_status()
-        return response.json()
+        data = response.json()
+        self.cache.set_llm_completion(model, messages, data)
+        return data
 
     async def close(self):
         await self.client.aclose()

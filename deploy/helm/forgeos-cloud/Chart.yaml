@@ -1,0 +1,14 @@
+apiVersion: v2
+name: forgeos-cloud
+description: Helm Chart for deployment of ForgeOS Cloud autonomous AI squad platform on Kubernetes.
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - forgeos
+  - ai-squad
+  - software-engineering
+  - omniroute
+  - autoscale
+maintainers:
+  - name: ForgeOS Architecture Squad

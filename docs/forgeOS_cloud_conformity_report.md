@@ -1,6 +1,6 @@
 # ForgeOS Cloud Conformity Report
 
-**Audit date:** 2026-08-03  
+**Audit date:** 2026-08-04
 **Reference plan:** `docs/plano_forgeOS_cloud.md`  
 **Reference backlog:** `docs/backlog_forgeOS_cloud.md`  
 **Verdict:** `IMPLEMENTATION_READY_FOR_TARGETED_VALIDATION`, not a production
@@ -74,7 +74,7 @@ clean environment.
 | 5.3 BYOK UI | PARTIAL | Settings surfaces exist; end-to-end encrypted tenant-scoped storage is not proven. |
 | 5.4 Tracing timeline | IMPLEMENTED | Backend spans and frontend timeline component exist. |
 | 5.5 Dynamic PO input/HITL UI | IMPLEMENTED | HITL modal and chat flow exist with API integration. |
-| 5.6 Docker/OmniRoute E2E | BLOCKED | OmniRoute discovery is healthy, but Docker's Windows named pipe is currently unresponsive and the tested free/freemium routes returned upstream HTTP 500/502 or connect timeouts. No product acceptance exists until a real free-route completion is recorded in SQLite. |
+| 5.6 Docker/OmniRoute E2E | BLOCKED | OmniRoute discovery is healthy, but Docker's Windows named pipe is currently unresponsive and the tested free/freemium routes returned upstream HTTP 500/502 or connect timeouts. No product acceptance exists until a real free-route completion is recorded in SQLite. The V3 benchmark harness itself was also corrected on 2026-08-04: it had still written an Ollama workspace config and could therefore not serve as Cloud-only evidence. |
 | 5.7 Executive release dossier | PARTIAL | Dossier/evidence services exist, but a release dossier cannot be accepted while mandatory E2E and tenant gates remain open. |
 
 ## Deterministic validation
@@ -92,6 +92,11 @@ These results prove repository consistency, not Cloud deployment or product
 acceptance. `/v1/models` discovery was verified against the local OmniRoute
 gateway; both Chief preflight and pipeline worker selection now append only a
 bounded set of explicitly free/freemium aliases from that live catalog.
+The V3 benchmark runner was audited separately and corrected to initialize and
+execute the workspace with `provider=omniroute` from the beginning; its
+preflight now selects only explicit free/freemium catalog routes and its
+metrics reject non-OmniRoute calls. This is a harness correction, not evidence
+that a route is currently completing requests.
 Direct completion probes nevertheless failed at the upstream gateway, while
 the Docker SDK could not complete a bounded Windows named-pipe ping. No
 successful HP12C product run or ten-function validation is claimed. The next

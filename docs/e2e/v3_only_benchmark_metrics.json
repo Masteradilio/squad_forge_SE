@@ -1,49 +1,45 @@
 {
   "benchmark_name": "SprintBoard Lite V3-Only Empirical Benchmark",
-  "date": "2026-06-28",
+  "date": "2026-08-04",
   "prd_file": "docs/PRD_SPRINTBOARD_LITE.md",
-  "status": "ACCEPTED",
-  "blockers": [],
+  "status": "REJECTED",
+  "blockers": [
+    "OmniRoute-only routing did not execute any Chief Engineer call; benchmark did not exercise the intended Cloud architecture."
+  ],
   "preflight_checklist": {
     "docker_or_dev_passed": true,
-    "llm_installed_passed": true,
+    "omniroute_gateway_passed": true,
     "task_count_match_passed": true,
     "chief_engineer_configured_passed": true
   },
   "run_summary": {
     "run_id": "V3-Run-1",
-    "tasks_planned": 5,
-    "tasks_imported": 5,
-    "task_runs_executed": 7,
+    "tasks_planned": 6,
+    "prd_requirements": 5,
+    "tasks_imported": 6,
+    "task_runs_executed": 0,
     "task_statuses": {
-      "PR_READY": 5
+      "READY": 6
     },
-    "artifacts_generated": 84,
-    "artifact_types": {
-      "DiffArtifact": 14,
-      "PRArtifact": 10,
-      "PlanArtifact": 5,
-      "RepairArtifact": 5,
-      "ReviewArtifact": 5,
-      "RiskArtifact": 5,
-      "RoleArtifact": 35,
-      "TestArtifact": 5
-    },
-    "model_calls_logged": 16,
-    "openrouter_calls_logged": 7,
-    "local_calls_logged": 9,
-    "estimated_cost_usd": 0.0307395,
+    "artifacts_generated": 0,
+    "artifact_types": {},
+    "model_calls_logged": 0,
+    "omniroute_calls_logged": 0,
+    "non_omniroute_calls_logged": 0,
+    "chief_engineer_calls_logged": 0,
+    "local_calls_logged": 0,
+    "estimated_cost_usd": 0.0,
     "exit_code": 0,
     "routing_contract_summary": {
       "chief_only": 1,
       "chief_led": 4,
-      "local_assisted": 0
+      "local_assisted": 1
     }
   },
   "conclusions": {
-    "quality_score": "Deliverable",
-    "has_pr_artifacts": true,
+    "quality_score": "Failed/Blocked",
+    "has_pr_artifacts": false,
     "is_auditable": true,
-    "api_led_economy_first_exercised": true
+    "api_led_economy_first_exercised": false
   }
 }

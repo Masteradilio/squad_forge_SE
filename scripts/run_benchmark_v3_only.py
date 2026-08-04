@@ -30,7 +30,12 @@ async def check_docker_status() -> tuple[bool, str]:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
         )
-        stdout, stderr = await proc.communicate()
+        try:
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=10.0)
+        except asyncio.TimeoutError:
+            proc.kill()
+            await proc.communicate()
+            return False, "Docker status command exceeded the 10s benchmark timeout"
         if proc.returncode == 0:
             return True, stdout.decode("utf-8").strip()
         else:
@@ -38,48 +43,60 @@ async def check_docker_status() -> tuple[bool, str]:
     except Exception as e:
         return False, str(e)
 
-async def check_ollama_status() -> tuple[bool, list[str]]:
-    """Checks if local Ollama daemon is reachable and lists downloaded models."""
+async def check_omniroute_status(base_url: str) -> tuple[bool, list[str], str]:
+    """Check the OmniRoute catalog without consulting a local model runtime."""
     import urllib.request
-    import json
+
+    url = f"{base_url.rstrip('/')}/models"
+
     try:
         loop = asyncio.get_event_loop()
+
         def fetch():
             try:
-                response = urllib.request.urlopen("http://localhost:11434/api/tags", timeout=3)
-                return response.read().decode("utf-8")
+                request = urllib.request.Request(url)
+                api_key = os.environ.get("OMNIROUTE_API_KEY") or root_env_values().get("OMNIROUTE_API_KEY")
+                if api_key:
+                    request.add_header("Authorization", f"Bearer {api_key}")
+                with urllib.request.urlopen(request, timeout=5) as response:
+                    return response.status, response.read().decode("utf-8")
             except Exception as e:
-                return str(e)
-        res = await loop.run_in_executor(None, fetch)
-        if "models" in res:
-            data = json.loads(res)
-            models = [m["name"] for m in data.get("models", [])]
-            return True, models
-        else:
-            return False, []
+                return 0, str(e)
+
+        status_code, body = await loop.run_in_executor(None, fetch)
+        if status_code != 200:
+            return False, [], f"GET {url} returned HTTP {status_code}: {body[:240]}"
+        data = json.loads(body)
+        models = [item["id"] for item in data.get("data", []) if isinstance(item, dict) and item.get("id")]
+        if not models:
+            return False, [], f"GET {url} returned no model routes"
+        return True, models, f"OmniRoute catalog reachable at {url}; routes advertised: {models[:12]}"
     except Exception as e:
-        return False, []
+        return False, [], f"OmniRoute catalog probe failed at {url}: {e}"
 
 async def run_cli_command(cwd: str, args: list[str]) -> tuple[int, str, str]:
-    """Executes a LocalForge CLI command in the specified directory using the absolute python venv path."""
+    """Run one CLI command with a hard timeout and no orphaned child process."""
     env = os.environ.copy()
     env["PYTHONPATH"] = os.path.join(ROOT_DIR, "backend")
     for key in (
-        "NVIDIA_LLM_MODEL",
-        "NVIDIA_API_KEY",
-        "OPENROUTER_MODEL",
-        "OPENROUTER_API_KEY",
         "LOCALFORGE_MODEL_API_KEY",
+        "LOCALFORGE_MODEL_PROVIDER",
+        "LOCALFORGE_MODEL_BASE_URL",
+        "LOCALFORGE_DEFAULT_MODEL",
+        "LOCALFORGE_FALLBACK_MODELS",
         "LOCALFORGE_CHIEF_PROVIDER",
         "LOCALFORGE_CHIEF_BASE_URL",
         "LOCALFORGE_CHIEF_MODEL",
         "LOCALFORGE_CHIEF_VISUAL_MODEL",
         "LOCALFORGE_CHIEF_API_KEY",
+        "LOCALFORGE_CHIEF_FALLBACK_MODELS",
+        "LOCALFORGE_CHIEF_VISUAL_FALLBACK_MODELS",
         "LOCALFORGE_CHIEF_FALLBACK_PROVIDER",
         "LOCALFORGE_CHIEF_FALLBACK_BASE_URL",
         "LOCALFORGE_CHIEF_FALLBACK_MODEL",
         "LOCALFORGE_CHIEF_FALLBACK_API_KEY",
         "LOCALFORGE_OMNIROUTE_JSON_VERIFIED",
+        "LOCALFORGE_CHIEF_PREFLIGHT_TIMEOUT",
         "OMNIROUTE_URL",
         "OMNIROUTE_API_KEY",
     ):
@@ -88,6 +105,12 @@ async def run_cli_command(cwd: str, args: list[str]) -> tuple[int, str, str]:
             env[key] = value
     python_exe = sys.executable
     cmd_args = [python_exe, "-m", "localforge.cli.main"] + args
+    try:
+        default_timeout = float(os.environ.get("LOCALFORGE_BENCHMARK_COMMAND_TIMEOUT", "120"))
+        run_timeout = float(os.environ.get("LOCALFORGE_BENCHMARK_RUN_TIMEOUT", "900"))
+    except ValueError:
+        default_timeout, run_timeout = 120.0, 900.0
+    timeout_seconds = run_timeout if "run" in args else default_timeout
 
     try:
         proc = await asyncio.create_subprocess_exec(
@@ -97,8 +120,19 @@ async def run_cli_command(cwd: str, args: list[str]) -> tuple[int, str, str]:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
         )
-        stdout, stderr = await proc.communicate()
-        return proc.returncode or 0, stdout.decode("utf-8").strip(), stderr.decode("utf-8").strip()
+        try:
+            stdout, stderr = await asyncio.wait_for(
+                proc.communicate(), timeout=max(1.0, timeout_seconds)
+            )
+        except asyncio.TimeoutError:
+            proc.kill()
+            stdout, stderr = await proc.communicate()
+            timeout_message = (
+                f"Command {' '.join(args)!r} exceeded the benchmark timeout "
+                f"of {timeout_seconds:.0f}s and was terminated."
+            )
+            return 124, stdout.decode("utf-8", errors="replace").strip(), timeout_message
+        return proc.returncode or 0, stdout.decode("utf-8", errors="replace").strip(), stderr.decode("utf-8", errors="replace").strip()
     except Exception as e:
         return -1, "", str(e)
 
@@ -122,7 +156,7 @@ async def patch_workspace_config(
     docker_active: bool,
     chief_config: dict[str, Any],
 ):
-    """Updates config.yaml for V3 API-led/economy-first routing."""
+    """Write an OmniRoute-only Cloud config for the benchmark workspace."""
     config_path = os.path.join(workspace_dir, ".localforge", "config.yaml")
     if os.path.exists(config_path):
         try:
@@ -131,14 +165,22 @@ async def patch_workspace_config(
             
             if "models" not in cfg:
                 cfg["models"] = {}
-            cfg["models"]["provider"] = "ollama"
-            cfg["models"]["base_url"] = "http://localhost:11434/v1"
-            cfg["models"]["default_model"] = default_model
-            cfg["models"]["fallback_models"] = [
-                "gemma4:12b",
-                "granite4.1:8b",
-                "nemotron-3-nano:4b",
+            gateway_url = (
+                os.environ.get("OMNIROUTE_URL")
+                or root_env_values().get("OMNIROUTE_URL")
+                or "http://127.0.0.1:20128/v1"
+            )
+            free_routes = [
+                "auto/best-free",
+                "auto/coding:free",
+                "oc/nemotron-3-ultra-free",
+                "oc/mimo-v2.5-free",
+                "oc/north-mini-code-free",
             ]
+            cfg["models"]["provider"] = "omniroute"
+            cfg["models"]["base_url"] = gateway_url
+            cfg["models"]["default_model"] = default_model
+            cfg["models"]["fallback_models"] = free_routes
             
             if "sandbox" not in cfg:
                 cfg["sandbox"] = {}
@@ -149,22 +191,16 @@ async def patch_workspace_config(
 
             if "chief_engineer" not in cfg:
                 cfg["chief_engineer"] = {}
-            cfg["chief_engineer"]["enabled"] = bool(chief_config.get("model"))
-            cfg["chief_engineer"]["provider"] = chief_config.get("provider", "openrouter")
-            cfg["chief_engineer"]["base_url"] = chief_config.get(
-                "base_url", "https://openrouter.ai/api/v1"
-            )
-            cfg["chief_engineer"]["model"] = chief_config.get("model")
-            cfg["chief_engineer"]["visual_model"] = chief_config.get("visual_model")
-            cfg["chief_engineer"]["visual_fallback_models"] = chief_config.get(
-                "visual_fallback_models", ["auto/best-vision"]
-            )
-            cfg["chief_engineer"]["fallback_models"] = chief_config.get(
-                "fallback_models", ["auto/pro-coding", "auto/best-coding"]
-            )
-            cfg["chief_engineer"]["fallback_provider"] = chief_config.get("fallback_provider")
-            cfg["chief_engineer"]["fallback_base_url"] = chief_config.get("fallback_base_url")
-            cfg["chief_engineer"]["fallback_model"] = chief_config.get("fallback_model")
+            cfg["chief_engineer"]["enabled"] = True
+            cfg["chief_engineer"]["provider"] = "omniroute"
+            cfg["chief_engineer"]["base_url"] = gateway_url
+            cfg["chief_engineer"]["model"] = default_model
+            cfg["chief_engineer"]["visual_model"] = default_model
+            cfg["chief_engineer"]["visual_fallback_models"] = free_routes
+            cfg["chief_engineer"]["fallback_models"] = free_routes
+            cfg["chief_engineer"]["fallback_provider"] = None
+            cfg["chief_engineer"]["fallback_base_url"] = None
+            cfg["chief_engineer"]["fallback_model"] = None
             cfg["chief_engineer"]["timeout"] = 240.0
 
             if "budgets" not in cfg:
@@ -183,10 +219,11 @@ async def patch_workspace_config(
             # remaining under the hard paid-call and USD ceilings.
             cfg["budgets"]["max_run_recovery_cycles"] = 8
                 
-            with open(config_path, "w", encoding="utf-8") as f:
+            with open(config_path, "w", encoding="utf-8", newline="\n") as f:
                 yaml.safe_dump(cfg, f, default_flow_style=False)
             print(
-                f"Patched config at {config_path}: default_model={default_model}, "
+                f"Patched OmniRoute-only config at {config_path}: "
+                f"gateway={gateway_url}, default_model={default_model}, "
                 f"chief_provider={cfg['chief_engineer']['provider']}, "
                 f"chief_model_configured={bool(chief_config.get('model'))}, "
                 f"sandbox_type={cfg['sandbox']['type']}"
@@ -196,47 +233,35 @@ async def patch_workspace_config(
 
 
 def chief_engineer_config_from_env() -> dict[str, Any]:
-    env = os.environ.copy()
-    env.update({k: v for k, v in root_env_values().items() if k not in env})
-    provider: str | None = env.get("LOCALFORGE_CHIEF_PROVIDER")
-    if not provider:
-        provider = "nvidia" if env.get("NVIDIA_LLM_MODEL") and env.get("NVIDIA_API_KEY") else "openrouter"
-    resolved_provider = provider or "openrouter"
-    if resolved_provider == "omniroute":
-        base_url: str = env.get("LOCALFORGE_CHIEF_BASE_URL") or env.get("OMNIROUTE_URL") or "http://localhost:20128/v1"
-        model: str | None = env.get("LOCALFORGE_CHIEF_MODEL") or env.get("OPENROUTER_MODEL") or "auto/best-coding"
-        api_key_configured = True
-    elif resolved_provider == "nvidia":
-        base_url = "https://integrate.api.nvidia.com/v1"
-        model = env.get("NVIDIA_LLM_MODEL")
-        api_key_configured = bool(env.get("NVIDIA_API_KEY"))
-    else:
-        base_url = "https://openrouter.ai/api/v1"
-        model = env.get("OPENROUTER_MODEL")
-        api_key_configured = bool(env.get("OPENROUTER_API_KEY"))
+    env = root_env_values()
+    env.update({key: value for key, value in os.environ.items() if value})
+    base_url = env.get("LOCALFORGE_CHIEF_BASE_URL") or env.get("OMNIROUTE_URL") or "http://127.0.0.1:20128/v1"
+    model = env.get("LOCALFORGE_CHIEF_MODEL") or env.get("OMNIROUTE_MODEL") or "auto/best-free"
+    free_fallbacks = [
+        model.strip()
+        for model in env.get(
+            "LOCALFORGE_CHIEF_FALLBACK_MODELS",
+            "auto/coding:free,oc/nemotron-3-ultra-free,oc/mimo-v2.5-free,oc/north-mini-code-free",
+        ).split(",")
+        if model.strip()
+    ]
     return {
-        "provider": resolved_provider,
+        "provider": "omniroute",
         "base_url": base_url,
         "model": model,
-        "visual_model": env.get("LOCALFORGE_CHIEF_VISUAL_MODEL"),
+        "visual_model": env.get("LOCALFORGE_CHIEF_VISUAL_MODEL") or model,
         "visual_fallback_models": [
             model.strip()
             for model in env.get(
-                "LOCALFORGE_CHIEF_VISUAL_FALLBACK_MODELS", "auto/best-vision"
+                "LOCALFORGE_CHIEF_VISUAL_FALLBACK_MODELS", ",".join(free_fallbacks)
             ).split(",")
             if model.strip()
         ],
-        "fallback_models": [
-            model.strip()
-            for model in env.get(
-                "LOCALFORGE_CHIEF_FALLBACK_MODELS", "auto/pro-coding,auto/best-coding"
-            ).split(",")
-            if model.strip()
-        ],
-        "api_key_configured": api_key_configured,
-        "fallback_provider": env.get("LOCALFORGE_CHIEF_FALLBACK_PROVIDER"),
-        "fallback_base_url": env.get("LOCALFORGE_CHIEF_FALLBACK_BASE_URL"),
-        "fallback_model": env.get("LOCALFORGE_CHIEF_FALLBACK_MODEL"),
+        "fallback_models": free_fallbacks,
+        "api_key_configured": bool(env.get("OMNIROUTE_API_KEY")) or base_url.startswith(("http://localhost", "http://127.0.0.1", "http://omniroute")),
+        "fallback_provider": None,
+        "fallback_base_url": None,
+        "fallback_model": None,
     }
 
 
@@ -338,8 +363,42 @@ def apply_api_led_task_contracts(db_path: str) -> dict[str, int]:
     conn.close()
     return summary
 
-async def run_preflight_checks(v3_dir: str, v3_tasks_imported: int, expected_tasks: int) -> tuple[dict[str, Any], str | None]:
-    """Runs all pre-flight diagnostic validations and returns results and the chosen LLM model."""
+def _task_count_matches_contract(db_path: str, expected_prd_tasks: int) -> tuple[bool, str]:
+    """Accept the PRD tasks plus the one deterministic release-assembly task."""
+    if not os.path.exists(db_path):
+        return False, "workspace database is missing"
+    try:
+        with sqlite3.connect(db_path) as conn:
+            rows = conn.execute("SELECT key, title FROM tasks ORDER BY id").fetchall()
+    except sqlite3.Error as exc:
+        return False, f"could not inspect imported tasks: {exc}"
+
+    if len(rows) == expected_prd_tasks:
+        return True, f"Tasks imported: {len(rows)}, expected PRD requirements: {expected_prd_tasks}"
+
+    assembly_key = f"LF-PRD-{expected_prd_tasks + 1:03d}"
+    if (
+        len(rows) == expected_prd_tasks + 1
+        and rows[-1][0] == assembly_key
+        and "release assembly" in str(rows[-1][1]).lower()
+    ):
+        return True, (
+            f"Tasks imported: {len(rows)} = {expected_prd_tasks} PRD requirements "
+            f"+ deterministic {assembly_key} release-assembly task"
+        )
+    return False, (
+        f"Tasks imported: {len(rows)}, expected {expected_prd_tasks} PRD requirements "
+        f"plus only the deterministic {assembly_key} release-assembly task"
+    )
+
+
+async def run_preflight_checks(
+    v3_dir: str,
+    v3_tasks_imported: int,
+    expected_tasks: int,
+    db_path: str,
+) -> tuple[dict[str, Any], str | None]:
+    """Validate Cloud prerequisites and select a route from OmniRoute's live catalog."""
     results = {}
     
     # 1. Check Docker or Dev Mode (Local Sandbox)
@@ -362,17 +421,22 @@ async def run_preflight_checks(v3_dir: str, v3_tasks_imported: int, expected_tas
         "detail": f"Docker active: {docker_active}, Dev mode (local sandbox) config: {dev_mode}"
     }
     
-    # 2. Check LLM model installed in Ollama & select best fallback
-    ollama_active, installed_models = await check_ollama_status()
+    # 2. Check the OmniRoute catalog. A catalog hit is not completion proof;
+    # the real CLI run performs the bounded chat readiness probe afterwards.
+    gateway_url = (
+        os.environ.get("OMNIROUTE_URL")
+        or root_env_values().get("OMNIROUTE_URL")
+        or "http://127.0.0.1:20128/v1"
+    )
+    gateway_active, available_models, gateway_detail = await check_omniroute_status(gateway_url)
     chosen_model = None
     
     # Preferred order: env model -> config model -> fallback options
     preferred_models = []
     
-    if os.environ.get("LOCALFORGE_MODEL"):
-        preferred_models.append(os.environ["LOCALFORGE_MODEL"])
-    if os.environ.get("OPENROUTER_MODEL"):
-        preferred_models.append(os.environ["OPENROUTER_MODEL"])
+    for env_name in ("LOCALFORGE_CHIEF_MODEL", "OMNIROUTE_MODEL", "LOCALFORGE_DEFAULT_MODEL"):
+        if os.environ.get(env_name):
+            preferred_models.append(os.environ[env_name])
         
     if os.path.exists(config_path):
         try:
@@ -384,35 +448,29 @@ async def run_preflight_checks(v3_dir: str, v3_tasks_imported: int, expected_tas
         except Exception:
             pass
             
-    fallback_options = ["gemma4:12b", "granite4.1:8b", "nemotron-3-nano:4b"]
-    
-    if ollama_active:
-        for fo in fallback_options:
-            for im in installed_models:
-                if fo == im or fo in im or im in fo:
-                    chosen_model = im
-                    break
-            if chosen_model:
-                break
+    free_models = [
+        model
+        for model in available_models
+        if model.endswith(":free") or "-free" in model or model.startswith("free/")
+    ]
+    for model in [*preferred_models, *free_models]:
+        if model in free_models:
+            chosen_model = model
+            break
 
-        if not chosen_model:
-            for pm in preferred_models:
-                for im in installed_models:
-                    if pm == im or pm in im or im in pm:
-                        chosen_model = im
-                        break
-                if chosen_model:
-                    break
-
-    model_passed = chosen_model is not None
-    results["llm_installed"] = {
-        "passed": model_passed,
-        "detail": f"Chosen model for execution: '{chosen_model}'. Ollama installed models: {installed_models}"
+    results["omniroute_gateway"] = {
+        "passed": gateway_active and chosen_model is not None,
+        "detail": (
+            f"{gateway_detail}; selected free route: {chosen_model!r}"
+            if gateway_active
+            else gateway_detail
+        ),
     }
     
+    task_count_passed, task_count_detail = _task_count_matches_contract(db_path, expected_tasks)
     results["task_count_match"] = {
-        "passed": v3_tasks_imported == expected_tasks,
-        "detail": f"Tasks imported: {v3_tasks_imported}, Expected count: {expected_tasks}"
+        "passed": task_count_passed,
+        "detail": task_count_detail,
     }
 
     chief_config = chief_engineer_config_from_env()
@@ -428,7 +486,31 @@ async def run_preflight_checks(v3_dir: str, v3_tasks_imported: int, expected_tas
     return results, chosen_model
 
 async def main():
-    print("=== Starting Real LocalForge V3-Only CLI Benchmark Execution ===")
+    print("=== Starting Real ForgeOS Cloud OmniRoute-Only Benchmark Execution ===")
+
+    gateway_url = (
+        os.environ.get("OMNIROUTE_URL")
+        or root_env_values().get("OMNIROUTE_URL")
+        or "http://127.0.0.1:20128/v1"
+    )
+    # Establish the Cloud contract before `init`; inherited legacy variables
+    # must never make the benchmark initialize an Ollama or direct-provider
+    # workspace by accident.
+    os.environ.update(
+        {
+            "OMNIROUTE_URL": gateway_url,
+            "LOCALFORGE_MODEL_PROVIDER": "omniroute",
+            "LOCALFORGE_MODEL_BASE_URL": gateway_url,
+            "LOCALFORGE_DEFAULT_MODEL": "auto/best-free",
+            "LOCALFORGE_FALLBACK_MODELS": "auto/coding:free,oc/nemotron-3-ultra-free,oc/mimo-v2.5-free,oc/north-mini-code-free",
+            "LOCALFORGE_CHIEF_PROVIDER": "omniroute",
+            "LOCALFORGE_CHIEF_BASE_URL": gateway_url,
+            "LOCALFORGE_CHIEF_MODEL": "auto/best-free",
+            "LOCALFORGE_CHIEF_VISUAL_MODEL": "auto/best-free",
+            "LOCALFORGE_CHIEF_FALLBACK_MODELS": "auto/coding:free,oc/nemotron-3-ultra-free,oc/mimo-v2.5-free,oc/north-mini-code-free",
+            "LOCALFORGE_CHIEF_VISUAL_FALLBACK_MODELS": "auto/best-free,oc/mimo-v2.5-free,oc/north-mini-code-free",
+        }
+    )
     
     v3_dir = os.path.join(ROOT_DIR, "benchmarks", "workspaces", "sprintboard-v3")
     
@@ -464,7 +546,9 @@ async def main():
 
     # Run Pre-flight Checks
     expected_tasks = 5
-    preflight, chosen_model = await run_preflight_checks(v3_dir, v3_tasks_imported, expected_tasks)
+    preflight, chosen_model = await run_preflight_checks(
+        v3_dir, v3_tasks_imported, expected_tasks, v3_db
+    )
     
     preflight_failed = False
     blockers = []
@@ -478,6 +562,38 @@ async def main():
     docker_active, _ = await check_docker_status()
     chief_config = chief_engineer_config_from_env()
     if chosen_model:
+        gateway_url = (
+            os.environ.get("OMNIROUTE_URL")
+            or root_env_values().get("OMNIROUTE_URL")
+            or "http://127.0.0.1:20128/v1"
+        )
+        free_route_ladder = ",".join(
+            [
+                chosen_model,
+                "auto/best-free",
+                "auto/coding:free",
+                "oc/nemotron-3-ultra-free",
+                "oc/mimo-v2.5-free",
+                "oc/north-mini-code-free",
+            ]
+        )
+        # Override inherited legacy Ollama/OpenRouter variables so this
+        # benchmark cannot accidentally execute a different architecture.
+        os.environ.update(
+            {
+                "OMNIROUTE_URL": gateway_url,
+                "LOCALFORGE_MODEL_PROVIDER": "omniroute",
+                "LOCALFORGE_MODEL_BASE_URL": gateway_url,
+                "LOCALFORGE_DEFAULT_MODEL": chosen_model,
+                "LOCALFORGE_FALLBACK_MODELS": free_route_ladder,
+                "LOCALFORGE_CHIEF_PROVIDER": "omniroute",
+                "LOCALFORGE_CHIEF_BASE_URL": gateway_url,
+                "LOCALFORGE_CHIEF_MODEL": chosen_model,
+                "LOCALFORGE_CHIEF_VISUAL_MODEL": chosen_model,
+                "LOCALFORGE_CHIEF_FALLBACK_MODELS": free_route_ladder,
+                "LOCALFORGE_CHIEF_VISUAL_FALLBACK_MODELS": free_route_ladder,
+            }
+        )
         await patch_workspace_config(v3_dir, chosen_model, docker_active, chief_config)
 
     v3_run_code, v3_run_out, v3_run_err = -1, "", ""
@@ -494,10 +610,10 @@ async def main():
     v3_runs_count = 0
     v3_task_runs_count = 0
     v3_calls_logged = 0
-    v3_openrouter_calls = 0
     v3_omniroute_calls = 0
     v3_chief_calls = 0
     v3_local_calls = 0
+    v3_non_omniroute_calls = 0
     v3_artifacts_logged = 0
     v3_cost_usd = 0.0
     
@@ -520,16 +636,11 @@ async def main():
             c.execute("SELECT provider, COUNT(*) FROM model_call_ledger GROUP BY provider")
             for provider, count in c.fetchall():
                 normalized_provider = str(provider or "").lower()
-                if normalized_provider == "openrouter":
-                    v3_openrouter_calls = count
-                    v3_chief_calls += count
-                elif normalized_provider == "omniroute":
+                if normalized_provider == "omniroute":
                     v3_omniroute_calls = count
                     v3_chief_calls += count
-                elif normalized_provider == "openai_compatible":
-                    v3_chief_calls += count
                 else:
-                    v3_local_calls += count
+                    v3_non_omniroute_calls += count
             
             c.execute("SELECT SUM(estimated_cost_usd) FROM model_call_ledger")
             cost_val = c.fetchone()[0]
@@ -563,11 +674,17 @@ async def main():
         failed_tasks = task_statuses.get("FAILED_SAFE", 0)
         pr_ready_tasks = task_statuses.get("PR_READY", 0)
         
-        if v3_chief_calls == 0:
+        if v3_non_omniroute_calls > 0:
             status_classification = "REJECTED"
             blockers.append(
-                "V3 API-led routing did not execute any Chief Engineer call; "
-                "benchmark did not exercise the intended V3 architecture."
+                "Benchmark recorded a model call outside OmniRoute; "
+                "the Cloud-only acceptance contract was violated."
+            )
+        elif v3_chief_calls == 0:
+            status_classification = "REJECTED"
+            blockers.append(
+                "OmniRoute-only routing did not execute any Chief Engineer call; "
+                "benchmark did not exercise the intended Cloud architecture."
             )
         elif pr_ready_tasks > 0 and failed_tasks == 0:
             status_classification = "ACCEPTED"
@@ -588,21 +705,22 @@ async def main():
       "blockers": blockers,
       "preflight_checklist": {
           "docker_or_dev_passed": preflight["docker_or_dev"]["passed"],
-          "llm_installed_passed": preflight["llm_installed"]["passed"],
+          "omniroute_gateway_passed": preflight["omniroute_gateway"]["passed"],
           "task_count_match_passed": preflight["task_count_match"]["passed"],
           "chief_engineer_configured_passed": preflight["chief_engineer_configured"]["passed"]
       },
       "run_summary": {
           "run_id": f"V3-Run-{v3_runs_count}" if v3_runs_count > 0 else "V3-Run-None",
-          "tasks_planned": expected_tasks,
+          "tasks_planned": v3_tasks_imported,
+          "prd_requirements": expected_tasks,
           "tasks_imported": v3_tasks_imported,
           "task_runs_executed": v3_task_runs_count,
           "task_statuses": task_statuses,
           "artifacts_generated": v3_artifacts_logged,
           "artifact_types": artifact_types,
           "model_calls_logged": v3_calls_logged,
-          "openrouter_calls_logged": v3_openrouter_calls,
           "omniroute_calls_logged": v3_omniroute_calls,
+          "non_omniroute_calls_logged": v3_non_omniroute_calls,
           "chief_engineer_calls_logged": v3_chief_calls,
           "local_calls_logged": v3_local_calls,
           "estimated_cost_usd": v3_cost_usd,
@@ -616,7 +734,7 @@ async def main():
         "api_led_economy_first_exercised": v3_chief_calls > 0
       }
     }
-    with open(metrics_json_path, "w", encoding="utf-8") as f:
+    with open(metrics_json_path, "w", encoding="utf-8", newline="\n") as f:
         json.dump(metrics_data, f, indent=2)
 
     # 2. Format Human Acceptance Report
@@ -647,15 +765,15 @@ The product is accepted only when the benchmark reaches `ACCEPTED`. A `PARTIAL` 
 ## Real Execution Evidence (SQLite & FileSystem)
 
 - **Workspace Path**: `benchmarks/workspaces/sprintboard-v3`
-- **Total Task Runs**: {v3_task_runs_count} of {expected_tasks} planned.
+- **Total Task Runs**: {v3_task_runs_count} of {v3_tasks_imported} planned.
 - **Total Artifacts**: {v3_artifacts_logged} generated under `.localforge/artifacts/`.
 - **Task Statuses**: {json.dumps(task_statuses)}
 - **Artifact Types**: {json.dumps(artifact_types)}
 - **V3 Routing Contracts**: {json.dumps(routing_contract_summary)}
-- **Chief Engineer Calls**: {v3_chief_calls} (OpenRouter: {v3_openrouter_calls}; OmniRoute: {v3_omniroute_calls})
+- **Chief Engineer Calls**: {v3_chief_calls} (OmniRoute: {v3_omniroute_calls}; non-OmniRoute: {v3_non_omniroute_calls})
 - **Local Calls Logged**: {v3_local_calls}
 """
-    with open(acceptance_md_path, "w", encoding="utf-8") as f:
+    with open(acceptance_md_path, "w", encoding="utf-8", newline="\n") as f:
         f.write(acceptance_md)
 
     # 3. Format V3 Only Benchmark Report
@@ -697,7 +815,7 @@ Métricas de execução extraídas diretamente da base de dados `.localforge/loc
 | :--- | :---: | :--- |
 | **Run ID** | f"V3-Run-{v3_runs_count}" | ID de execução real do controle do LocalForge |
 | **SQLite DB Path** | `benchmarks/workspaces/sprintboard-v3/.localforge/localforge.db` | Banco SQLite físico do runtime |
-| **Tasks Planned** | {expected_tasks} | Escopo completo do PRD |
+| **Tasks Planned** | {v3_tasks_imported} | {expected_tasks} requisitos do PRD + assembly determinístico |
 | **Tasks Imported** | {v3_tasks_imported} | Sucesso na importação real |
 | **Task Runs Executed** | {v3_task_runs_count} | Quantidade de iterações de tarefas tentadas |
 | **PR_READY Count** | {task_statuses.get("PR_READY", 0)} | Tarefas prontas para pull request |
@@ -713,7 +831,7 @@ Métricas de execução extraídas diretamente da base de dados `.localforge/loc
 
 ## 4. Distribuição de Estados das Tarefas
 
-Abaixo consta a distribuição real de status das {expected_tasks} tarefas após a rodada:
+Abaixo consta a distribuição real de status das {v3_tasks_imported} tarefas após a rodada:
 - **BACKLOG**: {task_statuses.get("BACKLOG", 0)}
 - **READY**: {task_statuses.get("READY", 0)}
 - **CLAIMED**: {task_statuses.get("CLAIMED", 0)}
@@ -729,7 +847,7 @@ Abaixo consta a distribuição real de status das {expected_tasks} tarefas após
 
 ### Resultados do Pré-flight
 - **docker_or_dev**: {"PASSED" if preflight["docker_or_dev"]["passed"] else "FAILED"} - {preflight["docker_or_dev"]["detail"]}
-- **llm_installed**: {"PASSED" if preflight["llm_installed"]["passed"] else "FAILED"} - {preflight["llm_installed"]["detail"]}
+- **omniroute_gateway**: {"PASSED" if preflight["omniroute_gateway"]["passed"] else "FAILED"} - {preflight["omniroute_gateway"]["detail"]}
 - **task_count_match**: {"PASSED" if preflight["task_count_match"]["passed"] else "FAILED"} - {preflight["task_count_match"]["detail"]}
 - **chief_engineer_configured**: {"PASSED" if preflight["chief_engineer_configured"]["passed"] else "FAILED"} - {preflight["chief_engineer_configured"]["detail"]}
 
@@ -744,9 +862,9 @@ Abaixo consta a distribuição real de status das {expected_tasks} tarefas após
 
 > [!IMPORTANT]
 > **CLASSIFICACAO: {status_classification}**
-> The V3-only run proves the API-led/economy-first architecture only when at least one `openrouter` call is recorded in `model_call_ledger` and costs are consolidated in the report. Otherwise the result remains **REJECTED** or **BLOCKED**, even if the CLI exits with code 0.
+> The V3-only run proves the OmniRoute-only API-led/economy-first architecture only when at least one `omniroute` call is recorded in `model_call_ledger`, no non-OmniRoute call is recorded, and costs are consolidated in the report. Otherwise the result remains **REJECTED** or **BLOCKED**, even if the CLI exits with code 0.
 """
-    with open(report_md_path, "w", encoding="utf-8") as f:
+    with open(report_md_path, "w", encoding="utf-8", newline="\n") as f:
         f.write(report_md)
 
     print(f"\n[Success] V3-Only benchmark execution completed! Status: {status_classification}")

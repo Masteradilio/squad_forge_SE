@@ -64,6 +64,23 @@ All notable changes to LocalForge OS will be documented in this file.
 - Removed all generated HP12C benchmark workspaces after extracting their
   evidence; the reference `samples/e2e-hp12c-platinum/docs` directory retains
   only the PRD and design-target image.
+- Corrected `scripts/run_benchmark_v3_only.py`, which was still initializing
+  benchmark workspaces with Ollama and treating OpenRouter-style calls as
+  valid Cloud evidence. The benchmark now probes the live OmniRoute catalog,
+  selects only explicitly free/freemium routes, forces both worker and Chief
+  configuration through the gateway before `init`, and rejects any recorded
+  non-OmniRoute call.
+- Fixed the generated V3 metrics/report contract to use the
+  `omniroute_gateway` preflight key and to distinguish OmniRoute calls from
+  forbidden direct-provider calls.
+- Added hard timeouts and child-process cleanup to the Cloud benchmark's Docker
+  probe and CLI invocations. A stalled local gateway or CLI now produces a
+  bounded diagnostic instead of leaving a Python benchmark process running
+  after the operator shell times out; `run` defaults to a 900-second command
+  ceiling and can be adjusted with `LOCALFORGE_BENCHMARK_RUN_TIMEOUT`.
+- Updated the SprintBoard preflight contract for the current PRD compiler:
+  five numbered requirements plus the deterministic `LF-PRD-006` release-
+  assembly task are accepted, while arbitrary task-count drift remains blocked.
 
 ### Reliability and Evidence
 - Permanent Chief-provider failures (billing, credits, and authentication) now

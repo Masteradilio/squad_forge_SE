@@ -134,6 +134,9 @@ and then failed closed after all eight bounded observations returned upstream
 118: 19 `READY` tasks, one blocked run, zero `task_runs`, and zero artifacts.
 This proves the unattended recovery window is bounded and auditable; it does
 not prove model execution or product behavior while the upstream remains down.
+After evidence extraction, all generated benchmark workspaces were removed;
+the HP12C reference directory now retains only `PRD.md` and
+`hp12c_platinum_design_target.png` for the next clean acceptance run.
 
 ## Security review and remediation
 

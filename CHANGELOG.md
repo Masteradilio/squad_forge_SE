@@ -61,6 +61,9 @@ All notable changes to LocalForge OS will be documented in this file.
   observations) and still received upstream 500/502/connect-timeout errors.
   The run correctly failed closed with 19 `READY` tasks and zero execution or
   product artifacts; no HP12C acceptance claim is made.
+- Removed all generated HP12C benchmark workspaces after extracting their
+  evidence; the reference `samples/e2e-hp12c-platinum/docs` directory retains
+  only the PRD and design-target image.
 
 ### Reliability and Evidence
 - Permanent Chief-provider failures (billing, credits, and authentication) now

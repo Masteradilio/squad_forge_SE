@@ -57,6 +57,10 @@ All notable changes to LocalForge OS will be documented in this file.
   four free aliases before receiving upstream 500/502 failures. Its SQLite
   state remained 19 `READY` tasks, zero `task_runs`, and zero artifacts; the
   product acceptance gate therefore remains open.
+- Run 119 exercised two bounded recovery rounds (eight total route
+  observations) and still received upstream 500/502/connect-timeout errors.
+  The run correctly failed closed with 19 `READY` tasks and zero execution or
+  product artifacts; no HP12C acceptance claim is made.
 
 ### Reliability and Evidence
 - Permanent Chief-provider failures (billing, credits, and authentication) now

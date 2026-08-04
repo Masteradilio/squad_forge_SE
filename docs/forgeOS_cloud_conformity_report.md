@@ -127,6 +127,14 @@ that PRD import and backlog creation work in the Cloud path, while proving no
 completion, repair, PR generation, or ten-function HP12C behavior until at
 least one OmniRoute free/freemium route completes a bounded chat request.
 
+Run 119 exercised the new two-round recovery policy. It issued four distinct
+route probes in each of two rounds, waited for the configured short backoff,
+and then failed closed after all eight bounded observations returned upstream
+500/502 or connect-timeout errors. Its SQLite state was unchanged from Run
+118: 19 `READY` tasks, one blocked run, zero `task_runs`, and zero artifacts.
+This proves the unattended recovery window is bounded and auditable; it does
+not prove model execution or product behavior while the upstream remains down.
+
 ## Security review and remediation
 
 The bounded security review found and fixed two actionable code issues: the

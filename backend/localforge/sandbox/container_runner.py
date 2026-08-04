@@ -1,9 +1,9 @@
 """Ephemeral Container Sandbox Runner — Isolated Docker/Podman Sandbox & Live Preview Manager."""
 
-from pathlib import Path
 import re
-from typing import Any, Dict, List, Optional
+
 import pydantic
+from pydantic import Field
 
 
 class SandboxConfig(pydantic.BaseModel):
@@ -13,7 +13,9 @@ class SandboxConfig(pydantic.BaseModel):
     vcpu_limit: float = 1.0
     memory_limit_mb: int = 1024
     disk_limit_mb: int = 5120
-    egress_whitelist: List[str] = ["registry.npmjs.org", "pypi.org", "github.com"]
+    egress_whitelist: list[str] = Field(
+        default_factory=lambda: ["registry.npmjs.org", "pypi.org", "github.com"]
+    )
     preview_url: str = ""
 
 
@@ -25,14 +27,23 @@ class ContainerRunner:
 
     def create_sandbox(self, tenant_id: str, project_id: str) -> SandboxConfig:
         """Create sandbox configuration with cgroups v2 resource limits and live preview URL."""
-        preview_url = f"https://{tenant_id}-{project_id}.{self.sandbox_domain}"
+        tenant_slug = self._safe_slug(tenant_id, "tenant_id")
+        project_slug = self._safe_slug(project_id, "project_id")
+        preview_url = f"https://{tenant_slug}-{project_slug}.{self.sandbox_domain}"
         config = SandboxConfig(
-            container_id=f"sbx_{tenant_id}_{project_id}",
-            tenant_id=tenant_id,
-            project_id=project_id,
+            container_id=f"sbx_{tenant_slug}_{project_slug}",
+            tenant_id=tenant_slug,
+            project_id=project_slug,
             preview_url=preview_url,
         )
         return config
+
+    @staticmethod
+    def _safe_slug(value: str, field_name: str) -> str:
+        normalized = value.strip().lower()
+        if not normalized or not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,62}", normalized):
+            raise ValueError(f"{field_name} must be a DNS-safe identifier")
+        return normalized
 
     def scrub_secrets_from_logs(self, log_text: str) -> str:
         """Task 4.5: Secret Scrubber for terminal logs masking API keys, bearers, and tokens."""

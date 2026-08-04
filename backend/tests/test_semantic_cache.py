@@ -1,9 +1,7 @@
 """Unit tests for SemanticCacheManager & AST Caching."""
 
 import time
-from pathlib import Path
 
-import pytest
 from localforge.services.semantic_cache import SemanticCacheManager
 
 

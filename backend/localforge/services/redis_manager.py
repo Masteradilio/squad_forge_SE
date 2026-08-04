@@ -1,10 +1,10 @@
 """Redis Service Manager — In-memory caching, Pub/Sub event streaming, and distributed locks with graceful fallback."""
 
-import asyncio
 import logging
 import os
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import Any, AsyncGenerator, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -19,17 +19,17 @@ except ImportError:
 class RedisManager:
     """Manages Redis connections for caching, Pub/Sub, and distributed locks."""
 
-    def __init__(self, redis_url: Optional[str] = None):
+    def __init__(self, redis_url: str | None = None):
         self.redis_url = (
             redis_url
             or os.getenv("LOCALFORGE_REDIS_URL")
             or os.getenv("REDIS_URL")
             or "redis://redis:6379/0"
         )
-        self._client: Optional[Any] = None
+        self._client: Any | None = None
         self._available: bool = False
 
-    async def _get_client(self) -> Optional[Any]:
+    async def _get_client(self) -> Any | None:
         if not HAS_REDIS:
             return None
         if self._client is None:
@@ -50,7 +50,7 @@ class RedisManager:
     def is_available(self) -> bool:
         return self._available
 
-    async def get(self, key: str) -> Optional[str]:
+    async def get(self, key: str) -> str | None:
         """Retrieve a cached string value from Redis."""
         client = await self._get_client()
         if not client:
@@ -61,7 +61,7 @@ class RedisManager:
             logger.debug(f"Redis GET failed for key {key}: {exc}")
             return None
 
-    async def set(self, key: str, value: str, ttl_seconds: Optional[int] = None) -> bool:
+    async def set(self, key: str, value: str, ttl_seconds: int | None = None) -> bool:
         """Store a string value in Redis with optional TTL."""
         client = await self._get_client()
         if not client:

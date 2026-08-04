@@ -1,10 +1,12 @@
+import asyncio
+import asyncio
 import json
 import re
 from typing import TypeVar
 
 from pydantic import BaseModel, ValidationError
 
-from localforge.llm.base import BaseLLMProvider, LLMError
+from localforge.llm.base import BaseLLMProvider, LLMError, LLMMessage, LLMTimeoutError
 
 # Type variable for Pydantic models
 T = TypeVar("T", bound=BaseModel)
@@ -13,23 +15,33 @@ T = TypeVar("T", bound=BaseModel)
 def clean_json_str(content: str) -> str:
     """Extract and clean raw JSON substring out of LLM response.
 
-    Strips markdown formatting blocks (e.g. ```json ... ```).
+    Strips markdown formatting blocks (e.g. ```json ... ```) and ignores
+    trailing commentary or a second JSON object emitted by weaker models.
     """
     content = content.strip()
     # Try to find content within backticks
     match = re.search(r"```(?:json)?\s*(.*?)\s*```", content, re.DOTALL | re.IGNORECASE)
     if match:
-        return match.group(1).strip()
+        content = match.group(1).strip()
+    start = content.find("{")
+    if start >= 0:
+        candidate = content[start:]
+        try:
+            _, end = json.JSONDecoder().raw_decode(candidate)
+        except json.JSONDecodeError:
+            return content
+        return candidate[:end]
     return content
 
 
 async def chat_completion_validated(  # noqa: UP047
     provider: BaseLLMProvider,
-    messages: list[dict[str, str]],
+    messages: list[LLMMessage],
     schema_model: type[T],
     max_retries: int = 1,
     timeout: float = 30.0,
     model: str | None = None,
+    stream: bool | None = None,
 ) -> T:
     """Execute a chat completion request and enforce validation of the output.
 
@@ -38,24 +50,66 @@ async def chat_completion_validated(  # noqa: UP047
     """
     local_messages = list(messages)  # Copy to avoid side-effects on input list
     schema = schema_model.model_json_schema()
+    use_gateway_stream = (
+        str(getattr(provider, "provider_name", "")).lower() == "omniroute"
+        if stream is None
+        else stream
+    )
 
     for attempt in range(max_retries + 1):
-        raw_response = await provider.chat_completion(
-            messages=local_messages,
-            response_schema=schema,
-            stream=False,
-            timeout=timeout,
-            model=model,
-        )
+        try:
+            raw_response = await asyncio.wait_for(
+                provider.chat_completion(
+                    messages=local_messages,
+                    response_schema=schema,
+                    stream=use_gateway_stream,
+                    timeout=timeout,
+                    model=model,
+                ),
+                timeout=timeout,
+            )
+        except TimeoutError as exc:
+            raise LLMTimeoutError(
+                f"Structured completion call timed out after {timeout}s"
+            ) from exc
 
-        # We only expect non-streaming results for structured validation
         if not isinstance(raw_response, str):
-            raise LLMError("Structured validation calls do not support streaming response mode.")
+            async def consume_stream(stream_response=raw_response) -> tuple[T | None, str]:
+                chunks: list[str] = []
+                try:
+                    async for chunk in stream_response:
+                        chunks.append(chunk)
+                        candidate = clean_json_str("".join(chunks))
+                        try:
+                            return schema_model.model_validate(json.loads(candidate, strict=False)), ""
+                        except (json.JSONDecodeError, ValidationError):
+                            continue
+                finally:
+                    close = getattr(stream_response, "aclose", None)
+                    if callable(close):
+                        await close()
+                return None, "".join(chunks)
+
+            try:
+                streamed_result, streamed_content = await asyncio.wait_for(
+                    consume_stream(), timeout=timeout
+                )
+            except TimeoutError as exc:
+                raise LLMTimeoutError(
+                    f"Structured stream completion call timed out after {timeout}s"
+                ) from exc
+            if streamed_result is not None:
+                return streamed_result
+            raw_response = streamed_content
 
         cleaned = clean_json_str(raw_response)
 
         try:
-            parsed = json.loads(cleaned)
+            # Some gateway routes escape JSON correctly except for literal
+            # control characters inside a generated code string. Pydantic
+            # still validates the schema; accepting those characters here
+            # avoids discarding an otherwise complete Chief artifact.
+            parsed = json.loads(cleaned, strict=False)
             return schema_model.model_validate(parsed)
         except (json.JSONDecodeError, ValidationError) as e:
             if attempt >= max_retries:

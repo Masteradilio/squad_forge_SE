@@ -1,10 +1,12 @@
 import asyncio
+import base64
+import binascii
 import json
 import logging
 import os
 import subprocess
-import time
 from collections.abc import Sequence
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -65,6 +67,7 @@ from localforge.pipeline import RolePipelineEngine
 from localforge.prd import import_prd
 from localforge.quality.discovery import TestCommandDiscovery
 from localforge.safety.runner import run_safe_command
+from localforge.services.scheduler import Scheduler
 from localforge.services.security_controls import (
     SecurityPolicy,
     enforce_api_auth,
@@ -78,40 +81,60 @@ from localforge.storage.orm import ArtifactORM, TaskRunORM
 
 logger = logging.getLogger(__name__)
 
+SAFE_ENV_SETTINGS = {
+    "LOCALFORGE_ALLOWED_ORIGINS",
+    "LOCALFORGE_CHIEF_MODEL",
+    "LOCALFORGE_DEFAULT_MODEL",
+    "LOCALFORGE_FALLBACK_MODELS",
+    "LOCALFORGE_MAX_BODY_BYTES",
+    "LOCALFORGE_SANDBOX_TYPE",
+}
+
 
 def create_app(
     db_manager: DatabaseManager | None = None,
     llm_provider: BaseLLMProvider | None = None,
 ) -> FastAPI:
     manager = db_manager or default_db_manager
-    app = FastAPI(title="LocalForge OS API", version=__version__)
-    app.state.event_bus = EventBus(db_manager=manager)
-    app.state.security_policy = SecurityPolicy.from_environment()
-    from localforge.observability.tracer import OpenTelemetryTracer
-    app.state.telemetry_tracer = OpenTelemetryTracer()
 
-    allowed_origins_raw = os.getenv("LOCALFORGE_ALLOWED_ORIGINS")
-    if allowed_origins_raw:
-        origins = [o.strip() for o in allowed_origins_raw.split(",") if o.strip()]
-    else:
-        origins = ["*"]
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=origins,
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
-    app.add_middleware(GZipMiddleware, minimum_size=1000)
-
-    @app.on_event("startup")
-    async def startup_event() -> None:
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI):
         try:
             from localforge.storage.bootstrap import bootstrap_database
             await bootstrap_database(manager)
             logger.info("Database bootstrapped on API startup.")
         except Exception as exc:
             logger.error(f"Error bootstrapping database on API startup: {exc}")
+        yield
+        running = list(getattr(_app.state, "squad_tasks", {}).values())
+        for task in running:
+            task.cancel()
+        if running:
+            await asyncio.gather(*running, return_exceptions=True)
+
+    app = FastAPI(title="LocalForge OS API", version=__version__, lifespan=lifespan)
+    app.state.event_bus = EventBus(db_manager=manager)
+    app.state.squad_tasks = {}
+    app.state.security_policy = SecurityPolicy.from_environment()
+    from localforge.observability.tracer import OpenTelemetryTracer
+    from localforge.pipeline.hitl_engine import HITLEngine
+
+    app.state.telemetry_tracer = OpenTelemetryTracer()
+    app.state.hitl_engine = HITLEngine(storage_path=os.getenv("LOCALFORGE_HITL_STORE"))
+
+    allowed_origins_raw = os.getenv("LOCALFORGE_ALLOWED_ORIGINS")
+    if allowed_origins_raw:
+        origins = [o.strip() for o in allowed_origins_raw.split(",") if o.strip()]
+    else:
+        origins = ["http://localhost:5173", "http://localhost:3000", "http://localhost"]
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=origins,
+        allow_credentials=origins != ["*"],
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+    app.add_middleware(GZipMiddleware, minimum_size=1000)
 
     @app.middleware("http")
     async def enforce_security_controls(request: Request, call_next: Any) -> Response:
@@ -168,17 +191,33 @@ def create_app(
     @app.post("/projects")
     async def create_project(req: dict[str, Any]) -> dict[str, Any]:
         name = req.get("name") or "LocalForge Project"
-        root_path = req.get("root_path") or str(Path.cwd())
+        root_path = Path(str(req.get("root_path") or Path.cwd())).expanduser().resolve()
+        storage_root_value = os.getenv("LOCALFORGE_PROJECTS_ROOT")
+        environment = os.getenv("LOCALFORGE_ENV", "development").lower()
+        if storage_root_value:
+            storage_root = Path(storage_root_value).expanduser().resolve()
+            try:
+                root_path.relative_to(storage_root)
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=403,
+                    detail="root_path must remain inside LOCALFORGE_PROJECTS_ROOT",
+                ) from exc
+        elif environment in {"production", "staging"}:
+            raise HTTPException(
+                status_code=503,
+                detail="LOCALFORGE_PROJECTS_ROOT is required for cloud projects",
+            )
         default_branch = req.get("default_branch") or "main"
         remote_url = req.get("remote_url")
         async with UnitOfWork(manager) as uow:
             assert uow.projects is not None
-            existing = await uow.projects.get_project_by_path(root_path)
+            existing = await uow.projects.get_project_by_path(str(root_path))
             if existing:
                 return _dump(existing)
             proj = domain.Project(
                 name=name,
-                root_path=root_path,
+                root_path=str(root_path),
                 default_branch=default_branch,
                 remote_url=remote_url,
             )
@@ -199,6 +238,7 @@ def create_app(
         await _ensure_chat_tables()
         async with await manager.get_session() as session:
             from sqlalchemy import select
+
             from localforge.storage.orm import ProjectFolderORM
             res = await session.execute(select(ProjectFolderORM).order_by(ProjectFolderORM.name.asc()))
             folders = res.scalars().all()
@@ -239,7 +279,8 @@ def create_app(
     async def delete_chat_folder(folder_id: int) -> dict[str, Any]:
         async with await manager.get_session() as session:
             from sqlalchemy import update
-            from localforge.storage.orm import ProjectFolderORM, ChatSessionORM
+
+            from localforge.storage.orm import ChatSessionORM, ProjectFolderORM
             folder = await session.get(ProjectFolderORM, folder_id)
             if not folder:
                 raise HTTPException(status_code=404, detail="Folder not found")
@@ -255,8 +296,9 @@ def create_app(
     @app.get("/chat/sessions")
     async def list_chat_sessions() -> list[dict[str, Any]]:
         async with await manager.get_session() as session:
-            from sqlalchemy import select, func
-            from localforge.storage.orm import ChatSessionORM, ChatMessageORM
+            from sqlalchemy import func, select
+
+            from localforge.storage.orm import ChatMessageORM, ChatSessionORM
             res = await session.execute(select(ChatSessionORM).order_by(ChatSessionORM.updated_at.desc()))
             sessions = res.scalars().all()
             
@@ -278,7 +320,7 @@ def create_app(
         project_id = req.get("project_id")
 
         async with await manager.get_session() as session:
-            from localforge.storage.orm import ChatSessionORM, ChatMessageORM
+            from localforge.storage.orm import ChatMessageORM, ChatSessionORM
             sess = ChatSessionORM(
                 title=title,
                 folder_id=int(folder_id) if folder_id else None,
@@ -291,7 +333,12 @@ def create_app(
             welcome_msg = ChatMessageORM(
                 session_id=sess.id,
                 sender="Scrum Master",
-                text="Olá Product Owner! Sou o **Scrum Master** do LocalForge OS. Envie o seu `PRD.md` e arquivos visuais/schemas de interface (`.png`, `.jpg`, `.svg`) abaixo para iniciarmos a Etapa 2 de criação do Backlog da Squad.",
+                text=(
+                    "Olá Product Owner! Sou o **Scrum Master** do LocalForge OS. "
+                    "Envie o seu `PRD.md` e arquivos visuais/schemas de interface "
+                    "(`.png`, `.jpg`, `.svg`) abaixo para iniciarmos a Etapa 2 "
+                    "de criação do Backlog da Squad."
+                ),
                 attachments=[],
             )
             session.add(welcome_msg)
@@ -305,7 +352,8 @@ def create_app(
     async def get_chat_session_details(session_id: int) -> dict[str, Any]:
         async with await manager.get_session() as session:
             from sqlalchemy import select
-            from localforge.storage.orm import ChatSessionORM, ChatMessageORM
+
+            from localforge.storage.orm import ChatMessageORM, ChatSessionORM
             sess = await session.get(ChatSessionORM, session_id)
             if not sess:
                 raise HTTPException(status_code=404, detail="Chat session not found")
@@ -352,15 +400,159 @@ def create_app(
             await session.commit()
             return {"status": "deleted", "session_id": session_id}
 
+    @app.post("/projects/intake")
+    async def intake_project_inputs(req: dict[str, Any]) -> dict[str, Any]:
+        """Persist the PO's PRD and design reference before backlog compilation."""
+        name = str(req.get("name") or "LocalForge Project").strip()[:255]
+        requested_project_id = req.get("project_id")
+        root_value = req.get("root_path") or str(Path.cwd())
+        root_path = Path(str(root_value)).expanduser().resolve()
+
+        # Cloud intake must never let a caller choose an arbitrary host path.
+        # Existing projects are authoritative; new projects are confined to
+        # the configured persistent project volume.
+        if requested_project_id is not None:
+            async with UnitOfWork(manager) as lookup_uow:
+                assert lookup_uow.projects is not None
+                existing_project = await lookup_uow.projects.get_project(
+                    int(requested_project_id)
+                )
+            if existing_project is None:
+                raise HTTPException(status_code=404, detail="Project not found")
+            canonical_root = Path(existing_project.root_path).expanduser().resolve()
+            if "root_path" in req and root_path != canonical_root:
+                raise HTTPException(
+                    status_code=409,
+                    detail="root_path does not match the canonical project storage path",
+                )
+            root_path = canonical_root
+        else:
+            storage_root_value = os.getenv("LOCALFORGE_PROJECTS_ROOT")
+            environment = os.getenv("LOCALFORGE_ENV", "development").lower()
+            if storage_root_value:
+                storage_root = Path(storage_root_value).expanduser().resolve()
+                try:
+                    root_path.relative_to(storage_root)
+                except ValueError as exc:
+                    raise HTTPException(
+                        status_code=403,
+                        detail="root_path must remain inside LOCALFORGE_PROJECTS_ROOT",
+                    ) from exc
+            elif environment in {"production", "staging"}:
+                raise HTTPException(
+                    status_code=503,
+                    detail="LOCALFORGE_PROJECTS_ROOT is required for cloud intake",
+                )
+
+        if not root_path.is_dir():
+            raise HTTPException(status_code=400, detail="root_path must be an existing directory")
+        prd_content = req.get("prd_content")
+        if not isinstance(prd_content, str) or not prd_content.strip():
+            raise HTTPException(status_code=400, detail="prd_content is required")
+        if len(prd_content.encode("utf-8")) > 2_000_000:
+            raise HTTPException(status_code=413, detail="PRD exceeds the 2 MB intake limit")
+        docs_path = root_path / "docs"
+        docs_path.mkdir(parents=True, exist_ok=True)
+        prd_path = docs_path / "PRD.md"
+        prd_path.write_text(prd_content, encoding="utf-8")
+
+        image_name = str(req.get("design_image_name") or "design_target.png")
+        image_data = req.get("design_image_base64")
+        image_path: Path | None = None
+        if image_data is not None:
+            if not isinstance(image_data, str) or len(image_data) > 8_000_000:
+                raise HTTPException(status_code=413, detail="design image exceeds the intake limit")
+            safe_name = Path(image_name).name
+            if Path(safe_name).suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp", ".svg"}:
+                raise HTTPException(status_code=400, detail="unsupported design image format")
+            try:
+                encoded = image_data.split(",", 1)[-1]
+                image_bytes = base64.b64decode(encoded, validate=True)
+            except (ValueError, binascii.Error) as exc:
+                raise HTTPException(status_code=400, detail="invalid design_image_base64") from exc
+            if len(image_bytes) > 5_000_000:
+                raise HTTPException(status_code=413, detail="design image exceeds the 5 MB limit")
+            image_path = docs_path / safe_name
+            image_path.write_bytes(image_bytes)
+
+        project_id = requested_project_id
+        async with UnitOfWork(manager) as uow:
+            assert uow.projects is not None
+            project = await uow.projects.get_project(int(project_id)) if project_id else None
+            if project is None:
+                project = await uow.projects.get_project_by_path(str(root_path))
+            if project is None:
+                project = await uow.projects.create_project(
+                    domain.Project(
+                        name=name,
+                        root_path=str(root_path),
+                        default_branch=str(req.get("default_branch") or "main"),
+                    )
+                )
+            await uow.commit()
+        assert project.id is not None
+        imported = await import_prd(prd_path, project.id, db_manager=manager, llm_provider=llm_provider)
+        return {
+            "project": _dump(project),
+            "prd_path": str(prd_path),
+            "design_image_path": str(image_path) if image_path else None,
+            "prd_import": imported.model_dump(mode="json"),
+        }
+
+    @app.get("/projects/{project_id}/hitl/gates")
+    async def list_hitl_gates(project_id: int) -> list[dict[str, Any]]:
+        """Return pending and recently resolved HITL gates for one project."""
+        engine = app.state.hitl_engine
+        return [
+            gate.model_dump(mode="json")
+            for gate in engine.list_gates()
+            if gate.project_id in (None, project_id)
+        ]
+
+    @app.post("/projects/{project_id}/hitl/gates")
+    async def create_hitl_gate(project_id: int, req: dict[str, Any]) -> dict[str, Any]:
+        gate_type = str(req.get("gate_type") or "DYNAMIC_INPUT").strip()
+        role_name = str(req.get("role_name") or "ScrumMaster").strip()
+        prompt_message = str(req.get("prompt_message") or "").strip()
+        if not prompt_message:
+            raise HTTPException(status_code=400, detail="prompt_message is required")
+        options = req.get("question_options")
+        if options is not None and not isinstance(options, dict):
+            raise HTTPException(status_code=400, detail="question_options must be an object")
+        gate = app.state.hitl_engine.create_interruption_gate(
+            gate_type=gate_type,
+            role_name=role_name,
+            prompt_message=prompt_message,
+            question_options=options,
+            project_id=project_id,
+            run_id=int(req["run_id"]) if req.get("run_id") is not None else None,
+        )
+        return gate.model_dump(mode="json")
+
+    @app.post("/hitl/gates/{gate_id}/resolve")
+    async def resolve_hitl_gate(gate_id: str, req: dict[str, Any]) -> dict[str, Any]:
+        response = str(req.get("response") or "").strip()
+        if not response:
+            raise HTTPException(status_code=400, detail="response is required")
+        gate = app.state.hitl_engine.resolve_gate(
+            gate_id,
+            response,
+            approve=bool(req.get("approve", True)),
+        )
+        if gate is None:
+            raise HTTPException(status_code=404, detail="HITL gate not found")
+        return gate.model_dump(mode="json")
+
     @app.post("/projects/chat")
     async def po_scrum_master_chat(req: dict[str, Any]) -> dict[str, Any]:
         user_message = str(req.get("message", ""))
         attachments = req.get("attachments", [])
         project_id = req.get("project_id")
         session_id = req.get("session_id")
+        prd_path_value = req.get("prd_path")
 
         async with await manager.get_session() as db_sess:
-            from localforge.storage.orm import ChatSessionORM, ChatMessageORM
+            from localforge.storage.orm import ChatMessageORM, ChatSessionORM
             chat_sess = None
             if session_id:
                 chat_sess = await db_sess.get(ChatSessionORM, int(session_id))
@@ -408,7 +600,7 @@ def create_app(
 
             # Attempt to call OmniRoute LLM Gateway for Scrum Master response
             from localforge.services.omniroute_client import OmniRouteClient
-            omni_url = os.getenv("LOCALFORGE_MODEL_BASE_URL") or os.getenv("OMNIROUTE_URL") or "http://omniroute:20128/v1"
+            omni_url = load_config().models.base_url
             client = OmniRouteClient(base_url=omni_url)
 
             system_prompt = (
@@ -429,6 +621,8 @@ def create_app(
                     llm_text = choices[0].get("message", {}).get("content", "")
             except Exception as exc:
                 logger.debug(f"OmniRoute chat call fallback: {exc}")
+            finally:
+                await client.close()
 
             if not llm_text:
                 llm_text = (
@@ -438,12 +632,26 @@ def create_app(
                     "Acesse o menu **Kanban** para acompanhar o progresso da Squad em tempo real!"
                 )
 
-            # Auto-provision HP 12C tasks into tasks table if empty
+            if not prd_path_value and req.get("bootstrap_hp12c_demo") is not True:
+                llm_text = (
+                    f"Project {project.name} is ready. Provide a project-relative `prd_path` "
+                    "to compile the Product Owner's PRD; no backlog was invented."
+                )
+
+            # Compile the supplied PRD only when the PO provided an explicit path.
             existing_tasks = await uow.tasks.list_tasks_for_project(project.id)
-            if not existing_tasks:
+            if not existing_tasks and req.get("bootstrap_hp12c_demo") is True:
                 default_tasks = [
-                    ("LF-PRD-001", "Definição de Contratos de Interface RPN & Tipos", "Criar interfaces TypeScript e esquemas Pydantic para registradores X, Y, Z, T"),
-                    ("LF-PRD-002", "Motor de Cálculo RPN (Notação Polonesa Reversa)", "Implementar pilha RPN, operações de adição, subtração, multiplicação e divisão"),
+                    (
+                        "LF-PRD-001",
+                        "Definição de Contratos de Interface RPN & Tipos",
+                        "Criar interfaces TypeScript e esquemas Pydantic para registradores X, Y, Z, T",
+                    ),
+                    (
+                        "LF-PRD-002",
+                        "Motor de Cálculo RPN (Notação Polonesa Reversa)",
+                        "Implementar pilha RPN, operações de adição, subtração, multiplicação e divisão",
+                    ),
                     ("LF-PRD-003", "Funções Financeiras TVM (n, i, PV, PMT, FV)", "Implementar fórmulas de juros compostos e amortização"),
                     ("LF-PRD-004", "Registradores de Memória (STO / RCL)", "Implementar leitura e escrita nos registradores R0 a R9"),
                     ("LF-PRD-005", "Componente Visor LCD Digital", "Criar componente React com indicador de 10 dígitos e indicadores de status"),
@@ -461,9 +669,29 @@ def create_app(
                     await uow.tasks.create_task(task_obj)
                 await uow.commit()
 
+        import_result: dict[str, Any] | None = None
+        if prd_path_value:
+            candidate = Path(str(prd_path_value))
+            project_root = Path(project.root_path).resolve()
+            resolved_prd = (project_root / candidate).resolve() if not candidate.is_absolute() else candidate.resolve()
+            try:
+                resolved_prd.relative_to(project_root)
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail="PRD path must remain inside project root") from exc
+            if not resolved_prd.is_file() or resolved_prd.suffix.lower() not in {".md", ".markdown"}:
+                raise HTTPException(status_code=400, detail="prd_path must point to an existing Markdown file")
+            assert project.id is not None
+            imported = await import_prd(
+                resolved_prd,
+                project.id,
+                db_manager=manager,
+                llm_provider=llm_provider,
+            )
+            import_result = imported.model_dump(mode="json")
+
         # Record Scrum Master Reply and link project_id to chat_sess
         async with await manager.get_session() as db_sess:
-            from localforge.storage.orm import ChatSessionORM, ChatMessageORM
+            from localforge.storage.orm import ChatMessageORM, ChatSessionORM
             chat_sess = await db_sess.get(ChatSessionORM, chat_sess.id)
             if chat_sess:
                 if not chat_sess.project_id:
@@ -486,6 +714,7 @@ def create_app(
             "reply": llm_text,
             "session_id": chat_sess.id,
             "status": "success",
+            "prd_import": import_result,
         }
 
     @app.post("/projects/reset-all")
@@ -500,7 +729,7 @@ def create_app(
 
         # Re-create 1 initial default clean chat session
         async with await manager.get_session() as db_sess:
-            from localforge.storage.orm import ChatSessionORM, ChatMessageORM
+            from localforge.storage.orm import ChatMessageORM, ChatSessionORM
             init_sess = ChatSessionORM(title="Nova Conversa")
             db_sess.add(init_sess)
             await db_sess.commit()
@@ -509,7 +738,12 @@ def create_app(
             init_msg = ChatMessageORM(
                 session_id=init_sess.id,
                 sender="Scrum Master",
-                text="Olá Product Owner! Sou o **Scrum Master** do LocalForge OS. Envie o seu `PRD.md` e arquivos visuais/schemas de interface (`.png`, `.jpg`, `.svg`) abaixo para iniciarmos a Etapa 2 de criação do Backlog da Squad.",
+                text=(
+                    "Olá Product Owner! Sou o **Scrum Master** do LocalForge OS. "
+                    "Envie o seu `PRD.md` e arquivos visuais/schemas de interface "
+                    "(`.png`, `.jpg`, `.svg`) abaixo para iniciarmos a Etapa 2 "
+                    "de criação do Backlog da Squad."
+                ),
                 attachments=[],
             )
             db_sess.add(init_msg)
@@ -532,18 +766,39 @@ def create_app(
     async def start_squad_execution(project_id: int) -> dict[str, Any]:
         async with UnitOfWork(manager) as uow:
             assert uow.projects is not None
+            assert uow.executions is not None
             project = await uow.projects.get_project(project_id)
             if not project:
                 raise HTTPException(status_code=404, detail="Project not found")
+            active_runs = await uow.executions.list_runs_for_project(project_id)
+            if any(run.status in (RunStatus.PENDING, RunStatus.RUNNING) for run in active_runs):
+                raise HTTPException(status_code=409, detail="A squad run is already active")
+            config = load_config()
+            run = await uow.executions.create_run(
+                domain.Run(
+                    project_id=project_id,
+                    mode=RunMode.UNATTENDED,
+                    initiated_by="api:squad",
+                    resource_limits={
+                        "max_run_time": config.budgets.max_run_time,
+                        "max_task_duration": config.budgets.max_task_duration,
+                        "max_repair_attempts": config.budgets.max_repair_attempts,
+                    },
+                )
+            )
+            await uow.commit()
+            assert run.id is not None
 
-        bus: EventBus = app.state.event_bus
-        tracer = getattr(app.state, "telemetry_tracer", None)
+        worker = asyncio.create_task(_execute_real_squad_loop(run.id, project_id, manager))
+        app.state.squad_tasks[run.id] = worker
+        def _remove_finished_worker(_task: asyncio.Task[Any], run_id: int = run.id) -> None:
+            app.state.squad_tasks.pop(run_id, None)
 
-        # Launch background agent execution loop
-        asyncio.create_task(_execute_real_squad_loop(project_id, manager, bus, tracer))
+        worker.add_done_callback(_remove_finished_worker)
 
         return {
             "status": "started",
+            "run_id": run.id,
             "message": "Execução da Squad disparada em segundo plano com chamadas LLM e telemetria ao vivo!",
         }
 
@@ -749,15 +1004,26 @@ def create_app(
 
     @app.put("/projects/{project_id}/model-routes")
     async def upsert_model_route(project_id: int, req: ModelRouteRequest) -> dict[str, Any]:
+        config = load_config()
+        if req.provider.lower() not in {"omniroute", "omni_route"}:
+            raise HTTPException(
+                status_code=400,
+                detail="ForgeOS Cloud model routes must use OmniRoute.",
+            )
+        if req.endpoint_url and req.endpoint_url.rstrip("/") != config.models.base_url.rstrip("/"):
+            raise HTTPException(
+                status_code=400,
+                detail="Model routes cannot bypass the configured OmniRoute gateway.",
+            )
         async with UnitOfWork(manager) as uow:
             assert uow.routing is not None
             route = await uow.routing.upsert_route(
                 domain.ModelRoute(
                     project_id=project_id,
                     role=req.role,
-                    provider=req.provider,
+                    provider="omniroute",
                     model_profile_id=req.model_profile_id,
-                    endpoint_url=req.endpoint_url,
+                    endpoint_url=config.models.base_url,
                     fallback_model_profile_id=req.fallback_model_profile_id,
                 )
             )
@@ -973,14 +1239,14 @@ def create_app(
                             domain.SeniorityClass.CHIEF_ONLY,
                             domain.SeniorityClass.CHIEF_LED,
                         ):
-                            model_profile_id = "gpt-5.5-large"
-                            provider = "openrouter"
+                            model_profile_id = "auto/best-free"
+                            provider = "omniroute"
                         elif meta.seniority_class == domain.SeniorityClass.LOCAL_ASSISTED:
-                            model_profile_id = "granite4.1:8b"
-                            provider = "ollama"
+                            model_profile_id = "auto/coding:free"
+                            provider = "omniroute"
                         else:
-                            model_profile_id = "local_small"
-                            provider = "ollama"
+                            model_profile_id = "oc/north-mini-code-free"
+                            provider = "omniroute"
 
                 composition.append(
                     {
@@ -1016,10 +1282,10 @@ def create_app(
             by_task: dict[str, float] = {}
 
             for call in calls:
-                cost = call.estimated_cost_usd if call.provider == "openrouter" else 0.0
+                cost = call.estimated_cost_usd if call.provider == "omniroute" else 0.0
 
                 is_chief = (
-                    call.provider == "openrouter"
+                    call.provider in {"openrouter", "nvidia", "omniroute"}
                     or "chief" in call.reason.lower()
                     or "contract" in call.reason.lower()
                     or "repair" in call.reason.lower()
@@ -1174,13 +1440,13 @@ def create_app(
             if not task:
                 raise HTTPException(status_code=404, detail="Task not found")
             task.status = TaskStatus.BLOCKED
-            task.description = f"[PO REJECTION REASON]: {req.comment}\n\n{task.description}"
+            task.description = f"[PO REJECTION REASON]: {req.body}\n\n{task.description}"
             updated = await uow.tasks.update_task(task)
             await app.state.event_bus.publish(
                 LifecycleEvent(
                     project_id=updated.project_id,
                     event_type="task.status_changed",
-                    payload={"task_id": updated.id, "status": updated.status.value, "po_rejection": req.comment},
+                    payload={"task_id": updated.id, "status": updated.status.value, "po_rejection": req.body},
                 )
             )
             return _dump(updated)
@@ -1194,11 +1460,22 @@ def create_app(
                 line = line.strip()
                 if line and not line.startswith("#") and "=" in line:
                     k, v = line.split("=", 1)
-                    env_vars[k.strip()] = v.strip().strip("'\"")
+                    key = k.strip()
+                    if key in SAFE_ENV_SETTINGS:
+                        env_vars[key] = v.strip().strip("'\"")
         return env_vars
 
     @app.post("/settings/env")
     async def update_env_settings(req: dict[str, str]) -> dict[str, str]:
+        invalid_keys = sorted(set(req) - SAFE_ENV_SETTINGS)
+        if invalid_keys:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Only non-secret runtime settings may be changed here; "
+                    f"unsupported or sensitive keys: {', '.join(invalid_keys)}"
+                ),
+            )
         env_path = Path(".env")
         existing: dict[str, str] = {}
         if env_path.exists():
@@ -1211,7 +1488,7 @@ def create_app(
             existing[k] = v
         lines = [f"{k}={v}" for k, v in existing.items()]
         env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-        return existing
+        return {key: existing[key] for key in SAFE_ENV_SETTINGS if key in existing}
 
     @app.get("/projects/{project_id}/worktrees")
     async def list_project_worktrees(project_id: int) -> list[dict[str, Any]]:
@@ -1332,24 +1609,33 @@ def create_app(
         project_id: int,
         last_event_id: int = 0,
         limit: int = 25,
+        follow: bool = False,
     ) -> StreamingResponse:
         bus: EventBus = app.state.event_bus
 
         async def event_stream():
             queue = bus.subscribe(project_id)
             try:
-                yield ": connected\n\n"
+                if follow:
+                    yield ": connected\n\n"
                 replayed = await bus.replay(
                     project_id=project_id, after_id=last_event_id, limit=limit
                 )
                 for event in replayed:
                     yield _sse(event)
+                if not follow:
+                    return
+                idle_cycles = 0
                 while True:
                     try:
                         event = await asyncio.wait_for(queue.get(), timeout=15.0)
                         yield _sse(event)
-                    except asyncio.TimeoutError:
+                        idle_cycles = 0
+                    except TimeoutError:
                         yield ": keep-alive\n\n"
+                        idle_cycles += 1
+                        # A follow-mode connection remains available for live
+                        # events; finite replay callers return above.
             except asyncio.CancelledError:
                 pass
             finally:
@@ -1359,23 +1645,73 @@ def create_app(
 
     @app.get("/projects/{project_id}/routes")
     async def get_project_routes(project_id: int) -> list[dict[str, Any]]:
-        return []
+        async with UnitOfWork(manager) as uow:
+            assert uow.routing is not None
+            return [_dump(route) for route in await uow.routing.list_routes(project_id)]
 
     @app.get("/projects/{project_id}/approvals")
     async def get_project_approvals(project_id: int) -> list[dict[str, Any]]:
-        return []
+        async with UnitOfWork(manager) as uow:
+            assert uow.safety is not None
+            return [_dump(item) for item in await uow.safety.list_approvals_for_project(project_id)]
 
     @app.get("/projects/{project_id}/pending-approvals")
     async def get_project_pending_approvals(project_id: int) -> list[dict[str, Any]]:
-        return []
+        async with UnitOfWork(manager) as uow:
+            assert uow.safety is not None
+            return [_dump(item) for item in await uow.safety.list_pending_approvals(project_id)]
 
     @app.get("/projects/{project_id}/metrics")
     async def get_project_metrics(project_id: int) -> list[dict[str, Any]]:
-        return []
+        async with UnitOfWork(manager) as uow:
+            assert uow.tasks is not None
+            assert uow.executions is not None
+            assert uow.model_calls is not None
+            tasks = await uow.tasks.list_tasks_for_project(project_id)
+            runs = await uow.executions.list_runs_for_project(project_id)
+            calls = await uow.model_calls.list_calls(project_id=project_id)
+            return [
+                {
+                    "project_id": project_id,
+                    "tasks_total": len(tasks),
+                    "tasks_pr_ready": sum(task.status == TaskStatus.PR_READY for task in tasks),
+                    "tasks_blocked": sum(
+                        task.status
+                        in {
+                            TaskStatus.BLOCKED,
+                            TaskStatus.FAILED_SAFE,
+                            TaskStatus.BLOCKED_NEEDS_HUMAN_REVIEW,
+                        }
+                        for task in tasks
+                    ),
+                    "runs_total": len(runs),
+                    "model_calls_total": len(calls),
+                    "paid_cost_usd": sum(
+                        call.estimated_cost_usd
+                        for call in calls
+                        if call.provider == "omniroute" and call.estimated_cost_usd > 0
+                    ),
+                }
+            ]
 
     @app.get("/projects/{project_id}/chief-engineer/usage")
     async def get_chief_engineer_usage(project_id: int) -> dict[str, Any]:
-        return {"tokens": 0, "calls": 0, "cost": 0.0}
+        async with UnitOfWork(manager) as uow:
+            assert uow.model_calls is not None
+            calls = await uow.model_calls.list_calls(project_id=project_id)
+            chief_calls = [
+                call
+                for call in calls
+                if call.provider == "omniroute"
+                or "chief" in call.reason.value.lower()
+            ]
+            return {
+                "input_tokens": sum(call.input_tokens for call in chief_calls),
+                "output_tokens": sum(call.output_tokens for call in chief_calls),
+                "tokens": sum(call.input_tokens + call.output_tokens for call in chief_calls),
+                "calls": len(chief_calls),
+                "cost": sum(call.estimated_cost_usd for call in chief_calls),
+            }
 
     @app.get("/projects/{project_id}/policies/{name}")
     async def get_project_policy(project_id: int, name: str) -> dict[str, Any]:
@@ -2077,11 +2413,106 @@ def _sse(event: LifecycleEvent) -> str:
 
 
 async def _execute_real_squad_loop(
+    run_id: int,
     project_id: int,
     manager: DatabaseManager,
-    bus: EventBus,
-    tracer: Any,
+    bus: EventBus | None = None,
+    tracer: Any = None,
 ):
+    """Run the server-owned Scheduler until its durable run reaches a terminal state."""
+    try:
+        config = load_config()
+        from localforge.cli.run import _run_chief_preflight
+
+        async with UnitOfWork(manager) as uow:
+            assert uow.tasks is not None
+            ready_tasks = [
+                task
+                for task in await uow.tasks.list_tasks_for_project(project_id)
+                if task.status == TaskStatus.READY
+            ]
+        chief_error = await _run_chief_preflight(config, ready_tasks)
+        if chief_error:
+            raise RuntimeError(chief_error)
+        await _run_omniroute_preflight(config)
+    except Exception as exc:
+        logger.exception("OmniRoute preflight blocked run %s", run_id)
+        async with UnitOfWork(manager) as uow:
+            assert uow.executions is not None
+            run = await uow.executions.get_run(run_id)
+            if run is not None:
+                run.status = RunStatus.BLOCKED_NEEDS_HUMAN_REVIEW
+                run.ended_at = datetime.now(UTC)
+                run.summary = f"OmniRoute preflight blocked execution: {exc}"
+                await uow.executions.update_run(run)
+        return
+    scheduler = Scheduler(
+        project_id=project_id,
+        run_id=run_id,
+        max_parallel_tasks=config.budgets.max_parallel_tasks,
+        db_manager=manager,
+        execute_pipeline=True,
+    )
+    await scheduler.start()
+    try:
+        while True:
+            async with UnitOfWork(manager) as uow:
+                assert uow.executions is not None
+                run = await uow.executions.get_run(run_id)
+            if run is None or run.status in {
+                RunStatus.COMPLETED,
+                RunStatus.FAILED,
+                RunStatus.CANCELLED,
+                RunStatus.BLOCKED_NEEDS_HUMAN_REVIEW,
+                RunStatus.PAUSED,
+            }:
+                break
+            await asyncio.sleep(0.5)
+    finally:
+        await scheduler.stop(timeout=10.0)
+    return
+
+
+async def _run_omniroute_preflight(config: Any) -> dict[str, list[dict[str, Any]]] | None:
+    """Discover and register OmniRoute combos before a Cloud run starts.
+
+    ForgeOS Cloud runs cannot silently fall back to a direct provider, an
+    unverified model catalog, or stale combo configuration.
+    """
+    if str(config.models.provider).lower() not in {"omniroute", "omni_route"}:
+        return None
+
+    from localforge.discovery.engine import PreFlightDiscoveryEngine
+    from localforge.services.omniroute_client import OmniRouteClient
+
+    client = OmniRouteClient(base_url=config.models.base_url)
+    try:
+        discovery = PreFlightDiscoveryEngine(client)
+        result = await asyncio.wait_for(discovery.discover_and_rank_models(), timeout=20.0)
+        if not result.get("all_ranked"):
+            raise RuntimeError(
+                "OmniRoute returned no free models with verified tools and JSON capabilities"
+            )
+        if not result.get("forge_high_tier") or not result.get("forge_mid_tier"):
+            raise RuntimeError("OmniRoute did not produce both required execution combos")
+        configured_model = str(getattr(config.models, "default_model", ""))
+        discovered_models = set(result["forge_high_tier"] + result["forge_mid_tier"])
+        if configured_model not in {"forge-high-tier", "forge-mid-tier"} and configured_model not in discovered_models:
+            raise RuntimeError(
+                "OmniRoute Cloud runs must use a registered tier or a discovered verified model"
+            )
+        logger.info(
+            "OmniRoute preflight selected %d models; high=%s mid=%s",
+            len(result["all_ranked"]),
+            result["forge_high_tier"],
+            result["forge_mid_tier"],
+        )
+        return result
+    finally:
+        await client.close()
+
+    """Retained only as a migration note; the server-owned loop above is authoritative.
+
     from localforge.services.omniroute_client import OmniRouteClient
     omni_url = os.getenv("LOCALFORGE_MODEL_BASE_URL") or os.getenv("OMNIROUTE_URL") or "http://omniroute:20128/v1"
     client = OmniRouteClient(base_url=omni_url)
@@ -2241,3 +2672,4 @@ async def _execute_real_squad_loop(
                 payload={"task_id": task.id, "key": task.key, "status": "PR_READY"},
             )
         )
+    """

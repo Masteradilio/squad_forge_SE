@@ -1,10 +1,15 @@
 # Phase R9 Candidate Acceptance Report
 
-Status: EVIDENCE_READY
+Status: PARTIAL
 
 Phase R9 replaces strategy-comparison claims derived from hardcoded constants
-with an observed, versioned corpus loaded from
+with a versioned evaluation corpus loaded from
 `docs/e2e/v6_2_compliance/phase_R9/observed_corpus.json`.
+
+The checked-in corpus is explicitly a controlled fixture. Its observation rows
+use `measurement_source=OBSERVED_LEDGER_FIXTURE`, so the compliance gate now
+rejects it as production-observed evidence. It remains valid for deterministic
+regression tests, but cannot support an `ACCEPTED` comparative conclusion.
 
 Implemented controls:
 
@@ -17,7 +22,7 @@ Implemented controls:
 - Strategy comparisons validate that each strategy was measured on the same
   corpus and equivalent budget/environment/timeout/target-commit envelope.
 - Metrics keep unavailable measurements as `UNKNOWN` instead of replacing them
-  with synthetic values.
+  with synthetic values; fixture measurement sources force a `PARTIAL` verdict.
 - PR-ready rate includes a Wilson confidence interval, and duration variance is
   reported where repeated observations exist.
 

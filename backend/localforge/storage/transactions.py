@@ -34,9 +34,10 @@ class UnitOfWork:
     Guarantees ACID atomic execution across all services.
     """
 
-    def __init__(self, manager: DatabaseManager | None = None):
+    def __init__(self, manager: DatabaseManager | None = None, *, read_only: bool = False):
         self.db_manager = manager or db_manager
         self.session: AsyncSession | None = None
+        self.read_only = read_only
 
         # Bind placeholders for atomic services
         self.projects: ProjectService | None = None
@@ -104,8 +105,14 @@ class UnitOfWork:
                 if exc_type is not None:
                     # Rollback changes if an exception occurs
                     await self.session.rollback()
-                    # Persist buffered calls in a clean independent transaction post-rollback
+                    # Persist buffered calls after rollback using this same
+                    # session. Opening a second SQLite writer here can race
+                    # with the recovery transaction on Windows.
                     await self._persist_pending_model_calls()
+                elif self.read_only:
+                    # Monitoring/query-only sessions must never compete with
+                    # a scheduler writer by attempting a needless commit.
+                    await self.session.rollback()
                 else:
                     # Commit changes on success
                     await self.session.commit()
@@ -118,19 +125,30 @@ class UnitOfWork:
     async def _persist_pending_model_calls(self) -> None:
         from localforge.services.model_calls import ModelCallLedgerService
 
-        if not ModelCallLedgerService._pending_calls:
+        pending_calls = list(ModelCallLedgerService._pending_calls)
+        if not pending_calls or self.session is None:
             return
         try:
             from localforge.storage.orm import ModelCallLedgerORM
 
-            async with self.db_manager.session_factory() as session:
-                for call in ModelCallLedgerService._pending_calls:
-                    orm_obj = ModelCallLedgerORM.from_domain(call)
-                    session.add(orm_obj)
-                await session.commit()
+            for call in pending_calls:
+                orm_obj = ModelCallLedgerORM.from_domain(call)
+                self.session.add(orm_obj)
+            await self.session.commit()
         except Exception as e:
             import logging
 
             logging.getLogger("localforge").error(
                 f"Failed to persist pending model calls post-rollback: {e}"
             )
+
+    async def persist_pending_model_calls(self) -> None:
+        """Persist paid/local call evidence after a handled task failure.
+
+        The scheduler catches task exceptions inside the UnitOfWork context so
+        it can mark the task ``FAILED_SAFE`` and continue the run. In that
+        path ``__aexit__`` sees no exception, therefore a rollback performed by
+        the scheduler would otherwise discard the model-cost ledger. Expose a
+        narrow public hook for that recovery path.
+        """
+        await self._persist_pending_model_calls()

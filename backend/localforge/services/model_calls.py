@@ -2,7 +2,12 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from localforge.models import domain
-from localforge.storage.orm import ModelCallLedgerORM, RunORM
+from localforge.services.pricing import (
+    is_free_gateway_model,
+    is_gateway_provider,
+    is_paid_provider,
+)
+from localforge.storage.orm import ModelCallLedgerORM, ModelPricingSnapshotORM, RunORM
 
 OPENROUTER_MINIMAX_M3_INPUT_PER_MILLION = 0.30
 OPENROUTER_MINIMAX_M3_OUTPUT_PER_MILLION = 1.20
@@ -28,6 +33,41 @@ class ModelCallLedgerService:
         self.session = session
 
     async def record_call(self, call: domain.ModelCallLedger) -> domain.ModelCallLedger:
+        if is_paid_provider(call.provider):
+            result = await self.session.execute(
+                select(ModelPricingSnapshotORM).where(
+                    ModelPricingSnapshotORM.model_name == call.model
+                )
+            )
+            snapshot = result.scalar_one_or_none()
+            if snapshot is None:
+                raise ValueError(
+                    f"Missing persisted pricing snapshot for paid model {call.model!r}."
+                )
+            observed_cost = (
+                max(call.input_tokens, 0) * float(snapshot.input_price_per_million)
+                + max(call.output_tokens, 0) * float(snapshot.output_price_per_million)
+            ) / 1_000_000
+            metadata = dict(call.metadata or {})
+            metadata["pricing_snapshot_id"] = snapshot.id
+            metadata["pricing_measurement_source"] = "MODEL_PRICING_SNAPSHOT"
+            call = call.model_copy(
+                update={"estimated_cost_usd": observed_cost, "metadata": metadata}
+            )
+        elif is_gateway_provider(call.provider):
+            metadata = dict(call.metadata or {})
+            metadata["pricing_measurement_source"] = (
+                "GATEWAY_REPORTED_COST"
+                if call.estimated_cost_usd > 0.0
+                else "NON_BILLED_GATEWAY_ROUTE"
+            )
+            call = call.model_copy(update={"metadata": metadata})
+        else:
+            metadata = dict(call.metadata or {})
+            metadata["pricing_measurement_source"] = "NON_BILLED_PROVIDER"
+            call = call.model_copy(
+                update={"estimated_cost_usd": 0.0, "metadata": metadata}
+            )
         orm_obj = ModelCallLedgerORM.from_domain(call)
         self.session.add(orm_obj)
         await self.session.flush()
@@ -54,7 +94,15 @@ class ModelCallLedgerService:
         run_id: int | None,
         estimated_input_tokens: int,
         estimated_output_tokens: int,
+        provider: str | None = None,
+        model: str | None = None,
     ) -> None:
+        if provider is not None and not (
+            is_paid_provider(provider) or is_gateway_provider(provider)
+        ):
+            return
+        if is_gateway_provider(provider or "") and is_free_gateway_model(model):
+            return
         if run_id is None:
             return
         run = await self.session.get(RunORM, run_id)

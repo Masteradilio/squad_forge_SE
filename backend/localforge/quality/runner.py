@@ -30,6 +30,7 @@ class FocusedTestRunner:
         worktree_path: str,
         command: str,
         timeout: float,
+        artifact_root: str | None = None,
     ) -> TestRunResult:
         assert self.uow.tasks is not None
         task = await self.uow.tasks.get_task(task_id)
@@ -49,7 +50,7 @@ class FocusedTestRunner:
             result = TestRunResult(command, -1, "", str(exc), timed_out=True)
 
         await ArtifactStore(self.uow).write_artifact(
-            project_root=worktree_path,
+            project_root=artifact_root or worktree_path,
             task_run_id=task_run_id,
             task_key=task.key,
             run_id=self.run_id,

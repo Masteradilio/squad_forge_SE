@@ -1,0 +1,20 @@
+{
+  "phase": "R16",
+  "scope": "real HP12C fail-fast provider retry",
+  "verdict": "BLOCKED_NEEDS_HUMAN_REVIEW",
+  "workspace": "samples/e2e-hp12c-platinum",
+  "database": ".localforge/final.db",
+  "tasks_imported": 19,
+  "tasks_pr_ready": 0,
+  "task_runs_completed": 0,
+  "task_runs_failed": 1,
+  "paid_calls_failed": 1,
+  "recovery_cycles_used": 0,
+  "measured_cost_usd": 0.0003606,
+  "provider_errors": [
+    "NVIDIA timeout",
+    "OpenRouter HTTP 402 Insufficient credits"
+  ],
+  "product_acceptance": false,
+  "next_gate": "make NVIDIA quota or funded OpenRouter fallback available and rerun from a clean database"
+}

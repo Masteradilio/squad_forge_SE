@@ -2,6 +2,161 @@
 
 All notable changes to LocalForge OS will be documented in this file.
 
+## [Unreleased] - 2026-08-01 (V6 Compliance Hardening)
+
+### ForgeOS Cloud OmniRoute Hardening
+- Aligned Cloud defaults, workspace templates, Compose defaults, Squad profiles,
+  discovery tiers, and visual fallback ladders with OmniRoute free/freemium
+  routes (`auto/best-free`, `auto/coding:free`, and `oc/*-free`), while keeping
+  explicit operator overrides supported.
+- Discovery now recognizes `:free`/`-free` OmniRoute catalog IDs as free routes
+  and never synthesizes paid aliases for high, mid, or fast tiers.
+- CLI Chief preflight now expands the configured ladder with a bounded set of
+  explicitly free routes discovered from the live OmniRoute catalog, allowing
+  stale configured aliases to recover without introducing direct NVIDIA,
+  OpenRouter, or Ollama calls.
+- Pipeline local-worker selection now rejects non-free OmniRoute overrides and
+  appends a bounded live free-route catalog, so stale paid aliases cannot be
+  reintroduced by a role profile during execution.
+- Root `.env`, workspace defaults, and the frontend model settings now suggest
+  only the same free/freemium OmniRoute route family.
+- Docker SDK bootstrap operations now have bounded timeouts, and the HP12C
+  acceptance script exposes an explicit `docker` default or `local` development
+  mode instead of silently downgrading isolation. OmniRoute Chief pre-flight now
+  stops after repeated gateway-wide upstream failures instead of leaving a run
+  pending or retrying indefinitely.
+- Targeted validation: `81 passed`; global mypy: `Success: no issues found in
+  262 source files`. Cloud product acceptance remains unverified because the
+  local Docker daemon is unresponsive and current OmniRoute upstream routes
+  return `500/502` or timeout; no E2E success claim is made.
+- Final local regression after the live-route fallback hardening: `482 passed,
+  1 skipped`; frontend production build also passed.
+
+### Reliability and Evidence
+- Permanent Chief-provider failures (billing, credits, and authentication) now
+  propagate from the pipeline to the scheduler with their original diagnostic;
+  Scrum Master recovery no longer spends repeated paid cycles on a blocker that
+  requires operator action. Added regression coverage for provider-error
+  propagation and verified the backend suite at `450 passed, 1 skipped` in the
+  dependency-complete test runtime.
+- Final run summaries now reload persisted task state before rendering counts
+  and include the exact per-task blocker in both `run.summary` and
+  `run_summary.md`, preventing stale task objects from hiding the cause of a
+  blocked unattended run.
+- Compliance remediation now makes the PR Factory and Light Swarm use the
+  canonical mechanical pre-PR gate. Remote PR creation is skipped when a gate
+  fails, and `PR_READY` requires observed commit/diff bindings plus an approved
+  independent Maker/Checker record instead of synthetic role IDs.
+- The normal role pipeline now persists the deterministic validation result as
+  a Maker/Checker verification before invoking the PR Factory. Failed tests do
+  not receive a fabricated approval and remain safely blocked.
+- Paid model ledger entries are recalculated from persisted pricing snapshots;
+  missing paid-model pricing is an error, while local providers remain zero-cost.
+  OpenRouter Minimax snapshots are bootstrapped for fresh and existing databases.
+- R9 fixture observations are now explicitly ineligible for production
+  comparative acceptance. The R9 report records `PARTIAL` until real ledger
+  observations replace `OBSERVED_LEDGER_FIXTURE` rows.
+- The empirical benchmark no longer writes fabricated zero API costs and now
+  reports `UNKNOWN` when no model-call ledger evidence exists; a run is complete
+  only when every imported task reaches `PR_READY`.
+- Chief Engineer routing is now provider-aware: NVIDIA no longer receives
+  OmniRoute `auto/*` aliases, and a provider-level model-not-found (`404`) can
+  reach the configured fallback without weakening authentication or billing
+  failures. A clean HP12C retry confirmed the route reached NVIDIA correctly;
+  the remaining block was external (`NVIDIA 429`/timeout followed by OpenRouter
+  `402 Insufficient credits`), with failed calls and pricing evidence recorded
+  in SQLite.
+- Visual Chief repairs now require a complete `write_file` HTML document with
+  standalone document sections before entering the gate; CSS-only patches and
+  short `append_content` responses are rejected immediately as non-material repairs.
+  The contract also enforces a 6,000-character minimum for standalone visual HTML,
+  preventing compact-prompt guidance from collapsing into an empty shell.
+- Provider factories now propagate `chief_engineer.max_output_tokens_per_call` to NVIDIA,
+  OpenRouter, and OpenAI-compatible clients, so economy-first output limits are enforced
+  by workspace configuration rather than depending on an unrelated shell variable.
+- Cancelling a run now also cancels its pending or running task runs with a persisted
+  end time and operator summary, preventing stale task-run records from blocking a
+  later unattended execution. Added a focused regression test for this lifecycle invariant.
+- Chief readiness now probes the configured primary provider before any fallback
+  wrapper, preventing a slow healthy NVIDIA primary from being misreported as an
+  OpenRouter credit failure. The server-owned API loop uses the same fail-fast guard.
+- Multimodal requests no longer fall through to an unverified fallback provider;
+  visual failures remain on the primary route so the bounded text-contract path can
+  recover without silently resending image data to a different provider.
+- Normalized singular Chief responses such as `{"action": {...}}` into the required
+  non-empty `actions` array and replaced the oversized visual system prompt at call
+  time with a compact contract-driven prompt. This reduces provider timeouts while
+  retaining deterministic visual-gate enforcement and explicit keypad/layout rules.
+- The NVIDIA API key was verified with real structured text and multimodal probes, but
+  the full HP12C scheduler run has not yet produced a complete accepted product. No
+  `PR_READY`, ten-function, visual, or release-completion claim is made here.
+- The controlled HP12C rerun exercised real Scrum Master requeue and Chief repair
+  attempts, but the NVIDIA gateway later returned `503 ResourceExhausted` after its
+  worker request quota was exhausted. This is recorded as an external E2E blocker;
+  the repository remains unaccepted and must not be published as a completed release.
+- Added PRD-derived visual structure contracts for calculator/keypad tasks: one parent
+  10x4 grid, explicit spanning ENTER placement, near-full-frame body, left-aligned LCD,
+  and rectangular HP badge. The pipeline and PR factory now reject incompatible HTML
+  before accepting a screenshot, while preserving the 0.90 visual threshold.
+- Calibrated the image gate for photo-to-HTML comparisons: acceptance uses a documented
+  light-blurred perceptual score while retaining `raw_similarity` in the evidence, so
+  browser antialiasing and camera texture do not dominate the decision.
+- Reworked visual repair routing so the configured multimodal Chief route is attempted
+  first and the primary Chief route remains the fallback; added focused regression tests
+  for nested grids, spanning keys, restrictive widths, LCD alignment, and badge geometry.
+- Re-ran the real HP 12C diagnostic against the local OmniRoute gateway in clean workspaces.
+  The generated artifacts remained below the strict visual gate (best observed score
+  0.837; other attempts 0.824 and 0.650), so the E2E remains blocked with no PR_READY
+  claim. The benchmark was not allowed to downgrade the threshold or manufacture success.
+- Hardened cloud compliance surfaces across discovery, memory, safety, sandbox, GitOps,
+  HITL, scheduler, API, frontend intake, and Context7 integration paths.
+- Made visual Chief Engineer repairs reference-aware: execution-workspace image resolution,
+  multimodal reference delivery, best-candidate rollback, and destructive whole-file guards
+  now protect the visual acceptance loop.
+- Preserved pending paid-model ledger entries when a task fails after a database rollback.
+- Added targeted regression coverage for visual reference resolution and destructive repair
+  rejection.
+- Preserved legacy runtime-action compatibility while keeping role authority enforcement for
+  contract-backed pipeline tasks; repaired compliance manifest hashing against immutable source
+  commits and added the cross-platform `tzdata` runtime dependency.
+- Added deterministic finite SSE replay (`follow=true` for live consumers), cross-event-loop
+  subscriber delivery, and a dependency-free CLI version smoke path for wheel validation.
+- Closed the repository lint gate after the compliance pass: backend regression suite `411
+  passed, 1 skipped`, `mypy` passed for 260 source files, `ruff check backend` passed, the
+  frontend production build passed, and `git diff --check` passed. Removed ignored E2E
+  databases, worktrees, screenshots, and logs while preserving only versioned benchmark
+  documentation.
+- Added `docs/forgeOS_cloud_conformity_report.md` to distinguish source-level Cloud
+  implementation from runtime proof and to keep the missing tenant/RLS, DNS egress,
+  deployed preview, and paid OmniRoute E2E gates explicit.
+- Hardened Cloud deployment defaults: the OmniRoute image now fails on installation
+  errors, its healthcheck no longer masks an unavailable gateway, Compose prerequisites
+  are documented in `.env.example`, preview identifiers are DNS-safe, API token checks
+  use constant-time comparison, and direct Docker network access fails closed.
+- Wired Cloud execution to a fail-closed OmniRoute preflight: the server-owned squad loop
+  now discovers verified free models and persists `BLOCKED_NEEDS_HUMAN_REVIEW` when discovery
+  fails. The default Compose profile uses the gateway's authenticated `auto/*free` routes
+  without pretending it can mutate management state; optional `manage` credentials enable
+  `forge-high-tier`/`forge-mid-tier` registration through `/api/combos`, with 4xx failures
+  remaining fail-closed.
+  Discovery now normalizes timezone-less release dates and understands nested capability,
+  supported-parameter, and zero-pricing metadata without approving unknown models.
+- Added the same economy-first Chief Engineer preflight to the direct CLI scheduler path:
+  Chief-dependent runs now perform one bounded readiness probe and persist
+  `BLOCKED_NEEDS_HUMAN_REVIEW` on provider failure instead of repeating the same paid error
+  for every task. CLI audit logs now escape Unicode payloads for Windows consoles.
+- Removed the frontend image's silent `npm ci` fallback, passed the configured Cloud provider
+  and optional Chief Engineer credentials explicitly through Compose, and aligned README
+  release language with the still-unaccepted V6.2 compliance boundary.
+- The latest local gates are `419 passed, 1 skipped`, mypy clean across 260 source files,
+  Ruff clean, frontend production build passed, and Compose config validation passed with
+  non-production validation secrets.
+- The real HP 12C E2E diagnostic run reached the Chief Engineer pipeline but remained
+  `BLOCKED_NEEDS_HUMAN_REVIEW` after OpenRouter returned HTTP 402 for exhausted credits;
+  no `PR_READY` or product-completion claim is made from that run. The subsequent clean CLI
+  preflight reproduced the 402 once and closed without creating task runs; see the Phase R14
+  evidence.
+
  ## [1.2.7] - 2026-08-01 (Backend Policy & Pending-Approvals 200 OK Fallbacks)
 
 ### 🚀 Bug Fixes & Resiliency Enhancements

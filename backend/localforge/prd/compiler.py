@@ -60,7 +60,7 @@ async def import_prd(
         project = await uow.projects.get_project(project_id)
         if project is None:
             raise ValueError("Project not found for PRD import.")
-        contract = build_architecture_contract(plan)
+        contract = build_architecture_contract(plan, project_root=Path(project.root_path))
         contract_rel_path = ".localforge/contracts/architecture_contract.json"
         contract_path = Path(project.root_path) / contract_rel_path
         contract_path.parent.mkdir(parents=True, exist_ok=True)
@@ -200,9 +200,7 @@ def _ensure_integration_task(plan: ExtractedPlan) -> None:
         ],
         risk_level="high",
         expected_files=[
-            "frontend/index.html",
-            "frontend/src/App.tsx",
-            "frontend/src/main.tsx",
+            "app/index.html",
         ],
         epic_title=epic_title,
         metadata={

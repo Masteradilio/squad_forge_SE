@@ -4,6 +4,7 @@ import os
 import shutil
 import sys
 import tempfile
+from typing import Any
 
 import typer
 from localforge.core.config import load_config
@@ -80,9 +81,11 @@ async def check_docker() -> tuple[str, str, str]:
     """Check if Docker is installed, running and Python SDK is functional."""
     # First check Python SDK
     sdk_installed = False
+    docker_module: Any = None
     try:
-        import docker
+        import docker as docker_sdk
 
+        docker_module = docker_sdk
         sdk_installed = True
     except ImportError:
         pass
@@ -122,7 +125,7 @@ async def check_docker() -> tuple[str, str, str]:
         if sdk_installed:
             try:
                 # Verify SDK can connect
-                client = docker.from_env()
+                client = docker_module.from_env()
                 await asyncio.get_running_loop().run_in_executor(None, client.ping)
                 return (
                     "PASS",
@@ -149,8 +152,8 @@ async def check_docker() -> tuple[str, str, str]:
         )
 
 
-async def check_ollama() -> tuple[str, str, str]:
-    """Check if the configured LLM model provider is running and the default model is loaded."""
+async def check_omniroute() -> tuple[str, str, str]:
+    """Check that the configured OmniRoute gateway and route are available."""
     try:
         config = load_config()
     except Exception as e:
@@ -160,7 +163,11 @@ async def check_ollama() -> tuple[str, str, str]:
     default_model = config.models.default_model
 
     try:
-        provider = OpenAICompatibleProvider(base_url=provider_url, default_model=default_model)
+        provider = OpenAICompatibleProvider(
+            base_url=provider_url,
+            default_model=default_model,
+            provider_name="omniroute",
+        )
         available_models = await provider.list_models()
         if default_model in available_models:
             return (
@@ -190,7 +197,7 @@ async def run_doctor(json_output: bool) -> None:
         "write_perms": check_write_permissions(),
         "sqlite": check_sqlite(),
         "docker": check_docker(),
-        "ollama": check_ollama(),
+        "omniroute": check_omniroute(),
     }
 
     results = {}

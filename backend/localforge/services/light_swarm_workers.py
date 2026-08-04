@@ -60,7 +60,10 @@ async def execute_typed_worker_node(
         evidence_json=evidence_payload,
         changed_files=[],
         tests_executed=["test_phase8_light_swarm"],
-        validation_results_json={"status": "PASSED"},
+        # Binding a node to the DAG records provenance only.  It is not proof
+        # that a command or test was executed; the governed worker must supply
+        # that result before the canonical PR_READY gate can accept it.
+        validation_results_json={"status": "RECORDED", "execution_observed": False},
     )
 
     node.output_artifact_type = art_type

@@ -9,7 +9,11 @@ from localforge.models.enums import (
     RunMode,
     TaskStatus,
 )
-from localforge.runtime.actions import normalize_runtime_command, parse_action_proposals
+from localforge.runtime.actions import (
+    normalize_generated_text,
+    normalize_runtime_command,
+    parse_action_proposals,
+)
 from localforge.runtime.compression import compress_tool_output
 from localforge.runtime.context import TaskContextBuilder
 from localforge.runtime.file_tools import SafeFileEditor
@@ -41,6 +45,12 @@ def test_runtime_action_parser_and_compression():
     assert "[compressed output" in compressed
     assert "original_chars=2000" in compressed
     assert normalize_runtime_command("pytest -q").endswith(" -m pytest -q")
+    assert normalize_runtime_command("pytest -q", portable=True) == "python -m pytest -q"
+
+
+def test_generated_text_repairs_gateway_mojibake_without_changing_plain_text():
+    assert normalize_generated_text("function Î”DYS() {}") == "function ΔDYS() {}"
+    assert normalize_generated_text("plain ASCII") == "plain ASCII"
 
 
 def test_runtime_action_parser_extracts_wrapped_json():
@@ -257,7 +267,7 @@ async def test_lead_agent_runtime_completes_trivial_file_change_through_safe_too
     assert "summarized" in summary.lower()
     refreshed = await uow.tasks.get_task(task.id)
     assert refreshed is not None
-    assert refreshed.status == TaskStatus.PR_READY
+    assert refreshed.status == TaskStatus.REVIEWING
     assert refreshed.metadata["changed_files"] == ["NOTE.md"]
     events = await uow.audits.list_audit_events_for_project(project.id)
     assert any(event.event_type == AuditEventType.SAFETY_DECISION for event in events)

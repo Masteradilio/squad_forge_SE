@@ -1,7 +1,9 @@
 """OpenTelemetry Tracing Collector — Records agent execution latencies, tool calls & telemetry timeline."""
 
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any
+from uuid import uuid4
+
 import pydantic
 
 
@@ -10,9 +12,9 @@ class TraceSpan(pydantic.BaseModel):
     role_name: str
     action_name: str
     start_time: float
-    end_time: Optional[float] = None
-    duration_ms: Optional[float] = None
-    tool_calls: List[str] = []
+    end_time: float | None = None
+    duration_ms: float | None = None
+    tool_calls: list[str] = pydantic.Field(default_factory=list)
     status: str = "IN_PROGRESS"
 
 
@@ -20,11 +22,11 @@ class OpenTelemetryTracer:
     """Asynchronous tracer capturing execution spans for visual timeline in UI."""
 
     def __init__(self):
-        self.spans: List[TraceSpan] = []
+        self.spans: list[TraceSpan] = []
 
     def start_span(self, role_name: str, action_name: str) -> TraceSpan:
         """Start a telemetry trace span for a Squad role."""
-        span_id = f"span_{role_name.lower().replace(' ', '_')}_{int(time.time() * 1000)}"
+        span_id = f"span_{role_name.lower().replace(' ', '_')}_{uuid4().hex}"
         span = TraceSpan(
             span_id=span_id,
             role_name=role_name,
@@ -34,7 +36,7 @@ class OpenTelemetryTracer:
         self.spans.append(span)
         return span
 
-    def end_span(self, span_id: str, tool_calls: Optional[List[str]] = None, status: str = "SUCCESS") -> Optional[TraceSpan]:
+    def end_span(self, span_id: str, tool_calls: list[str] | None = None, status: str = "SUCCESS") -> TraceSpan | None:
         """End a telemetry span and compute latency duration."""
         for span in self.spans:
             if span.span_id == span_id:
@@ -46,6 +48,6 @@ class OpenTelemetryTracer:
                 return span
         return None
 
-    def get_timeline(self) -> List[Dict[str, Any]]:
+    def get_timeline(self) -> list[dict[str, Any]]:
         """Return full execution timeline for UI display."""
         return [span.model_dump() for span in self.spans]

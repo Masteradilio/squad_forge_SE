@@ -160,10 +160,10 @@
     "Candidate evidence remains EVIDENCE_READY until reviewed PR, merge commit, exact-head CI, owner-approved tag, and final release validation exist."
   ],
   "input_hashes": {
-    "CHANGELOG.md": "4b79d4ebbca6d44b9ffe224f6f0a6e458416b799cdd81a248c70a052bb5faf6a",
+    "CHANGELOG.md": "1d810534a4e3c040e1133e88109317fda53faf109b228f110e5a174029acd595",
     "backend/localforge/gitops/adapter.py": "5972c73b3865f0ea7025f449096f6b46274969f4fadab68a426f7b4ebbd55ca5",
     "backend/localforge/gitops/manager.py": "920910a19a6d296ba0eb29e116097a3bef5acd0b4ad60b9ccf1ee1a150887c4f",
-    "backend/localforge/models/domain.py": "87dab6c488ba3fcab241944f8a13cccfa26ab726b4133f30c54038bc418556b9",
+    "backend/localforge/models/domain.py": "99d6c61b1ba8a9b459e6448592f3e8465e45b77727144a22bfb766aca94daa88",
     "backend/localforge/models/enums.py": "8ad6bca9afbf41c5c75c442b8b88bd5363332b191f3f93c555cd6b519635b583",
     "backend/localforge/services/governed_execution.py": "9265286a5ebfabe4e3ab2761e715b868e2255a77a545d8d81042d833dbefa683",
     "backend/localforge/services/loop_coordinator.py": "193f5afeca041f2b08c340b34338fb2a99805a7653377c2a4238614465b9ce6b",
@@ -172,7 +172,7 @@
     "backend/localforge/services/runners.py": "8d1ce83e0b23bce02f8196f4e5cb101a184bfc28470ceb3e3e5fb619a7a42615",
     "backend/localforge/services/worktree.py": "f6190dd9d4d5ff6f77450f44db648b8c581284c8dc6f536bf2045c290197e895",
     "backend/localforge/storage/bootstrap.py": "686c0db17b9816246739af54286703b93f6a86f34697e64f0903014a60a3bbf5",
-    "backend/localforge/storage/orm.py": "f116b13529d97e16e826d5e4cf0b7ab99b7e2f27c9bb166b9c26b6e1daf5dbdb",
+    "backend/localforge/storage/orm.py": "d962a0c747e838abccc7612bd43b90403a4812110b23205fad95a4adf558968d",
     "backend/tests/test_audit_store.py": "dc1c4401fd92be91d90440c92bcfaf7d4fa09f7180966e1f607c76e8944f5ca8",
     "backend/tests/test_gitops.py": "785f4762e53b6694cd36f72d212c1706ef5501cf2f8e5446cf6ef60f54edd6e6",
     "backend/tests/test_phase6_runner_pool_governance.py": "52089e8a35d82fd9ca4fa70e63c2f5041d990b805630b80e8e6785dbf9b5adae",
@@ -186,18 +186,19 @@
   "known_limitations": [
     "Candidate evidence is not final release acceptance."
   ],
-  "manifest_sha256": "3743bd2a39e678b108f62c0288459377d4988ce52a3b67444f52f9a5fceb3dac",
   "phase": "R5",
   "release_tag": "v6.2.0",
   "release_version": "6.2.0",
   "reviewed_pr_number": 14,
   "schema_version": "localforge.v6_2.candidate_manifest.v1",
-  "source_commit": "f6a876369e32d90c51fad0e14981a0ffcae464fb",
+  "source_commit": "d5be09e101437a45b67faa4683a82bd2c3cf7af3",
   "task_ids": [
     "V61C-500",
     "V61C-501",
     "V61C-502",
     "V61C-503"
   ],
-  "verdict": "EVIDENCE_READY"
+  "verdict": "EVIDENCE_READY",
+  "parent_commit": "9a9eafd96011688821d4771c81e5cf717c0890d9",
+  "manifest_sha256": "28644834df335284101d5f67abfef520c3c7a59b1a7a84e19251c96b1c71acd1"
 }

@@ -5,6 +5,31 @@ from typing import Any, Literal
 from pydantic import BaseModel, ValidationError, model_validator
 
 
+_MOJIBAKE_MARKERS = ("Ã", "Â", "Î", "Ð", "â", "ð", "�")
+
+
+def normalize_generated_text(value: str) -> str:
+    """Repair a conservative set of UTF-8-as-Windows-1252 model artifacts.
+
+    Some gateways return non-ASCII characters such as ``Δ`` as the mojibake
+    sequence ``Î”``. Normalize generated source and tests at the single write
+    boundary so the product and its acceptance tests share the same encoding.
+    Text without a suspicious marker, or text that cannot be round-tripped,
+    is returned unchanged.
+    """
+    if not value or not any(marker in value for marker in _MOJIBAKE_MARKERS):
+        return value
+    try:
+        candidate = value.encode("cp1252").decode("utf-8")
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        return value
+    if sum(candidate.count(marker) for marker in _MOJIBAKE_MARKERS) < sum(
+        value.count(marker) for marker in _MOJIBAKE_MARKERS
+    ):
+        return candidate
+    return value
+
+
 class RuntimeActionProposal(BaseModel):
     kind: Literal["write_file", "append_content", "run_command"]
     path: str | None = None
@@ -14,43 +39,48 @@ class RuntimeActionProposal(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def normalize_model_aliases(cls, data: object) -> object:
-        if not isinstance(data, dict):
-            return data
-        normalized = dict(data)
-        if "kind" not in normalized:
-            for alias in ("operation", "action", "type"):
-                if alias in normalized:
-                    normalized["kind"] = normalized[alias]
-                    break
-        if normalized.get("kind") in {
-            "write_content",
-            "create_file",
-            "update_file",
-            "replace_file",
-            "edit_file",
-            "patch_file",
-            "modify_file",
-            "edit",
-        }:
-            normalized["kind"] = "write_file"
-        if normalized.get("kind") in {"command", "shell", "exec", "execute"}:
-            normalized["kind"] = "run_command"
-        if normalized.get("kind") == "run_command" and "command" not in normalized:
-            for alias in ("cmd", "shell_command"):
-                if alias in normalized:
-                    normalized["command"] = normalized[alias]
-                    break
-        if "path" not in normalized:
-            for alias in ("file", "filename", "file_path"):
-                if alias in normalized:
-                    normalized["path"] = normalized[alias]
-                    break
-        if "content" not in normalized:
-            for alias in ("code", "body", "text"):
-                if alias in normalized:
-                    normalized["content"] = normalized[alias]
-                    break
-        return normalized
+        return _normalize_model_aliases(data)
+
+
+def _normalize_model_aliases(data: object) -> object:
+    """Normalize common model aliases without invoking Pydantic descriptors."""
+    if not isinstance(data, dict):
+        return data
+    normalized = dict(data)
+    if "kind" not in normalized:
+        for alias in ("operation", "action", "type"):
+            if alias in normalized:
+                normalized["kind"] = normalized[alias]
+                break
+    if normalized.get("kind") in {
+        "write_content",
+        "create_file",
+        "update_file",
+        "replace_file",
+        "edit_file",
+        "patch_file",
+        "modify_file",
+        "edit",
+    }:
+        normalized["kind"] = "write_file"
+    if normalized.get("kind") in {"command", "shell", "exec", "execute"}:
+        normalized["kind"] = "run_command"
+    if normalized.get("kind") == "run_command" and "command" not in normalized:
+        for alias in ("cmd", "shell_command"):
+            if alias in normalized:
+                normalized["command"] = normalized[alias]
+                break
+    if "path" not in normalized:
+        for alias in ("file", "filename", "file_path"):
+            if alias in normalized:
+                normalized["path"] = normalized[alias]
+                break
+    if "content" not in normalized:
+        for alias in ("code", "body", "text"):
+            if alias in normalized:
+                normalized["content"] = normalized[alias]
+                break
+    return normalized
 
 
 def parse_action_proposals(raw: object) -> list[RuntimeActionProposal]:
@@ -80,7 +110,7 @@ def parse_action_proposals(raw: object) -> list[RuntimeActionProposal]:
                 pass
         if not isinstance(item, dict):
             continue
-        norm_item = RuntimeActionProposal.normalize_model_aliases(item)
+        norm_item = _normalize_model_aliases(item)
         if isinstance(norm_item, dict):
             item = norm_item
         kind_val = str(item.get("kind") or item.get("action") or item.get("type") or "").lower()
@@ -214,15 +244,16 @@ def proposals_to_metadata(proposals: list[RuntimeActionProposal]) -> list[dict[s
     return [proposal.model_dump(exclude_none=True) for proposal in proposals]
 
 
-def normalize_runtime_command(command: str) -> str:
+def normalize_runtime_command(command: str, *, portable: bool = False) -> str:
+    python = "python" if portable else f'"{sys.executable}"'
     stripped = command.strip()
     if stripped == "pytest":
-        return f'"{sys.executable}" -m pytest'
+        return f"{python} -m pytest"
     if stripped.startswith("pytest "):
-        return f'"{sys.executable}" -m {stripped}'
+        return f"{python} -m {stripped}"
     for prefix in ("python -m pytest", "python3 -m pytest"):
         if stripped == prefix:
-            return f'"{sys.executable}" -m pytest'
+            return f"{python} -m pytest"
         if stripped.startswith(prefix + " "):
-            return f'"{sys.executable}" -m pytest{stripped[len(prefix) :]}'
+            return f"{python} -m pytest{stripped[len(prefix) :]}"
     return command

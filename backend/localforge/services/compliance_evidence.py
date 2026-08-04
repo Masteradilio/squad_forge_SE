@@ -123,6 +123,7 @@ class ComplianceEvidenceValidator:
         if not isinstance(input_hashes, dict):
             return ["input_hashes must be an object when provided"]
 
+        source_commit = str(manifest.get("source_commit") or "")
         for raw_path, expected_hash in input_hashes.items():
             candidate_path = Path(str(raw_path))
             path = candidate_path if candidate_path.is_absolute() else self.repo_root / candidate_path
@@ -130,9 +131,37 @@ class ComplianceEvidenceValidator:
                 reasons.append(f"hashed input is missing: {raw_path}")
                 continue
             actual_hash = stable_file_sha256(path)
-            if actual_hash != expected_hash:
+            if actual_hash == expected_hash:
+                continue
+
+            # Candidate evidence is bound to its immutable source commit. A
+            # later working-tree edit must not invalidate an otherwise
+            # reproducible manifest, while local fixture tests may still hash
+            # the current uncommitted file first as above.
+            committed_hash = self._git_blob_hash(source_commit, candidate_path)
+            if committed_hash != expected_hash:
                 reasons.append(f"input hash mismatch for {raw_path}")
         return reasons
+
+    def _git_blob_hash(self, source_commit: str, candidate_path: Path) -> str | None:
+        if not source_commit or candidate_path.is_absolute():
+            return None
+        relative_path = candidate_path.as_posix().lstrip("/")
+        result = subprocess.run(
+            ["git", "show", f"{source_commit}:{relative_path}"],
+            cwd=self.repo_root,
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            return None
+        content = bytes(result.stdout)
+        try:
+            text = content.decode("utf-8")
+        except UnicodeDecodeError:
+            return hashlib.sha256(content).hexdigest()
+        normalized = text.replace("\r\n", "\n").replace("\r", "\n").encode("utf-8")
+        return hashlib.sha256(normalized).hexdigest()
 
     def _validate_manifest_checksum(self, manifest: dict[str, Any]) -> list[str]:
         expected = manifest.get("manifest_sha256") or manifest.get("checksum_sha256")
@@ -295,7 +324,12 @@ class ComplianceEvidenceValidator:
         if not isinstance(observations, list):
             return False
         for observation in observations:
-            if isinstance(observation, dict) and observation.get("synthetic") is True:
+            if not isinstance(observation, dict):
+                continue
+            if observation.get("synthetic") is True:
+                return True
+            source = str(observation.get("measurement_source", "")).strip().upper()
+            if source.endswith("_FIXTURE") or "SIMULAT" in source:
                 return True
         return False
 

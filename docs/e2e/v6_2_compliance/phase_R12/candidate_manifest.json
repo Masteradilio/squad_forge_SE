@@ -45,13 +45,12 @@
     "Candidate evidence is not final release acceptance.",
     "Clean-clone validation, reviewed merge, owner-approved tag, GitHub Release assets, release re-download validation, and final ACCEPTED manifest remain open."
   ],
-  "manifest_sha256": "48f0140c3d7aaa202662fbb87f93f08142b65069d9963378e74119162cdf12c1",
   "phase": "R12",
   "release_tag": "v6.2.0",
   "release_version": "6.2.0",
   "reviewed_pr_number": 14,
   "schema_version": "localforge.v6_2.candidate_manifest.v1",
-  "source_commit": "8d9888f",
+  "source_commit": "d5be09e101437a45b67faa4683a82bd2c3cf7af3",
   "task_ids": [
     "V61C-1200",
     "V61C-1201",
@@ -60,5 +59,7 @@
     "V61C-1204",
     "V61C-1205"
   ],
-  "verdict": "EVIDENCE_READY"
+  "verdict": "EVIDENCE_READY",
+  "parent_commit": "9a9eafd96011688821d4771c81e5cf717c0890d9",
+  "manifest_sha256": "460c730ea9e956d78f773986d34286b4d63086b5c7a4e43b8a95c4262f169593"
 }

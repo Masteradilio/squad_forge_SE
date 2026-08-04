@@ -69,6 +69,10 @@ class SelfHealingEngine:
         task = await self.uow.tasks.get_task(task_id)
         if not task:
             raise ValueError(f"Task with ID {task_id} not found.")
+        # Repair actions created before task contracts still pass through the
+        # ActionGateway, but do not have an authoritative role/file scope yet.
+        # Contracted repairs retain the Bug Fixer authority boundary.
+        agent_role = "Bug Fixer" if isinstance(task.metadata.get("task_contract"), dict) else None
         if task.status == TaskStatus.TESTING:
             await self.uow.tasks.update_task_status(task_id, TaskStatus.REPAIRING)
 
@@ -107,6 +111,7 @@ class SelfHealingEngine:
                 project_id=self.project_id,
                 run_id=self.run_id,
                 task_id=task_id,
+                agent_role=agent_role,
             ).write_text(
                 worktree_path,
                 action.path,

@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import logging
 import os
 import re
@@ -25,6 +26,17 @@ def get_task_branch_name(task_key: str, title: str) -> str:
         slug = slug[:30].strip("-")
 
     return f"localforge/{task_key.lower()}-{slug}"
+
+
+def get_task_run_branch_name(
+    task_key: str, title: str, project_root: str, run_id: int
+) -> str:
+    """Return a run branch name isolated from other project workspaces."""
+    base = get_task_branch_name(task_key, title)
+    workspace_fingerprint = hashlib.sha256(
+        os.path.realpath(os.path.abspath(project_root)).encode("utf-8")
+    ).hexdigest()[:10]
+    return f"{base}-ws-{workspace_fingerprint}-run-{run_id}"
 
 
 class WorktreeManager:
@@ -76,7 +88,11 @@ class WorktreeManager:
         # 2. Determine paths and branch names
         branch_name = get_task_branch_name(task.key, task.title)
         if self.run_id is not None:
-            branch_name = f"{branch_name}-run-{self.run_id}"
+            # Branches are global to the backing repository, while run IDs are
+            # only unique inside one LocalForge database.
+            branch_name = get_task_run_branch_name(
+                task.key, task.title, project.root_path, self.run_id
+            )
         worktree_path = os.path.realpath(
             os.path.abspath(
                 os.path.join(
@@ -95,6 +111,7 @@ class WorktreeManager:
             run_id=self.run_id,
             task_id=None,  # Run in main repo context
             run_mode=self.run_mode,
+            repository_root=project.root_path,
         )
 
         default_branch = await git.default_branch()
@@ -245,12 +262,15 @@ class WorktreeManager:
         assert worktree_path is not None
 
         # Execute git worktree remove from the main repository context
+        assert self.uow.projects is not None
+        project = await self.uow.projects.get_project(self.project_id)
         git = GitAdapter(
             project_id=self.project_id,
             uow=self.uow,
             run_id=self.run_id,
             task_id=None,
             run_mode=self.run_mode,
+            repository_root=project.root_path if project else None,
         )
 
         lock = self._get_worktree_lock(worktree_path)
@@ -351,6 +371,7 @@ class WorktreeManager:
             run_id=self.run_id,
             task_id=None,
             run_mode=self.run_mode,
+            repository_root=project.root_path,
         )
 
         for entry in entries:

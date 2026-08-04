@@ -6,7 +6,7 @@ import logging
 import os
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from localforge.services.redis_manager import redis_manager
 
@@ -18,7 +18,7 @@ class SemanticCacheManager:
 
     def __init__(
         self,
-        cache_dir: Optional[Path] = None,
+        cache_dir: Path | None = None,
         similarity_threshold: float = 0.92,
         ttl_seconds: int = 86400,
     ):
@@ -33,54 +33,60 @@ class SemanticCacheManager:
         self.enabled = os.getenv("FORGEOS_SEMANTIC_CACHE_ENABLED", "true").lower() == "true"
         self.redis = redis_manager
 
-    def _compute_key(self, model: str, messages: List[Dict[str, Any]]) -> str:
+    def _compute_key(self, model: str, messages: list[dict[str, Any]]) -> str:
         """Compute deterministic SHA-256 key from model and chat message structure."""
         serialized = json.dumps({"model": model, "messages": messages}, sort_keys=True)
         return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
     def get_llm_completion(
-        self, model: str, messages: List[Dict[str, Any]]
-    ) -> Optional[Dict[str, Any]]:
+        self, model: str, messages: list[dict[str, Any]]
+    ) -> dict[str, Any] | None:
         """Retrieve cached LLM completion if available and unexpired."""
         if not self.enabled:
             return None
 
         cache_key = self._compute_key(model, messages)
-
-        # Check Redis if available
-        if self.redis.is_available:
-            try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    # Synchronous fallback reading
-                    pass
-            except Exception:
-                pass
-
         cache_file = self.cache_dir / f"llm_{cache_key}.json"
-
         if not cache_file.exists():
             return None
-
         try:
             content = json.loads(cache_file.read_text(encoding="utf-8"))
             timestamp = content.get("timestamp", 0)
             if time.time() - timestamp > self.ttl_seconds:
-                logger.debug(f"Cache key {cache_key} expired.")
                 cache_file.unlink(missing_ok=True)
                 return None
-
-            logger.info(f"Semantic Cache HIT for model {model} (Key: {cache_key[:8]})")
             cached_data = content.get("data", {})
+            if not isinstance(cached_data, dict):
+                return None
             cached_data["cached"] = True
             cached_data["cache_key"] = cache_key
             return cached_data
-        except Exception as exc:
+        except (OSError, json.JSONDecodeError, TypeError) as exc:
             logger.warning(f"Error reading cache file {cache_file}: {exc}")
             return None
 
+    async def aget_llm_completion(
+        self, model: str, messages: list[dict[str, Any]]
+    ) -> dict[str, Any] | None:
+        """Async cache lookup that actually uses Redis when it is reachable."""
+        if not self.enabled:
+            return None
+        cache_key = self._compute_key(model, messages)
+        redis_key = f"forgeos:llm:{cache_key}"
+        cached = await self.redis.get(redis_key)
+        if cached:
+            try:
+                data = json.loads(cached)
+                if isinstance(data, dict):
+                    data["cached"] = True
+                    data["cache_key"] = cache_key
+                    return data
+            except json.JSONDecodeError:
+                await self.redis.delete(redis_key)
+        return self.get_llm_completion(model, messages)
+
     def set_llm_completion(
-        self, model: str, messages: List[Dict[str, Any]], data: Dict[str, Any]
+        self, model: str, messages: list[dict[str, Any]], data: dict[str, Any]
     ) -> None:
         """Store LLM completion into semantic cache."""
         if not self.enabled:
@@ -100,6 +106,20 @@ class SemanticCacheManager:
         except Exception as exc:
             logger.warning(f"Failed to write cache file {cache_file}: {exc}")
 
+    async def aset_llm_completion(
+        self, model: str, messages: list[dict[str, Any]], data: dict[str, Any]
+    ) -> None:
+        """Persist an LLM response to Redis and the deterministic disk fallback."""
+        if not self.enabled:
+            return
+        cache_key = self._compute_key(model, messages)
+        await self.redis.set(
+            f"forgeos:llm:{cache_key}",
+            json.dumps(data, separators=(",", ":")),
+            ttl_seconds=self.ttl_seconds,
+        )
+        self.set_llm_completion(model, messages, data)
+
     def compute_workspace_hash(self, workspace_path: Path) -> str:
         """Compute combined SHA-256 hash of all indexed source code files in workspace."""
         hasher = hashlib.sha256()
@@ -112,12 +132,12 @@ class SemanticCacheManager:
                     continue
                 try:
                     stat = filepath.stat()
-                    hasher.update(f"{filepath.name}:{stat.st_mtime}:{stat.st_size}".encode("utf-8"))
+                    hasher.update(f"{filepath.name}:{stat.st_mtime}:{stat.st_size}".encode())
                 except OSError:
                     continue
         return hasher.hexdigest()
 
-    def get_ast_graph(self, workspace_path: Path) -> Optional[Dict[str, Any]]:
+    def get_ast_graph(self, workspace_path: Path) -> dict[str, Any] | None:
         """Retrieve cached AST graph if workspace files have not changed."""
         if not self.enabled:
             return None
@@ -135,7 +155,7 @@ class SemanticCacheManager:
         except Exception:
             return None
 
-    def set_ast_graph(self, workspace_path: Path, graph_data: Dict[str, Any]) -> None:
+    def set_ast_graph(self, workspace_path: Path, graph_data: dict[str, Any]) -> None:
         """Store AST graph for workspace hash."""
         if not self.enabled:
             return

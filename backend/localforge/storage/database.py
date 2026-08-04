@@ -27,7 +27,10 @@ class DatabaseManager:
         if is_sqlite:
             # check_same_thread=False is required for sqlite+aiosqlite in async mode
             connect_args["check_same_thread"] = False
-            connect_args["timeout"] = 30
+            # OmniRoute visual retries can leave short-lived read/write
+            # contention while the scheduler closes a failed task. Give
+            # SQLite enough time to serialize that writer on Windows.
+            connect_args["timeout"] = 120
             from sqlalchemy.pool import NullPool
 
             kwargs["poolclass"] = NullPool
@@ -50,7 +53,10 @@ class DatabaseManager:
             def set_sqlite_pragma(dbapi_connection: Any, connection_record: Any) -> None:
                 cursor = dbapi_connection.cursor()
                 try:
-                    cursor.execute("PRAGMA journal_mode=WAL")
+                    # journal_mode is a database-wide setting. Changing it on
+                    # every pooled connection can deadlock a writer while a
+                    # monitor session is opening during a scheduler commit.
+                    cursor.execute("PRAGMA busy_timeout=120000")
                     cursor.execute("PRAGMA synchronous=NORMAL")
                 except Exception:
                     pass

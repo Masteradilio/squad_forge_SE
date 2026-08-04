@@ -27,6 +27,7 @@ class ActionRequest(BaseModel):
     payload: dict[str, Any] = Field(default_factory=dict)
     purpose: str
     risk_level: str = "low"  # low, medium, high
+    actor_role: str | None = None
 
     @model_validator(mode="after")
     def validate_payload_requirements(self) -> "ActionRequest":
@@ -88,13 +89,14 @@ class SafetyKernel:
         if request.kind in (ActionKind.READ_FILE, ActionKind.WRITE_FILE):
             target = request.payload["path"]
 
-            # Enforce path canonicalization boundaries for writes
-            if request.kind == ActionKind.WRITE_FILE:
-                if not is_path_safe(target, project_root):
-                    return (
-                        SafetyDecision.DENY,
-                        f"Write action outside workspace root is blocked: {target}",
-                    )
+            # Reads and writes are both confined to the workspace.  Allowing a
+            # read outside the root would leak host secrets to an agent and
+            # defeat the sandbox contract.
+            if not is_path_safe(target, project_root):
+                return (
+                    SafetyDecision.DENY,
+                    f"File action outside workspace root is blocked: {target}",
+                )
 
             # Resolve real target path to check protected path segments
             try:
@@ -122,11 +124,21 @@ class SafetyKernel:
                 return SafetyDecision.DENY, f"Command safety check failed: {error_reason}"
 
             # Escalate high/medium risk command inputs to requiring approval unless they are automated pipeline actions (staging/test validation)
+            normalized_command = command.strip().lower()
+            # Read-only Git identity/ref queries are required by unattended
+            # PR assembly (for example ``git rev-parse HEAD``). They do not
+            # mutate the worktree and must not create a human-approval gate
+            # solely because the task itself is high risk.
+            is_read_only_git = normalized_command.startswith(
+                ("git rev-parse", "git show-ref")
+            )
             is_git_or_test = (
                 command.strip().startswith("git add")
                 or command.strip().startswith("git commit")
+                or command.strip().startswith("git diff --check")
                 or (command.strip().startswith("git checkout") and "localforge" in command)
                 or ("pytest" in command and ("tests/" in command or "test_" in command))
+                or is_read_only_git
             )
 
             if request.risk_level in ("high", "medium") and not is_git_or_test:

@@ -5,9 +5,10 @@ from localforge.contracts.verifier import ContractVerifier
 from localforge.models import domain
 from localforge.models.enums import AgentRole, AuditEventActorType, AuditEventType, HandoffKind, TaskStatus
 from localforge.pr_factory.github import GitHubPRAdapter
+from localforge.safety.pre_pr_gate import MechanicalPrePRGate
 from localforge.storage import UnitOfWork
 from localforge.storage.artifacts import ArtifactStore
-from localforge.visual.gate import VisualFidelityGate
+from localforge.visual.gate import VisualFidelityGate, validate_visual_html_structure
 from localforge.visual.screenshot import capture_html_screenshot
 
 
@@ -68,13 +69,14 @@ class LocalPRFactory:
         visual_ref_rel = None
         visual_actual_rel = None
         visual_threshold = 0.90
+        visual_viewport = "1280x720"
 
         if isinstance(contract, dict):
             visual_required = bool(contract.get("visual_required", False))
             visual_ref_rel = contract.get("visual_reference_image")
             visual_actual_rel = contract.get("visual_actual_output")
             visual_threshold = float(contract.get("visual_similarity_threshold", 0.90))
-            str(contract.get("visual_viewport", "1280,720"))
+            visual_viewport = str(contract.get("visual_viewport", visual_viewport))
 
         if not visual_required:
             visual_required = bool(task.metadata.get("visual_required", False))
@@ -85,7 +87,7 @@ class LocalPRFactory:
         if "visual_similarity_threshold" in task.metadata:
             visual_threshold = float(task.metadata["visual_similarity_threshold"])
         if "visual_viewport" in task.metadata:
-            str(task.metadata["visual_viewport"])
+            visual_viewport = str(task.metadata["visual_viewport"])
 
         if visual_required and worktree_path:
             ref_image_path = None
@@ -129,8 +131,21 @@ class LocalPRFactory:
                     f"Visual mismatch: Actual HTML output not found for path '{visual_actual_rel}'."
                 )
             else:
+                structure_rules: list[str] = []
+                if isinstance(contract, dict):
+                    raw_rules = contract.get("visual_structure_rules", [])
+                    if isinstance(raw_rules, list):
+                        structure_rules = [item for item in raw_rules if isinstance(item, str)]
+                structure_findings = validate_visual_html_structure(
+                    html_abs_path, structure_rules=structure_rules
+                )
+                reasons.extend(
+                    f"Visual structure mismatch: {finding}" for finding in structure_findings
+                )
                 actual_image_path = os.path.join(worktree_path, "actual_layout.png")
-                captured = capture_html_screenshot(html_abs_path, actual_image_path)
+                captured = capture_html_screenshot(
+                    html_abs_path, actual_image_path, viewport=visual_viewport
+                )
                 if captured and ref_image_path:
                     visual_result = VisualFidelityGate().evaluate(
                         reference_image_path=ref_image_path,
@@ -160,15 +175,53 @@ class LocalPRFactory:
                 summary=f"Cost benchmark artifact for {task.key}",
             )
             artifact_paths.add(cost_artifact.path)
-        except Exception:
-            pass
+        except Exception as exc:
+            reasons.append(f"Cost benchmark unavailable: {exc}")
         if not any(path.endswith("cost_benchmark.md") for path in artifact_paths):
             reasons.append("cost_benchmark.md missing")
 
+        remote_url: str | None = None
+        task_metadata = dict(task.metadata or {})
+        source_commit = str(
+            task_metadata.get("current_source_commit")
+            or task_metadata.get("source_commit")
+            or ""
+        ).strip()
+        target_commit = str(
+            task_metadata.get("current_target_commit")
+            or task_metadata.get("target_commit")
+            or ""
+        ).strip()
+        if not source_commit or not target_commit:
+            reasons.append("observed source/target commit binding missing")
+
+        gate_result = None
+        if not reasons:
+            diff_text = await ArtifactStore(self.uow).read_artifact(
+                project.root_path, self.run_id, task.key, "diff.patch"
+            )
+            gate_result = await MechanicalPrePRGate().evaluate_gate(
+                project_id=self.project_id,
+                task_run_id=task_run_id,
+                uow=self.uow,
+                diff_text=diff_text,
+                modified_files=[str(path) for path in changed_files if isinstance(path, str)],
+            )
+            if not gate_result.passed:
+                reasons.extend(f"Pre-PR gate: {violation}" for violation in gate_result.violations)
+
+        verification = None
+        if not reasons:
+            assert self.uow.maker_checker is not None
+            verification = await self.uow.maker_checker.get_verification_for_task_run(task_run_id)
+            if verification is None or verification.id is None:
+                reasons.append("approved Maker/Checker verification missing")
+            elif verification.status.value != "APPROVED" or not verification.deterministic_passed:
+                reasons.append("Maker/Checker verification is not an approved deterministic result")
+        ready = not reasons
         pr_body = self._render_pr_body(
             task, task_run, sorted(artifact_paths), reasons, cost_report_md=cost_report_md
         )
-
         pr_artifact = await ArtifactStore(self.uow).write_artifact(
             project_root=project.root_path,
             task_run_id=task_run_id,
@@ -179,15 +232,17 @@ class LocalPRFactory:
             summary=f"Local PR artifact for {task.key}",
         )
 
-        remote_url = self.github_adapter.create_pr(
-            title=f"{task.key}: {task.title}",
-            body=pr_body,
-            branch=task_run.branch_name or "",
-        )
-        ready = not reasons
-        task_metadata = dict(task.metadata or {})
         if ready and task.status == TaskStatus.REVIEWING:
             assert self.uow.executions is not None
+            assert verification is not None
+            remote_url = self.github_adapter.create_pr(
+                title=f"{task.key}: {task.title}",
+                body=pr_body,
+                branch=task_run.branch_name or "",
+            )
+        if ready and task.status == TaskStatus.REVIEWING:
+            assert gate_result is not None
+            assert verification is not None
             handoff = await self.uow.executions.create_handoff(
                 domain.Handoff(
                     task_run_id=task_run_id,
@@ -197,32 +252,23 @@ class LocalPRFactory:
                     payload_json={"source": "pr_factory", "artifact_path": pr_artifact.path},
                 )
             )
-            source_commit = str(
-                task_metadata.get("current_source_commit")
-                or task_metadata.get("source_commit")
-                or "unknown-source"
-            )
-            target_commit = str(
-                task_metadata.get("current_target_commit")
-                or task_metadata.get("target_commit")
-                or "unknown-target"
-            )
             await self.uow.tasks.mark_pr_ready(
                 task_id,
                 gate_evidence={
                     "source": "pr_factory",
                     "task_run_id": task_run_id,
                     "handoff_id": handoff.id or 0,
-                    "maker_id": "pr-factory",
-                    "checker_id": "mechanical-pre-pr-gate",
-                    "maker_attempt_id": f"pr-factory:{task_run_id}",
-                    "checker_attempt_id": f"mechanical-pre-pr-gate:{task_run_id}",
+                    "maker_id": verification.maker_agent_id,
+                    "checker_id": verification.checker_agent_id,
+                    "maker_attempt_id": f"maker-checker:{verification.id}",
+                    "checker_attempt_id": f"mechanical-pre-pr-gate:{verification.id}",
                     "pre_pr_gate": {
-                        "passed": True,
+                        "passed": gate_result.passed,
                         "remote_url": remote_url,
                         "source_commit": source_commit,
                         "target_commit": target_commit,
                         "diff_hash": pr_artifact.content_hash,
+                        "checks": gate_result.checks,
                     },
                     "risk_verdict": {"passed": True, "source": "contract-verifier"},
                     "safety_verdict": {"passed": True, "source": "mechanical-pre-pr-gate"},

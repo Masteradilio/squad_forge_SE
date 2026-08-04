@@ -1,4 +1,5 @@
 from pathlib import Path
+
 from localforge.skills.registry import SkillRegistry
 
 

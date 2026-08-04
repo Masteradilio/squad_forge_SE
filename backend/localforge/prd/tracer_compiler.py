@@ -1,6 +1,5 @@
 """Tracer-Bullet Backlog Compiler — Decomposes PRDs into full-stack vertical slices."""
 
-from typing import Any, Dict, List
 import pydantic
 
 
@@ -12,13 +11,13 @@ class TracerTicket(pydantic.BaseModel):
     api_endpoint_task: str
     ui_component_task: str
     unit_test_task: str
-    contract_allowed_files: List[str]
+    contract_allowed_files: list[str]
 
 
 class TracerCompiler:
     """Compiles PRD specifications into Matt Pocock Tracer-Bullet vertical tickets."""
 
-    def compile_prd_to_tracer_tickets(self, prd_content: str) -> List[TracerTicket]:
+    def compile_prd_to_tracer_tickets(self, prd_content: str) -> list[TracerTicket]:
         """Parse PRD content and produce vertical Tracer Bullet tickets."""
         # Standard tracer-bullet vertical slice tickets
         tickets = [

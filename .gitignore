@@ -72,6 +72,9 @@ runs/
 .worktrees/
 .localforge-worktrees/
 benchmarks/workspaces/
+benchmarks/*.db-*
+benchmarks/*.html
+benchmarks/*.png
 .benchmarks/
 
 # Docker / local volumes

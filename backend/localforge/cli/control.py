@@ -8,7 +8,7 @@ from typing import Any
 import typer
 from localforge.core.config import load_config
 from localforge.llm.openai_compatible import OpenAICompatibleProvider
-from localforge.models.enums import RunStatus
+from localforge.models.enums import RunStatus, TaskRunStatus
 from localforge.skills import SkillRegistry
 from localforge.storage import UnitOfWork, db_manager
 from rich.console import Console
@@ -40,9 +40,19 @@ async def _latest_run(project_id: int, uow: UnitOfWork):
 async def _set_latest_run_status(status: RunStatus) -> None:
     async with UnitOfWork(db_manager) as uow:
         assert uow.executions is not None
+        assert uow.tasks is not None
         project = await _current_project(uow)
         assert project.id is not None
         run = await _latest_run(project.id, uow)
+        if status == RunStatus.CANCELLED and run.id is not None:
+            ended_at = datetime.now(UTC)
+            for task_run in await uow.tasks.list_runs_for_run(run.id):
+                if task_run.status not in {TaskRunStatus.PENDING, TaskRunStatus.RUNNING}:
+                    continue
+                task_run.status = TaskRunStatus.CANCELLED
+                task_run.ended_at = ended_at
+                task_run.final_summary = "Cancelled with parent run by operator."
+                await uow.tasks.update_task_run(task_run)
         run.status = status
         if status in {RunStatus.CANCELLED, RunStatus.FAILED, RunStatus.COMPLETED}:
             run.ended_at = datetime.now(UTC)
@@ -129,9 +139,15 @@ def logs_cmd(limit: int = typer.Option(25, "--limit")) -> None:
             assert project.id is not None
             events = await uow.audits.list_audit_events_for_project(project.id)
             for event in events[:limit]:
+                payload = json.dumps(
+                    event.payload_redacted,
+                    ensure_ascii=True,
+                    sort_keys=True,
+                    default=str,
+                )
                 console.print(
                     f"{event.created_at.isoformat()} {event.event_type.value} "
-                    f"{event.payload_redacted}"
+                    f"{payload}"
                 )
 
     asyncio.run(run())
@@ -220,7 +236,7 @@ def chief_engineer_freeze_contract_cmd(
 
     async def run() -> None:
         from localforge.chief_engineer.service import ChiefEngineerService
-        from localforge.llm.openrouter import OpenRouterProvider
+        from localforge.llm.factory import build_chief_engineer_provider
         from localforge.prd.contracts import ArchitectureContract
 
         config = load_config()
@@ -230,13 +246,9 @@ def chief_engineer_freeze_contract_cmd(
             raise typer.Exit(code=1)
         contract = ArchitectureContract.model_validate_json(open(path, encoding="utf-8").read())
         if not config.chief_engineer.model:
-            console.print("[bold red]OPENROUTER_MODEL is not configured.[/bold red]")
+            console.print("[bold red]The OmniRoute Chief Engineer model is not configured.[/bold red]")
             raise typer.Exit(code=1)
-        provider = OpenRouterProvider(
-            api_key=config.chief_engineer.api_key,
-            base_url=config.chief_engineer.base_url,
-            default_model=config.chief_engineer.model,
-        )
+        provider = build_chief_engineer_provider(config)
         async with UnitOfWork(db_manager) as uow:
             project = await _current_project(uow)
             assert project.id is not None

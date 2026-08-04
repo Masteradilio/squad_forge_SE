@@ -1,7 +1,7 @@
 from collections.abc import AsyncIterator
 from typing import Any
 
-from localforge.llm.base import BaseLLMProvider
+from localforge.llm.base import BaseLLMProvider, LLMMessage
 
 
 class FakeLLMProvider(BaseLLMProvider):
@@ -22,7 +22,7 @@ class FakeLLMProvider(BaseLLMProvider):
 
     async def chat_completion(
         self,
-        messages: list[dict[str, str]],
+        messages: list[LLMMessage],
         response_schema: dict[str, Any] | None = None,
         stream: bool = False,
         timeout: float = 30.0,

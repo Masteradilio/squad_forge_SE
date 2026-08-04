@@ -183,6 +183,20 @@ def test_compliance_evidence_rejects_synthetic_benchmark_observations(tmp_path: 
     assert any("synthetic benchmark" in reason for reason in result.reasons)
 
 
+def test_compliance_evidence_rejects_fixture_measurement_source(tmp_path: Path) -> None:
+    manifest_path = tmp_path / "manifest.json"
+    manifest = _base_manifest(_head_commit())
+    manifest["observations"] = [
+        {"task_key": "LF-1", "measurement_source": "OBSERVED_LEDGER_FIXTURE"}
+    ]
+    _write_manifest(manifest_path, manifest)
+
+    result = ComplianceEvidenceValidator(Path.cwd()).validate_manifest(manifest_path)
+
+    assert result.verdict == INVALID
+    assert any("synthetic benchmark" in reason for reason in result.reasons)
+
+
 def test_compliance_evidence_accepts_immutable_fixture(tmp_path: Path) -> None:
     manifest_path = tmp_path / "manifest.json"
     backlog_path = tmp_path / "completed_backlog.md"

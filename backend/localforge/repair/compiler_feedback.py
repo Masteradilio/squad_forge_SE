@@ -1,7 +1,7 @@
 """Compiler Feedback Loop — Captures tsc/pyright error tracebacks for Bug Fixer self-correction."""
 
 import re
-from typing import Any, Dict, List
+
 import pydantic
 
 
@@ -16,7 +16,7 @@ class CompilerErrorLocation(pydantic.BaseModel):
 class CompilerFeedbackLoop:
     """Parses compiler/type-checker output and feeds line-precise errors back to Bug Fixer."""
 
-    def parse_typescript_errors(self, output: str) -> List[CompilerErrorLocation]:
+    def parse_typescript_errors(self, output: str) -> list[CompilerErrorLocation]:
         """Parse 'tsc --noEmit' output into structured error locations."""
         # e.g.: src/App.tsx(42,15): error TS2322: Type 'string' is not assignable to type 'number'.
         pattern = r"([^\s()]+\.[a-zA-Z0-9]+)\((\d+),(\d+)\):\s+error\s+([A-Z0-9]+):\s+(.*)"

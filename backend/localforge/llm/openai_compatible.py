@@ -1,4 +1,5 @@
 import json
+import json
 import os
 from collections.abc import AsyncIterator
 from typing import Any
@@ -10,6 +11,7 @@ from localforge.llm.base import (
     LLMConnectionError,
     LLMError,
     LLMHTTPError,
+    LLMMessage,
     LLMTimeoutError,
 )
 
@@ -42,6 +44,52 @@ def _looks_like_upstream_error(content: str) -> bool:
     if lowered.startswith('{"error"'):
         return True
     return any(hint in lowered for hint in _UPSTREAM_ERROR_HINTS)
+
+
+def decode_chat_completion_response(response: httpx.Response) -> str:
+    """Decode a normal OpenAI response or an SSE response sent for ``stream=false``.
+
+    Some OpenAI-compatible gateways always emit SSE frames, even when the
+    request disables streaming. Normalizing both wire formats here keeps the
+    local provider and gateway-specific clients on the same contract.
+    """
+    body = response.text if isinstance(response.text, str) else ""
+    if body.lstrip().startswith("data:") or "text/event-stream" in response.headers.get(
+        "content-type", ""
+    ).lower():
+        parts: list[str] = []
+        for line in body.splitlines():
+            if not line.startswith("data:"):
+                continue
+            data_str = line.removeprefix("data:").strip()
+            if not data_str or data_str == "[DONE]":
+                continue
+            try:
+                chunk = json.loads(data_str)
+            except json.JSONDecodeError:
+                continue
+            choices = chunk.get("choices", [])
+            if not choices:
+                continue
+            choice = choices[0]
+            delta = choice.get("delta", {})
+            content = delta.get("content") if isinstance(delta, dict) else None
+            if content is None:
+                message = choice.get("message", {})
+                content = message.get("content") if isinstance(message, dict) else None
+            if content:
+                parts.append(str(content))
+        if parts:
+            return "".join(parts)
+
+    data = response.json()
+    choices = data.get("choices", [])
+    if not choices:
+        raise LLMError("API response did not contain completion choices.")
+    content = choices[0].get("message", {}).get("content") or ""
+    if not isinstance(content, str):
+        raise LLMError("API response completion content was not text.")
+    return content
 
 
 def _ollama_options_overrides() -> dict[str, object]:
@@ -80,14 +128,10 @@ class OpenAICompatibleProvider(BaseLLMProvider):
         api_key: str | None = None,
         default_model: str | None = None,
         provider_name: str = "openai_compatible",
+        max_output_tokens: int | None = None,
     ):
         self.base_url = base_url.rstrip("/")
-        self.api_key = (
-            api_key
-            or os.getenv("OPENROUTER_API_KEY")
-            or os.getenv("LOCALFORGE_MODEL_API_KEY")
-            or "no-key"
-        )
+        self.api_key = api_key or os.getenv("LOCALFORGE_MODEL_API_KEY") or "no-key"
         self.default_model = default_model
         self.provider_name = provider_name
         # Honour ``LOCALFORGE_LLM_MAX_OUTPUT_TOKENS`` (and the
@@ -96,12 +140,15 @@ class OpenAICompatibleProvider(BaseLLMProvider):
         # truncation that collapses otherwise valid JSON Schema responses
         # into ``content: null``; the default of 0 means "let the
         # provider decide", which is fine but easy to misjudge.
-        try:
-            self.default_max_output_tokens = int(
-                os.getenv("LOCALFORGE_LLM_MAX_OUTPUT_TOKENS", "0") or "0"
-            )
-        except ValueError:
-            self.default_max_output_tokens = 0
+        if max_output_tokens is not None:
+            self.default_max_output_tokens = max_output_tokens
+        else:
+            try:
+                self.default_max_output_tokens = int(
+                    os.getenv("LOCALFORGE_LLM_MAX_OUTPUT_TOKENS", "0") or "0"
+                )
+            except ValueError:
+                self.default_max_output_tokens = 0
         try:
             self.default_max_input_tokens = int(
                 os.getenv("LOCALFORGE_LLM_MAX_INPUT_TOKENS", "0") or "0"
@@ -136,7 +183,7 @@ class OpenAICompatibleProvider(BaseLLMProvider):
 
     async def chat_completion(
         self,
-        messages: list[dict[str, str]],
+        messages: list[LLMMessage],
         response_schema: dict[str, Any] | None = None,
         stream: bool = False,
         timeout: float = 240.0,
@@ -180,12 +227,38 @@ class OpenAICompatibleProvider(BaseLLMProvider):
         # existing tests keep their behaviour, but a positive env value
         # unlocks the full output budget the configured model can emit.
         if self.default_max_output_tokens > 0:
-            payload["max_tokens"] = self.default_max_output_tokens
+            max_output_tokens = self.default_max_output_tokens
+            if self.provider_name.lower() == "omniroute":
+                # Free/freemium OmniRoute routes can spend an unbounded amount
+                # of time in hidden reasoning when given the 8k Chief ceiling.
+                # ForgeOS actions and plain visual documents are both bounded;
+                # cap every OmniRoute transport so a free route cannot spend
+                # an unbounded time generating a large response.
+                try:
+                    gateway_cap = int(
+                        os.getenv("LOCALFORGE_OMNIROUTE_MAX_OUTPUT_TOKENS", "6000")
+                    )
+                except ValueError:
+                    gateway_cap = 6000
+                if gateway_cap > 0:
+                    max_output_tokens = min(max_output_tokens, gateway_cap)
+            payload["max_tokens"] = max_output_tokens
+
+        # OmniRoute's free/freemium routes may emit hidden reasoning before
+        # the answer. Keep that reasoning deliberately low for every ForgeOS
+        # request, including plain HTML transport used by visual tasks;
+        # otherwise a complete document can time out before its source is
+        # emitted. OmniRoute accepts this field, while other providers must
+        # not see it.
+        if self.provider_name.lower() == "omniroute":
+            reasoning_effort = os.getenv("LOCALFORGE_OMNIROUTE_REASONING_EFFORT", "low").strip()
+            if reasoning_effort in {"none", "minimal", "low", "medium", "high"}:
+                payload["reasoning_effort"] = reasoning_effort
 
         # Request JSON output format; the Ollama host ignores this flag
         # (it always answers with plain JSON content) while NIM/vLLM
         # honour it, so the backend normalisation happens here.
-        if response_schema is not None:
+        if response_schema is not None and self.provider_name.lower() != "omniroute":
             payload["response_format"] = {"type": "json_object"}
         # Forward Ollama-specific runtime options (currently only
         # num_ctx, the model's effective context window). We key them
@@ -206,10 +279,7 @@ class OpenAICompatibleProvider(BaseLLMProvider):
                         f"Completion API failed ({resp.status_code}): {resp.text}",
                         status_code=resp.status_code,
                     )
-                data = resp.json()
-                choices = data.get("choices", [])
-                if not choices:
-                    raise LLMError("API response did not contain completion choices.")
+                content = decode_chat_completion_response(resp)
                 # Detect upstream-model errors hidden inside the first choice.
                 # than as an HTTP 4xx/5xx. Treating that as a normal
                 # content would route it into the validator, where every
@@ -217,7 +287,6 @@ class OpenAICompatibleProvider(BaseLLMProvider):
                 # schema-validate before the operator notices. Surface it
                 # as a distinct, retryable LLMError so the wrapper or the
                 # fall-through provider can skip the model.
-                content = choices[0].get("message", {}).get("content") or ""
                 if _looks_like_upstream_error(content):
                     raise LLMError(
                         f"Upstream model error returned inside content: {content[:300]!r}"

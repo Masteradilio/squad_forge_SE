@@ -1,6 +1,7 @@
 import asyncio
 import copy
 import os
+from pathlib import Path
 from typing import Any, cast
 
 import typer
@@ -14,6 +15,7 @@ except ImportError:
 
 from localforge.core.templates import DEFAULT_CONFIG_TEMPLATE, DEFAULT_POLICY_TEMPLATE
 from localforge.models import domain
+from localforge.quality.package_locker import PackageLocker
 from localforge.storage import UnitOfWork, bootstrap_database, db_manager
 
 console = Console()
@@ -81,6 +83,11 @@ async def run_init() -> None:
         with open(policy_path, "w", encoding="utf-8") as f:
             yaml.safe_dump(DEFAULT_POLICY_TEMPLATE, f, default_flow_style=False)
         console.print(f"[green]Created conservative security policy at:[/green] {policy_path}")
+
+    # Freeze dependency manifests before the workspace becomes executable.
+    # Existing lockfiles are preserved; missing locks are generated from the
+    # real package metadata instead of a synthetic empty placeholder.
+    PackageLocker(Path(cwd)).freeze_all()
 
     # 6. Bootstrap database
     console.print("[blue]Bootstrapping local database...[/blue]")

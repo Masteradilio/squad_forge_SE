@@ -28,7 +28,7 @@
   ],
   "input_hashes": {
     ".github/workflows/ci.yml": "463c8ac144651b84ee25d74577c464c5cf0ef467fa875bad57b351d89dd2ab53",
-    "CHANGELOG.md": "4b79d4ebbca6d44b9ffe224f6f0a6e458416b799cdd81a248c70a052bb5faf6a",
+    "CHANGELOG.md": "1d810534a4e3c040e1133e88109317fda53faf109b228f110e5a174029acd595",
     "README.md": "ae9444d0517df944f6ce40e56f37573f7af02b2d59cc62307fd8588e3a26f79f",
     "backend/tests/test_release_truth.py": "b004b9b35f9fd8b6aed2e7373223ab130e897d9036c08d6ac45c5b073744a118",
     "docs/compliance_backlog_V6-1.md": "b7f5312a2c69d4c832ac226bb3b4ae2c52cb65e52d35c2b9c3d6c3220db36a1e",
@@ -44,18 +44,18 @@
     "R0 truth reset is not final production acceptance.",
     "Reviewed PR, remote CI for the remediation branch, and final release assets are still required."
   ],
-  "manifest_sha256": "bd65c2a1db36a330f2b8d02dabd170a5cbaaa56ff501026f0028a7aec9cc202e",
-  "parent_commit": "27836a2a8b18d9d24e8155ea30a6e7dcce2eec50",
+  "parent_commit": "9a9eafd96011688821d4771c81e5cf717c0890d9",
   "phase": "R0",
   "release_tag": "v6.2.0",
   "release_version": "6.2.0",
   "schema_version": "localforge.v6_2.candidate_manifest.v1",
-  "source_commit": "e2cc2a32fb0c1bb97dbb8fa54f5c9468398b636e",
+  "source_commit": "d5be09e101437a45b67faa4683a82bd2c3cf7af3",
   "task_ids": [
     "V61C-000",
     "V61C-001",
     "V61C-002",
     "V61C-003"
   ],
-  "verdict": "EVIDENCE_READY"
+  "verdict": "EVIDENCE_READY",
+  "manifest_sha256": "895db1a215b19312fd0d603f798f5bfdeeb1545d025cdaab13c7cd04895119b7"
 }

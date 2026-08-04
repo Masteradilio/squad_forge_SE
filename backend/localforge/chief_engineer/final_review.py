@@ -80,6 +80,7 @@ class FinalReviewService:
             run_id=run_id,
             estimated_input_tokens=estimated_input,
             estimated_output_tokens=estimated_output,
+            provider=str(getattr(provider, "provider_name", "omniroute")),
         )
         try:
             review = await chat_completion_validated(
@@ -102,7 +103,7 @@ class FinalReviewService:
                     project_id=project_id,
                     run_id=run_id,
                     task_id=task_id,
-                    provider=str(getattr(provider, "provider_name", "openrouter")),
+                    provider=str(getattr(provider, "provider_name", "omniroute")),
                     model=model,
                     reason=ChiefEngineerCallReason.FINAL_PR_REVIEW,
                     input_tokens=estimated_input,
@@ -118,7 +119,7 @@ class FinalReviewService:
                 project_id=project_id,
                 run_id=run_id,
                 task_id=task_id,
-                provider=str(getattr(provider, "provider_name", "openrouter")),
+                provider=str(getattr(provider, "provider_name", "omniroute")),
                 model=model,
                 reason=ChiefEngineerCallReason.FINAL_PR_REVIEW,
                 input_tokens=estimated_input,

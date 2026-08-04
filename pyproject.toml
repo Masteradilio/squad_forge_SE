@@ -32,8 +32,11 @@ dependencies = [
   "aiosqlite>=0.20,<1.0",
   "asyncpg>=0.29,<1.0",
   "psycopg2-binary>=2.9,<3.0",
+  "cryptography>=42.0,<46.0",
+  "docker>=7.1,<8.0",
   "redis>=5.0.0,<6.0",
   "python-dotenv>=1.0,<2.0",
+  "tzdata>=2024.1,<2026.0",
   "GitPython>=3.1,<4.0",
   "pillow>=10.0,<13.0",
 ]
@@ -48,6 +51,15 @@ dev = [
   "types-PyYAML>=6.0,<7.0",
   "pre-commit>=3.8,<4.0",
   "build>=1.2,<2.0",
+  "playwright>=1.45,<2.0",
+]
+cloud = [
+  "chromadb>=0.5,<1.0",
+  "tree-sitter>=0.22,<1.0",
+  "tree-sitter-languages>=1.10,<2.0",
+  "playwright>=1.45,<2.0",
+  "opentelemetry-api>=1.25,<2.0",
+  "opentelemetry-sdk>=1.25,<2.0",
 ]
 
 [project.scripts]
@@ -66,6 +78,7 @@ testpaths = ["backend/tests"]
 pythonpath = ["backend"]
 filterwarnings = [
   "ignore:Using `httpx` with `starlette.testclient` is deprecated.*",
+  "ignore:The default datetime adapter is deprecated as of Python 3.12.*:DeprecationWarning:aiosqlite.core",
 ]
 
 [tool.ruff]

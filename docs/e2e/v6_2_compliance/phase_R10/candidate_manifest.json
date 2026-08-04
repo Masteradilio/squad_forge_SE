@@ -31,13 +31,12 @@
     "Candidate evidence is not final production acceptance.",
     "Full hosted authorization, dependency/security scans, failure injection, capacity, and deployment runbooks remain open."
   ],
-  "manifest_sha256": "578e4b7f65c92981ae97e8610701ecef68dd5e453a52016acc43b182359b8dbe",
   "phase": "R10",
   "release_tag": "v6.2.0",
   "release_version": "6.2.0",
   "reviewed_pr_number": 14,
   "schema_version": "localforge.v6_2.candidate_manifest.v1",
-  "source_commit": "51283d1",
+  "source_commit": "d5be09e101437a45b67faa4683a82bd2c3cf7af3",
   "task_ids": [
     "V61C-1000",
     "V61C-1001",
@@ -45,5 +44,7 @@
     "V61C-1003",
     "V61C-1004"
   ],
-  "verdict": "EVIDENCE_READY"
+  "verdict": "EVIDENCE_READY",
+  "parent_commit": "9a9eafd96011688821d4771c81e5cf717c0890d9",
+  "manifest_sha256": "d4c50efb061380ebb5215f36c15fb74b6cc23be144a21647aa1c5369b8e5420f"
 }

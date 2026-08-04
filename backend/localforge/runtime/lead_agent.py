@@ -36,11 +36,16 @@ class LeadAgentRuntime:
         )
 
         task = await self.uow.tasks.update_task_status(task_id, TaskStatus.IMPLEMENTING)
+        # Legacy runtime-action tasks predate role contracts. Keep them on the
+        # existing ActionGateway path until a task contract supplies an
+        # authoritative role and allowed-file scope.
+        agent_role = "Developer" if isinstance(task.metadata.get("task_contract"), dict) else None
         editor = SafeFileEditor(
             self.uow,
             project_id=self.project_id,
             run_id=self.run_id,
             task_id=task_id,
+            agent_role=agent_role,
         )
         actions = task.metadata.get("runtime_actions", [])
         try:
@@ -105,47 +110,21 @@ class LeadAgentRuntime:
 
         await self.uow.tasks.update_task_status(task_id, TaskStatus.TESTING)
         await self.uow.tasks.update_task_status(task_id, TaskStatus.REVIEWING)
-        task_metadata = dict(task.metadata or {})
         assert self.uow.executions is not None
         handoff = await self.uow.executions.create_handoff(
             domain.Handoff(
                 task_run_id=task_run_id,
                 from_role=AgentRole.REVIEWER,
                 to_role=AgentRole.PR_WRITER,
-                kind=HandoffKind.PR_READY,
-                payload_json={"source": "lead_agent_runtime", "artifact_path": plan_artifact.path},
+                kind=HandoffKind.REVIEW,
+                payload_json={
+                    "source": "lead_agent_runtime",
+                    "artifact_path": plan_artifact.path,
+                    "status": "REVIEW_REQUIRED",
+                },
             )
         )
-        source_commit = str(task_metadata.get("source_commit", "unknown-source"))
-        target_commit = str(task_metadata.get("target_commit", "unknown-target"))
-        await self.uow.tasks.mark_pr_ready(
-            task_id,
-            gate_evidence={
-                "source": "lead_agent_runtime",
-                "task_run_id": task_run_id,
-                "handoff_id": handoff.id or 0,
-                "maker_id": "lead-agent",
-                "checker_id": "mechanical-pre-pr-gate",
-                "maker_attempt_id": f"lead-agent:{task_run_id}",
-                "checker_attempt_id": f"mechanical-pre-pr-gate:{task_run_id}",
-                "pre_pr_gate": {
-                    "passed": True,
-                    "changed_files": changed_files,
-                    "source_commit": source_commit,
-                    "target_commit": target_commit,
-                    "diff_hash": plan_artifact.content_hash,
-                },
-                "risk_verdict": {"passed": True, "source": "lead-agent-review"},
-                "safety_verdict": {"passed": True, "source": "mechanical-pre-pr-gate"},
-                "checks_executed": command_summaries or ["runtime-actions-applied"],
-                "artifact_paths": [plan_artifact.path],
-                "branch_name": task_run.branch_name,
-                "worktree_path": task_run.worktree_path,
-                "source_commit": source_commit,
-                "target_commit": target_commit,
-                "diff_hash": plan_artifact.content_hash,
-            },
-        )
+        assert handoff.id is not None
         summary = "Lead agent summarized executed actions."
         task_run.final_summary = summary
         await self.uow.tasks.update_task_run(task_run)

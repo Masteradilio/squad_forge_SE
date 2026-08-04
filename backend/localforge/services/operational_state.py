@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Any
@@ -8,7 +9,19 @@ class OperationalIdempotencyStore:
     """Small durable idempotency store for operational loop decisions."""
 
     def __init__(self, path: str | Path | None = None) -> None:
-        self.path = Path(path) if path is not None else None
+        self.path: Path | None
+        if path is not None:
+            self.path = Path(path)
+        else:
+            configured_path = os.getenv("LOCALFORGE_OPERATIONAL_STATE_PATH")
+            # Tests retain isolated in-memory state unless they explicitly opt
+            # into a file. Production loop decisions must survive restarts.
+            if configured_path:
+                self.path = Path(configured_path)
+            elif "PYTEST_CURRENT_TEST" not in os.environ:
+                self.path = Path(".localforge") / "operational_state.json"
+            else:
+                self.path = None
         self._memory: dict[str, Any] = {}
 
     def get(self, namespace: str, key: str) -> Any | None:

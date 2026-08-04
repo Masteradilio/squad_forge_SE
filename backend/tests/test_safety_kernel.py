@@ -183,6 +183,26 @@ async def test_safety_kernel_evaluate_commands(tmp_path, db_session):
     decision, reason = await SafetyKernel.evaluate(req_risk, uow, str(tmp_path))
     assert decision == SafetyDecision.REQUIRE_APPROVAL
 
+    req_validation = ActionRequest(
+        project_id=project.id,
+        kind=ActionKind.RUN_COMMAND,
+        payload={"command": "git diff --check"},
+        purpose="automated validation",
+        risk_level="high",
+    )
+    decision, reason = await SafetyKernel.evaluate(req_validation, uow, str(tmp_path))
+    assert decision == SafetyDecision.ALLOW
+
+    req_revision = ActionRequest(
+        project_id=project.id,
+        kind=ActionKind.RUN_COMMAND,
+        payload={"command": "git rev-parse HEAD"},
+        purpose="recording the source commit",
+        risk_level="high",
+    )
+    decision, reason = await SafetyKernel.evaluate(req_revision, uow, str(tmp_path))
+    assert decision == SafetyDecision.ALLOW
+
 
 @pytest.mark.anyio
 async def test_run_safe_command_unattended(tmp_path, db_session):

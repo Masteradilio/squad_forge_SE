@@ -6,7 +6,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from sqlalchemy import text
-from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from localforge.storage.database import DatabaseManager
@@ -138,6 +137,15 @@ async def bootstrap_database(db_manager: DatabaseManager) -> int:
                     )
 
     await ensure_db_directory(db_manager.db_url)
+
+    # Configure SQLite's database-wide journal mode before opening the
+    # long-lived application sessions. Running this once during bootstrap is
+    # safe; running it from each connection hook can deadlock concurrent
+    # scheduler writes and read-only monitors.
+    if db_manager.db_url.startswith("sqlite+aiosqlite:///") and ":memory:" not in db_manager.db_url:
+        async with db_manager.engine.begin() as conn:
+            await conn.execute(text("PRAGMA journal_mode=WAL"))
+            await conn.execute(text("PRAGMA synchronous=NORMAL"))
 
     async with await db_manager.get_session() as session:
         current_version = await get_current_schema_version(session)
@@ -479,6 +487,10 @@ async def bootstrap_database(db_manager: DatabaseManager) -> int:
 
         elif current_version == CURRENT_VERSION:
             logger.info("Database is already up to date.")
+            # Reconcile configured provider models on every startup. This is
+            # intentionally idempotent so a model added after database
+            # creation can still produce an auditable ledger entry.
+            await seed_pricing_data(session)
             return current_version
 
         raise UnsupportedSchemaVersionError(
@@ -491,107 +503,61 @@ async def seed_pricing_data(session: AsyncSession) -> None:
     from sqlalchemy import select
 
     from localforge.storage.orm import ModelPricingSnapshotORM, PricingSourceORM
-
-    # Check if pricing sources already exist
-    existing = await session.execute(select(PricingSourceORM).limit(1))
-    if existing.first():
-        return
-
-    logger.info("Seeding competitor model pricing snapshots into database...")
-
-    # 1. OpenAI Source
-    openai_src = PricingSourceORM(
-        provider="OpenAI",
-        url="https://openai.com/api/pricing/",
-        notes="Official OpenAI pricing snapshots baseline.",
-    )
-    session.add(openai_src)
-
-    # 2. Anthropic Source
-    anthropic_src = PricingSourceORM(
-        provider="Anthropic",
-        url="https://platform.claude.com/docs/en/about-claude/pricing",
-        notes="Official Anthropic pricing snapshots baseline.",
-    )
-    session.add(anthropic_src)
-
-    # 3. Google Source
-    google_src = PricingSourceORM(
-        provider="Google",
-        url="https://ai.google.dev/gemini-api/docs/pricing",
-        notes="Official Google pricing snapshots baseline.",
-    )
-    session.add(google_src)
-    await session.flush()  # Populate IDs
-
-    # OpenAI snapshots (per 1M tokens)
-    openai_snapshots = [
-        ModelPricingSnapshotORM(
-            pricing_source_id=openai_src.id,
-            model_name="gpt-5.5-large",
-            input_price_per_million=5.00,
-            output_price_per_million=30.00,
+    source_specs = {
+        "OpenAI": (
+            "https://openai.com/api/pricing/",
+            "Official OpenAI pricing snapshots baseline.",
         ),
-        ModelPricingSnapshotORM(
-            pricing_source_id=openai_src.id,
-            model_name="gpt-5.4-medium",
-            input_price_per_million=2.50,
-            output_price_per_million=15.00,
+        "Anthropic": (
+            "https://platform.claude.com/docs/en/about-claude/pricing",
+            "Official Anthropic pricing snapshots baseline.",
         ),
-        ModelPricingSnapshotORM(
-            pricing_source_id=openai_src.id,
-            model_name="gpt-5.4-mini",
-            input_price_per_million=0.75,
-            output_price_per_million=4.50,
+        "Google": (
+            "https://ai.google.dev/gemini-api/docs/pricing",
+            "Official Google pricing snapshots baseline.",
         ),
+        "OpenRouter": (
+            "https://openrouter.ai/models",
+            "Persisted paid-model snapshot used for LocalForge ledger accounting.",
+        ),
+    }
+    source_result = await session.execute(select(PricingSourceORM))
+    sources = {source.provider: source for source in source_result.scalars().all()}
+    for provider, (url, notes) in source_specs.items():
+        if provider not in sources:
+            source = PricingSourceORM(provider=provider, url=url, notes=notes)
+            session.add(source)
+            sources[provider] = source
+    await session.flush()
+
+    snapshot_specs: list[tuple[str, str, float, float]] = [
+        ("OpenAI", "gpt-5.5-large", 5.00, 30.00),
+        ("OpenAI", "gpt-5.4-medium", 2.50, 15.00),
+        ("OpenAI", "gpt-5.4-mini", 0.75, 4.50),
+        ("Anthropic", "claude-opus-4.8", 5.00, 25.00),
+        ("Anthropic", "claude-sonnet-4.6", 3.00, 15.00),
+        ("Anthropic", "claude-haiku-4.5", 1.00, 5.00),
+        ("Google", "gemini-2.5-pro", 1.25, 10.00),
+        ("Google", "gemini-2.5-flash", 0.30, 2.50),
+        ("Google", "gemini-2.5-flash-lite", 0.10, 0.40),
+        ("OpenRouter", "minimax/minimax-m3", 0.30, 1.20),
+        ("OpenRouter", "minimaxai/minimax-m3", 0.30, 1.20),
     ]
 
-    # Anthropic snapshots (per 1M tokens)
-    anthropic_snapshots = [
-        ModelPricingSnapshotORM(
-            pricing_source_id=anthropic_src.id,
-            model_name="claude-opus-4.8",
-            input_price_per_million=5.00,
-            output_price_per_million=25.00,
-        ),
-        ModelPricingSnapshotORM(
-            pricing_source_id=anthropic_src.id,
-            model_name="claude-sonnet-4.6",
-            input_price_per_million=3.00,
-            output_price_per_million=15.00,
-        ),
-        ModelPricingSnapshotORM(
-            pricing_source_id=anthropic_src.id,
-            model_name="claude-haiku-4.5",
-            input_price_per_million=1.00,
-            output_price_per_million=5.00,
-        ),
-    ]
-
-    # Google snapshots (per 1M tokens)
-    google_snapshots = [
-        ModelPricingSnapshotORM(
-            pricing_source_id=google_src.id,
-            model_name="gemini-2.5-pro",
-            input_price_per_million=1.25,
-            output_price_per_million=10.00,
-        ),
-        ModelPricingSnapshotORM(
-            pricing_source_id=google_src.id,
-            model_name="gemini-2.5-flash",
-            input_price_per_million=0.30,
-            output_price_per_million=2.50,
-        ),
-        ModelPricingSnapshotORM(
-            pricing_source_id=google_src.id,
-            model_name="gemini-2.5-flash-lite",
-            input_price_per_million=0.10,
-            output_price_per_million=0.40,
-        ),
-    ]
-
-    for snap in openai_snapshots + anthropic_snapshots + google_snapshots:
-        session.add(snap)
+    existing_result = await session.execute(select(ModelPricingSnapshotORM.model_name))
+    existing_models = {str(model_name) for (model_name,) in existing_result.all()}
+    for provider, model_name, input_price, output_price in snapshot_specs:
+        if model_name in existing_models:
+            continue
+        session.add(
+            ModelPricingSnapshotORM(
+                pricing_source_id=sources[provider].id,
+                model_name=model_name,
+                input_price_per_million=input_price,
+                output_price_per_million=output_price,
+            )
+        )
+        existing_models.add(model_name)
 
     await session.commit()
     logger.info("Pricing snapshots seeded successfully.")

@@ -65,6 +65,18 @@ class DraftPullRequest:
     draft: bool = True
 
 
+@dataclass(frozen=True)
+class CIRepairExecution:
+    """Observed result returned by a controlled CI repair executor."""
+
+    passed: bool
+    evidence_summary: str
+    checks_executed: list[str]
+    source_commit: str
+    target_commit: str
+    diff_hash: str
+
+
 class OperationalRepositoryConnector(Protocol):
     """Least-capability connector contract consumed by operational loops."""
 
@@ -96,14 +108,24 @@ class LocalRepositoryConnector:
         pull_requests: list[PullRequestRecord] | None = None,
         review_threads: list[ReviewThreadRecord] | None = None,
         check_runs: list[CheckRunRecord] | None = None,
+        repair_executor: Callable[[int | str, str], CIRepairExecution] | None = None,
         page_size: int = 50,
     ) -> None:
         self.issues = issues or []
         self.pull_requests = pull_requests or []
         self.review_threads = review_threads or []
         self.check_runs = check_runs or []
+        self.repair_executor = repair_executor
         self.page_size = page_size
         self.created_draft_prs: dict[str, DraftPullRequest] = {}
+
+    def execute_ci_repair(
+        self, build_id: int | str, failure_fingerprint: str
+    ) -> CIRepairExecution | None:
+        """Run the explicitly injected controlled executor used by tests/adapters."""
+        if self.repair_executor is None:
+            return None
+        return self.repair_executor(build_id, failure_fingerprint)
 
     def list_issues(self, cursor: str | None = None) -> Page:
         return self._page(self.issues, cursor)

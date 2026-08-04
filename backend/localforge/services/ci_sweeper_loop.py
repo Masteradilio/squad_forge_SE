@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from localforge.services.eval_corpus import LabeledEvent
 from localforge.services.operational_connector import (
     CheckRunRecord,
+    CIRepairExecution,
     OperationalRepositoryConnector,
     fetch_all_pages,
     sanitize_external_text,
@@ -41,7 +42,7 @@ class CIRepairResult(BaseModel):
     typed_evidence_summary: str | None = None
     requires_human_merge: bool = True
     test_weakened_or_deleted: bool = False  # Strictly MUST be False
-    status: str  # REPAIRED_DRAFT_PR, SKIPPED_FLAKE, ESCALATED_ENV, BREAKER_OPEN, FAILED
+    status: str  # REPAIRED_DRAFT_PR, REQUIRES_CONTROLLED_CONNECTOR, BREAKER_OPEN, FAILED
 
 
 class CISweeperLoopService:
@@ -145,6 +146,18 @@ class CISweeperLoopService:
                 status="SKIPPED_UNAUTHORIZED_CLASS",
             )
 
+        if connector is None:
+            return CIRepairResult(
+                build_id=classification.build_id,
+                failure_class=classification.failure_class,
+                attempts_used=0,
+                circuit_breaker_opened=False,
+                draft_pr_created=False,
+                requires_human_merge=True,
+                test_weakened_or_deleted=False,
+                status="REQUIRES_CONTROLLED_CONNECTOR",
+            )
+
         # Track attempts and enforce Circuit Breaker (V6-1102 regression)
         attempts = self.state_store.increment(
             "ci_sweeper_attempts",
@@ -168,23 +181,52 @@ class CISweeperLoopService:
                 status="BREAKER_OPEN",
             )
 
-        # Simulate isolated worktree repair & checker verification
-        evidence_summary = (
-            f"[Typed Evidence] Re-ran original failing test ({classification.failure_fingerprint}) "
-            "and adjacent regression suite in isolated worktree. "
-            f"Verification PASSED. Attempts: {attempts}/3."
-        )
-        draft_pr_title = f"fix(ci): repair regression for build {classification.build_id}"
-        draft_pr_created = True
-        if connector is not None:
-            draft_pr = connector.create_draft_pr(
-                title=draft_pr_title,
-                branch=f"localforge/ci-{classification.build_id}",
-                body=evidence_summary,
-                idempotency_key=classification.failure_fingerprint,
+        # Creating a PR is not a repair.  The connector must expose a real,
+        # controlled worktree executor that returns observed checks and hashes.
+        executor = getattr(connector, "execute_ci_repair", None)
+        if not callable(executor):
+            return CIRepairResult(
+                build_id=classification.build_id,
+                failure_class=classification.failure_class,
+                attempts_used=attempts,
+                requires_human_merge=True,
+                test_weakened_or_deleted=False,
+                status="REQUIRES_CONTROLLED_EXECUTOR",
             )
-            draft_pr_title = draft_pr.title
-            draft_pr_created = draft_pr.draft
+        execution = executor(classification.build_id, classification.failure_fingerprint)
+        if not isinstance(execution, CIRepairExecution) or not execution.passed:
+            return CIRepairResult(
+                build_id=classification.build_id,
+                failure_class=classification.failure_class,
+                attempts_used=attempts,
+                requires_human_merge=True,
+                test_weakened_or_deleted=False,
+                typed_evidence_summary=(
+                    execution.evidence_summary if isinstance(execution, CIRepairExecution) else None
+                ),
+                status="REPAIR_FAILED",
+            )
+        if not execution.checks_executed or not all(
+            value.strip() for value in (execution.source_commit, execution.target_commit, execution.diff_hash)
+        ):
+            return CIRepairResult(
+                build_id=classification.build_id,
+                failure_class=classification.failure_class,
+                attempts_used=attempts,
+                requires_human_merge=True,
+                test_weakened_or_deleted=False,
+                status="REQUIRES_OBSERVED_EVIDENCE",
+            )
+        evidence_summary = execution.evidence_summary
+        draft_pr_title = f"fix(ci): repair regression for build {classification.build_id}"
+        draft_pr = connector.create_draft_pr(
+            title=draft_pr_title,
+            branch=f"localforge/ci-{classification.build_id}",
+            body=evidence_summary,
+            idempotency_key=classification.failure_fingerprint,
+        )
+        draft_pr_title = draft_pr.title
+        draft_pr_created = draft_pr.draft
 
         return CIRepairResult(
             build_id=classification.build_id,

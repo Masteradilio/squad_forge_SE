@@ -60,18 +60,19 @@
     "Human review, merge, post-merge GitHub metadata, and final release asset validation remain required.",
     "Windows local validation was performed in the development checkout; Linux clean-install validation depends on remote CI."
   ],
-  "manifest_sha256": "1c4cce92e92b1880944936efd8507281b4b10281ae841ac0fec790dddd9533bb",
   "phase": "R1",
   "release_tag": "v6.2.0",
   "release_version": "6.2.0",
   "reviewed_pr_number": 14,
   "schema_version": "localforge.v6_2.candidate_manifest.v1",
-  "source_commit": "413507fbf3d920642b58424a490abe80f9adb862",
+  "source_commit": "d5be09e101437a45b67faa4683a82bd2c3cf7af3",
   "task_ids": [
     "V61C-100",
     "V61C-101",
     "V61C-102",
     "V61C-103"
   ],
-  "verdict": "EVIDENCE_READY"
+  "verdict": "EVIDENCE_READY",
+  "parent_commit": "9a9eafd96011688821d4771c81e5cf717c0890d9",
+  "manifest_sha256": "1ff82ca7b3959a503fb94d4a07c05345847f93ce68e5903bc00d53c363f4bdf1"
 }

@@ -1,23 +1,34 @@
 import asyncio
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 from localforge.api.app import create_app
-from localforge.core.config import load_config
+from localforge.chief_engineer.service import (
+    ChiefEngineerRepairPlan,
+    ChiefEngineerService,
+    _extract_visual_document,
+    _is_transient_gateway_error,
+    _normalize_visual_section_content,
+    _validate_visual_repair_plan,
+    _validate_visual_section,
+    _visual_section_models,
+)
+from localforge.core.config import LocalForgeConfig, load_config
 from localforge.llm import LLMError
 from localforge.llm.base import LLMHTTPError, LLMTimeoutError
-from localforge.llm.factory import build_chief_engineer_provider
 from localforge.llm.fallback import FallbackLLMProvider
 from localforge.llm.openrouter import OpenRouterProvider
 from localforge.models import domain
 from localforge.models.enums import ChiefEngineerCallReason, RunMode, RunStatus
+from localforge.pipeline.engine import RolePipelineEngine, _chief_model_sequence
 from localforge.storage import UnitOfWork
 from localforge.storage.bootstrap import bootstrap_database
 from localforge.storage.database import DatabaseManager
 
 
-def test_config_loads_openrouter_chief_engineer_from_env_file(tmp_path, monkeypatch):
+def test_legacy_vendor_keys_do_not_bypass_cloud_gateway(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     (tmp_path / ".env").write_text(
         "OPENROUTER_MODEL=minimax/minimax-m3\nOPENROUTER_API_KEY=test-secret-key\n",
@@ -26,14 +37,14 @@ def test_config_loads_openrouter_chief_engineer_from_env_file(tmp_path, monkeypa
 
     config = load_config()
 
-    assert config.chief_engineer.provider == "openrouter"
-    assert config.chief_engineer.model == "minimax/minimax-m3"
-    assert config.chief_engineer.api_key == "test-secret-key"
-    assert config.chief_engineer.base_url == "https://openrouter.ai/api/v1"
+    assert config.chief_engineer.provider == "omniroute"
+    assert config.chief_engineer.model == "auto/best-free"
+    assert config.chief_engineer.api_key is None
+    assert config.chief_engineer.base_url == "http://localhost:20128/v1"
     assert config.budgets.max_paid_calls == 30
 
 
-def test_config_prefers_nvidia_chief_engineer_from_env_file(tmp_path, monkeypatch):
+def test_legacy_nvidia_keys_do_not_bypass_cloud_gateway(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     (tmp_path / ".env").write_text(
         "NVIDIA_LLM_MODEL=minimax/minimax-m3\n"
@@ -45,12 +56,261 @@ def test_config_prefers_nvidia_chief_engineer_from_env_file(tmp_path, monkeypatc
 
     config = load_config()
 
-    assert config.chief_engineer.provider == "nvidia"
-    assert config.chief_engineer.model == "minimax/minimax-m3"
-    assert config.chief_engineer.api_key == "nvapi-secret"
-    assert config.chief_engineer.fallback_provider == "openrouter"
-    assert config.chief_engineer.fallback_api_key == "sk-or-fallback"
-    assert isinstance(build_chief_engineer_provider(config), FallbackLLMProvider)
+    assert config.chief_engineer.provider == "omniroute"
+    assert config.chief_engineer.model == "auto/best-free"
+    assert config.chief_engineer.api_key is None
+    assert config.chief_engineer.fallback_provider is None
+
+
+def test_visual_repair_rejects_css_only_patch() -> None:
+    contract = {"visual_required": True, "visual_actual_output": "app/index.html"}
+    css_patch = ChiefEngineerRepairPlan.model_validate(
+        {
+            "actions": [
+                {"kind": "append_content", "path": "app/index.html", "content": ".key {}"}
+            ]
+        }
+    )
+    with pytest.raises(ValueError, match="complete write_file"):
+        _validate_visual_repair_plan(css_patch, contract)
+
+    complete_html = "<html><body><style></style><script></script>" + ("x" * 6000)
+    valid_plan = ChiefEngineerRepairPlan.model_validate(
+        {
+            "actions": [
+                {"kind": "write_file", "path": "app/index.html", "content": complete_html}
+            ]
+        }
+    )
+    _validate_visual_repair_plan(valid_plan, contract)
+
+
+def test_extract_visual_document_discards_gateway_transport_noise() -> None:
+    raw = "Here is the file:\n```html\n<!doctype html><html><body><script>ok()</script></body></html>\n```\nDone."
+    assert _extract_visual_document(raw).startswith("<!doctype html>")
+    assert _extract_visual_document(raw).endswith("</html>")
+
+
+def test_visual_sections_reject_wrappers_and_omissions() -> None:
+    _validate_visual_section(
+        "css_layout", ".key{display:block}" + ("/*x*/" * 140), 600, 1200
+    )
+
+    with pytest.raises(ValueError, match="wrapper tag"):
+        _validate_visual_section(
+            "script_core", "<script>run()</script>" + ("/*x*/" * 200), 900, 1600
+        )
+    with pytest.raises(ValueError, match="omission marker"):
+        _validate_visual_section(
+            "body_shell", "placeholder" + ("<!--x-->" * 100), 600, 1200
+        )
+
+
+def test_visual_section_normalizer_removes_safe_model_wrappers() -> None:
+    assert _normalize_visual_section_content("script_core", "<script>run()</script>") == "run()"
+    assert _normalize_visual_section_content("css_layout", "<style>body{}</style>") == "body{}"
+
+
+def test_visual_section_normalizer_extracts_full_document_body_fragments() -> None:
+    document = (
+        "<html><body><main><header>LCD</header><section class='key-grid'>"
+        + "".join(f"<button data-key='k{i}'>K{i}</button>" for i in range(20))
+        + "</section></main></body></html>"
+    )
+    assert _normalize_visual_section_content("body_shell", document) == "<header>LCD</header>"
+    controls = _normalize_visual_section_content("body_controls_2", document)
+    assert "data-key='k5'" in controls
+    assert "data-key='k0'" not in controls
+
+
+def test_omniroute_visual_sections_use_equivalent_coding_alias() -> None:
+    assert _visual_section_models("omniroute", "auto/pro-vision") == [
+        "auto/best-free",
+        "auto/coding:free",
+        "oc/nemotron-3-ultra-free",
+        "oc/mimo-v2.5-free",
+        "oc/north-mini-code-free",
+    ]
+    assert _visual_section_models("omniroute", "auto/best-vision")[0] == "auto/best-free"
+    assert _visual_section_models("nvidia", "vendor/vision-model") == [
+        "vendor/vision-model"
+    ]
+
+
+def test_transient_gateway_error_classifier() -> None:
+    assert _is_transient_gateway_error(LLMHTTPError("limited", status_code=429))
+    assert _is_transient_gateway_error(LLMTimeoutError("timeout"))
+    assert not _is_transient_gateway_error(LLMHTTPError("unauthorized", status_code=401))
+
+
+@pytest.mark.anyio
+async def test_omniroute_transient_alias_failure_uses_next_alias_without_chief(
+    monkeypatch,
+):
+    config = LocalForgeConfig.model_validate(
+        {
+            "models": {"provider": "omniroute"},
+            "chief_engineer": {"provider": "omniroute", "model": "auto/best-reasoning"},
+        }
+    )
+    monkeypatch.setattr("localforge.pipeline.engine.load_config", lambda: config)
+
+    class LocalGateway:
+        provider_name = "omniroute"
+
+        def __init__(self):
+            self.models: list[str] = []
+
+        async def chat_completion(self, *args, **kwargs):
+            model = str(kwargs["model"])
+            self.models.append(model)
+            if model == "auto/best-fast":
+                raise LLMHTTPError("free pool exhausted", status_code=429)
+            return '{"actions": []}'
+
+    local = LocalGateway()
+    monkeypatch.setattr(
+        "localforge.pipeline.engine.OpenAICompatibleProvider",
+        lambda **kwargs: local,
+    )
+    monkeypatch.setattr(
+        "localforge.pipeline.engine.build_chief_engineer_provider",
+        lambda config: (_ for _ in ()).throw(AssertionError("Chief is not needed")),
+    )
+
+    engine = RolePipelineEngine.__new__(RolePipelineEngine)
+    engine.uow = MagicMock(model_calls=None)
+    engine._local_model_candidates = AsyncMock(
+        return_value=["auto/best-fast", "auto/best-coding"]
+    )
+
+    response, model = await engine._chat_completion_with_local_fallback(
+        prompt="return action JSON",
+        preferred_model="auto/best-fast",
+        timeout=180.0,
+    )
+
+    assert response == '{"actions": []}'
+    assert model == "auto/best-coding"
+    assert local.models == ["auto/best-fast", "auto/best-coding"]
+
+
+@pytest.mark.anyio
+async def test_omniroute_local_lane_tries_chief_alias_after_transient_primary_failure(
+    monkeypatch,
+):
+    config = LocalForgeConfig.model_validate(
+        {
+            "models": {"provider": "omniroute", "default_model": "auto/best-fast"},
+            "chief_engineer": {
+                "provider": "omniroute",
+                "model": "auto/best-reasoning",
+                "fallback_models": ["auto/best-coding", "auto/best-chat"],
+            },
+        }
+    )
+    monkeypatch.setattr("localforge.pipeline.engine.load_config", lambda: config)
+
+    class LocalGateway:
+        provider_name = "omniroute"
+
+        async def chat_completion(self, *args, **kwargs):
+            raise LLMHTTPError("free pool exhausted", status_code=429)
+
+    class ChiefGateway:
+        provider_name = "omniroute"
+
+        def __init__(self):
+            self.models: list[str] = []
+
+        async def chat_completion(self, *args, **kwargs):
+            model = str(kwargs["model"])
+            self.models.append(model)
+            if model == "auto/best-reasoning":
+                raise LLMTimeoutError("reasoning route timed out")
+            return '{"actions": []}'
+
+    chief = ChiefGateway()
+    monkeypatch.setattr(
+        "localforge.pipeline.engine.OpenAICompatibleProvider",
+        lambda **kwargs: LocalGateway(),
+    )
+    monkeypatch.setattr(
+        "localforge.pipeline.engine.build_chief_engineer_provider",
+        lambda config: chief,
+    )
+
+    engine = RolePipelineEngine.__new__(RolePipelineEngine)
+    engine.uow = MagicMock(model_calls=None)
+    engine._local_model_candidates = AsyncMock(return_value=["auto/best-fast"])
+
+    response, model = await engine._chat_completion_with_local_fallback(
+        prompt="return action JSON",
+        preferred_model="auto/best-fast",
+        timeout=180.0,
+    )
+
+    assert response == '{"actions": []}'
+    assert model == "auto/best-coding"
+    assert chief.models == ["auto/best-reasoning", "auto/best-coding"]
+
+
+@pytest.mark.anyio
+async def test_visual_repair_is_assembled_from_bounded_calls() -> None:
+    chunks = [
+        "*{box-sizing:border-box}body{margin:0}" + ("/*r*/" * 80),
+        ".calculator-shell{display:grid;min-height:80vh}" + ("/*c*/" * 71),
+        ".calculator-shell{max-width:900px;margin:auto}" + ("/*o*/" * 70),
+        ".calculator-shell{background:#ddd;border-radius:8px}" + ("/*s*/" * 70),
+        ".display{font:inherit}" + ("/*f*/" * 70),
+        ".key-grid{display:grid}.key{display:block}" + ("/*g*/" * 100),
+        ".key{font-weight:700}.key small{display:block}" + ("/*l*/" * 100),
+        ".display{box-shadow:inset 0 0 4px #000}" + ("/*z*/" * 70),
+        '<header><output id="display">0</output></header>' + ("<!--s-->" * 90),
+        '<button class="key" data-key="1">1</button>' * 8,
+        '<button class="key" data-key="2">2</button>' * 8,
+        '<button class="key" data-key="3">3</button>' * 8,
+        '<button class="key" data-key="4">4</button>' * 8,
+        '<button class="key" data-key="5">5</button>' * 8,
+        '<button class="key" data-key="6">6</button>' * 8,
+        "const stack=[]; function renderDisplay(){return stack[0] ?? 0;}"
+        + ("/* state behavior */" * 30),
+        "function enter(){stack.push(renderDisplay());} function add(){return 0;}"
+        + ("/* operation behavior */" * 30),
+        "document.querySelectorAll('.key').forEach((key)=>key.onclick=()=>{});"
+        + ("/* control behavior */" * 30),
+        "function advancedOperation(){return 0;}" + ("/* advanced behavior */" * 48),
+    ]
+    provider = MagicMock(provider_name="nvidia")
+    provider.chat_completion = AsyncMock(
+        side_effect=[json.dumps({"content": chunk}) for chunk in chunks]
+    )
+    uow = MagicMock()
+    uow.model_calls.ensure_budget = AsyncMock()
+    uow.model_calls.record_call = AsyncMock()
+
+    plan = await ChiefEngineerService(uow).plan_semantic_repair(
+        project_id=1,
+        run_id=2,
+        task_id=3,
+        task_contract={
+            "title": "Build calculator shell",
+            "visual_required": True,
+            "visual_actual_output": "app/index.html",
+            "allowed_files": ["app/index.html"],
+        },
+        changed_files_context="app/index.html is missing",
+        validation_output="visual output is missing",
+        provider=provider,
+        model="vision-model",
+    )
+
+    assert provider.chat_completion.await_count == 19
+    assert uow.model_calls.record_call.await_count == 19
+    assert plan.actions[0].kind == "write_file"
+    assert plan.actions[0].path == "app/index.html"
+    assert plan.actions[0].content.startswith("<!DOCTYPE html>")
+    assert all(chunk in plan.actions[0].content for chunk in chunks)
 
 
 def test_chief_engineer_provider_metadata_records_fallback_use():
@@ -85,6 +345,82 @@ async def test_chief_engineer_falls_back_on_primary_timeout():
     assert result == "ok"
     assert provider.used_fallback is True
     fallback.chat_completion.assert_awaited_once()
+
+
+@pytest.mark.anyio
+async def test_chief_engineer_falls_back_on_primary_model_not_found():
+    primary = MagicMock(provider_name="nvidia", default_model="primary-model")
+    primary.chat_completion = AsyncMock(
+        side_effect=LLMHTTPError("model not found", status_code=404)
+    )
+    fallback = MagicMock(provider_name="openrouter", default_model="fallback-model")
+    fallback.chat_completion = AsyncMock(return_value="ok")
+    provider = FallbackLLMProvider(
+        primary=primary,
+        fallback=fallback,
+        primary_timeout=30.0,
+    )
+
+    result = await provider.chat_completion([{"role": "user", "content": "work"}])
+
+    assert result == "ok"
+    assert provider.used_fallback is True
+    fallback.chat_completion.assert_awaited_once()
+
+
+def test_nvidia_chief_does_not_send_provider_aliases_to_primary():
+    provider = MagicMock(primary_provider_name="nvidia", provider_name="nvidia")
+
+    assert _chief_model_sequence(
+        provider,
+        "minimaxai/minimax-m3",
+        ["auto/pro-coding", "auto/best-coding"],
+    ) == ["minimaxai/minimax-m3"]
+
+
+@pytest.mark.anyio
+async def test_chief_engineer_keeps_multimodal_failure_on_primary_route():
+    primary = MagicMock(provider_name="nvidia", default_model="primary-model")
+    primary.chat_completion = AsyncMock(side_effect=LLMTimeoutError("vision timeout"))
+    fallback = MagicMock(provider_name="openrouter", default_model="fallback-model")
+    fallback.chat_completion = AsyncMock(return_value="should not receive an image")
+    provider = FallbackLLMProvider(
+        primary=primary,
+        fallback=fallback,
+        primary_timeout=30.0,
+    )
+
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "repair the visual layout"},
+                {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,test"}},
+            ],
+        }
+    ]
+    with pytest.raises(LLMTimeoutError, match="vision timeout"):
+        await provider.chat_completion(messages)
+
+    assert provider.used_fallback is False
+    fallback.chat_completion.assert_not_awaited()
+
+
+def test_chief_engineer_repair_plan_normalizes_singular_action():
+    plan = ChiefEngineerRepairPlan.model_validate(
+        {
+            "summary": "single action response",
+            "action": {
+                "type": "write_file",
+                "file": "app/index.html",
+                "text": "<html></html>",
+            },
+        }
+    )
+
+    assert len(plan.actions) == 1
+    assert plan.actions[0].kind == "write_file"
+    assert plan.actions[0].path == "app/index.html"
 
 
 @pytest.mark.anyio
@@ -202,8 +538,8 @@ def test_paid_model_ledger_records_and_enforces_run_budget(tmp_path):
 
 def test_api_exposes_chief_engineer_call_ledger_without_secret(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("OPENROUTER_MODEL", "minimax/minimax-m3")
-    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-hidden")
+    monkeypatch.setenv("LOCALFORGE_CHIEF_MODEL", "auto/best-reasoning")
+    monkeypatch.setenv("LOCALFORGE_CHIEF_API_KEY", "gateway-secret")
     manager = DatabaseManager(f"sqlite+aiosqlite:///{(tmp_path / 'phase32.db').as_posix()}")
     asyncio.run(bootstrap_database(manager))
 
@@ -237,7 +573,7 @@ def test_api_exposes_chief_engineer_call_ledger_without_secret(tmp_path, monkeyp
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["model"] == "minimax/minimax-m3"
+    assert payload["model"] == "auto/best-reasoning"
     assert payload["api_key_configured"] is True
     assert "sk-or-hidden" not in response.text
     assert payload["calls"][0]["reason"] == "FINAL_PR_REVIEW"

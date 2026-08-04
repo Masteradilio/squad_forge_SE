@@ -1,5 +1,7 @@
 import os
 
+import os
+
 from localforge.models.enums import RunMode
 from localforge.safety.runner import run_safe_command
 from localforge.storage import UnitOfWork
@@ -21,12 +23,27 @@ class GitAdapter:
         run_id: int | None = None,
         task_id: int | None = None,
         run_mode: RunMode = RunMode.INTERACTIVE,
+        repository_root: str | None = None,
     ):
         self.project_id = project_id
         self.uow = uow
         self.run_id = run_id
         self.task_id = task_id
         self.run_mode = run_mode
+        self.repository_root = repository_root
+
+    def _repository_relative_path(self, path: str) -> str:
+        """Translate host paths to paths visible in the Docker workspace."""
+        if not self.repository_root:
+            return path
+        root = os.path.realpath(os.path.abspath(self.repository_root))
+        target = os.path.realpath(os.path.abspath(path))
+        try:
+            if os.path.commonpath([root, target]) != root:
+                return path
+        except ValueError:
+            return path
+        return os.path.relpath(target, root).replace(os.sep, "/") or "."
 
     async def _execute_git(self, args: list[str], use_task_context: bool = True) -> str:
         """Helper routing the raw Git command list to the safety runner."""
@@ -106,20 +123,51 @@ class GitAdapter:
         # Check if the branch exists
         exists = await self.branch_exists(branch_name)
 
+        container_path = self._repository_relative_path(path)
         if exists:
-            args = ["worktree", "add", path, branch_name]
+            args = ["worktree", "add", container_path, branch_name]
         else:
-            args = ["worktree", "add", "-b", branch_name, path]
+            args = ["worktree", "add", "-b", branch_name, container_path]
             if base_branch:
                 args.append(base_branch)
 
         # Run on the main repository root (overriding task_id to None so
         # safety kernel uses main project root)
         await self._execute_git(args, use_task_context=False)
+        self._repair_host_worktree_metadata(path)
+
+    def _repair_host_worktree_metadata(self, path: str) -> None:
+        """Rewrite Docker-created worktree pointers with host-native paths."""
+        if not self.repository_root:
+            return
+        git_pointer = os.path.join(path, ".git")
+        if not os.path.isfile(git_pointer):
+            return
+        common_git_dir = os.path.join(self.repository_root, ".git")
+        if not os.path.isdir(common_git_dir):
+            return
+        try:
+            with open(git_pointer, encoding="utf-8") as handle:
+                pointer = handle.read().strip()
+            worktree_name = os.path.basename(pointer.replace("\\", "/"))
+            host_worktree_git = os.path.join(common_git_dir, "worktrees", worktree_name)
+            if not os.path.isdir(host_worktree_git):
+                return
+            host_pointer = os.path.abspath(host_worktree_git).replace("\\", "/")
+            with open(git_pointer, "w", encoding="utf-8", newline="\n") as handle:
+                handle.write(f"gitdir: {host_pointer}\n")
+            gitdir_file = os.path.join(host_worktree_git, "gitdir")
+            with open(gitdir_file, "w", encoding="utf-8", newline="\n") as handle:
+                handle.write(f"{os.path.abspath(git_pointer).replace('\\', '/') }\n")
+        except OSError:
+            return
 
     async def remove_worktree(self, path: str) -> None:
         """Remove a worktree registered directory from the main repository."""
-        await self._execute_git(["worktree", "remove", path, "--force"], use_task_context=False)
+        await self._execute_git(
+            ["worktree", "remove", self._repository_relative_path(path), "--force"],
+            use_task_context=False,
+        )
 
     async def diff(self, base_ref: str | None = None) -> str:
         """Show unstaged/staged diff changes or compare against base ref."""

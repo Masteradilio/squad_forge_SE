@@ -18,6 +18,7 @@ from localforge.services.audit import AuditService
 from localforge.services.execution import ExecutionService
 from localforge.services.project import ProjectService
 from localforge.services.task import TaskService
+from localforge.services.worktree import WorktreeService
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -373,6 +374,74 @@ async def test_pr_ready_rejects_stale_source_or_target_commit(db_session: AsyncS
         diff_hash="c" * 64,
     )
     with pytest.raises(ValueError, match="target_commit is stale"):
+        await task_service.mark_pr_ready(task.id, gate_evidence=evidence)
+
+
+@pytest.mark.asyncio
+async def test_pr_ready_rejects_commit_not_bound_to_worktree_manifest(db_session: AsyncSession):
+    proj_service = ProjectService(db_session)
+    task_service = TaskService(db_session)
+    exec_service = ExecutionService(db_session)
+    audit_service = AuditService(db_session)
+    worktree_service = WorktreeService(db_session)
+
+    proj = await proj_service.create_project(
+        domain.Project(name="LF Manifest Test", root_path="/t", default_branch="m")
+    )
+    assert proj.id is not None
+    task = await task_service.create_task(
+        domain.Task(
+            project_id=proj.id,
+            key="LF-103",
+            title="Task",
+            description="Desc",
+            metadata={"source_commit": "current-source", "target_commit": "current-target"},
+        )
+    )
+    assert task.id is not None
+    run = await exec_service.create_run(
+        domain.Run(project_id=proj.id, mode=RunMode.UNATTENDED, initiated_by="test")
+    )
+    assert run.id is not None
+    task_run = await task_service.create_task_run(
+        domain.TaskRun(
+            run_id=run.id,
+            task_id=task.id,
+            worktree_path="/tmp/lf-103",
+            branch_name="localforge/lf-103",
+        )
+    )
+    assert task_run.id is not None
+    assert task_run.worktree_path is not None
+    assert task_run.branch_name is not None
+    await worktree_service.create_attempt_manifest(
+        project_id=proj.id,
+        task_id=task.id,
+        task_run_id=task_run.id,
+        worktree_path=task_run.worktree_path,
+        branch_name=task_run.branch_name,
+        source_commit="manifest-source-drift",
+        owner_agent_id="coder",
+    )
+    artifact = await audit_service.create_artifact(
+        domain.Artifact(
+            task_run_id=task_run.id,
+            type=ArtifactType.PR,
+            path=".localforge/artifacts/runs/1/tasks/lf-103/pr.md",
+            content_hash="d" * 64,
+        )
+    )
+    handoff = await _create_pr_ready_handoff(exec_service, task_run.id)
+    evidence = _pr_ready_evidence(
+        task_run=task_run,
+        handoff=handoff,
+        artifact_path=artifact.path,
+        source_commit="current-source",
+        target_commit="current-target",
+        diff_hash="d" * 64,
+    )
+
+    with pytest.raises(ValueError, match="does not match worktree manifest"):
         await task_service.mark_pr_ready(task.id, gate_evidence=evidence)
 
 

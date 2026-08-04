@@ -1,3 +1,4 @@
+import os
 from dataclasses import dataclass
 
 from localforge.models.enums import (
@@ -5,6 +6,7 @@ from localforge.models.enums import (
     AutonomyEnforcementResult,
     AutonomyLevel,
 )
+from localforge.safety.authority_matrix import AgentAuthorityMatrix
 from localforge.safety.kernel import ActionRequest, SafetyDecision, SafetyKernel
 from localforge.services.autonomy import AutonomyService
 from localforge.storage import UnitOfWork
@@ -23,6 +25,7 @@ class ActionGateway:
     def __init__(self, uow: UnitOfWork):
         self.uow = uow
         self.autonomy = AutonomyService()
+        self.authority = AgentAuthorityMatrix()
 
     async def evaluate(
         self,
@@ -32,6 +35,20 @@ class ActionGateway:
         autonomy_level: AutonomyLevel,
     ) -> ActionGatewayDecision:
         target = self._target_for(request)
+        if request.actor_role and request.kind in (ActionKind.READ_FILE, ActionKind.WRITE_FILE):
+            if target:
+                target = os.path.relpath(target, project_root).replace("\\", "/")
+            authorized, authority_reason = self.authority.validate_action_authority(
+                request.actor_role,
+                target or "",
+                is_write=request.kind == ActionKind.WRITE_FILE,
+            )
+            if not authorized:
+                return ActionGatewayDecision(
+                    decision=SafetyDecision.DENY,
+                    reason=authority_reason,
+                    autonomy_result=AutonomyEnforcementResult.DENIED_ROLE_SPOOFING,
+                )
         allowed, autonomy_result, autonomy_reason = self.autonomy.evaluate_action(
             autonomy_level,
             request.kind,

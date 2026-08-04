@@ -2,7 +2,12 @@ import os
 
 import git
 import pytest
-from localforge.gitops import GitAdapter, WorktreeManager, get_task_branch_name
+from localforge.gitops import (
+    GitAdapter,
+    WorktreeManager,
+    get_task_branch_name,
+    get_task_run_branch_name,
+)
 from localforge.models import domain
 from localforge.models.enums import AgentRole, ArtifactType, HandoffKind, TaskStatus
 from localforge.services.execution import ExecutionService
@@ -19,6 +24,15 @@ def test_git_branch_naming():
     branch_long = get_task_branch_name("LF-02", long_title)
     assert len(branch_long) <= 50  # localforge/lf-02- + 30 chars slug
     assert branch_long.startswith("localforge/lf-02-")
+
+
+def test_run_branch_naming_is_workspace_scoped(tmp_path):
+    first = get_task_run_branch_name("LF-01", "Shared task", str(tmp_path / "one"), 1)
+    second = get_task_run_branch_name("LF-01", "Shared task", str(tmp_path / "two"), 1)
+
+    assert first != second
+    assert first.endswith("-run-1")
+    assert second.endswith("-run-1")
 
 
 @pytest.fixture

@@ -33,18 +33,19 @@
     "Per-node resources and typed dependency evidence remain open.",
     "Deep Swarm benchmark gate remains required before production promotion."
   ],
-  "manifest_sha256": "4d2bfc0bbb9e04141ed8d4d8569985c3d0f52867cf937a90033fefaff43cf348",
   "phase": "R7",
   "release_tag": "v6.2.0",
   "release_version": "6.2.0",
   "reviewed_pr_number": 14,
   "schema_version": "localforge.v6_2.candidate_manifest.v1",
-  "source_commit": "af14dd7",
+  "source_commit": "d5be09e101437a45b67faa4683a82bd2c3cf7af3",
   "task_ids": [
     "V61C-700",
     "V61C-701",
     "V61C-702",
     "V61C-703"
   ],
-  "verdict": "EVIDENCE_READY"
+  "verdict": "EVIDENCE_READY",
+  "parent_commit": "9a9eafd96011688821d4771c81e5cf717c0890d9",
+  "manifest_sha256": "5c6a8485dc36bd496020f3b99d14e3c52867e05c1e2a137db079c9f512d1a142"
 }

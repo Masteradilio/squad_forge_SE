@@ -1,0 +1,12 @@
+{
+  "phase": "R13",
+  "scope": "real HP12C backend E2E diagnostic",
+  "verdict": "BLOCKED_NEEDS_HUMAN_REVIEW",
+  "workspace": "benchmarks/workspaces/hp12c-e2e-r20",
+  "database": "benchmarks/hp12c-e2e-v21.db",
+  "chief_engineer_ledger_calls": 4,
+  "provider_error": "HTTP 402 Insufficient credits",
+  "all_tasks_pr_ready": false,
+  "product_acceptance": false,
+  "next_gate": "fund OpenRouter and rerun clean real E2E"
+}

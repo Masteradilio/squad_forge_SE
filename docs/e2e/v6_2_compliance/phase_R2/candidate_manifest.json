@@ -29,18 +29,19 @@
     "Candidate evidence is not final release acceptance.",
     "Live GitHub metadata querying, branch protection enforcement, final release assets, and post-merge validation remain required."
   ],
-  "manifest_sha256": "cab43ad8aa1e06028465aefd91e7cca6446b3affa00700ea947c4f377b43a269",
   "phase": "R2",
   "release_tag": "v6.2.0",
   "release_version": "6.2.0",
   "reviewed_pr_number": 14,
   "schema_version": "localforge.v6_2.candidate_manifest.v1",
-  "source_commit": "6f421ef05e337abf9852aefa612ca899c4f9ca26",
+  "source_commit": "d5be09e101437a45b67faa4683a82bd2c3cf7af3",
   "task_ids": [
     "V61C-200",
     "V61C-201",
     "V61C-202",
     "V61C-203"
   ],
-  "verdict": "EVIDENCE_READY"
+  "verdict": "EVIDENCE_READY",
+  "parent_commit": "9a9eafd96011688821d4771c81e5cf717c0890d9",
+  "manifest_sha256": "bc2a4eecdf49d70cfdfdbe4a0a56ecd119ae80830db4cc085ab2c6592c34257f"
 }

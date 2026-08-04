@@ -1,6 +1,8 @@
 import asyncio
 import os
 import shutil
+import signal
+import subprocess
 
 from localforge.safety.command_validator import command_to_argv
 from localforge.sandbox.base import BaseSandbox
@@ -25,11 +27,21 @@ class LocalSandbox(BaseSandbox):
             raise RuntimeError("Sandbox is not running.")
 
         argv = command_to_argv(cmd)
+        creationflags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
+        child_env = os.environ.copy()
+        # Generated Python tests and source files are UTF-8. Keep local
+        # sandbox subprocesses deterministic on Windows, where the ambient
+        # code page is otherwise commonly cp1252.
+        child_env.setdefault("PYTHONUTF8", "1")
+        child_env.setdefault("PYTHONIOENCODING", "utf-8")
         proc = await asyncio.create_subprocess_exec(
             *argv,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             cwd=self.worktree_path,
+            env=child_env,
+            start_new_session=os.name != "nt",
+            creationflags=creationflags,
         )
 
         try:
@@ -49,9 +61,19 @@ class LocalSandbox(BaseSandbox):
     async def _terminate_process(self, proc: asyncio.subprocess.Process) -> None:
         if proc.returncode is None:
             try:
-                proc.kill()
+                if os.name == "nt":
+                    proc.send_signal(signal.CTRL_BREAK_EVENT)
+                else:
+                    killpg = getattr(os, "killpg", None)
+                    sigkill = getattr(signal, "SIGKILL", 9)
+                    if callable(killpg):
+                        killpg(proc.pid, sigkill)
+                    else:
+                        proc.kill()
             except ProcessLookupError:
                 pass
+            except OSError:
+                proc.kill()
         try:
             await asyncio.wait_for(asyncio.shield(proc.wait()), timeout=5.0)
         except (TimeoutError, ProcessLookupError):

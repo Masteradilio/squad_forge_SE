@@ -218,7 +218,7 @@ async def test_import_prd_creates_architecture_contract_and_task_packets(db_mana
     async with UnitOfWork(db_manager) as uow:
         assert uow.projects is not None
         project = await uow.projects.create_project(
-            domain.Project(name="Contract", root_path=str(tmp_path), default_branch="main")
+        domain.Project(name="Contract", root_path=str(tmp_path), default_branch="main")
         )
         assert project.id is not None
 
@@ -292,6 +292,102 @@ def test_architecture_contract_uses_explicit_domain_neutral_task_packets():
     )
 
 
+def test_keyboard_mapping_is_not_misclassified_as_visual_work() -> None:
+    from localforge.prd.contracts import build_architecture_contract
+    from localforge.prd.schemas import ExtractedPlan, ExtractedTask
+
+    title = "Map physical keyboard keys to calculator buttons"
+    contract = build_architecture_contract(
+        ExtractedPlan(
+            tasks=[
+                ExtractedTask(
+                    title=title,
+                    description="Wire keyboard events to existing controls.",
+                    expected_files=["app/index.html", "tests/test_keyboard.py"],
+                )
+            ]
+        )
+    ).task_contracts[title]
+
+    assert contract.visual_required is False
+    assert contract.seniority_class == "local_assisted"
+
+
+def test_web_prd_without_paths_uses_shared_product_surface():
+    from localforge.prd.contracts import build_architecture_contract
+    from localforge.prd.schemas import ExtractedPlan, ExtractedTask
+
+    contract = build_architecture_contract(
+        ExtractedPlan(
+            tasks=[
+                ExtractedTask(title="Design calculator keypad", description=""),
+                ExtractedTask(title="Implement RPN stack registers", description=""),
+            ]
+        )
+    )
+
+    assert contract.task_contracts["Implement RPN stack registers"].allowed_files == [
+        "app/index.html",
+        "tests/test_implement_rpn_stack_registers.py",
+    ]
+    assert contract.task_contracts["Design calculator keypad"].visual_required is True
+    assert contract.task_contracts["Design calculator keypad"].seniority_class == "chief_led"
+    assert contract.task_contracts["Implement RPN stack registers"].visual_required is False
+    assert (
+        contract.task_contracts["Implement RPN stack registers"].seniority_class
+        == "local_assisted"
+    )
+
+
+def test_visual_web_tasks_receive_reference_contract_from_workspace(tmp_path):
+    from localforge.prd.contracts import build_architecture_contract
+    from localforge.prd.schemas import ExtractedPlan, ExtractedTask
+
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "hp12c_platinum_design_target.png").write_bytes(b"reference")
+    title = "Design the calculator chassis and keypad layout"
+
+    contract = build_architecture_contract(
+        ExtractedPlan(
+            tasks=[ExtractedTask(title=title, description="", expected_files=["app/index.html"])]
+        ),
+        project_root=tmp_path,
+    ).task_contracts[title]
+
+    assert contract.visual_required is True
+    assert contract.visual_reference_image == "docs/hp12c_platinum_design_target.png"
+    assert contract.visual_actual_output == "app/index.html"
+    assert contract.visual_viewport == "1280x720"
+
+
+def test_visual_contract_honors_metadata_and_rejects_escape_paths():
+    from localforge.prd.contracts import build_architecture_contract
+    from localforge.prd.schemas import ExtractedPlan, ExtractedTask
+
+    title = "Implement the product surface"
+    contract = build_architecture_contract(
+        ExtractedPlan(
+            tasks=[
+                ExtractedTask(
+                    title=title,
+                    description="",
+                    expected_files=["app/index.html"],
+                    metadata={
+                        "visual_required": True,
+                        "visual_reference_image": "../outside.png",
+                        "visual_actual_output": "C:/outside.html",
+                    },
+                )
+            ]
+        )
+    ).task_contracts[title]
+
+    assert contract.visual_required is True
+    assert contract.visual_reference_image is None
+    assert contract.visual_actual_output is None
+
+
 @pytest.mark.anyio
 async def test_import_prd_persists_explicit_contract_dependencies(db_manager, tmp_path):
     prd_path = tmp_path / "PRD.md"
@@ -359,7 +455,7 @@ async def test_import_prd_appends_integration_task_depending_on_all_preceding_ta
         )
         assert project.id is not None
 
-    imported = await import_prd(prd_path, project.id, db_manager=db_manager, dry_run=False)
+    await import_prd(prd_path, project.id, db_manager=db_manager, dry_run=False)
 
     async with UnitOfWork(db_manager) as uow:
         assert uow.tasks is not None

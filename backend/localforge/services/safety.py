@@ -58,6 +58,15 @@ class SafetyService:
         )
         return [orm_obj.to_domain() for orm_obj in result.scalars().all()]
 
+    async def list_approvals_for_project(self, project_id: int) -> list[domain.ActionApproval]:
+        """List the complete approval history for a project."""
+        result = await self.session.execute(
+            select(ActionApprovalORM)
+            .where(ActionApprovalORM.project_id == project_id)
+            .order_by(ActionApprovalORM.created_at.desc())
+        )
+        return [orm_obj.to_domain() for orm_obj in result.scalars().all()]
+
     async def list_approvals_for_run(self, run_id: int) -> list[domain.ActionApproval]:
         """List all action approvals generated during a specific run."""
         result = await self.session.execute(

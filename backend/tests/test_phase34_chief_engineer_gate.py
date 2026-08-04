@@ -2,7 +2,11 @@ import asyncio
 import json
 
 import pytest
-from localforge.chief_engineer.service import ChiefEngineerRepairPlan, ChiefEngineerService
+from localforge.chief_engineer.service import (
+    ChiefEngineerRepairPlan,
+    ChiefEngineerService,
+    _estimate_message_tokens,
+)
 from localforge.llm.fake import FakeLLMProvider
 from localforge.models import domain
 from localforge.models.enums import ChiefEngineerCallReason, RunMode, RunStatus
@@ -94,6 +98,23 @@ def test_chief_engineer_repair_plan_rejects_empty_actions():
                 "risk_notes": [],
             }
         )
+
+
+def test_multimodal_budget_estimate_does_not_count_base64_as_text():
+    image_data_url = "data:image/jpeg;base64," + ("A" * 500_000)
+    estimate = _estimate_message_tokens(
+        [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "repair the visual layout"},
+                    {"type": "image_url", "image_url": {"url": image_data_url}},
+                ],
+            }
+        ]
+    )
+
+    assert estimate < 10_000
 
 
 def test_chief_engineer_semantic_repair_records_paid_call(tmp_path):

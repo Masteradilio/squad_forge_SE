@@ -1,6 +1,6 @@
 import re
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, tzinfo
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from localforge.models import domain
@@ -192,7 +192,12 @@ def _cron_matches(value: int, field: str) -> bool:
     return value == int(field)
 
 
-def _timezone(name: str) -> ZoneInfo:
+def _timezone(name: str) -> tzinfo:
+    if name.upper() == "UTC":
+        # UTC is part of the standard library. Keep the default schedule
+        # usable in minimal Windows environments without an installed tzdata
+        # wheel; named zones still require the packaged timezone database.
+        return UTC
     try:
         return ZoneInfo(name)
     except ZoneInfoNotFoundError as exc:

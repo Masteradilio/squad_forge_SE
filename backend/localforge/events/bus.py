@@ -59,17 +59,22 @@ class EventBus:
     def __init__(self, *, db_manager: DatabaseManager):
         self.db_manager = db_manager
         self._subscribers: dict[int, set[asyncio.Queue[LifecycleEvent]]] = {}
+        self._subscriber_loops: dict[asyncio.Queue[LifecycleEvent], asyncio.AbstractEventLoop] = {}
         self._next_memory_id = 1_000_000
 
     def subscribe(self, project_id: int) -> asyncio.Queue[LifecycleEvent]:
         queue: asyncio.Queue[LifecycleEvent] = asyncio.Queue(maxsize=100)
         self._subscribers.setdefault(project_id, set()).add(queue)
+        self._subscriber_loops[queue] = asyncio.get_running_loop()
         return queue
 
     def unsubscribe(self, project_id: int, queue: asyncio.Queue[LifecycleEvent]) -> None:
         queues = self._subscribers.get(project_id)
         if queues:
             queues.discard(queue)
+            if not queues:
+                self._subscribers.pop(project_id, None)
+        self._subscriber_loops.pop(queue, None)
 
     async def publish(self, event: LifecycleEvent) -> LifecycleEvent:
         if event.id is None:
@@ -87,6 +92,7 @@ class EventBus:
         # Stream event to Redis Pub/Sub channel if available
         try:
             import json
+
             from localforge.services.redis_manager import redis_manager
             if redis_manager.is_available:
                 channel = f"events:project:{event.project_id}"
@@ -96,14 +102,25 @@ class EventBus:
         except Exception:
             pass
 
+        compacted = event.compact()
+        current_loop = asyncio.get_running_loop()
         for queue in list(self._subscribers.get(event.project_id, set())):
-            if queue.full():
-                try:
-                    queue.get_nowait()
-                except asyncio.QueueEmpty:
-                    pass
-            queue.put_nowait(event.compact())
+            target_loop = self._subscriber_loops.get(queue)
+            if target_loop is not None and target_loop is not current_loop:
+                if target_loop.is_running():
+                    target_loop.call_soon_threadsafe(self._offer, queue, compacted)
+                continue
+            self._offer(queue, compacted)
         return event
+
+    @staticmethod
+    def _offer(queue: asyncio.Queue[LifecycleEvent], event: LifecycleEvent) -> None:
+        if queue.full():
+            try:
+                queue.get_nowait()
+            except asyncio.QueueEmpty:
+                pass
+        queue.put_nowait(event)
 
     async def replay(
         self,

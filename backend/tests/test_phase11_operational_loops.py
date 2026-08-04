@@ -21,6 +21,7 @@ from localforge.services.eval_corpus import (
 )
 from localforge.services.operational_connector import (
     CheckRunRecord,
+    CIRepairExecution,
     IssueRecord,
     LocalRepositoryConnector,
     PullRequestRecord,
@@ -147,7 +148,7 @@ def test_operational_loop_idempotency_survives_service_restart(tmp_path) -> None
     assert daily_second.run_cheap_triage([issue_event])[0].acting_on is True
 
     babysitter_first = PRBabysitterLoopService(OperationalIdempotencyStore(state_path))
-    assert babysitter_first.process_pr_event(review_event).action_type == "SMALL_FIX_WORKTREE"
+    assert babysitter_first.process_pr_event(review_event).action_type == "SMALL_FIX_PLANNED"
     babysitter_second = PRBabysitterLoopService(OperationalIdempotencyStore(state_path))
     duplicate_action = babysitter_second.process_pr_event(review_event)
     assert duplicate_action.action_type == "IGNORE_DUPLICATE"
@@ -155,9 +156,13 @@ def test_operational_loop_idempotency_survives_service_restart(tmp_path) -> None
 
     sweeper_first = CISweeperLoopService(OperationalIdempotencyStore(state_path))
     classification = sweeper_first.classify_ci_event(ci_event)
-    assert sweeper_first.execute_repair(classification).attempts_used == 1
+    blocked = sweeper_first.execute_repair(classification)
+    assert blocked.status == "REQUIRES_CONTROLLED_CONNECTOR"
+    assert blocked.attempts_used == 0
+    connector = LocalRepositoryConnector()
+    assert sweeper_first.execute_repair(classification, connector).attempts_used == 1
     sweeper_second = CISweeperLoopService(OperationalIdempotencyStore(state_path))
-    assert sweeper_second.execute_repair(classification).attempts_used == 2
+    assert sweeper_second.execute_repair(classification, connector).attempts_used == 2
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -203,22 +208,33 @@ def test_ci_sweeper_repair_execution_and_circuit_breaker() -> None:
     assert repair_flake.status == "SKIPPED_UNAUTHORIZED_CLASS"
     assert repair_flake.draft_pr_created is False
 
-    # CODE_REGRESSION -> REPAIRED_DRAFT_PR (attempts 1 to 3)
+    # CODE_REGRESSION without a controlled connector cannot claim repair.
     code_event = next(e for e in corpus_svc.list_events() if e.category == "CI_CODE_REGRESSION")
     code_class = sweeper_svc.classify_ci_event(code_event)
 
     r1 = sweeper_svc.execute_repair(code_class)
-    assert r1.status == "REPAIRED_DRAFT_PR"
-    assert r1.draft_pr_created is True
+    assert r1.status == "REQUIRES_CONTROLLED_CONNECTOR"
+    assert r1.draft_pr_created is False
     assert r1.requires_human_merge is True
     assert r1.test_weakened_or_deleted is False  # Never weaken tests!
 
-    sweeper_svc.execute_repair(code_class)
-    r3 = sweeper_svc.execute_repair(code_class)
-    assert r3.attempts_used == 3
+    connector = LocalRepositoryConnector(
+        repair_executor=lambda build_id, fingerprint: CIRepairExecution(
+            passed=True,
+            evidence_summary=f"observed repair for {fingerprint}",
+            checks_executed=["pytest"],
+            source_commit="source-commit",
+            target_commit="target-commit",
+            diff_hash="a" * 64,
+        )
+    )
+    sweeper_svc.execute_repair(code_class, connector)
+    r3 = sweeper_svc.execute_repair(code_class, connector)
+    assert r3.attempts_used == 2
 
     # Attempt 4 on same failure fingerprint -> BREAKER_OPEN
-    r4 = sweeper_svc.execute_repair(code_class)
+    sweeper_svc.execute_repair(code_class, connector)
+    r4 = sweeper_svc.execute_repair(code_class, connector)
     assert r4.status == "BREAKER_OPEN"
     assert r4.circuit_breaker_opened is True
 
@@ -235,7 +251,15 @@ def test_ci_sweeper_uses_connector_checks_and_draft_pr_idempotency() -> None:
                 failed_test="tests/test_app.py::test_login",
                 log_excerpt="AssertionError",
             )
-        ]
+        ],
+        repair_executor=lambda build_id, fingerprint: CIRepairExecution(
+            passed=True,
+            evidence_summary="observed pytest repair passed",
+            checks_executed=["pytest"],
+            source_commit="source-commit",
+            target_commit="target-commit",
+            diff_hash="b" * 64,
+        ),
     )
     sweeper_svc = CISweeperLoopService()
 
@@ -268,7 +292,7 @@ def test_pr_babysitter_deduplication_and_isolated_worktree_fix() -> None:
 
     # First processing -> SMALL_FIX_WORKTREE
     action1 = babysitter_svc.process_pr_event(review_event, upstream_changed=False)
-    assert action1.action_type == "SMALL_FIX_WORKTREE"
+    assert action1.action_type == "SMALL_FIX_PLANNED"
     assert action1.target_file == "backend/auth.py"
     assert action1.target_line == 45
     assert action1.approved_self_pr is False
@@ -323,7 +347,7 @@ def test_pr_babysitter_uses_connector_review_threads_and_pr_heads() -> None:
         known_pr_heads={7: "old-sha"},
     )
 
-    assert action.action_type == "SMALL_FIX_WORKTREE"
+    assert action.action_type == "SMALL_FIX_PLANNED"
     assert action.target_file == "backend/api.py"
     assert action.evidence_invalidated is True
     assert action.approved_self_pr is False
@@ -344,7 +368,7 @@ def test_strategy_comparator_matrix_and_gates() -> None:
 
     # Verify Light Swarm strategy gate
     light_swarm_gate = report.gate_results["LOOP_LIGHT_SWARM"]
-    assert light_swarm_gate.verdict == "ACCEPTED"
+    assert light_swarm_gate.verdict == "PARTIAL"
     assert light_swarm_gate.light_swarm_improved_pr_ready is True
     assert light_swarm_gate.auto_merges_count == 0
 
@@ -354,6 +378,8 @@ def test_strategy_comparator_matrix_and_gates() -> None:
 
     # Verify recommendations
     assert report.recommended_strategy_per_loop["L2_CI_SWEEPER"] == "LOOP_LIGHT_SWARM"
+    assert report.fair_comparison_passed is False
+    assert any("non-observed measurement source" in reason for reason in report.comparison_reasons)
 
 
 def test_strategy_comparator_metrics_change_with_observed_labels() -> None:
@@ -470,7 +496,7 @@ def test_daily_triage_zero_external_mutations() -> None:
 
 
 def test_ci_sweeper_isolated_worktree_repair() -> None:
-    """V61C-802: CI sweeper performs allowlisted repair and creates draft PR through connector."""
+    """V61C-802: Provider connectors without a repair executor fail closed."""
     from localforge.connectors.github_connector import GitHubRepositoryConnector
 
     connector = GitHubRepositoryConnector()
@@ -489,8 +515,8 @@ def test_ci_sweeper_isolated_worktree_repair() -> None:
     )
 
     res = svc.execute_repair(classif, connector=connector)
-    assert res.status == "REPAIRED_DRAFT_PR"
-    assert res.draft_pr_created is True
+    assert res.status == "REQUIRES_CONTROLLED_EXECUTOR"
+    assert res.draft_pr_created is False
     assert res.test_weakened_or_deleted is False
     assert res.requires_human_merge is True
 
@@ -510,7 +536,7 @@ def test_pr_babysitter_exact_line_mapping_and_conflict_escalation() -> None:
             required_approval="HUMAN_MERGE",
         )
     )
-    assert comment_action.action_type == "SMALL_FIX_WORKTREE"
+    assert comment_action.action_type == "SMALL_FIX_PLANNED"
     assert comment_action.target_file == "main.py"
     assert comment_action.target_line == 42
     assert comment_action.approved_self_pr is False

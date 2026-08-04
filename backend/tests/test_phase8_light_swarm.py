@@ -20,6 +20,7 @@ from localforge.models.enums import (
 )
 from localforge.services.light_swarm import LightSwarmService
 from localforge.storage import UnitOfWork
+from localforge.storage.artifacts import ArtifactStore
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Helper fixtures
@@ -608,7 +609,8 @@ async def test_light_swarm_recover_swarm_run_on_restart(db_manager) -> None:
 
 @pytest.mark.asyncio
 async def test_light_swarm_canonical_pr_ready_evidence_submission(db_manager) -> None:
-    """V61C-603: Complete swarm evidence bundle is submitted to TaskService.mark_pr_ready."""
+    """V61C-603: Only observed maker/checker evidence can reach PR_READY."""
+    from localforge.models.enums import ArtifactType
     from localforge.services.light_swarm_aggregation import aggregate_and_submit_pr_ready
 
     async with UnitOfWork(db_manager) as uow:
@@ -622,7 +624,21 @@ async def test_light_swarm_canonical_pr_ready_evidence_submission(db_manager) ->
         task = await uow.tasks.create_task(
             domain.Task(project_id=proj.id, key="SW-11", title="R3 Gate", description="desc")
         )
-        task_run = await uow.tasks.create_task_run(domain.TaskRun(task_id=task.id, run_id=1))
+        task_run = await uow.tasks.create_task_run(
+            domain.TaskRun(
+                task_id=task.id,
+                run_id=1,
+                worktree_path="E:/tmp/r3_gate",
+                branch_name="localforge/sw-11",
+            )
+        )
+        assert task.id is not None and task_run.id is not None
+        task.metadata = {
+            "source_commit": "source-commit",
+            "target_commit": "target-commit",
+            "changed_files": ["app.py"],
+        }
+        await uow.tasks.update_task(task)
 
         nodes = [
             _make_node("impl", SwarmNodeType.IMPLEMENT),
@@ -641,6 +657,51 @@ async def test_light_swarm_canonical_pr_ready_evidence_submission(db_manager) ->
 
         await uow.light_swarm.complete_node(run.id, "impl", worker_agent_id="maker-agent-1")
         await uow.light_swarm.complete_node(run.id, "verify", worker_agent_id="checker-agent-2")
+
+        assert uow.audits is not None and uow.typed_handoffs is not None
+        diff_artifact = await ArtifactStore(uow).write_artifact(
+            project_root=proj.root_path,
+            task_run_id=task_run.id,
+            task_key=task.key,
+            run_id=1,
+            filename="diff.patch",
+            content="diff --git a/app.py b/app.py\n+print('observed')\n",
+            summary="Observed patch diff",
+        )
+        task.metadata["diff_hash"] = diff_artifact.content_hash
+        await uow.tasks.update_task(task)
+        await uow.audits.create_artifact(
+            domain.Artifact(
+                task_run_id=task_run.id,
+                type=ArtifactType.PR,
+                path=".localforge/artifacts/sw-11/pr.md",
+                content_hash="c" * 64,
+            )
+        )
+        await uow.typed_handoffs.create_artifact(
+            project_id=proj.id,
+            task_run_id=task_run.id,
+            producer_agent_id="maker-agent-1",
+            consumer_agent_id="checker-agent-2",
+            summary="Observed patch",
+            artifact_type=TypedArtifactType.PATCH,
+            evidence_json={"execution_observed": True},
+            changed_files=["app.py"],
+            tests_executed=[],
+            validation_results_json={"status": "PASSED", "execution_observed": True},
+        )
+        await uow.typed_handoffs.create_artifact(
+            project_id=proj.id,
+            task_run_id=task_run.id,
+            producer_agent_id="checker-agent-2",
+            consumer_agent_id="safety-auditor",
+            summary="Observed verification",
+            artifact_type=TypedArtifactType.VERIFICATION,
+            evidence_json={"execution_observed": True},
+            changed_files=["app.py"],
+            tests_executed=["pytest"],
+            validation_results_json={"status": "PASSED", "execution_observed": True},
+        )
 
         updated_task = await aggregate_and_submit_pr_ready(run.id, uow)
         assert updated_task is not None

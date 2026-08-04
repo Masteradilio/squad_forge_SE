@@ -274,7 +274,7 @@ async def test_local_model_call_is_recorded_in_ledger(db_session):
 
     await engine._record_local_model_call(
         task=task,
-        model="granite4.1:8b",
+        model="auto/best-fast",
         reason=ChiefEngineerCallReason.TASK_RISK_CLASSIFICATION,
         prompt="make a tiny change",
         response='{"actions":[]}',
@@ -282,7 +282,7 @@ async def test_local_model_call_is_recorded_in_ledger(db_session):
 
     calls = await engine.uow.model_calls.list_calls(project_id=1, run_id=20)
     assert len(calls) == 1
-    assert calls[0].provider == "ollama"
+    assert calls[0].provider == "omniroute"
     assert calls[0].estimated_cost_usd == 0.0
     assert calls[0].metadata["v3_economy_first"] is True
 

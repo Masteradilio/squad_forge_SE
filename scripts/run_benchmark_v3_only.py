@@ -64,7 +64,25 @@ async def run_cli_command(cwd: str, args: list[str]) -> tuple[int, str, str]:
     """Executes a LocalForge CLI command in the specified directory using the absolute python venv path."""
     env = os.environ.copy()
     env["PYTHONPATH"] = os.path.join(ROOT_DIR, "backend")
-    for key in ("OPENROUTER_MODEL", "OPENROUTER_API_KEY", "LOCALFORGE_MODEL_API_KEY"):
+    for key in (
+        "NVIDIA_LLM_MODEL",
+        "NVIDIA_API_KEY",
+        "OPENROUTER_MODEL",
+        "OPENROUTER_API_KEY",
+        "LOCALFORGE_MODEL_API_KEY",
+        "LOCALFORGE_CHIEF_PROVIDER",
+        "LOCALFORGE_CHIEF_BASE_URL",
+        "LOCALFORGE_CHIEF_MODEL",
+        "LOCALFORGE_CHIEF_VISUAL_MODEL",
+        "LOCALFORGE_CHIEF_API_KEY",
+        "LOCALFORGE_CHIEF_FALLBACK_PROVIDER",
+        "LOCALFORGE_CHIEF_FALLBACK_BASE_URL",
+        "LOCALFORGE_CHIEF_FALLBACK_MODEL",
+        "LOCALFORGE_CHIEF_FALLBACK_API_KEY",
+        "LOCALFORGE_OMNIROUTE_JSON_VERIFIED",
+        "OMNIROUTE_URL",
+        "OMNIROUTE_API_KEY",
+    ):
         value = root_env_values().get(key)
         if value and not env.get(key):
             env[key] = value
@@ -80,7 +98,7 @@ async def run_cli_command(cwd: str, args: list[str]) -> tuple[int, str, str]:
             stderr=asyncio.subprocess.PIPE
         )
         stdout, stderr = await proc.communicate()
-        return proc.returncode, stdout.decode("utf-8").strip(), stderr.decode("utf-8").strip()
+        return proc.returncode or 0, stdout.decode("utf-8").strip(), stderr.decode("utf-8").strip()
     except Exception as e:
         return -1, "", str(e)
 
@@ -102,7 +120,7 @@ async def patch_workspace_config(
     workspace_dir: str,
     default_model: str,
     docker_active: bool,
-    chief_model: str | None,
+    chief_config: dict[str, Any],
 ):
     """Updates config.yaml for V3 API-led/economy-first routing."""
     config_path = os.path.join(workspace_dir, ".localforge", "config.yaml")
@@ -131,34 +149,95 @@ async def patch_workspace_config(
 
             if "chief_engineer" not in cfg:
                 cfg["chief_engineer"] = {}
-            cfg["chief_engineer"]["enabled"] = bool(chief_model)
-            cfg["chief_engineer"]["provider"] = "openrouter"
-            cfg["chief_engineer"]["base_url"] = "https://openrouter.ai/api/v1"
-            cfg["chief_engineer"]["model"] = chief_model
+            cfg["chief_engineer"]["enabled"] = bool(chief_config.get("model"))
+            cfg["chief_engineer"]["provider"] = chief_config.get("provider", "openrouter")
+            cfg["chief_engineer"]["base_url"] = chief_config.get(
+                "base_url", "https://openrouter.ai/api/v1"
+            )
+            cfg["chief_engineer"]["model"] = chief_config.get("model")
+            cfg["chief_engineer"]["visual_model"] = chief_config.get("visual_model")
+            cfg["chief_engineer"]["visual_fallback_models"] = chief_config.get(
+                "visual_fallback_models", ["auto/best-vision"]
+            )
+            cfg["chief_engineer"]["fallback_models"] = chief_config.get(
+                "fallback_models", ["auto/pro-coding", "auto/best-coding"]
+            )
+            cfg["chief_engineer"]["fallback_provider"] = chief_config.get("fallback_provider")
+            cfg["chief_engineer"]["fallback_base_url"] = chief_config.get("fallback_base_url")
+            cfg["chief_engineer"]["fallback_model"] = chief_config.get("fallback_model")
             cfg["chief_engineer"]["timeout"] = 240.0
 
             if "budgets" not in cfg:
                 cfg["budgets"] = {}
-            cfg["budgets"]["max_paid_calls"] = 20
+            # A multi-task visual PRD can legitimately need one initial call
+            # plus bounded repairs per task. Keep the financial ceiling hard,
+            # but avoid aborting a valid batch on the small default token cap.
+            cfg["budgets"]["max_paid_calls"] = 100
+            cfg["budgets"]["max_paid_input_tokens"] = 800000
+            cfg["budgets"]["max_paid_output_tokens"] = 240000
             cfg["budgets"]["max_paid_usd"] = 2.0
-            cfg["budgets"]["max_task_duration"] = 1200.0
-            cfg["budgets"]["max_run_time"] = 3600.0
+            cfg["budgets"]["max_task_duration"] = 1800.0
+            cfg["budgets"]["max_run_time"] = 10800.0
             cfg["budgets"]["max_diff_growth"] = 5000
+            # Visual PRDs can need several Scrum Master -> Chief cycles while
+            # remaining under the hard paid-call and USD ceilings.
+            cfg["budgets"]["max_run_recovery_cycles"] = 8
                 
             with open(config_path, "w", encoding="utf-8") as f:
                 yaml.safe_dump(cfg, f, default_flow_style=False)
             print(
                 f"Patched config at {config_path}: default_model={default_model}, "
-                f"chief_model_configured={bool(chief_model)}, sandbox_type={cfg['sandbox']['type']}"
+                f"chief_provider={cfg['chief_engineer']['provider']}, "
+                f"chief_model_configured={bool(chief_config.get('model'))}, "
+                f"sandbox_type={cfg['sandbox']['type']}"
             )
         except Exception as e:
             print(f"Failed to patch config at {config_path}: {e}")
 
 
-def chief_engineer_config_from_env() -> tuple[str | None, bool]:
+def chief_engineer_config_from_env() -> dict[str, Any]:
     env = os.environ.copy()
     env.update({k: v for k, v in root_env_values().items() if k not in env})
-    return env.get("OPENROUTER_MODEL"), bool(env.get("OPENROUTER_API_KEY"))
+    provider: str | None = env.get("LOCALFORGE_CHIEF_PROVIDER")
+    if not provider:
+        provider = "nvidia" if env.get("NVIDIA_LLM_MODEL") and env.get("NVIDIA_API_KEY") else "openrouter"
+    resolved_provider = provider or "openrouter"
+    if resolved_provider == "omniroute":
+        base_url: str = env.get("LOCALFORGE_CHIEF_BASE_URL") or env.get("OMNIROUTE_URL") or "http://localhost:20128/v1"
+        model: str | None = env.get("LOCALFORGE_CHIEF_MODEL") or env.get("OPENROUTER_MODEL") or "auto/best-coding"
+        api_key_configured = True
+    elif resolved_provider == "nvidia":
+        base_url = "https://integrate.api.nvidia.com/v1"
+        model = env.get("NVIDIA_LLM_MODEL")
+        api_key_configured = bool(env.get("NVIDIA_API_KEY"))
+    else:
+        base_url = "https://openrouter.ai/api/v1"
+        model = env.get("OPENROUTER_MODEL")
+        api_key_configured = bool(env.get("OPENROUTER_API_KEY"))
+    return {
+        "provider": resolved_provider,
+        "base_url": base_url,
+        "model": model,
+        "visual_model": env.get("LOCALFORGE_CHIEF_VISUAL_MODEL"),
+        "visual_fallback_models": [
+            model.strip()
+            for model in env.get(
+                "LOCALFORGE_CHIEF_VISUAL_FALLBACK_MODELS", "auto/best-vision"
+            ).split(",")
+            if model.strip()
+        ],
+        "fallback_models": [
+            model.strip()
+            for model in env.get(
+                "LOCALFORGE_CHIEF_FALLBACK_MODELS", "auto/pro-coding,auto/best-coding"
+            ).split(",")
+            if model.strip()
+        ],
+        "api_key_configured": api_key_configured,
+        "fallback_provider": env.get("LOCALFORGE_CHIEF_FALLBACK_PROVIDER"),
+        "fallback_base_url": env.get("LOCALFORGE_CHIEF_FALLBACK_BASE_URL"),
+        "fallback_model": env.get("LOCALFORGE_CHIEF_FALLBACK_MODEL"),
+    }
 
 
 def _task_requires_chief(title: str, description: str) -> bool:
@@ -241,8 +320,9 @@ def apply_api_led_task_contracts(db_path: str) -> dict[str, int]:
             visual_required = False
             summary["local_assisted"] += 1
 
+        existing_contract = metadata.get("task_contract")
         metadata["task_contract"] = {
-            **(metadata.get("task_contract") if isinstance(metadata.get("task_contract"), dict) else {}),
+            **(existing_contract if isinstance(existing_contract, dict) else {}),
             "allowed_files": allowed_files,
             "visual_required": visual_required,
             "visual_actual_output": "app/sprintboard.html" if visual_required else None,
@@ -335,12 +415,13 @@ async def run_preflight_checks(v3_dir: str, v3_tasks_imported: int, expected_tas
         "detail": f"Tasks imported: {v3_tasks_imported}, Expected count: {expected_tasks}"
     }
 
-    chief_model, chief_key_configured = chief_engineer_config_from_env()
+    chief_config = chief_engineer_config_from_env()
     results["chief_engineer_configured"] = {
-        "passed": bool(chief_model and chief_key_configured),
+        "passed": bool(chief_config.get("model") and chief_config.get("api_key_configured")),
         "detail": (
-            f"OPENROUTER_MODEL configured: {bool(chief_model)}, "
-            f"OPENROUTER_API_KEY configured: {chief_key_configured}"
+            f"provider={chief_config.get('provider')}, "
+            f"model configured: {bool(chief_config.get('model'))}, "
+            f"credentials/configuration ready: {chief_config.get('api_key_configured')}"
         ),
     }
     
@@ -395,9 +476,9 @@ async def main():
 
     # Patch config in workspace V3
     docker_active, _ = await check_docker_status()
-    chief_model, _chief_key_configured = chief_engineer_config_from_env()
+    chief_config = chief_engineer_config_from_env()
     if chosen_model:
-        await patch_workspace_config(v3_dir, chosen_model, docker_active, chief_model)
+        await patch_workspace_config(v3_dir, chosen_model, docker_active, chief_config)
 
     v3_run_code, v3_run_out, v3_run_err = -1, "", ""
     
@@ -414,6 +495,8 @@ async def main():
     v3_task_runs_count = 0
     v3_calls_logged = 0
     v3_openrouter_calls = 0
+    v3_omniroute_calls = 0
+    v3_chief_calls = 0
     v3_local_calls = 0
     v3_artifacts_logged = 0
     v3_cost_usd = 0.0
@@ -436,8 +519,15 @@ async def main():
 
             c.execute("SELECT provider, COUNT(*) FROM model_call_ledger GROUP BY provider")
             for provider, count in c.fetchall():
-                if provider == "openrouter":
+                normalized_provider = str(provider or "").lower()
+                if normalized_provider == "openrouter":
                     v3_openrouter_calls = count
+                    v3_chief_calls += count
+                elif normalized_provider == "omniroute":
+                    v3_omniroute_calls = count
+                    v3_chief_calls += count
+                elif normalized_provider == "openai_compatible":
+                    v3_chief_calls += count
                 else:
                     v3_local_calls += count
             
@@ -473,10 +563,10 @@ async def main():
         failed_tasks = task_statuses.get("FAILED_SAFE", 0)
         pr_ready_tasks = task_statuses.get("PR_READY", 0)
         
-        if v3_openrouter_calls == 0:
+        if v3_chief_calls == 0:
             status_classification = "REJECTED"
             blockers.append(
-                "V3 API-led routing did not execute any Chief Engineer/OpenRouter call; "
+                "V3 API-led routing did not execute any Chief Engineer call; "
                 "benchmark did not exercise the intended V3 architecture."
             )
         elif pr_ready_tasks > 0 and failed_tasks == 0:
@@ -512,6 +602,8 @@ async def main():
           "artifact_types": artifact_types,
           "model_calls_logged": v3_calls_logged,
           "openrouter_calls_logged": v3_openrouter_calls,
+          "omniroute_calls_logged": v3_omniroute_calls,
+          "chief_engineer_calls_logged": v3_chief_calls,
           "local_calls_logged": v3_local_calls,
           "estimated_cost_usd": v3_cost_usd,
           "exit_code": v3_run_code,
@@ -521,7 +613,7 @@ async def main():
         "quality_score": "Deliverable" if status_classification == "ACCEPTED" else ("Partial with failures" if status_classification == "PARTIAL" else "Failed/Blocked"),
         "has_pr_artifacts": v3_artifacts_logged > 0,
         "is_auditable": v3_runs_count > 0,
-        "api_led_economy_first_exercised": v3_openrouter_calls > 0
+        "api_led_economy_first_exercised": v3_chief_calls > 0
       }
     }
     with open(metrics_json_path, "w", encoding="utf-8") as f:
@@ -560,7 +652,7 @@ The product is accepted only when the benchmark reaches `ACCEPTED`. A `PARTIAL` 
 - **Task Statuses**: {json.dumps(task_statuses)}
 - **Artifact Types**: {json.dumps(artifact_types)}
 - **V3 Routing Contracts**: {json.dumps(routing_contract_summary)}
-- **Chief Engineer/OpenRouter Calls**: {v3_openrouter_calls}
+- **Chief Engineer Calls**: {v3_chief_calls} (OpenRouter: {v3_openrouter_calls}; OmniRoute: {v3_omniroute_calls})
 - **Local Calls Logged**: {v3_local_calls}
 """
     with open(acceptance_md_path, "w", encoding="utf-8") as f:
@@ -612,7 +704,7 @@ Métricas de execução extraídas diretamente da base de dados `.localforge/loc
 | **FAILED_SAFE Count** | {task_statuses.get("FAILED_SAFE", 0)} | Falhas seguras capturadas de forma robusta |
 | **Actual API Cost (USD)** | ${v3_cost_usd:.4f} | Custos reais de chamadas aos modelos |
 | **Actual Model Calls Logged** | {v3_calls_logged} | Quantidade de chamadas aos modelos registradas |
-| **OpenRouter Chief Calls Logged** | {v3_openrouter_calls} | Deve ser maior que zero para validar a V3 API-led |
+| **Chief Calls Logged** | {v3_chief_calls} | Deve ser maior que zero para validar a V3 API-led |
 | **Local Calls Logged** | {v3_local_calls} | Evidencia a parte local/economy da arquitetura |
 | **API-led Routing Contracts** | {json.dumps(routing_contract_summary)} | Tarefas complexas para Chief; tarefas simples para local |
 | **Artifacts Generated** | {v3_artifacts_logged} | Artefatos gravados no disco pelo pipeline |

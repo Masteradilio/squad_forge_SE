@@ -47,7 +47,8 @@ class PRBabysitterLoopService:
         Enforces:
         - Event deduplication (returns IGNORE_DUPLICATE if seen before).
         - Upstream branch change detection (invalidates stale evidence and revalidates).
-        - Small fixes applied only in isolated worktree with exact file/line mapping.
+        - Small fixes are only planned here; application requires a controlled
+          worktree executor with observable evidence.
         - Merge conflicts escalated to human notification (no silent overwrite).
         - Strict prohibition of self-approval or self-merge.
         """
@@ -102,7 +103,7 @@ class PRBabysitterLoopService:
             return PRBabysitterAction(
                 pr_id=pr_id,
                 event_id=event.id,
-                action_type="SMALL_FIX_WORKTREE",
+                action_type="SMALL_FIX_PLANNED",
                 target_file=target_file,
                 target_line=target_line,
                 deduplicated=False,
@@ -111,8 +112,8 @@ class PRBabysitterLoopService:
                 approved_self_pr=False,
                 merged_self_pr=False,
                 summary=(
-                    f"Small fix applied in isolated worktree for PR #{pr_id} "
-                    f"at {target_file}:{target_line}."
+                    f"Small fix planned for a controlled isolated worktree for PR #{pr_id} "
+                    f"at {target_file}:{target_line}; execution evidence is required."
                 ),
             )
 

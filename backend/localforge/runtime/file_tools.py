@@ -29,11 +29,17 @@ class SafeFileEditor:
         project_id: int,
         run_id: int | None = None,
         task_id: int | None = None,
+        agent_role: str | None = None,
+        artifact_root: str | None = None,
     ):
         self.uow = uow
         self.project_id = project_id
         self.run_id = run_id
         self.task_id = task_id
+        self.agent_role = agent_role
+        # Code edits belong to the isolated task worktree, while artifacts
+        # belong to the canonical project workspace consumed by the PR gate.
+        self.artifact_root = artifact_root
 
     async def read_text(self, worktree_root: str, relative_path: str) -> str:
         target = self._resolve(worktree_root, relative_path)
@@ -72,7 +78,7 @@ class SafeFileEditor:
         )
         if task_run_id and task_key and self.run_id is not None:
             await ArtifactStore(self.uow).write_artifact(
-                project_root=worktree_root,
+                project_root=self.artifact_root or worktree_root,
                 task_run_id=task_run_id,
                 task_key=task_key,
                 run_id=self.run_id,
@@ -98,6 +104,20 @@ class SafeFileEditor:
             if run and run.resource_limits:
                 max_files = run.resource_limits.get("max_file_count", max_files)
                 max_diff = run.resource_limits.get("max_diff_growth", max_diff)
+
+        if self.task_id is not None and self.uow.tasks is not None:
+            task = await self.uow.tasks.get_task(self.task_id)
+            if task and isinstance(task.metadata, dict):
+                max_files = int(task.metadata.get("max_file_count", max_files) or max_files)
+                max_diff = int(task.metadata.get("max_diff_growth", max_diff) or max_diff)
+                contract = task.metadata.get("task_contract")
+                if isinstance(contract, dict) and contract.get("visual_required"):
+                    from localforge.core.config import load_config
+
+                    visual_limit = getattr(
+                        load_config().budgets, "max_visual_diff_growth", 100000
+                    )
+                    max_diff = max(max_diff, visual_limit)
 
         # Run git checks in worktree_root
         import subprocess
@@ -171,6 +191,7 @@ class SafeFileEditor:
             kind=kind,
             payload={"path": target},
             purpose=f"{kind.value}: {target}",
+            actor_role=self.agent_role,
         )
         gateway_decision = await ActionGateway(self.uow).evaluate(
             request,

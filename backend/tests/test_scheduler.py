@@ -218,6 +218,66 @@ async def test_scrum_master_records_blocker_and_reopens_for_chief(
 
 
 @pytest.mark.anyio
+async def test_scrum_master_does_not_reopen_permanent_provider_blocker(
+    db_manager, db_session: AsyncSession
+):
+    uow = UnitOfWork(db_manager)
+    uow.session = db_session
+    uow.projects = ProjectService(db_session)
+    uow.executions = ExecutionService(db_session)
+    uow.tasks = TaskService(db_session)
+    uow.audits = AuditService(db_session)
+
+    project = await uow.projects.create_project(
+        domain.Project(name="Provider blocker", root_path="/p", default_branch="main")
+    )
+    assert project.id is not None
+    run = await uow.executions.create_run(
+        domain.Run(project_id=project.id, mode=RunMode.UNATTENDED, initiated_by="test")
+    )
+    assert run.id is not None
+    task = await uow.tasks.create_task(
+        domain.Task(
+            project_id=project.id,
+            key="LF-31",
+            title="Paid provider task",
+            description="",
+            metadata={"task_contract": {"seniority_class": "chief_only"}},
+        )
+    )
+    assert task.id is not None
+    for status in (
+        TaskStatus.READY,
+        TaskStatus.CLAIMED,
+        TaskStatus.PLANNING,
+        TaskStatus.IMPLEMENTING,
+        TaskStatus.FAILED_SAFE,
+    ):
+        await uow.tasks.update_task_status(task.id, status)
+    await uow.tasks.create_task_run(
+        domain.TaskRun(
+            run_id=run.id,
+            task_id=task.id,
+            status=TaskRunStatus.FAILED,
+            final_summary=(
+                "Chief Engineer provider is unavailable and requires operator action: "
+                "OpenRouter completion failed (402): Insufficient credits"
+            ),
+        )
+    )
+
+    scheduler = Scheduler(project_id=project.id, run_id=run.id, db_manager=db_manager)
+    failed_task = await uow.tasks.get_task(task.id)
+    assert failed_task is not None
+    reopened = await scheduler._scrum_master_unblock_failed_tasks(uow, [failed_task])
+
+    refreshed = await uow.tasks.get_task(task.id)
+    assert reopened == 0
+    assert refreshed is not None
+    assert refreshed.status == TaskStatus.FAILED_SAFE
+
+
+@pytest.mark.anyio
 async def test_replay_pagination(db_manager, db_session: AsyncSession):
     """Verify that export_run_replay correctly supports limit and offset pagination parameters."""
     uow = UnitOfWork(db_manager)

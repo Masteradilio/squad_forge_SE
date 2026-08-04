@@ -1,8 +1,8 @@
 """Unit tests for RedisManager service and transparent fallback behavior."""
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
+import pytest
 from localforge.services.redis_manager import RedisManager, redis_manager
 
 

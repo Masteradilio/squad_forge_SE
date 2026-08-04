@@ -518,13 +518,13 @@ def test_model_routing_and_memory_api_persist_backups(tmp_path):
             f"/projects/{ids['project_id']}/model-routes",
             json={
                 "role": "Coder",
-                "provider": "ollama",
-                "model_profile_id": "qwen-coder",
-                "endpoint_url": "http://localhost:11434",
+                "provider": "omniroute",
+                "model_profile_id": "auto/best-coding-fast",
+                "endpoint_url": "http://localhost:20128/v1",
             },
         )
         assert route.status_code == 200
-        assert route.json()["model_profile_id"] == "qwen-coder"
+        assert route.json()["model_profile_id"] == "auto/best-coding-fast"
         assert (
             client.get(f"/projects/{ids['project_id']}/model-routes").json()[0]["role"] == "Coder"
         )
@@ -574,6 +574,13 @@ def seed_pipeline_state(
                 domain.Project(name="Phase 23", root_path=str(tmp_path), default_branch="main")
             )
             assert project.id is not None
+            task_metadata: dict[str, object] = {
+                "changed_files": ["src/sample.py"],
+                "source_commit": "source-commit",
+                "target_commit": "target-commit",
+            }
+            if metadata:
+                task_metadata.update(metadata)
             task = await uow.tasks.create_task(
                 domain.Task(
                     project_id=project.id,
@@ -582,7 +589,7 @@ def seed_pipeline_state(
                     description=description,
                     status=TaskStatus.READY,
                     acceptance_criteria=["PR artifact is ready"],
-                    metadata=metadata or {"changed_files": ["src/sample.py"]},
+                    metadata=task_metadata,
                 )
             )
             assert task.id is not None
@@ -596,7 +603,12 @@ def seed_pipeline_state(
             )
             assert run.id is not None
             task_run = await uow.tasks.create_task_run(
-                domain.TaskRun(run_id=run.id, task_id=task.id, worktree_path=str(tmp_path))
+                domain.TaskRun(
+                    run_id=run.id,
+                    task_id=task.id,
+                    worktree_path=str(tmp_path),
+                    branch_name="localforge/lf-2301",
+                )
             )
             assert task_run.id is not None
             return {

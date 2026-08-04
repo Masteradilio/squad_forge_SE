@@ -23,7 +23,7 @@ class TaskUpdateRequest(BaseModel):
 
 class ModelRouteRequest(BaseModel):
     role: AgentRole
-    provider: str = "localforge"
+    provider: str = "omniroute"
     model_profile_id: str
     endpoint_url: str | None = None
     fallback_model_profile_id: str | None = None

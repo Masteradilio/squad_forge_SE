@@ -1,6 +1,5 @@
 """Reviewer Scope Validator — File Scope Locking (Max 3-5 files per task contract)."""
 
-from typing import List, Tuple
 
 
 class FileScopeValidator:
@@ -10,8 +9,8 @@ class FileScopeValidator:
         self.max_allowed_files = max_allowed_files
 
     def validate_diff_scope(
-        self, modified_files: List[str], contract_allowed_files: List[str]
-    ) -> Tuple[bool, str]:
+        self, modified_files: list[str], contract_allowed_files: list[str]
+    ) -> tuple[bool, str]:
         """Validate if modified files stay strictly within allowed task scope boundaries."""
         if len(modified_files) > self.max_allowed_files:
             return (

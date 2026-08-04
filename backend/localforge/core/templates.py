@@ -11,10 +11,14 @@ DEFAULT_CONFIG_TEMPLATE: dict[str, Any] = {
         "remote_url": "{remote_url}",
     },
     "models": {
-        "provider": "ollama",
-        "base_url": "http://localhost:11434/v1",
-        "default_model": "gemma4:12b",
-        "fallback_models": ["granite4.1:8b", "nemotron-3-nano:4b"],
+        "provider": "omniroute",
+        "base_url": "http://localhost:20128/v1",
+        "default_model": "auto/best-free",
+        "fallback_models": [
+            "auto/coding:free",
+            "oc/nemotron-3-ultra-free",
+            "oc/mimo-v2.5-free",
+        ],
     },
 }
 

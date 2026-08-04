@@ -3,7 +3,13 @@ from typing import Any
 
 import httpx
 
-from localforge.llm.base import LLMConnectionError, LLMError, LLMHTTPError, LLMTimeoutError
+from localforge.llm.base import (
+    LLMConnectionError,
+    LLMError,
+    LLMHTTPError,
+    LLMMessage,
+    LLMTimeoutError,
+)
 from localforge.llm.openai_compatible import OpenAICompatibleProvider
 
 
@@ -16,6 +22,7 @@ class OpenRouterProvider(OpenAICompatibleProvider):
         api_key: str | None,
         default_model: str | None,
         base_url: str = "https://openrouter.ai/api/v1",
+        max_output_tokens: int | None = None,
     ):
         if not api_key:
             raise LLMError(
@@ -26,11 +33,12 @@ class OpenRouterProvider(OpenAICompatibleProvider):
             api_key=api_key,
             default_model=default_model,
             provider_name="openrouter",
+            max_output_tokens=max_output_tokens,
         )
 
     async def chat_completion(
         self,
-        messages: list[dict[str, str]],
+        messages: list[LLMMessage],
         response_schema: dict[str, Any] | None = None,
         stream: bool = False,
         timeout: float = 240.0,
@@ -49,6 +57,11 @@ class OpenRouterProvider(OpenAICompatibleProvider):
             "messages": messages,
             "stream": stream,
         }
+        # A complete visual repair can contain one compact HTML document. Keep
+        # enough output headroom for that document, while allowing operators to
+        # lower the ceiling for strict economy-first runs.
+        if self.default_max_output_tokens > 0:
+            payload["max_tokens"] = self.default_max_output_tokens
         if response_schema is not None:
             payload["response_format"] = {"type": "json_object"}
         if stream:
@@ -62,7 +75,13 @@ class OpenRouterProvider(OpenAICompatibleProvider):
                         f"{self._redact(resp.text)}",
                         status_code=resp.status_code,
                     )
-                data = resp.json()
+                try:
+                    data = resp.json()
+                except ValueError as exc:
+                    body = self._redact(resp.text[:1200])
+                    raise LLMError(
+                        "OpenRouter returned HTTP 200 with an invalid JSON body: " + body
+                    ) from exc
                 choices = data.get("choices", [])
                 if not choices:
                     raise LLMError("OpenRouter response did not contain completion choices.")

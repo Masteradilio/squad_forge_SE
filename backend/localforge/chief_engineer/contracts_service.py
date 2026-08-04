@@ -1,7 +1,7 @@
 """Chief Engineer Interface Contracts Service — Freezes interface contracts before code implementation."""
 
 from pathlib import Path
-from typing import Dict, List, Optional
+
 import pydantic
 
 
@@ -17,7 +17,7 @@ class InterfaceContractsService:
 
     def __init__(self, workspace_path: Path):
         self.workspace_path = workspace_path
-        self.frozen_contracts: Dict[str, InterfaceContract] = {}
+        self.frozen_contracts: dict[str, InterfaceContract] = {}
 
     def freeze_contract(self, relative_path: str, content: str) -> InterfaceContract:
         """Freeze an interface contract file in the workspace."""
@@ -34,5 +34,5 @@ class InterfaceContractsService:
         self.frozen_contracts[relative_path] = contract
         return contract
 
-    def get_frozen_contracts(self) -> List[InterfaceContract]:
+    def get_frozen_contracts(self) -> list[InterfaceContract]:
         return list(self.frozen_contracts.values())

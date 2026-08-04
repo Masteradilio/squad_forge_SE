@@ -16,8 +16,9 @@ def create_sandbox(
 ) -> BaseSandbox:
     """Create a sandbox instance based on the application configuration.
 
-    If 'docker' is configured but fails to initialize or import, it falls back to
-    the 'local' sandbox and logs a warning.
+    A Docker configuration is a security contract.  It must fail closed when
+    Docker cannot be constructed; silently switching to a host subprocess would
+    violate the deployment's isolation guarantee.
     """
     sandbox_type = config.sandbox.type.lower()
 
@@ -26,24 +27,26 @@ def create_sandbox(
         network_enabled = (
             config.sandbox.network_enabled if network_override is None else network_override
         )
+        if network_enabled:
+            raise RuntimeError(
+                "Sandbox egress is not enabled by this runner until the allowlist-aware network is provisioned."
+            )
 
         try:
-            # Check if docker package can be imported
             import docker  # noqa: F401
-
-            return DockerSandbox(
-                worktree_path=worktree_path,
-                image=image,
-                network_enabled=network_enabled,
-            )
-        except ImportError:
-            logger.warning(
-                "Docker Python SDK is not installed. Falling back to local restricted sandbox."
-            )
-        except Exception as e:
-            logger.warning(
-                f"Failed to initialize Docker sandbox: {e}. "
-                "Falling back to local restricted sandbox."
-            )
+        except ImportError as exc:
+            raise RuntimeError(
+                "Docker sandbox is configured but the Docker Python SDK is not installed."
+            ) from exc
+        return DockerSandbox(
+            worktree_path=worktree_path,
+            image=image,
+            network_enabled=network_enabled,
+            cpu_limit=config.sandbox.cpu_limit,
+            memory_limit_mb=config.sandbox.memory_limit_mb,
+            pids_limit=config.sandbox.pids_limit,
+            read_only_root=config.sandbox.read_only_root,
+            egress_allowlist=config.sandbox.egress_allowlist,
+        )
 
     return LocalSandbox(worktree_path=worktree_path)

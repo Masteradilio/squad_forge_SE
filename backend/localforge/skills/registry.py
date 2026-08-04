@@ -87,7 +87,11 @@ BUILTIN_SKILLS = [
     ),
     SkillDefinition(
         name="e2e-release-tester",
-        purpose="Universal post-merge E2E quality & PRD compliance verification using Playwright, HTTP client, CLI runner, and DB inspector to generate relatorio_conformidade_funcional.md.",
+        purpose=(
+            "Universal post-merge E2E quality & PRD compliance verification using "
+            "Playwright, HTTP client, CLI runner, and DB inspector to generate "
+            "relatorio_conformidade_funcional.md."
+        ),
         triggers=["e2e", "test", "compliance", "prd", "release", "quality", "functional"],
         allowed_actions=["browser automation", "http api request", "run subprocess", "inspect database", "generate relatorio_conformidade_funcional.md"],
         expected_artifacts=["relatorio_conformidade_funcional.md"],

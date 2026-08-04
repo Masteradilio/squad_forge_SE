@@ -6,11 +6,13 @@ from typing import Any, cast
 
 from localforge.core.config import load_config
 from localforge.gitops.manager import WorktreeManager
+from localforge.llm.base import is_permanent_provider_error
 from localforge.models import domain
 from localforge.models.enums import (
     AgentRole,
     AuditEventActorType,
     AuditEventType,
+    RunMode,
     RunStatus,
     TaskRunStatus,
     TaskStatus,
@@ -18,12 +20,43 @@ from localforge.models.enums import (
 from localforge.pipeline import PipelineMode, RolePipelineEngine
 from localforge.services.governed_execution import (
     GovernedExecutionRequest,
+    GovernedExecutionResult,
     GovernedExecutionService,
 )
 from localforge.services.runners import LocalWorktreeTaskRunner, TaskRunnerPool
 from localforge.storage.transactions import UnitOfWork
 
 logger = logging.getLogger("localforge.scheduler")
+
+
+def _is_permanent_provider_blocker(message: str) -> bool:
+    """Identify provider failures that cannot be healed by another retry.
+
+    A paid-provider billing or authentication failure must stop the recovery
+    loop immediately. Retrying the same request only spends more budget and
+    cannot produce a new implementation plan without operator action.
+    """
+    return is_permanent_provider_error(message)
+
+
+def _is_exhausted_chief_blocker(message: str) -> bool:
+    """Recognize a Chief lane that already exhausted its finite OmniRoute plan.
+
+    Reopening this exact failure without changing the request only repeats the
+    same free-route timeouts and can keep an unattended run alive for hours.
+    The next Scrum Master pass must preserve the evidence and escalate it
+    instead of issuing another identical paid/gateway cycle.
+    """
+    lowered = message.lower()
+    return any(
+        marker in lowered
+        for marker in (
+            "single-document visual repair exhausted",
+            "visual section '",
+            "chief engineer provider is unavailable",
+            "no chief engineer action was applied",
+        )
+    )
 
 
 def _clean_error_message(error: str) -> str:
@@ -127,7 +160,12 @@ class Scheduler:
         self.db_manager = db_manager
         self.execute_pipeline = execute_pipeline
         self.runner_pool = runner_pool or TaskRunnerPool(
-            [LocalWorktreeTaskRunner(project_id=project_id)]
+            [
+                LocalWorktreeTaskRunner(
+                    project_id=project_id,
+                    run_mode=RunMode.UNATTENDED if execute_pipeline else RunMode.INTERACTIVE,
+                )
+            ]
         )
         self._running = False
         self._task: asyncio.Task | None = None
@@ -353,6 +391,7 @@ class Scheduler:
 
             # 3. Try to claim and execute READY tasks
             ready_tasks = [t for t in tasks if t.status == TaskStatus.READY]
+            failed_in_iteration = False
             for t in ready_tasks:
                 if executing_count >= self.max_parallel_tasks:
                     break
@@ -373,103 +412,192 @@ class Scheduler:
                         status=TaskRunStatus.RUNNING,
                     )
                     task_run = await uow.tasks.create_task_run(task_run_data)
+                    assert task_run.id is not None
 
                     runner = self.runner_pool.acquire(t)
                     governed = GovernedExecutionService(runner)
-                    try:
-                        governed_result = await asyncio.wait_for(
-                            governed.start_task(
-                                GovernedExecutionRequest(
-                                    project_id=self.project_id,
-                                    run_id=self.run_id,
-                                    task=t,
-                                    task_run=task_run,
+
+                    async def dispatch_with_transaction() -> GovernedExecutionResult:
+                        async with UnitOfWork(self.db_manager) as dispatch_uow:
+                            return await asyncio.wait_for(
+                                governed.start_task(
+                                    GovernedExecutionRequest(
+                                        project_id=self.project_id,
+                                        run_id=self.run_id,
+                                        task=t,
+                                        task_run=task_run,
+                                    ),
+                                    uow=dispatch_uow,
                                 ),
-                                uow=uow,
-                            ),
-                            timeout=45.0,
+                                timeout=45.0,
+                            )
+
+                    try:
+                        # Commit the claim and TaskRun before dispatching the
+                        # runner. Dispatch/worktree persistence then gets its
+                        # own short transaction instead of one large writer
+                        # transaction spanning unrelated state changes.
+                        if uow.session is not None:
+                            logger.info(
+                                "Task %s claim persisted; starting governed dispatch",
+                                t.key,
+                            )
+                            await asyncio.wait_for(uow.session.commit(), timeout=30.0)
+                        governed_result = await asyncio.wait_for(
+                            dispatch_with_transaction(), timeout=90.0
                         )
                     except Exception as e:
                         logger.error(
                             f"Task {t.key} failed during governed dispatch: {e!r}",
                             exc_info=True,
                         )
-                        task_run.status = TaskRunStatus.FAILED
-                        task_run.final_summary = f"Governed dispatch failed: {e!r}"
-                        task_run.ended_at = datetime.now(UTC)
-                        await uow.tasks.update_task_run(task_run)
-                        await uow.tasks.update_task_status(t.id, TaskStatus.FAILED_SAFE)
-                        continue
+                        async with UnitOfWork(self.db_manager) as recovery_uow:
+                            assert recovery_uow.tasks is not None
+                            failed_task_run = await recovery_uow.tasks.get_task_run(task_run.id)
+                            if failed_task_run is not None:
+                                failed_task_run.status = TaskRunStatus.FAILED
+                                failed_task_run.final_summary = (
+                                    f"Governed dispatch failed: {e!r}"
+                                )
+                                failed_task_run.ended_at = datetime.now(UTC)
+                                await recovery_uow.tasks.update_task_run(failed_task_run)
+                            await self._mark_task_failed_safe(recovery_uow, t.id)
+                        failed_in_iteration = True
+                        break
                     if governed_result.status != "STARTED":
-                        continue
+                        failed_in_iteration = True
+                        break
 
                     task_run = governed_result.task_run
-                    if uow.session is not None:
-                        await uow.session.commit()
 
                     if self.execute_pipeline:
+                        # The scheduler queried and claimed the task in its
+                        # coordination UoW. Explicitly end any transaction
+                        # reopened by dispatch reads before the long-running
+                        # pipeline UoW starts; otherwise SQLite can retain a
+                        # read lock while OmniRoute is waiting for a model.
+                        if uow.session is not None:
+                            await uow.session.rollback()
                         assert task_run.id is not None
                         try:
-                            await RolePipelineEngine(
-                                uow, project_id=self.project_id, run_id=self.run_id
-                            ).run_task(
-                                task_id=t.id,
-                                task_run_id=task_run.id,
-                                mode=PipelineMode.DEFAULT,
-                                complete_run=False,
-                            )
-                            if governed_result.selected_runner_id and uow.runner_pool is not None:
-                                await uow.runner_pool.release_runner_lease(
-                                    governed_result.selected_runner_id,
-                                    success=True,
+                            # Do not hold the scheduler's dispatch transaction
+                            # while the OmniRoute call, sandbox, tests, and
+                            # visual gates run. Long work inside this session
+                            # can starve SQLite writers and leave the run stuck
+                            # at the first task.
+                            async with UnitOfWork(self.db_manager) as pipeline_uow:
+                                await RolePipelineEngine(
+                                    pipeline_uow,
+                                    project_id=self.project_id,
+                                    run_id=self.run_id,
+                                ).run_task(
+                                    task_id=t.id,
                                     task_run_id=task_run.id,
-                                    lease_token=governed_result.runner_lease_token,
+                                    mode=PipelineMode.DEFAULT,
+                                    complete_run=False,
                                 )
+
+                            # A pipeline can fail closed by returning a result
+                            # with FAILED_SAFE instead of raising. Inspect and
+                            # release the runner in a short, fresh transaction.
+                            async with UnitOfWork(self.db_manager) as result_uow:
+                                assert result_uow.tasks is not None
+                                refreshed_task = await result_uow.tasks.get_task(t.id)
+                                refreshed_run = await result_uow.tasks.get_task_run(task_run.id)
+                                if (
+                                    refreshed_task is not None
+                                    and refreshed_task.status
+                                    in self._RECOVERY_BLOCKING_STATES
+                                ) or (
+                                    refreshed_run is not None
+                                    and refreshed_run.status == TaskRunStatus.FAILED
+                                ):
+                                    await governed.cleanup(
+                                        refreshed_run or task_run,
+                                        uow=result_uow,
+                                    )
+                                    if (
+                                        governed_result.selected_runner_id
+                                        and result_uow.runner_pool is not None
+                                    ):
+                                        await result_uow.runner_pool.release_runner_lease(
+                                            governed_result.selected_runner_id,
+                                            success=False,
+                                            task_run_id=task_run.id,
+                                            lease_token=governed_result.runner_lease_token,
+                                        )
+                                    failed_in_iteration = True
+                                    break
+                                if (
+                                    governed_result.selected_runner_id
+                                    and result_uow.runner_pool is not None
+                                ):
+                                    await result_uow.runner_pool.release_runner_lease(
+                                        governed_result.selected_runner_id,
+                                        success=True,
+                                        task_run_id=task_run.id,
+                                        lease_token=governed_result.runner_lease_token,
+                                    )
                         except Exception as e:
                             logger.error(
                                 f"Task {t.key} failed during pipeline execution: {e!r}",
                                 exc_info=True,
                             )
-                            if uow.session is not None:
-                                await uow.session.rollback()
-                            failed_task_run = await uow.tasks.get_task_run(task_run.id)
-                            if failed_task_run is not None:
-                                failed_task_run.status = TaskRunStatus.FAILED
-                                if not failed_task_run.final_summary:
-                                    failed_task_run.final_summary = (
-                                        f"Pipeline execution failed: {e!r}"
-                                    )
-                                failed_task_run.ended_at = datetime.now(UTC)
-                                await uow.tasks.update_task_run(failed_task_run)
-                            else:
-                                await uow.tasks.create_task_run(
-                                    domain.TaskRun(
-                                        run_id=self.run_id,
-                                        task_id=t.id,
-                                        status=TaskRunStatus.FAILED,
-                                        worktree_path=task_run.worktree_path,
-                                        branch_name=task_run.branch_name,
-                                        sandbox_id=task_run.sandbox_id,
-                                        ended_at=datetime.now(UTC),
-                                        final_summary=f"Pipeline execution failed: {e!r}",
-                                    )
+                            # The pipeline UoW rolls back its own work and
+                            # preserves buffered model-call evidence. Record
+                            # the failure and clean up using a short recovery
+                            # transaction instead of reusing the old session.
+                            async with UnitOfWork(self.db_manager) as recovery_uow:
+                                assert recovery_uow.tasks is not None
+                                await recovery_uow.persist_pending_model_calls()
+                                failed_task_run = await recovery_uow.tasks.get_task_run(
+                                    task_run.id
                                 )
-                            await self._mark_task_failed_safe(uow, t.id)
-                            if uow.session is not None:
-                                await uow.session.commit()
-                            latest_runs = await uow.tasks.list_runs_for_task(t.id)
-                            if latest_runs:
-                                await governed.cleanup(latest_runs[0], uow=uow)
-                            if governed_result.selected_runner_id and uow.runner_pool is not None:
-                                await uow.runner_pool.release_runner_lease(
-                                    governed_result.selected_runner_id,
-                                    success=False,
-                                    task_run_id=task_run.id,
-                                    lease_token=governed_result.runner_lease_token,
-                                )
-                            continue
+                                if failed_task_run is not None:
+                                    failed_task_run.status = TaskRunStatus.FAILED
+                                    if not failed_task_run.final_summary:
+                                        failed_task_run.final_summary = (
+                                            f"Pipeline execution failed: {e!r}"
+                                        )
+                                    failed_task_run.ended_at = datetime.now(UTC)
+                                    await recovery_uow.tasks.update_task_run(failed_task_run)
+                                else:
+                                    await recovery_uow.tasks.create_task_run(
+                                        domain.TaskRun(
+                                            run_id=self.run_id,
+                                            task_id=t.id,
+                                            status=TaskRunStatus.FAILED,
+                                            worktree_path=task_run.worktree_path,
+                                            branch_name=task_run.branch_name,
+                                            sandbox_id=task_run.sandbox_id,
+                                            ended_at=datetime.now(UTC),
+                                            final_summary=f"Pipeline execution failed: {e!r}",
+                                        )
+                                    )
+                                await self._mark_task_failed_safe(recovery_uow, t.id)
+                                latest_runs = await recovery_uow.tasks.list_runs_for_task(t.id)
+                                if latest_runs:
+                                    await governed.cleanup(latest_runs[0], uow=recovery_uow)
+                                if (
+                                    governed_result.selected_runner_id
+                                    and recovery_uow.runner_pool is not None
+                                ):
+                                    await recovery_uow.runner_pool.release_runner_lease(
+                                        governed_result.selected_runner_id,
+                                        success=False,
+                                        task_run_id=task_run.id,
+                                        lease_token=governed_result.runner_lease_token,
+                                    )
+                            failed_in_iteration = True
+                            break
 
                     executing_count += 1
+
+                # A failed task is a scheduling barrier. Let the next loop
+                # iteration run Scrum Master conformity/recovery before any
+                # independent READY task can be claimed.
+                if failed_in_iteration:
+                    break
 
     async def _scrum_master_record_conformity(
         self, uow: UnitOfWork, tasks: list[domain.Task]
@@ -493,7 +621,7 @@ class Scheduler:
             check = {
                 "status": status,
                 "checked_by": AgentRole.SCRUM_MASTER.value,
-                "model": "gemma4:12b",
+                "model": "oc/north-mini-code-free",
                 "task_status": task.status.value,
                 "blocker": blocker[:1200],
                 "checked_at": datetime.now(UTC).isoformat(),
@@ -567,6 +695,34 @@ class Scheduler:
                 if latest and latest.final_summary
                 else "Unknown blocker"
             )
+            if _is_permanent_provider_blocker(blocker):
+                # This task will be escalated by the caller without another
+                # paid recovery cycle. The provider must become available
+                # before a new run can make progress.
+                continue
+            if attempts >= 1 and _is_exhausted_chief_blocker(blocker):
+                metadata["scrum_master_recovery_exhausted"] = True
+                metadata["scrum_master_last_blocker"] = blocker[:1200]
+                task.metadata = metadata
+                await uow.tasks.update_task(task)
+                if uow.audits is not None:
+                    await uow.audits.append_audit_event(
+                        domain.AuditEvent(
+                            project_id=self.project_id,
+                            run_id=self.run_id,
+                            task_id=task.id,
+                            actor_type=AuditEventActorType.AGENT,
+                            actor_id=AgentRole.SCRUM_MASTER.value,
+                            event_type=AuditEventType.SYSTEM_EVENT,
+                            payload_redacted={
+                                "action": "scrum_master_recovery_stopped_repeated_chief_blocker",
+                                "task_key": task.key,
+                                "attempt": attempts,
+                                "blocker": blocker[:1000],
+                            },
+                        )
+                    )
+                continue
             contract = metadata.get("task_contract")
             if not isinstance(contract, dict):
                 contract = {}
@@ -613,6 +769,10 @@ class Scheduler:
                 # Preserve the demo override (typically local_assisted):
                 contract["seniority_class"] = pre_existing_seniority or "local_assisted"
             contract["blocked_reason"] = blocker[:1200]
+            metadata["task_contract"] = contract
+            metadata["scrum_master_unblock_attempts"] = attempts + 1
+            metadata["scrum_master_last_check"] = datetime.now(UTC).isoformat()
+            task.metadata = metadata
             await uow.tasks.update_task(task)
             await uow.tasks.update_task_status(task_id, TaskStatus.READY)
             if uow.audits is not None:
@@ -719,11 +879,22 @@ class Scheduler:
         runs_by_task = await uow.tasks.list_runs_for_tasks(active_task_ids)
         for t in active_tasks:
             assert t.id is not None
+            effective_task_timeout = task_timeout
+            if isinstance(t.metadata, dict):
+                contract = t.metadata.get("task_contract")
+                if isinstance(contract, dict) and contract.get("visual_required"):
+                    try:
+                        effective_task_timeout = max(
+                            task_timeout,
+                            float(os.getenv("LOCALFORGE_VISUAL_MAX_TASK_DURATION", "3600")),
+                        )
+                    except ValueError:
+                        effective_task_timeout = max(task_timeout, 3600.0)
             for r in runs_by_task.get(t.id, []):
                 if r.run_id == self.run_id and r.status == TaskRunStatus.RUNNING:
                     # For watchdog check, we compare against task run started_at.
                     elapsed = (datetime.now(UTC) - _as_utc(r.started_at)).total_seconds()
-                    if elapsed > task_timeout:
+                    if elapsed > effective_task_timeout:
                         logger.warning(
                             f"Task run {r.id} for task {t.key} is unresponsive "
                             f"(stuck for {elapsed}s). Watchdog aborting."
@@ -797,6 +968,14 @@ class Scheduler:
             ):
                 continue
             try:
+                latest_runs = await tasks_svc.list_runs_for_task(t.id)
+                latest_run = max(latest_runs, key=lambda run: run.id or 0) if latest_runs else None
+                metadata = dict(t.metadata or {})
+                metadata["scrum_master_last_blocker"] = (
+                    latest_run.final_summary if latest_run and latest_run.final_summary else "Unknown blocker"
+                )[:1200]
+                t.metadata = metadata
+                await tasks_svc.update_task(t)
                 await tasks_svc.update_task_status(
                     t.id,
                     TaskStatus.BLOCKED_NEEDS_HUMAN_REVIEW,
@@ -824,6 +1003,17 @@ class Scheduler:
         """
         run.status = run_status
         run.ended_at = datetime.now(UTC)
+
+        # The caller may still hold task objects from before escalation.
+        # Reload them so persisted statuses and blocker metadata match the
+        # counters and details written to the final run summary.
+        tasks_svc = cast(Any, uow).tasks
+        summary_tasks = tasks
+        if tasks_svc is not None:
+            refreshed_tasks = await tasks_svc.list_tasks_for_project(self.project_id)
+            if refreshed_tasks:
+                summary_tasks = refreshed_tasks
+        counts = self._classify_task_statuses(summary_tasks)
 
         prs_ready_count = counts[TaskStatus.PR_READY.value] + counts[TaskStatus.DONE.value]
         blocked_count = counts[TaskStatus.BLOCKED.value]
@@ -886,17 +1076,20 @@ class Scheduler:
         ]
 
         # Per-task blocker detail for BLOCKED_NEEDS_HUMAN_REVIEW
+        blocker_details: list[str] = []
         if blocked_human_count > 0:
             summary_lines.append("")
             summary_lines.append("Per-task Blockers:")
-            for t in tasks:
+            for t in summary_tasks:
                 if t.status != TaskStatus.BLOCKED_NEEDS_HUMAN_REVIEW:
                     continue
                 metadata = dict(t.metadata or {})
                 last_blocker = str(metadata.get("scrum_master_last_blocker", "Unknown blocker"))[
                     :600
                 ]
-                summary_lines.append(f"- {t.key} ({t.title}): {last_blocker}")
+                detail = f"- {t.key} ({t.title}): {last_blocker}"
+                summary_lines.append(detail)
+                blocker_details.append(detail)
 
         run.summary = "\n".join(summary_lines)
         executions_svc = cast(Any, uow).executions
@@ -924,6 +1117,8 @@ class Scheduler:
                 f"- **Paid USD Spent**: ${paid_usd_spent:.4f}\n\n"
                 "### Recommended Next Steps\n" + "\n".join(recommendations) + "\n"
             )
+            if blocker_details:
+                md += "\n### Per-task Blockers\n" + "\n".join(blocker_details) + "\n"
             try:
                 filepath = os.path.join(project.root_path, "run_summary.md")
                 with open(filepath, "w", encoding="utf-8") as f:

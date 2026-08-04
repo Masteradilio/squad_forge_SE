@@ -6,6 +6,7 @@ from localforge.pr_factory.local import LocalPRFactory
 from localforge.services.audit import AuditService
 from localforge.services.cost_benchmark import CostBenchmarkService
 from localforge.services.execution import ExecutionService
+from localforge.services.maker_checker import MakerCheckerService
 from localforge.services.project import ProjectService
 from localforge.services.task import TaskService
 from localforge.storage import UnitOfWork
@@ -93,6 +94,7 @@ async def seed_pr_task(db_session, tmp_path):
     uow.projects = ProjectService(db_session)
     uow.tasks = TaskService(db_session)
     uow.executions = ExecutionService(db_session)
+    uow.maker_checker = MakerCheckerService(db_session)
     uow.audits = AuditService(db_session)
     uow.cost_benchmark = CostBenchmarkService(db_session)
     project = await uow.projects.create_project(
@@ -111,7 +113,11 @@ async def seed_pr_task(db_session, tmp_path):
             description="Create PR artifacts",
             acceptance_criteria=["artifact generated", "task marked PR_READY"],
             status=TaskStatus.REVIEWING,
-            metadata={"changed_files": ["backend/localforge/pr_factory/local.py"]},
+            metadata={
+                "changed_files": ["backend/localforge/pr_factory/local.py"],
+                "source_commit": "source-commit",
+                "target_commit": "target-commit",
+            },
         )
     )
     assert task.id is not None
@@ -161,4 +167,21 @@ async def write_required_evidence(
         "risk.md",
         "Allowed: True",
         "Risk",
+    )
+    assert uow.maker_checker is not None
+    verification = await uow.maker_checker.create_verification(
+        project_id=1,
+        task_run_id=task_run_id,
+        maker_agent_id="coder-agent",
+        checker_agent_id="reviewer-agent",
+    )
+    assert verification.id is not None
+    await uow.maker_checker.submit_verification_result(
+        verification_id=verification.id,
+        checker_agent_id="reviewer-agent",
+        approved=True,
+        deterministic_passed=True,
+        tests_executed=["pytest"],
+        not_checked=[],
+        feedback="Observed test evidence passed.",
     )

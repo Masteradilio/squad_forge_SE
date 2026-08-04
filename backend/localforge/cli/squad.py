@@ -70,14 +70,14 @@ async def run_squad_composition() -> None:
                         domain.SeniorityClass.CHIEF_ONLY,
                         domain.SeniorityClass.CHIEF_LED,
                     ):
-                        model_profile_id = "gpt-5.5-large"
-                        provider = "openrouter"
+                        model_profile_id = "auto/best-free"
+                        provider = "omniroute"
                     elif meta.seniority_class == domain.SeniorityClass.LOCAL_ASSISTED:
-                        model_profile_id = "granite4.1:8b"
-                        provider = "ollama"
+                        model_profile_id = "auto/coding:free"
+                        provider = "omniroute"
                     else:
-                        model_profile_id = "local_small"
-                        provider = "ollama"
+                        model_profile_id = "oc/north-mini-code-free"
+                        provider = "omniroute"
 
             table.add_row(
                 role.value,

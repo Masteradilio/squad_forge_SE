@@ -31,6 +31,27 @@ def test_api_health_and_openapi_available(tmp_path):
         close_manager(manager)
 
 
+def test_api_rejects_model_route_that_bypasses_omniroute(tmp_path):
+    manager = make_db_manager(tmp_path)
+    try:
+        ids = seed_api_state(manager, tmp_path)
+        client = TestClient(create_app(db_manager=manager))
+        response = client.put(
+            f"/projects/{ids['project_id']}/model-routes",
+            json={
+                "role": "Coder",
+                "provider": "openrouter",
+                "model_profile_id": "paid/model",
+                "endpoint_url": "https://openrouter.ai/api/v1",
+            },
+        )
+
+        assert response.status_code == 400
+        assert "must use OmniRoute" in response.json()["detail"]
+    finally:
+        close_manager(manager)
+
+
 def test_api_exposes_core_state_endpoints(tmp_path):
     manager = make_db_manager(tmp_path)
     try:
@@ -46,7 +67,7 @@ def test_api_exposes_core_state_endpoints(tmp_path):
             client.get(f"/projects/{ids['project_id']}/policies/default").json()["name"]
             == "default"
         )
-        assert client.get("/models").json()["provider"] == "ollama"
+        assert client.get("/models").json()["provider"] == "omniroute"
         assert client.get(f"/projects/{ids['project_id']}/prs").json()[0]["key"] == "LF-1401"
     finally:
         close_manager(manager)

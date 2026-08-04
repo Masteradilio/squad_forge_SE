@@ -28,7 +28,7 @@ from localforge.services.audit import AuditService
 from localforge.services.execution import ExecutionService
 from localforge.services.project import ProjectService
 from localforge.services.runners import BaseTaskRunner, RunnerContext, TaskRunnerPool
-from localforge.services.scheduler import Scheduler
+from localforge.services.scheduler import Scheduler, _is_permanent_provider_blocker
 from localforge.services.task import TaskService
 from localforge.storage import UnitOfWork
 
@@ -156,6 +156,20 @@ async def transition_task_to(uow: UnitOfWork, task_id: int, target_status: TaskS
             )
         else:
             await uow.tasks.update_task_status(task_id, status)
+
+
+def test_scheduler_does_not_retry_permanent_provider_credit_failures():
+    assert _is_permanent_provider_blocker(
+        "OpenRouter completion failed (402): Insufficient credits"
+    )
+    assert _is_permanent_provider_blocker("NVIDIA completion failed (401): unauthorized")
+    assert _is_permanent_provider_blocker("OpenRouter completion failed (403): forbidden")
+    assert not _is_permanent_provider_blocker(
+        "NVIDIA completion failed (429): Too Many Requests"
+    )
+    assert not _is_permanent_provider_blocker(
+        "OmniRoute failed (429) after pool attempts including hy3-free (401)"
+    )
 
 
 def test_budgets_default_config():
@@ -384,8 +398,8 @@ async def test_scheduler_max_run_time(tmp_path, db_session, db_manager):
 
 
 @pytest.mark.anyio
-async def test_scheduler_executes_ready_task_pipeline(tmp_path, db_session, db_manager):
-    """Verify scheduler setup is followed by actual role pipeline execution."""
+async def test_scheduler_fails_closed_without_observed_pr_evidence(tmp_path, db_session, db_manager):
+    """A stub runner must not bypass the canonical observed-evidence PR gate."""
     uow = UnitOfWork(db_manager)
     uow.session = db_session
     uow.projects = ProjectService(db_session)
@@ -432,7 +446,10 @@ async def test_scheduler_executes_ready_task_pipeline(tmp_path, db_session, db_m
 
     refreshed_task = await uow.tasks.get_task(task.id)
     assert refreshed_task is not None
-    assert refreshed_task.status == TaskStatus.PR_READY
+    assert refreshed_task.status == TaskStatus.FAILED_SAFE
+    task_runs = await uow.tasks.list_runs_for_task(task.id)
+    assert task_runs
+    assert "PR readiness failed" in (task_runs[-1].final_summary or "")
     task_runs = await uow.tasks.list_runs_for_task(task.id)
     assert task_runs
     task_run_id = task_runs[0].id
@@ -487,6 +504,14 @@ async def test_scheduler_summary_generation(tmp_path, db_session, db_manager):
         domain.Task(project_id=proj.id, key="LF-83", title="Task 3", description="")
     )
     await transition_task_to(uow, task3.id, TaskStatus.FAILED_SAFE)
+    await uow.tasks.create_task_run(
+        domain.TaskRun(
+            run_id=run.id,
+            task_id=task3.id,
+            status=TaskRunStatus.FAILED,
+            final_summary="Chief provider blocker: insufficient credits",
+        )
+    )
 
     # Record Deny AuditEvent
     await uow.audits.append_audit_event(
@@ -518,6 +543,7 @@ async def test_scheduler_summary_generation(tmp_path, db_session, db_manager):
     )
     assert "Tasks Needing Human Review" in refreshed_run.summary
     assert "Recovery cycles used" in refreshed_run.summary
+    assert "LF-83 (Task 3): Chief provider blocker: insufficient credits" in refreshed_run.summary
     # Failed_Safe tasks are escalated by the recovery loop before
     # the summary is generated; they now appear under the
     # BLOCKED_NEEDS_HUMAN_REVIEW bucket.
@@ -528,6 +554,7 @@ async def test_scheduler_summary_generation(tmp_path, db_session, db_manager):
     content = summary_file.read_text(encoding="utf-8")
     assert "# LocalForge OS — Run Execution Summary" in content
     assert "**Run ID**: " in content
+    assert "LF-83 (Task 3): Chief provider blocker: insufficient credits" in content
 
 
 @pytest.mark.anyio

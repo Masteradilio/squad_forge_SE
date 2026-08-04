@@ -335,8 +335,28 @@ export const apiClient = {
     });
   },
 
-  startSquad(projectId: number): Promise<{ status: string; message: string }> {
-    return request<{ status: string; message: string }>(`/api/projects/${projectId}/start-squad`, {
+  intakeProjectInputs(payload: {
+    name: string;
+    root_path: string;
+    project_id?: number;
+    prd_content: string;
+    design_image_name?: string;
+    design_image_base64?: string;
+  }): Promise<{
+    project: Project;
+    prd_path: string;
+    design_image_path: string | null;
+    prd_import: ImportPRDResult;
+  }> {
+    return request('/api/projects/intake', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  startSquad(projectId: number): Promise<{ status: string; run_id: number; message: string }> {
+    return request<{ status: string; run_id: number; message: string }>(`/api/projects/${projectId}/start-squad`, {
       method: 'POST',
     });
   },
@@ -693,7 +713,8 @@ export const apiClient = {
     message: string,
     attachments: string[],
     projectId?: number,
-    sessionId?: number
+    sessionId?: number,
+    prdPath?: string
   ): Promise<{ project: Project; reply: string; session_id: number; status: string }> {
     return request<{ project: Project; reply: string; session_id: number; status: string }>(
       '/api/projects/chat',
@@ -704,6 +725,7 @@ export const apiClient = {
           attachments,
           project_id: projectId,
           session_id: sessionId,
+          prd_path: prdPath,
         }),
       }
     );

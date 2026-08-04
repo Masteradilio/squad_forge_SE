@@ -1,6 +1,9 @@
+import re
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 from typing import Any
+
+LLMMessage = dict[str, Any]
 
 
 class LLMError(Exception):
@@ -29,6 +32,35 @@ class LLMHTTPError(LLMError):
         self.status_code = status_code
 
 
+def is_permanent_provider_error(message: str) -> bool:
+    """Return whether retrying the provider can succeed without operator action.
+
+    Billing and authentication failures are not transient model failures. The
+    scheduler uses this same classifier as the pipeline so a provider error is
+    preserved across the task boundary instead of being retried as a generic
+    implementation failure.
+    """
+    normalized = message.lower()
+    if any(
+        marker in normalized
+        for marker in (
+            "429",
+            "rate limit",
+            "timed out",
+            "timeout",
+            "temporarily unavailable",
+        )
+    ):
+        return False
+    return (
+        bool(re.search(r"\b(?:401|402|403)\b", normalized))
+        or "insufficient credits" in normalized
+        or "billing limit" in normalized
+        or "api key is invalid" in normalized
+        or "authentication failed" in normalized
+    )
+
+
 class BaseLLMProvider(ABC):
     """Abstract base class defining LLM provider interfaces."""
 
@@ -40,7 +72,7 @@ class BaseLLMProvider(ABC):
     @abstractmethod
     async def chat_completion(
         self,
-        messages: list[dict[str, str]],
+        messages: list[LLMMessage],
         response_schema: dict[str, Any] | None = None,
         stream: bool = False,
         timeout: float = 30.0,

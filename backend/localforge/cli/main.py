@@ -1,5 +1,17 @@
-import typer
+import sys
+
 from localforge import __version__
+
+try:
+    import typer
+except ModuleNotFoundError:
+    # Keep the package's version smoke test usable from a no-dependency wheel
+    # install. All other CLI commands still require the declared CLI extras.
+    if __name__ == "__main__" and "--version" in sys.argv:
+        print(f"LocalForge OS {__version__}")
+        raise SystemExit(0) from None
+    raise
+
 from localforge.cli.autonomy import autonomy_app
 from localforge.cli.benchmark import benchmark_app
 from localforge.cli.circuit_breakers import breakers_app

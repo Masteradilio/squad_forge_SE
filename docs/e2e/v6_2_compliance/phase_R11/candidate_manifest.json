@@ -33,13 +33,12 @@
     "Candidate evidence is not final public release evidence.",
     "Narrated video, README recruiter path, GitHub Pages deployment, and publication metadata remain open."
   ],
-  "manifest_sha256": "d6ad02d9f196392308848d0133f43a141da8971d7e7f44aba543672e96e37d48",
   "phase": "R11",
   "release_tag": "v6.2.0",
   "release_version": "6.2.0",
   "reviewed_pr_number": 14,
   "schema_version": "localforge.v6_2.candidate_manifest.v1",
-  "source_commit": "ea382ab",
+  "source_commit": "d5be09e101437a45b67faa4683a82bd2c3cf7af3",
   "task_ids": [
     "V61C-1100",
     "V61C-1101",
@@ -47,5 +46,7 @@
     "V61C-1103",
     "V61C-1104"
   ],
-  "verdict": "EVIDENCE_READY"
+  "verdict": "EVIDENCE_READY",
+  "parent_commit": "9a9eafd96011688821d4771c81e5cf717c0890d9",
+  "manifest_sha256": "9d436664830d82ca0f177462712bddcc75b1fd29a7fda0fad49ec8529f92f6de"
 }

@@ -1,4 +1,5 @@
 from pathlib import Path
+
 from localforge.prd.dossier import (
     build_executive_release_dossier,
     calculate_file_sha256,

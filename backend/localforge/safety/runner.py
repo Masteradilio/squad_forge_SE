@@ -12,6 +12,7 @@ from localforge.models.enums import (
 )
 from localforge.safety.action_gateway import ActionGateway
 from localforge.safety.kernel import ActionRequest, SafetyDecision, SafetyKernel
+from localforge.services.security_controls import redact_secrets as redact_security_value
 from localforge.storage import UnitOfWork
 
 __all__ = ["SafetyKernel", "SafetyViolationError", "redact_secrets", "run_safe_command"]
@@ -38,7 +39,7 @@ def redact_secrets(text: str) -> str:
         val = os.getenv(var)
         if val and len(val.strip()) > 3:
             redacted = redacted.replace(val, "[REDACTED]")
-    return redacted
+    return redact_security_value(redacted)
 
 
 async def run_safe_command(
@@ -119,7 +120,7 @@ async def run_safe_command(
             event_type=AuditEventType.SAFETY_DECISION,
             payload_redacted={
                 "action": "run_command",
-                "command": command,
+                "command": redact_secrets(command),
                 "decision": "DENY",
                 "reason": reason,
             },
@@ -141,7 +142,7 @@ async def run_safe_command(
                 event_type=AuditEventType.SAFETY_DECISION,
                 payload_redacted={
                     "action": "run_command",
-                    "command": command,
+                    "command": redact_secrets(command),
                     "decision": "DENY",
                     "reason": "Approval required but mode is UNATTENDED",
                 },
@@ -211,7 +212,7 @@ async def run_safe_command(
                 event_type=AuditEventType.SAFETY_DECISION,
                 payload_redacted={
                     "action": "run_command",
-                    "command": command,
+                    "command": redact_secrets(command),
                     "decision": "DENY",
                     "reason": f"Approval rejected or timed out with status: {final_status}",
                 },
@@ -252,7 +253,7 @@ async def run_safe_command(
             event_type=AuditEventType.SAFETY_DECISION,
             payload_redacted={
                 "action": "run_command",
-                "command": command,
+                "command": redact_secrets(command),
                 "decision": "ALLOW",
                 "exit_code": exit_code,
             },

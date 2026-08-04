@@ -278,7 +278,35 @@ export function POChatView({
     setMessages((prev) => [...prev, optimisticUserMsg]);
 
     try {
-      const res = await apiClient.poScrumMasterChat(userText, filesList, activeProject?.id, activeSessionId);
+      let prdPath: string | undefined;
+      const prdFile = selectedFiles.find((file) => file.name.toLowerCase().endsWith('.md'));
+      if (prdFile && activeProject) {
+        const imageFile = selectedFiles.find((file) => /\.(png|jpe?g|webp|svg)$/i.test(file.name));
+        const imageBase64 = imageFile
+          ? await new Promise<string>((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = () => resolve(String(reader.result));
+              reader.onerror = () => reject(reader.error || new Error('Unable to read design image'));
+              reader.readAsDataURL(imageFile);
+            })
+          : undefined;
+        const intake = await apiClient.intakeProjectInputs({
+          name: activeProject.name,
+          root_path: activeProject.root_path,
+          project_id: activeProject.id,
+          prd_content: await prdFile.text(),
+          design_image_name: imageFile?.name,
+          design_image_base64: imageBase64,
+        });
+        prdPath = intake.prd_path;
+      }
+      const res = await apiClient.poScrumMasterChat(
+        userText,
+        filesList,
+        activeProject?.id,
+        activeSessionId,
+        prdPath,
+      );
       
       const smResponse: ChatMessage = {
         id: (Date.now() + 1).toString(),

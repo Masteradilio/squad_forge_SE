@@ -290,8 +290,13 @@ class TaskService:
             .order_by(WorktreeAttemptManifestORM.updated_at.desc())
         )
         manifest = result.scalars().first()
-        if manifest and manifest.task_run_id != evidence.task_run_id:
-            raise ValueError("PR_READY evidence source_commit does not match worktree manifest")
+        if manifest:
+            if manifest.task_id != task_id:
+                raise ValueError("PR_READY evidence worktree manifest does not belong to task")
+            if manifest.branch_name != evidence.branch_name:
+                raise ValueError("PR_READY evidence branch_name does not match worktree manifest")
+            if manifest.source_commit != evidence.source_commit:
+                raise ValueError("PR_READY evidence source_commit does not match worktree manifest")
 
     async def update_task(self, task: domain.Task) -> domain.Task:
         """Update general task fields (except status validation)."""

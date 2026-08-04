@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 
 import pytest
 from localforge.models import domain
+from localforge.models.enums import ChiefEngineerCallReason
 from localforge.services.model_calls import ModelCallLedgerService
 from localforge.services.routing import ModelRoutingService
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,6 +27,28 @@ async def test_pricing_sources_and_snapshots_seeded(db_session: AsyncSession):
     assert "gpt-5.5-large" in model_names
     assert "claude-opus-4.8" in model_names
     assert "gemini-2.5-pro" in model_names
+
+
+@pytest.mark.asyncio
+async def test_omniroute_preserves_gateway_reported_cost_without_snapshot(
+    db_session: AsyncSession,
+):
+    ledger_service = ModelCallLedgerService(db_session)
+    call = await ledger_service.record_call(
+        domain.ModelCallLedger(
+            project_id=1,
+            provider="omniroute",
+            model="auto/best-fast",
+            reason=ChiefEngineerCallReason.SEMANTIC_REPAIR_PLAN,
+            input_tokens=100,
+            output_tokens=50,
+            estimated_cost_usd=9.99,
+            status="success",
+        )
+    )
+
+    assert call.estimated_cost_usd == 9.99
+    assert call.metadata["pricing_measurement_source"] == "GATEWAY_REPORTED_COST"
 
 
 @pytest.mark.asyncio
@@ -113,6 +136,24 @@ async def test_cost_benchmark_calculation(db_session: AsyncSession):
     # OpenAI hypothetical: 0.80 + 0.20 = 1.00 USD
     assert abs(res["openai_hypothetical_usd"] - 1.00) < 0.001
     assert res["openai_savings_usd"] > 0.0
+
+    await ledger_svc.record_call(
+        domain.ModelCallLedger(
+            project_id=1,
+            run_id=10,
+            task_id=20,
+            provider="omniroute",
+            model="auto/best-free",
+            reason=ChiefEngineerCallReason.SEMANTIC_REPAIR_PLAN,
+            input_tokens=100,
+            output_tokens=50,
+            estimated_cost_usd=0.0,
+            status="success",
+        )
+    )
+    gateway_res = await benchmark_svc.calculate_benchmarks(project_id=1, run_id=10)
+    assert gateway_res["gateway_calls"] == 1
+    assert gateway_res["free_gateway_calls"] == 1
 
     # 3. Generate markdown
     report = await benchmark_svc.generate_markdown_report(project_id=1, run_id=10)

@@ -33,13 +33,12 @@
     "Real remote connector mutation paths and controlled fixtures remain open.",
     "CI Sweeper and PR Babysitter still need real draft-PR mutation evidence."
   ],
-  "manifest_sha256": "265f55c665594f5de18d491da8869a03c12e5d763f75319db45b0c85521ba499",
   "phase": "R8",
   "release_tag": "v6.2.0",
   "release_version": "6.2.0",
   "reviewed_pr_number": 14,
   "schema_version": "localforge.v6_2.candidate_manifest.v1",
-  "source_commit": "88d8bda",
+  "source_commit": "d5be09e101437a45b67faa4683a82bd2c3cf7af3",
   "task_ids": [
     "V61C-800",
     "V61C-801",
@@ -47,5 +46,7 @@
     "V61C-803",
     "V61C-804"
   ],
-  "verdict": "EVIDENCE_READY"
+  "verdict": "EVIDENCE_READY",
+  "parent_commit": "9a9eafd96011688821d4771c81e5cf717c0890d9",
+  "manifest_sha256": "cc7b4ab139da1f6dc49a5790094b1f58cfe83862bb4a6c8c1d629f05aac4f1b0"
 }

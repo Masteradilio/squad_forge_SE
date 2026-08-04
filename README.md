@@ -1,14 +1,16 @@
 # 🛡️ ForgeOS Cloud 1.0.0 — Software Engineering Squad Platform
 
-> **SaaS Platform for Autonomous Software Engineering AI Squads with ZERO Inference Token Costs**
+> **Cost-aware platform for supervised autonomous software-engineering squads**
 
-ForgeOS Cloud is an open-source, cloud-ready software engineering platform powered by an autonomous 10-role AI Squad. It turns product specifications (PRDs) into full-stack vertical slices (*Tracer Bullets*), routes work through a zero-cost multi-provider gateway (**OmniRoute**), manages persistent memory via the **HyperMemory Matrix** (Graphify AST GraphRAG, MemPalace Loci Vault, Claude-Mem Synthesizer), enforces strict **Matt Pocock TDD** (Red-Green-Refactor), fetches version-specific live documentation (**Context7 MCP**), and secures execution via an **Agent Authority Matrix** and **Human-in-the-Loop (HITL) Interruption Gates**.
+ForgeOS Cloud is a source-available, cloud-ready software-engineering platform powered by a 10-role AI Squad. It turns product specifications (PRDs) into bounded full-stack vertical slices (*Tracer Bullets*), can route local work through the OmniRoute gateway, manages persistent memory via the **HyperMemory Matrix** (Graphify AST GraphRAG, MemPalace Loci Vault, and rule synthesis), fetches version-specific documentation through **Context7 MCP**, and secures execution through an **Agent Authority Matrix** and **Human-in-the-Loop (HITL) gates**. Provider availability, inference cost, tenant isolation, and product E2E acceptance remain environment-dependent and are never inferred from unit-test results.
+
+> **Release boundary:** V6.2 remains in compliance remediation and is not currently accepted as a production release. ForgeOS Cloud is OmniRoute-only and defaults to free/freemium routes; a real HP12C acceptance run still requires a healthy gateway, responsive sandbox, and independent product validation.
 
 ---
 
 ## 🏛️ Core Architectural Innovations
 
-### 1. OmniRoute AI Gateway Integration (Custo Zero de Inference)
+### 1. OmniRoute AI Gateway Integration (Economy-aware inference)
 - Connects to 290+ free-tier and freemium LLM providers (Google AI Studio, Groq, Cerebras, SambaNova, Mistral).
 - **Pre-Flight Discovery Engine**: Dynamically filters models by native agentic capability (`tools: true`, `json_schema: true`), fine-grained daily recency, and parameter size score before every Squad run.
 
@@ -29,7 +31,9 @@ ForgeOS Cloud is an open-source, cloud-ready software engineering platform power
 - **Compiler Feedback Loop**: Captures `tsc --noEmit` and `pyright` traceback line numbers (`App.tsx#L42`) and feeds them to the Bug Fixer agent.
 - **Interface Contracts First**: Freezes shared TypeScript `.types.ts` and Pydantic schemas before code implementation.
 - **File Scope Locking**: Restricts tickets to modifying a maximum of 3-5 files.
-- **Strict Package Version Locking**: Freezes `package-lock.json` and `uv.lock`.
+- **Dependency discipline**: The frontend uses the tracked `package-lock.json`; the
+  Python dependency lock and a clean-clone install remain release gates, not claims
+  inferred from this README.
 
 ### 6. Agent Authority Matrix (10 Squad Roles Enforcement)
 - Enforces strict role-based tool and file path permissions at the `ActionGateway` level:
@@ -56,7 +60,11 @@ ForgeOS Cloud is an open-source, cloud-ready software engineering platform power
 git clone https://github.com/Masteradilio/local_forge_os.git
 cd local_forge_os
 
-# Validate docker-compose configuration
+# Create local configuration and replace every placeholder secret first
+# PowerShell: Copy-Item .env.example .env
+# POSIX shell: cp .env.example .env
+
+# Validate docker-compose configuration (requires the Compose secrets)
 docker compose config
 
 # Build and launch all 5 containers (omniroute, backend, frontend, postgres-pgvector, redis)
@@ -67,15 +75,15 @@ docker compose up --build
 - **Frontend Dashboard**: `http://localhost:80` or `http://localhost:5173`
 - **FastAPI Backend**: `http://localhost:8000`
 - **OmniRoute AI Gateway Proxy**: `http://localhost:20128/v1`
-- **PostgreSQL Pgvector DB**: `localhost:5433`
-- **Redis In-Memory Store**: `localhost:6379`
+- **PostgreSQL Pgvector DB**: internal Compose service (not published by default)
+- **Redis In-Memory Store**: internal Compose service (not published by default)
 
 ---
 
 ## 🧪 Automated Test Suite & Quality Verification
 
 ```bash
-# Run backend pytest suite (398+ tests)
+# Run backend pytest suite
 python -m pytest backend/tests -q
 
 # Run frontend Vitest unit suite (100% Pass Rate)

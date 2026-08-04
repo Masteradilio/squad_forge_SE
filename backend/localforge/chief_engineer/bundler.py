@@ -1,5 +1,8 @@
+import base64
+import io
 import json
 import logging
+import os
 import re
 from typing import Any
 
@@ -158,6 +161,8 @@ class EconomyPromptBundler:
         task_contract: dict[str, Any],
         changed_files_context: str,
         validation_output: str,
+        visual_reference_image_path: str | None = None,
+        visual_actual_image_path: str | None = None,
     ) -> dict[str, Any]:
         """Build contract-aware bundle payload."""
         # 1. Clean validation output
@@ -190,6 +195,23 @@ class EconomyPromptBundler:
         else:
             bundle["context"] = redacted_files_context
 
+        if task_contract.get("visual_required"):
+            bundle["visual_evidence"] = {
+                "reference_attached": bool(
+                    visual_reference_image_path and os.path.isfile(visual_reference_image_path)
+                ),
+                "actual_attached": bool(
+                    visual_actual_image_path and os.path.isfile(visual_actual_image_path)
+                ),
+                "instruction": (
+                    "Compare the attached reference and current-render images. Preserve the "
+                    "calculator's full functionality while correcting the current render "
+                    "toward the reference; never omit controls or use placeholders. The "
+                    "reference image has precedence over any conflicting color, material, "
+                    "geometry, or layout wording in the task prose."
+                ),
+            }
+
         # Preview token budget
         estimated_input_chars = len(json.dumps(bundle))
         estimated_tokens = max(1, estimated_input_chars // 4)
@@ -201,3 +223,59 @@ class EconomyPromptBundler:
         )
 
         return bundle
+
+    def build_visual_user_content(
+        self,
+        bundle: dict[str, Any],
+        *,
+        visual_reference_image_path: str | None = None,
+        visual_actual_image_path: str | None = None,
+    ) -> str | list[dict[str, Any]]:
+        """Build a compact multimodal message for visual repair calls.
+
+        Images are resized and JPEG-compressed before attachment so visual
+        feedback remains useful without turning every retry into a large paid
+        payload. Text-only models still receive the complete JSON bundle.
+        """
+        text = json.dumps(bundle, sort_keys=True)
+        if bundle.get("visual_evidence"):
+            text += (
+                "\nFINAL VISUAL CHECKLIST: the reference image is the acceptance authority. "
+                "Preserve every existing key and handler. Do not create blank grid rows or "
+                "large vertical gaps. The physical calculator must fill the viewport, with "
+                "the full bottom row visible; remove only debug/footer chrome absent from the "
+                "reference. If the current file is already structurally complete, prefer CSS "
+                "changes over rewriting its JavaScript."
+            )
+        image_parts: list[dict[str, Any]] = []
+        for label, path in (
+            ("reference", visual_reference_image_path),
+            ("current render", visual_actual_image_path),
+        ):
+            data_url = self._image_data_url(path)
+            if data_url:
+                image_parts.append({"type": "text", "text": f"Attached image: {label}."})
+                image_parts.append(
+                    {"type": "image_url", "image_url": {"url": data_url}}
+                )
+        if not image_parts:
+            return text
+        return [{"type": "text", "text": text}, *image_parts]
+
+    def _image_data_url(self, path: str | None) -> str | None:
+        if not path or not os.path.isfile(path):
+            return None
+        try:
+            from PIL import Image
+
+            with Image.open(path) as image:
+                rgb_image = image.convert("RGB")
+                rgb_image.thumbnail((768, 768))
+                output = io.BytesIO()
+                rgb_image.save(output, format="JPEG", quality=68, optimize=True)
+                rgb_image.close()
+            encoded = base64.b64encode(output.getvalue()).decode("ascii")
+            return f"data:image/jpeg;base64,{encoded}"
+        except Exception as exc:
+            logger.warning("Unable to encode visual evidence %s: %s", path, exc)
+            return None

@@ -1,5 +1,6 @@
 """Security controls shared by API, audit, prompts, and exported artifacts."""
 
+import hmac
 import os
 import re
 from dataclasses import dataclass
@@ -25,8 +26,14 @@ class SecurityPolicy:
             max_body_bytes = max(1024, int(max_body_raw))
         except ValueError:
             max_body_bytes = DEFAULT_MAX_BODY_BYTES
+        environment = os.getenv("LOCALFORGE_ENV", os.getenv("FORGEOS_ENV", "development")).lower()
+        api_token = os.getenv("LOCALFORGE_API_TOKEN") or None
+        if environment in {"production", "staging"} and not api_token:
+            # Fail closed: a deployment without an auth secret must not expose
+            # mutable project, prompt, or execution endpoints.
+            api_token = "__missing_production_api_token__"
         return cls(
-            api_token=os.getenv("LOCALFORGE_API_TOKEN") or None,
+            api_token=api_token,
             max_body_bytes=max_body_bytes,
         )
 
@@ -37,7 +44,8 @@ SECRET_PATTERNS = (
         r"['\"]?[A-Za-z0-9_\-./:=+]{8,}['\"]?"
     ),
     re.compile(r"(?i)bearer\s+[A-Za-z0-9_\-./:=+]{8,}"),
-    re.compile(r"sk-[A-Za-z0-9]{16,}"),
+    re.compile(r"(?i)\bsk-[A-Za-z0-9][A-Za-z0-9_-]{15,}\b"),
+    re.compile(r"(?i)\b(?:nvapi|ghp_|github_pat_|xoxb-|xoxp-|AIza)[A-Za-z0-9_-]{16,}\b"),
 )
 
 
@@ -92,7 +100,7 @@ def enforce_api_auth(request: Request, policy: SecurityPolicy) -> None:
     if not policy.api_token or request.url.path in PUBLIC_PATHS:
         return
     expected = f"Bearer {policy.api_token}"
-    if request.headers.get("authorization") != expected:
+    if not hmac.compare_digest(request.headers.get("authorization", ""), expected):
         raise HTTPException(status_code=401, detail="Missing or invalid API token")
 
 

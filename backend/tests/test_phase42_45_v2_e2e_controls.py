@@ -335,3 +335,50 @@ async def test_chief_engineer_receives_expanded_visual_file_context(tmp_path):
     assert repaired is False
     assert "app/dashboard.html" in captured["context"]
     assert len(captured["context"]) > 12_000
+
+
+@pytest.mark.asyncio
+async def test_chief_provider_billing_failure_reaches_scheduler_blocker(tmp_path):
+    task = domain.Task(
+        id=2,
+        project_id=1,
+        key="LF-PRD-004",
+        title="Dashboard controls",
+        description="Visual task",
+        metadata={"task_contract": {"visual_required": True}},
+    )
+    task_run = domain.TaskRun(id=3, run_id=10, task_id=2, worktree_path=str(tmp_path))
+    config = SimpleNamespace(
+        chief_engineer=SimpleNamespace(
+            enabled=True,
+            model="minimaxai/minimax-m3",
+            fallback_models=[],
+            visual_model=None,
+            visual_fallback_models=[],
+        )
+    )
+
+    async def fail_plan(**kwargs):
+        raise ValueError("OpenRouter completion failed (402): Insufficient credits")
+
+    with (
+        patch("localforge.pipeline.engine.load_config", return_value=config),
+        patch(
+            "localforge.pipeline.engine.build_chief_engineer_provider",
+            return_value=MagicMock(provider_name="openrouter"),
+        ),
+        patch("localforge.pipeline.engine.ChiefEngineerService") as service_cls,
+    ):
+        service_cls.return_value.plan_semantic_repair = fail_plan
+        engine = RolePipelineEngine(MagicMock(), project_id=1, run_id=10)
+
+        with pytest.raises(ValueError, match="provider is unavailable.*402"):
+            await engine._try_chief_engineer_repair(
+                task=task,
+                task_run=task_run,
+                context=MagicMock(),
+                editor=MagicMock(),
+                changed_files=[],
+                command_summaries=[],
+                validation_output="visual validation failed",
+            )

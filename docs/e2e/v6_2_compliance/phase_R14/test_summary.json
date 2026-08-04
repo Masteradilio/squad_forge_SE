@@ -1,0 +1,12 @@
+{
+  "phase": "R14",
+  "scope": "direct CLI Chief Engineer preflight diagnostic",
+  "verdict": "BLOCKED_NEEDS_HUMAN_REVIEW",
+  "workspace": "benchmarks/workspaces/hp12c-v6-cloud-e2e",
+  "run_id": 3,
+  "provider_error": "HTTP 402 Insufficient credits",
+  "task_runs_created": 0,
+  "all_tasks_pr_ready": false,
+  "product_acceptance": false,
+  "next_gate": "fund the configured Chief provider and rerun from a clean workspace"
+}

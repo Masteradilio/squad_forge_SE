@@ -41,7 +41,7 @@ export function useProjectEvents(
     const connect = () => {
       if (!active) return;
 
-      const url = `/api/projects/${pid}/events?last_event_id=${lastEventIdRef.current}`;
+      const url = `/api/projects/${pid}/events?last_event_id=${lastEventIdRef.current}&follow=true`;
       eventSource = new EventSource(url);
 
       eventSource.onopen = () => {

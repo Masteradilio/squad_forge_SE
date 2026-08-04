@@ -61,6 +61,19 @@ def test_secret_redaction_covers_environment_and_inline_patterns(
     assert "bearer-secret-000" not in redacted
 
 
+@pytest.mark.parametrize(
+    "secret",
+    [
+        "sk-or-v1-0123456789abcdef0123456789abcdef",
+        "nvapi-0123456789abcdef0123456789abcdef",
+        "ghp_0123456789abcdef0123456789abcdef",
+        "AIza0123456789abcdef0123456789abcdef",
+    ],
+)
+def test_secret_redaction_covers_provider_key_shapes(secret: str) -> None:
+    assert secret not in redact_secrets(f"provider response: {secret}")
+
+
 def test_path_traversal_is_rejected(tmp_path: Path) -> None:
     root = tmp_path / "workspace"
     root.mkdir()

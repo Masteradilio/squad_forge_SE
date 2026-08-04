@@ -1,5 +1,7 @@
 import io
+import sys
 import tarfile
+import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -32,6 +34,13 @@ async def test_local_sandbox_lifecycle(tmp_path):
     exit_code, stdout, stderr = await sandbox.execute("python -c \"print('hello')\"")
     assert exit_code == 0
     assert "hello" in stdout
+
+    (worktree / "utf8.txt").write_bytes("ΔDYS".encode("utf-8"))
+    exit_code, stdout, stderr = await sandbox.execute(
+        f'{sys.executable} -c "from pathlib import Path; print(Path(\'utf8.txt\').read_text())"'
+    )
+    assert exit_code == 0
+    assert stdout.strip() == "ΔDYS"
 
     # Copy file in
     src_file = tmp_path / "src.txt"
@@ -146,6 +155,56 @@ async def test_docker_sandbox_mocked(tmp_path):
 
 
 @pytest.mark.anyio
+async def test_docker_sandbox_fails_fast_when_sdk_connection_hangs(tmp_path):
+    worktree = tmp_path / "worktree"
+    worktree.mkdir()
+    mock_docker = MagicMock()
+
+    def hanging_from_env():
+        time.sleep(0.05)
+        return MagicMock()
+
+    mock_docker.from_env.side_effect = hanging_from_env
+    with patch.dict("sys.modules", {"docker": mock_docker}):
+        sandbox = DockerSandbox(str(worktree))
+        sandbox.operation_timeout_seconds = 0.01
+
+        with pytest.raises(RuntimeError, match="timed out"):
+            await sandbox.create()
+
+        assert await sandbox.status() == "failed"
+
+
+@pytest.mark.anyio
+async def test_docker_sandbox_mounts_common_git_for_linked_worktree(tmp_path):
+    repo = tmp_path / "repo"
+    common_git = repo / ".git"
+    worktree = repo / ".localforge" / "worktrees" / "task-1"
+    common_git_worktree = common_git / "worktrees" / "task-1"
+    worktree.mkdir(parents=True)
+    common_git_worktree.mkdir(parents=True)
+    (worktree / ".git").write_text(
+        f"gitdir: {common_git_worktree}", encoding="utf-8"
+    )
+
+    mock_docker = MagicMock()
+    mock_client = MagicMock()
+    mock_client.containers.run.return_value = MagicMock()
+    mock_docker.from_env.return_value = mock_client
+
+    with patch.dict("sys.modules", {"docker": mock_docker}):
+        sandbox = DockerSandbox(str(worktree), image="test:latest")
+        await sandbox.create()
+
+    kwargs = mock_client.containers.run.call_args[1]
+    assert str(repo) in kwargs["volumes"]
+    assert kwargs["environment"] == {
+        "GIT_DIR": "/forgeos-repo/.git/worktrees/task-1",
+        "GIT_WORK_TREE": "/workspace",
+    }
+
+
+@pytest.mark.anyio
 async def test_docker_sandbox_blocks_workspace_prefix_escape(tmp_path):
     """Verify DockerSandbox rejects sibling paths that only share a string prefix."""
     worktree = tmp_path / "worktree"
@@ -205,10 +264,10 @@ async def test_sandbox_factory_resolution():
     sandbox = create_sandbox(config_local, "/dummy")
     assert isinstance(sandbox, LocalSandbox)
 
-    # Docker config without SDK falls back to LocalSandbox
+    # Docker config without SDK fails closed instead of downgrading to a host process.
     with patch.dict("sys.modules", {"docker": None}):
-        sandbox = create_sandbox(config_docker, "/dummy")
-        assert isinstance(sandbox, LocalSandbox)
+        with pytest.raises(RuntimeError, match="Docker sandbox is configured"):
+            create_sandbox(config_docker, "/dummy")
 
     # Docker config with SDK resolves to DockerSandbox
     mock_docker = MagicMock()

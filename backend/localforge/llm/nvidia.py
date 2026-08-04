@@ -11,6 +11,7 @@ class NvidiaProvider(OpenAICompatibleProvider):
         api_key: str | None,
         default_model: str | None,
         base_url: str = "https://integrate.api.nvidia.com/v1",
+        max_output_tokens: int | None = None,
     ):
         if not api_key:
             raise LLMError("NVIDIA API key is required for NVIDIA Chief Engineer calls.")
@@ -19,4 +20,5 @@ class NvidiaProvider(OpenAICompatibleProvider):
             api_key=api_key,
             default_model=default_model,
             provider_name="nvidia",
+            max_output_tokens=max_output_tokens,
         )

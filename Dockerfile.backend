@@ -23,24 +23,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY pyproject.toml README.md LICENSE requirements.txt* /app/
 COPY backend /app/backend
 
-# Install Python packages (including pgvector, chromadb, tree-sitter, playwright)
+# Install the reproducible Cloud dependency set.
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
-    pip install --no-cache-dir -e . && \
-    pip install --no-cache-dir \
-    pgvector \
-    psycopg2-binary \
-    asyncpg \
-    redis \
-    chromadb \
-    tree-sitter \
-    tree-sitter-languages \
-    playwright \
-    opentelemetry-api \
-    opentelemetry-sdk \
-    cryptography
+    pip install --no-cache-dir -e ".[cloud]" && \
+    pip install --no-cache-dir pgvector
 
 # Install Playwright chromium (optional headless browser)
-RUN playwright install chromium || true
+RUN playwright install chromium
+
+# Do not run the API as root.  Docker/Podman remains the only execution
+# boundary for agent commands when sandbox.type=docker.
+RUN useradd --create-home --uid 10001 forgeos && chown -R forgeos:forgeos /app
+USER forgeos
 
 COPY .env.example /app/.env.example
 

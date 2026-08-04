@@ -97,6 +97,12 @@ class StrategyComparatorService:
             strategy: self._gate_strategy(metrics, baseline_pr_ready)
             for strategy, metrics in metrics_map.items()
         }
+        if comparison_reasons:
+            for gate in gate_map.values():
+                gate.reasons.extend(comparison_reasons)
+                if gate.verdict != "REJECTED":
+                    gate.verdict = "PARTIAL"
+                    gate.recommended_default = False
 
         return StrategyComparisonReport(
             corpus_version=manifest.corpus_version,
@@ -154,6 +160,13 @@ class StrategyComparatorService:
             }
             if len(values) > 1:
                 reasons.append(f"Observed results disagree on {field_name}: {sorted(values)!r}.")
+        for result in observations:
+            source = result.measurement_source.strip().upper()
+            if not source or source.endswith("_FIXTURE") or "SIMULAT" in source:
+                reasons.append(
+                    f"{result.strategy_name}/{result.event_id} uses non-observed measurement source "
+                    f"{result.measurement_source!r}."
+                )
         return sorted(set(reasons))
 
     def _evaluate_strategy(

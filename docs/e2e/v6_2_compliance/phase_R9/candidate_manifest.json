@@ -33,13 +33,12 @@
     "JSONL publication export and CI row-count validation remain open.",
     "Deep Swarm remains opt-in and PARTIAL until repeated controlled runs justify it."
   ],
-  "manifest_sha256": "7f76306274c295d67b7aa0d01438bdbe9b8d49b1ca9db29f2a9bb2f91cd04312",
   "phase": "R9",
   "release_tag": "v6.2.0",
   "release_version": "6.2.0",
   "reviewed_pr_number": 14,
   "schema_version": "localforge.v6_2.candidate_manifest.v1",
-  "source_commit": "e449972",
+  "source_commit": "d5be09e101437a45b67faa4683a82bd2c3cf7af3",
   "task_ids": [
     "V61C-900",
     "V61C-901",
@@ -47,5 +46,7 @@
     "V61C-903",
     "V61C-904"
   ],
-  "verdict": "EVIDENCE_READY"
+  "verdict": "EVIDENCE_READY",
+  "parent_commit": "9a9eafd96011688821d4771c81e5cf717c0890d9",
+  "manifest_sha256": "b20cc9099cf74def01e8aece324f14def9ab48fc620efed2c9636f41d91cf183"
 }

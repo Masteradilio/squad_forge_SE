@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 import subprocess
 import tempfile
 
@@ -34,7 +35,9 @@ def find_browser_executable() -> str | None:
     return None
 
 
-def capture_html_screenshot(html_path: str, output_image_path: str) -> bool:
+def capture_html_screenshot(
+    html_path: str, output_image_path: str, *, viewport: str = "1280x720"
+) -> bool:
     """Capture a screenshot of a local HTML file using Chrome/Edge Headless.
 
     Returns True if screenshot was captured successfully, False otherwise.
@@ -57,8 +60,19 @@ def capture_html_screenshot(html_path: str, output_image_path: str) -> bool:
     # Ensure directory of the output image exists
     os.makedirs(os.path.dirname(abs_output), exist_ok=True)
 
+    match = re.fullmatch(r"\s*(\d+)\s*[x,]\s*(\d+)\s*", viewport)
+    viewport_width, viewport_height = (1280, 720)
+    if match:
+        viewport_width = max(320, int(match.group(1)))
+        viewport_height = max(240, int(match.group(2)))
+
     # Build CLI command for headless capture
-    with tempfile.TemporaryDirectory(prefix="localforge-headless-") as profile_dir:
+    # Chromium can leave a cache/lock file behind for a short time after the
+    # process exits on Windows. The screenshot itself is already durable, so
+    # cleanup must not turn a successful capture into a task failure.
+    with tempfile.TemporaryDirectory(
+        prefix="localforge-headless-", ignore_cleanup_errors=True
+    ) as profile_dir:
         cache_dir = os.path.join(profile_dir, "cache")
         cmd = [
             browser_exe,
@@ -77,7 +91,7 @@ def capture_html_screenshot(html_path: str, output_image_path: str) -> bool:
             f"--user-data-dir={profile_dir}",
             f"--disk-cache-dir={cache_dir}",
             f"--screenshot={abs_output}",
-            "--window-size=1280,720",
+            f"--window-size={viewport_width},{viewport_height}",
             "file:///" + abs_html.replace("\\", "/"),
         ]
 

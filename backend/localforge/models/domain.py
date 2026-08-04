@@ -259,6 +259,22 @@ class PRReadyEvidence(BaseModel):
             raise ValueError("risk_verdict.passed must be true")
         if self.safety_verdict.get("passed") is not True:
             raise ValueError("safety_verdict.passed must be true")
+        placeholder_values = {
+            "unknown-source",
+            "unknown-target",
+            "role-pipeline",
+            "lead-agent",
+            "0000000000000000000000000000000000000000",
+        }
+        if self.source_commit.lower() in placeholder_values:
+            raise ValueError("source_commit must identify an observed commit")
+        if self.target_commit.lower() in placeholder_values:
+            raise ValueError("target_commit must identify an observed commit")
+        if self.diff_hash.lower() in {
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "role-pipeline",
+        }:
+            raise ValueError("diff_hash must identify an observed diff")
         for field_name in ("source_commit", "target_commit", "diff_hash"):
             observed = self.pre_pr_gate.get(field_name)
             if observed is not None and str(observed) != getattr(self, field_name):

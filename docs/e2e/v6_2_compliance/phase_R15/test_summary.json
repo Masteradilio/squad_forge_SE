@@ -1,0 +1,19 @@
+{
+  "phase": "R15",
+  "scope": "real HP12C provider-routing retry",
+  "verdict": "BLOCKED_NEEDS_HUMAN_REVIEW",
+  "workspace": "samples/e2e-hp12c-platinum",
+  "database": ".localforge/retry.db",
+  "tasks_imported": 19,
+  "tasks_pr_ready": 0,
+  "task_runs_completed": 0,
+  "paid_calls_failed": 4,
+  "measured_cost_usd": 0.0012,
+  "provider_errors": [
+    "NVIDIA timeout",
+    "NVIDIA HTTP 429 Too Many Requests",
+    "OpenRouter HTTP 402 Insufficient credits"
+  ],
+  "product_acceptance": false,
+  "next_gate": "make NVIDIA quota or funded OpenRouter fallback available and rerun from a clean database"
+}

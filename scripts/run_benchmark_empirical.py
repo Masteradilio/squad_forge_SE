@@ -1,15 +1,16 @@
-import os
-import sys
-import json
 import asyncio
+import io
+import json
+import os
 import shutil
 import sqlite3
 import subprocess
-import yaml
-import io
+import sys
 import tarfile
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from typing import Any
+
+import yaml
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 V2_CODE_DIR = os.path.join(ROOT_DIR, ".benchmarks", "code", "v2-baseline-head")
@@ -32,8 +33,8 @@ async def check_docker_status() -> tuple[bool, str]:
 
 async def check_ollama_status() -> tuple[bool, list[str]]:
     """Checks if local Ollama daemon is reachable and lists downloaded models."""
-    import urllib.request
     import json
+    import urllib.request
     try:
         loop = asyncio.get_event_loop()
         def fetch():
@@ -49,7 +50,7 @@ async def check_ollama_status() -> tuple[bool, list[str]]:
             return True, models
         else:
             return False, []
-    except Exception as e:
+    except Exception:
         return False, []
 
 async def run_cli_command(
@@ -74,7 +75,11 @@ async def run_cli_command(
             stderr=asyncio.subprocess.PIPE
         )
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout_seconds)
-        return proc.returncode, stdout.decode("utf-8").strip(), stderr.decode("utf-8").strip()
+        return (
+            proc.returncode if proc.returncode is not None else -1,
+            stdout.decode("utf-8").strip(),
+            stderr.decode("utf-8").strip(),
+        )
     except TimeoutError:
         try:
             proc.kill()
@@ -94,8 +99,7 @@ def extract_head_baseline() -> tuple[bool, str]:
         proc = subprocess.run(
             ["git", "-C", ROOT_DIR, "archive", "--format=tar", "HEAD"],
             check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
         )
         with tarfile.open(fileobj=io.BytesIO(proc.stdout), mode="r:") as archive:
             archive.extractall(V2_CODE_DIR, filter="data")
@@ -116,6 +120,9 @@ def fetch_workspace_metrics(db_path: str) -> dict[str, Any]:
         "task_runs_count": 0,
         "artifacts_logged": 0,
         "calls_logged": 0,
+        "observed_ledger_cost_usd": None,
+        "cost_measurement_source": "UNKNOWN",
+        "human_interventions": None,
         "pr_ready": 0,
         "failed_safe": 0,
         "backlog": 0,
@@ -142,6 +149,22 @@ def fetch_workspace_metrics(db_path: str) -> dict[str, Any]:
             except Exception:
                 pass
         try:
+            c.execute(
+                """
+                SELECT COALESCE(SUM(estimated_cost_usd), 0.0), COUNT(*)
+                FROM model_call_ledger
+                WHERE lower(provider) NOT IN ('ollama', 'local', 'localforge')
+                """
+            )
+            paid_cost, paid_calls = c.fetchone()
+            metrics["observed_ledger_cost_usd"] = float(paid_cost)
+            metrics["cost_measurement_source"] = (
+                "MODEL_CALL_LEDGER" if paid_calls else "NO_PAID_CALLS_OBSERVED"
+            )
+        except Exception:
+            metrics["observed_ledger_cost_usd"] = None
+            metrics["cost_measurement_source"] = "UNKNOWN"
+        try:
             c.execute("SELECT status, COUNT(*) FROM tasks GROUP BY status")
             for status, count in c.fetchall():
                 normalized = str(status).lower()
@@ -155,6 +178,14 @@ def fetch_workspace_metrics(db_path: str) -> dict[str, Any]:
                     metrics["ready"] = count
         except Exception:
             pass
+        try:
+            c.execute(
+                "SELECT COUNT(*) FROM audit_events "
+                "WHERE lower(actor_type) = 'human'"
+            )
+            metrics["human_interventions"] = int(c.fetchone()[0])
+        except Exception:
+            metrics["human_interventions"] = None
         try:
             c.execute("SELECT status, COUNT(*) FROM task_runs GROUP BY status")
             for status, count in c.fetchall():
@@ -179,7 +210,7 @@ async def patch_workspace_config(workspace_dir: str, default_model: str, docker_
     config_path = os.path.join(workspace_dir, ".localforge", "config.yaml")
     if os.path.exists(config_path):
         try:
-            with open(config_path, "r", encoding="utf-8") as f:
+            with open(config_path, encoding="utf-8") as f:
                 cfg = yaml.safe_load(f) or {}
             
             if "models" not in cfg:
@@ -210,7 +241,7 @@ async def run_preflight_checks(v3_dir: str, v3_tasks_imported: int, expected_tas
     
     if os.path.exists(config_path):
         try:
-            with open(config_path, "r", encoding="utf-8") as f:
+            with open(config_path, encoding="utf-8") as f:
                 cfg = yaml.safe_load(f) or {}
                 sandbox_type = cfg.get("sandbox", {}).get("type", "local")
                 if sandbox_type == "local":
@@ -239,7 +270,7 @@ async def run_preflight_checks(v3_dir: str, v3_tasks_imported: int, expected_tas
     # Config default model
     if os.path.exists(config_path):
         try:
-            with open(config_path, "r", encoding="utf-8") as f:
+            with open(config_path, encoding="utf-8") as f:
                 cfg = yaml.safe_load(f) or {}
                 default_cfg_model = cfg.get("models", {}).get("default_model")
                 if default_cfg_model:
@@ -415,6 +446,10 @@ async def main():
     v3_failed_safe = int(v3_metrics["failed_safe"])
     v2_blocked_count = int(v2_metrics["backlog"]) + int(v2_metrics["ready"])
     v3_blocked_count = int(v3_metrics["backlog"]) + int(v3_metrics["ready"])
+    v2_cost = v2_metrics["observed_ledger_cost_usd"]
+    v3_cost = v3_metrics["observed_ledger_cost_usd"]
+    v2_human_interventions = v2_metrics["human_interventions"]
+    v3_human_interventions = v3_metrics["human_interventions"]
 
     # Extract any error details from V3 execution run
     execution_error = "\n\n".join(
@@ -425,11 +460,55 @@ async def main():
             "V3 STDOUT:\n" + v3_run_out if v3_run_out else "",
         ] if part
     )
-    v2_terminal_status = "BLOCKED" if preflight_failed else ("COMPLETED" if v2_run_code == 0 else "FAILED")
-    v3_terminal_status = "BLOCKED" if preflight_failed else ("COMPLETED" if v3_run_code == 0 else "FAILED")
+    v2_terminal_status = "BLOCKED" if preflight_failed else ("FAILED" if v2_run_code != 0 else (
+        "COMPLETED" if v2_pr_ready == v2_tasks_imported else "EXECUTED_WITH_FAILURES"
+    ))
+    v3_terminal_status = "BLOCKED" if preflight_failed else ("FAILED" if v3_run_code != 0 else (
+        "COMPLETED" if v3_pr_ready == v3_tasks_imported else "EXECUTED_WITH_FAILURES"
+    ))
     overall_status = "BLOCKED" if preflight_failed else "EXECUTED_WITH_FAILURES"
-    if not preflight_failed and v2_run_code == 0 and v3_run_code == 0:
+    if (
+        not preflight_failed
+        and v2_terminal_status == "COMPLETED"
+        and v3_terminal_status == "COMPLETED"
+    ):
         overall_status = "EXECUTED"
+
+    v3_quality_win = (
+        v3_terminal_status == "COMPLETED"
+        and v3_pr_ready == v3_tasks_imported
+        and v3_failed_safe == 0
+    )
+    costs_observed = all(
+        metric["cost_measurement_source"]
+        in {"MODEL_CALL_LEDGER", "NO_PAID_CALLS_OBSERVED"}
+        and metric["observed_ledger_cost_usd"] is not None
+        for metric in (v2_metrics, v3_metrics)
+    )
+    v3_cost_efficiency_win = bool(costs_observed and float(v3_cost) <= float(v2_cost))
+    v3_autonomy_win = bool(
+        v3_terminal_status == "COMPLETED"
+        and v3_human_interventions is not None
+        and v3_human_interventions == 0
+    )
+    victory_criteria = [
+        v3_quality_win,
+        v3_cost_efficiency_win,
+        v3_autonomy_win,
+        v3_pr_ready == v3_tasks_imported and v3_terminal_status == "COMPLETED",
+        v3_metrics["cost_measurement_source"] == "MODEL_CALL_LEDGER",
+        v3_artifacts_logged > 0 and v3_terminal_status == "COMPLETED",
+    ]
+
+    def display_cost(metrics: dict[str, Any]) -> str:
+        value = metrics["observed_ledger_cost_usd"]
+        source = metrics["cost_measurement_source"]
+        if value is None or source == "UNKNOWN":
+            return "UNKNOWN"
+        return f"${float(value):.6f} ({source})"
+
+    def display_count(value: Any) -> str:
+        return "UNKNOWN" if value is None else str(value)
     
     # 4. Format JSON comparative metrics (strict matching blockers)
     metrics_json_path = os.path.join(ROOT_DIR, "docs", "e2e", "v2_v3_comparative_metrics.json")
@@ -456,10 +535,11 @@ async def main():
           "pr_ready": v2_pr_ready,
           "failed_safe": v2_failed_safe,
           "blocked": expected_tasks if preflight_failed else v2_blocked_count,
-          "human_interventions": 0,
+           "human_interventions": v2_human_interventions,
           "local_model_attempts": v2_calls_logged,
           "chief_engineer_attempts": 0,
-          "actual_api_cost_usd": 0.0,
+          "observed_ledger_cost_usd": v2_metrics["observed_ledger_cost_usd"],
+          "cost_measurement_source": v2_metrics["cost_measurement_source"],
           "run_status": v2_terminal_status,
           "pr_artifacts_paths": []
         },
@@ -472,20 +552,22 @@ async def main():
           "pr_ready": v3_pr_ready,
           "failed_safe": v3_failed_safe,
           "blocked": expected_tasks if preflight_failed else v3_blocked_count,
-          "human_interventions": 0,
+           "human_interventions": v3_human_interventions,
           "local_model_attempts": v3_calls_logged,
           "chief_engineer_attempts": 0,
-          "actual_api_cost_usd": 0.0,  # real cost can be populated from SQLite ledger later if run completed
+          "observed_ledger_cost_usd": v3_metrics["observed_ledger_cost_usd"],
+          "cost_measurement_source": v3_metrics["cost_measurement_source"],
           "run_status": v3_terminal_status,
           "pr_artifacts_paths": []
         }
       ],
       "conclusions": {
-        "v3_victory_score": "0/6 criteria achieved (BLOCKED)" if preflight_failed else "0/6 criteria achieved (runs did not complete cleanly)",
-        "quality_win": False,
-        "cost_efficiency_win": False,
-        "autonomy_win": False,
-        "pr_ready_win": False
+         "v3_victory_score": f"{sum(victory_criteria)}/6 criteria achieved",
+         "quality_win": v3_quality_win,
+         "cost_efficiency_win": v3_cost_efficiency_win,
+         "autonomy_win": v3_autonomy_win,
+         "pr_ready_win": v3_pr_ready == v3_tasks_imported and v3_terminal_status == "COMPLETED",
+         "criteria": victory_criteria,
       }
     }
     with open(metrics_json_path, "w", encoding="utf-8") as f:
@@ -574,10 +656,10 @@ Métricas extraídas diretamente das tabelas dos bancos SQLite reais (`localforg
 | **Tasks Imported in DB** | {v2_tasks_imported} | {v3_tasks_imported} | **Sucesso na importação real** |
 | **PR_READY Count** | {v2_pr_ready} | {v3_pr_ready} | Status real de `tasks.status` |
 | **FAILED_SAFE Count** | {v2_failed_safe} | {v3_failed_safe} | Status real de `tasks.status` |
-| **Actual API Cost (USD)** | $0.0000 | **$0.0000** | **Sem gastos de API** |
-| **Actual Model Calls Logged** | {v2_calls_logged} | {v3_calls_logged} | **0 (Chamadas bloqueadas)** |
-| **PR Artifacts Logged** | {v2_artifacts_logged} | {v3_artifacts_logged} | **0 (Nenhum PR gerado)** |
-| **Human Acceptance Score** | 0.0 / 5.0 | **0.0 / 5.0** | **Produto não produzido** |
+| **Observed API Cost (USD)** | {display_cost(v2_metrics)} | **{display_cost(v3_metrics)}** | Persisted model-call ledger |
+| **Model Calls Logged** | {v2_calls_logged} | {v3_calls_logged} | SQLite ledger count |
+| **PR Artifacts Logged** | {v2_artifacts_logged} | {v3_artifacts_logged} | SQLite artifact count |
+| **Human Interventions Observed** | {display_count(v2_human_interventions)} | **{display_count(v3_human_interventions)}** | Audit event count; UNKNOWN if unavailable |
 
 ---
 

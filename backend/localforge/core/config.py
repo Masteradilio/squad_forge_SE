@@ -1,5 +1,6 @@
 import os
 from typing import Any
+from urllib.parse import urlsplit
 
 import yaml
 from dotenv import dotenv_values
@@ -16,17 +17,32 @@ DEFAULT_CONFIG = {
         "remote_url": None,
     },
     "models": {
-        "provider": "ollama",
-        "base_url": "http://localhost:11434/v1",
-        "default_model": "gemma4:12b",
-        "fallback_models": ["granite4.1:8b", "nemotron-3-nano:4b"],
+        "provider": "omniroute",
+        "base_url": "http://localhost:20128/v1",
+        "default_model": "auto/best-free",
+        "fallback_models": [
+            "auto/coding:free",
+            "oc/nemotron-3-ultra-free",
+            "oc/mimo-v2.5-free",
+        ],
         "roles": {},
     },
     "chief_engineer": {
-        "provider": "openrouter",
-        "base_url": "https://openrouter.ai/api/v1",
-        "model": None,
+        "provider": "omniroute",
+        "base_url": "http://localhost:20128/v1",
+        "model": "auto/best-free",
         "api_key": None,
+        "fallback_models": [
+            "auto/coding:free",
+            "oc/nemotron-3-ultra-free",
+            "oc/mimo-v2.5-free",
+            "oc/north-mini-code-free",
+        ],
+        "visual_fallback_models": [
+            "oc/mimo-v2.5-free",
+            "oc/north-mini-code-free",
+            "auto/best-free",
+        ],
         "fallback_provider": None,
         "fallback_base_url": None,
         "fallback_model": None,
@@ -48,6 +64,10 @@ DEFAULT_CONFIG = {
         "max_parallel_tasks": 2,
         "max_active_model_calls": 4,
         "max_diff_growth": 4000,
+        # Visual tasks may replace a complete HTML/CSS document. Keep the
+        # ordinary code diff budget strict while allowing one bounded page
+        # rewrite to pass through to the visual fidelity gate.
+        "max_visual_diff_growth": 100000,
         "max_file_count": 12,
         "max_paid_calls": 30,
         "max_paid_input_tokens": 400000,
@@ -70,20 +90,40 @@ class GitConfig(BaseModel):
 
 
 class ModelsConfig(BaseModel):
-    provider: str = Field(default="ollama")
-    base_url: str = Field(default="http://localhost:11434/v1")
-    default_model: str = Field(default="gemma4:12b")
+    provider: str = Field(default="omniroute")
+    base_url: str = Field(default="http://localhost:20128/v1")
+    default_model: str = Field(default="auto/best-free")
     fallback_models: list[str] = Field(
-        default_factory=lambda: ["granite4.1:8b", "nemotron-3-nano:4b"]
+        default_factory=lambda: [
+            "auto/coding:free",
+            "oc/nemotron-3-ultra-free",
+            "oc/mimo-v2.5-free",
+        ]
     )
     roles: dict[str, str] = Field(default_factory=dict)
 
 
 class ChiefEngineerConfig(BaseModel):
-    provider: str = Field(default="openrouter")
-    base_url: str = Field(default="https://openrouter.ai/api/v1")
-    model: str | None = Field(default=None)
+    provider: str = Field(default="omniroute")
+    base_url: str = Field(default="http://localhost:20128/v1")
+    model: str | None = Field(default="auto/best-free")
+    visual_model: str | None = Field(default=None)
     api_key: str | None = Field(default=None)
+    fallback_models: list[str] = Field(
+        default_factory=lambda: [
+            "auto/coding:free",
+            "oc/nemotron-3-ultra-free",
+            "oc/mimo-v2.5-free",
+            "oc/north-mini-code-free",
+        ]
+    )
+    visual_fallback_models: list[str] = Field(
+        default_factory=lambda: [
+            "oc/mimo-v2.5-free",
+            "oc/north-mini-code-free",
+            "auto/best-free",
+        ]
+    )
     fallback_provider: str | None = Field(default=None)
     fallback_base_url: str | None = Field(default=None)
     fallback_model: str | None = Field(default=None)
@@ -99,6 +139,11 @@ class SandboxConfig(BaseModel):
     type: str = Field(default="local")
     image: str = Field(default="python:3.12-slim")
     network_enabled: bool = Field(default=False)
+    cpu_limit: float = Field(default=1.0, gt=0, le=8)
+    memory_limit_mb: int = Field(default=1024, gt=64, le=16384)
+    pids_limit: int = Field(default=256, gt=16, le=4096)
+    read_only_root: bool = Field(default=True)
+    egress_allowlist: list[str] = Field(default_factory=list)
 
 
 class BudgetsConfig(BaseModel):
@@ -108,6 +153,7 @@ class BudgetsConfig(BaseModel):
     max_parallel_tasks: int = Field(default=2)
     max_active_model_calls: int = Field(default=4)
     max_diff_growth: int = Field(default=4000)
+    max_visual_diff_growth: int = Field(default=100000)
     max_file_count: int = Field(default=12)
     max_paid_calls: int = Field(default=30)
     max_paid_input_tokens: int = Field(default=400000)
@@ -142,6 +188,38 @@ def _find_env_file(start_dir: str) -> str | None:
     return None
 
 
+def _validate_omniroute_endpoint(value: str, section: str) -> None:
+    """Reject direct provider URLs while keeping private gateway hosts valid.
+
+    Provider names alone are not a sufficient guard: a legacy environment can
+    still set ``provider=omniroute`` alongside an OpenRouter or NVIDIA URL.
+    ForgeOS Cloud must reach upstream models through the OmniRoute gateway.
+    """
+    parsed = urlsplit(value)
+    host = (parsed.hostname or "").lower()
+    if parsed.scheme not in {"http", "https"} or not host:
+        raise ValueError(f"{section}.base_url must be an HTTP(S) OmniRoute endpoint")
+
+    known_gateway_host = host in {
+        "localhost",
+        "127.0.0.1",
+        "::1",
+        "omniroute",
+        "forgeos-omniroute",
+        "gateway",
+    }
+    configured_hosts = {
+        item.strip().lower()
+        for item in os.getenv("LOCALFORGE_OMNIROUTE_ALLOWED_HOSTS", "").split(",")
+        if item.strip()
+    }
+    gateway_named = host.endswith(".omniroute") or host.endswith(".forgeos")
+    if not (known_gateway_host or gateway_named or host in configured_hosts):
+        raise ValueError(
+            f"{section}.base_url must point to the OmniRoute gateway, not public host '{host}'"
+        )
+
+
 def load_config(cli_args: dict[str, Any] | None = None) -> LocalForgeConfig:
     """Load configuration with the following precedence order:
 
@@ -167,29 +245,16 @@ def load_config(cli_args: dict[str, Any] | None = None) -> LocalForgeConfig:
 
     # 2. Load from .env without mutating process environment or logging secrets.
     env_file_path = _find_env_file(cwd)
+    env_file_values: dict[str, str | None] = {}
     if env_file_path and os.path.exists(env_file_path):
-        env_file_values = dotenv_values(env_file_path)
-        if env_file_values.get("NVIDIA_LLM_MODEL") and env_file_values.get("NVIDIA_API_KEY"):
-            config_dict["chief_engineer"]["provider"] = "nvidia"
-            config_dict["chief_engineer"]["base_url"] = "https://integrate.api.nvidia.com/v1"
-            config_dict["chief_engineer"]["model"] = env_file_values["NVIDIA_LLM_MODEL"]
-            config_dict["chief_engineer"]["api_key"] = env_file_values["NVIDIA_API_KEY"]
-            if env_file_values.get("OPENROUTER_MODEL") and env_file_values.get(
-                "OPENROUTER_API_KEY"
-            ):
-                config_dict["chief_engineer"]["fallback_provider"] = "openrouter"
-                config_dict["chief_engineer"]["fallback_base_url"] = "https://openrouter.ai/api/v1"
-                config_dict["chief_engineer"]["fallback_model"] = env_file_values[
-                    "OPENROUTER_MODEL"
-                ]
-                config_dict["chief_engineer"]["fallback_api_key"] = env_file_values[
-                    "OPENROUTER_API_KEY"
-                ]
-        else:
-            if env_file_values.get("OPENROUTER_MODEL"):
-                config_dict["chief_engineer"]["model"] = env_file_values["OPENROUTER_MODEL"]
-            if env_file_values.get("OPENROUTER_API_KEY"):
-                config_dict["chief_engineer"]["api_key"] = env_file_values["OPENROUTER_API_KEY"]
+        # Vendor keys may still exist in legacy workspaces, but ForgeOS Cloud
+        # never infers a direct provider from them. Upstreams are configured in
+        # and reached exclusively through OmniRoute.
+        env_file_values = {
+            str(key): value
+            for key, value in dotenv_values(env_file_path).items()
+            if key is not None
+        }
 
     # 3. Load from Environment Variables
     env_mappings = {
@@ -199,32 +264,60 @@ def load_config(cli_args: dict[str, Any] | None = None) -> LocalForgeConfig:
         "LOCALFORGE_MODEL_PROVIDER": ("models", "provider"),
         "LOCALFORGE_MODEL_BASE_URL": ("models", "base_url"),
         "LOCALFORGE_DEFAULT_MODEL": ("models", "default_model"),
-        "NVIDIA_LLM_MODEL": ("chief_engineer", "model"),
-        "NVIDIA_API_KEY": ("chief_engineer", "api_key"),
-        "OPENROUTER_MODEL": ("chief_engineer", "model"),
-        "OPENROUTER_API_KEY": ("chief_engineer", "api_key"),
+        "LOCALFORGE_SANDBOX_TYPE": ("sandbox", "type"),
+        "LOCALFORGE_SANDBOX_IMAGE": ("sandbox", "image"),
+        "LOCALFORGE_CHIEF_PROVIDER": ("chief_engineer", "provider"),
+        "LOCALFORGE_CHIEF_BASE_URL": ("chief_engineer", "base_url"),
+        "LOCALFORGE_CHIEF_MODEL": ("chief_engineer", "model"),
+        "LOCALFORGE_CHIEF_VISUAL_MODEL": ("chief_engineer", "visual_model"),
+        "LOCALFORGE_CHIEF_VISUAL_FALLBACK_MODELS": (
+            "chief_engineer",
+            "visual_fallback_models",
+        ),
+        "LOCALFORGE_CHIEF_API_KEY": ("chief_engineer", "api_key"),
+        "LOCALFORGE_CHIEF_FALLBACK_MODELS": ("chief_engineer", "fallback_models"),
+        "LOCALFORGE_CHIEF_FALLBACK_PROVIDER": ("chief_engineer", "fallback_provider"),
+        "LOCALFORGE_CHIEF_FALLBACK_BASE_URL": ("chief_engineer", "fallback_base_url"),
+        "LOCALFORGE_CHIEF_FALLBACK_MODEL": ("chief_engineer", "fallback_model"),
+        "LOCALFORGE_CHIEF_FALLBACK_API_KEY": ("chief_engineer", "fallback_api_key"),
+        "LOCALFORGE_CHIEF_FALLBACK_AFTER_SECONDS": (
+            "chief_engineer",
+            "fallback_after_seconds",
+        ),
+        "LOCALFORGE_MAX_TASK_DURATION": ("budgets", "max_task_duration"),
+        "LOCALFORGE_MAX_REPAIR_ATTEMPTS": ("budgets", "max_repair_attempts"),
+        "LOCALFORGE_MAX_ACTIVE_MODEL_CALLS": ("budgets", "max_active_model_calls"),
+        "LOCALFORGE_MAX_PAID_CALLS": ("budgets", "max_paid_calls"),
+        "LOCALFORGE_MAX_PAID_INPUT_TOKENS": ("budgets", "max_paid_input_tokens"),
+        "LOCALFORGE_MAX_PAID_OUTPUT_TOKENS": ("budgets", "max_paid_output_tokens"),
+        "LOCALFORGE_MAX_PAID_USD": ("budgets", "max_paid_usd"),
+        "LOCALFORGE_MAX_PAID_USD_ABSOLUTE": ("budgets", "max_paid_usd_absolute"),
+        "LOCALFORGE_MAX_RUN_RECOVERY_CYCLES": ("budgets", "max_run_recovery_cycles"),
     }
     for env_var, path in env_mappings.items():
         val = os.getenv(env_var)
+        if val is None:
+            val = env_file_values.get(env_var)
         if val is not None:
             section, key = path
-            if env_var.startswith("NVIDIA_"):
-                config_dict["chief_engineer"]["provider"] = "nvidia"
-                config_dict["chief_engineer"]["base_url"] = "https://integrate.api.nvidia.com/v1"
             config_dict[section][key] = val
-    nvidia_model = os.getenv("NVIDIA_LLM_MODEL")
-    nvidia_key = os.getenv("NVIDIA_API_KEY")
-    if nvidia_model and nvidia_key:
-        config_dict["chief_engineer"]["provider"] = "nvidia"
-        config_dict["chief_engineer"]["base_url"] = "https://integrate.api.nvidia.com/v1"
-        config_dict["chief_engineer"]["model"] = nvidia_model
-        config_dict["chief_engineer"]["api_key"] = nvidia_key
-        if os.getenv("OPENROUTER_MODEL") and os.getenv("OPENROUTER_API_KEY"):
-            config_dict["chief_engineer"]["fallback_provider"] = "openrouter"
-            config_dict["chief_engineer"]["fallback_base_url"] = "https://openrouter.ai/api/v1"
-            config_dict["chief_engineer"]["fallback_model"] = os.environ["OPENROUTER_MODEL"]
-            config_dict["chief_engineer"]["fallback_api_key"] = os.environ["OPENROUTER_API_KEY"]
-
+    fallback_models = os.getenv("LOCALFORGE_FALLBACK_MODELS")
+    if fallback_models is not None:
+        config_dict["models"]["fallback_models"] = [
+            model.strip() for model in fallback_models.split(",") if model.strip()
+        ]
+    chief_fallback_models = os.getenv("LOCALFORGE_CHIEF_FALLBACK_MODELS")
+    if chief_fallback_models is not None:
+        config_dict["chief_engineer"]["fallback_models"] = [
+            model.strip() for model in chief_fallback_models.split(",") if model.strip()
+        ]
+    chief_visual_fallback_models = os.getenv("LOCALFORGE_CHIEF_VISUAL_FALLBACK_MODELS")
+    if chief_visual_fallback_models is not None:
+        config_dict["chief_engineer"]["visual_fallback_models"] = [
+            model.strip()
+            for model in chief_visual_fallback_models.split(",")
+            if model.strip()
+        ]
     # 4. Load from CLI arguments
     if cli_args:
         cli_mappings = {
@@ -241,9 +334,29 @@ def load_config(cli_args: dict[str, Any] | None = None) -> LocalForgeConfig:
                 section, key = path
                 config_dict[section][key] = val
 
+    for section in ("models", "chief_engineer"):
+        provider = str(config_dict[section].get("provider", "")).lower()
+        if provider not in {"omniroute", "omni_route"}:
+            raise ValueError(
+                "ForgeOS Cloud is OmniRoute-only; "
+                f"{section}.provider cannot be '{provider or 'unset'}'."
+            )
+        config_dict[section]["provider"] = "omniroute"
+
     # 5. Validate with Pydantic
     try:
-        return LocalForgeConfig.model_validate(config_dict)
+        config = LocalForgeConfig.model_validate(config_dict)
+        _validate_omniroute_endpoint(config.models.base_url, "models")
+        _validate_omniroute_endpoint(config.chief_engineer.base_url, "chief_engineer")
+        if config.chief_engineer.fallback_provider not in (None, "", "omniroute", "omni_route"):
+            raise ValueError(
+                "chief_engineer.fallback_provider must be omitted; ForgeOS Cloud is OmniRoute-only"
+            )
+        if config.chief_engineer.fallback_base_url:
+            _validate_omniroute_endpoint(
+                config.chief_engineer.fallback_base_url, "chief_engineer.fallback"
+            )
+        return config
     except ValidationError as e:
         # Generate clean error message
         errors = []

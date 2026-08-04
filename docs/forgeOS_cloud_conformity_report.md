@@ -54,8 +54,8 @@ clean environment.
 
 | Task | Status | Evidence / limitation |
 | --- | --- | --- |
-| 4.1 Ephemeral sandbox | IMPLEMENTED | Docker and local sandbox implementations exist with path containment. |
-| 4.2 Resource limits | IMPLEMENTED | CPU, memory, PID, read-only root, and no-new-privilege controls are configured. |
+| 4.1 Ephemeral sandbox | PARTIAL | Docker and local sandbox implementations have path containment, but the Compose backend still receives the host Docker socket; a rootless socket proxy or isolated worker boundary is still required for production. |
+| 4.2 Resource limits | PARTIAL | CPU, memory, PID, read-only root, and no-new-privilege controls are applied to child containers, but rootless/cgroups-v2 production enforcement is not independently proven. |
 | 4.3 Egress allowlist | PARTIAL | The default is network-denied and both the factory and Docker sandbox reject unprovisioned network access; DNS-level allowlist enforcement is not implemented. |
 | 4.4 Live preview proxy | PARTIAL | Preview URL/config metadata exists; no deployed Traefik route or authenticated preview service is proven. |
 | 4.5 Secret scrubbing | IMPLEMENTED | Terminal and exported artifact paths redact common API keys, bearer tokens, and assignments. |
@@ -123,3 +123,23 @@ This is a valid fail-closed runtime result, not product acceptance. It proves
 that PRD import and backlog creation work in the Cloud path, while proving no
 completion, repair, PR generation, or ten-function HP12C behavior until at
 least one OmniRoute free/freemium route completes a bounded chat request.
+
+## Security review and remediation
+
+The bounded security review found and fixed two actionable code issues: the
+benchmark harness now binds `project_id` as a SQL parameter, and the
+deterministic HTML replay renders payload fields with DOM `textContent` instead
+of `innerHTML`, with script-safe JSON encoding. The Nginx production template
+now emits CSP, `X-Content-Type-Options`, `X-Frame-Options`, strict referrer
+policy, and restrictive permissions policy headers. A Windows Git worktree
+pointer repair syntax error was also fixed and covered by the Git tests.
+
+The repository security scanner's backend pattern/secret modes still report
+regex false positives for documentation strings, safe
+`create_subprocess_exec` calls, redaction regexes, environment-variable names,
+and the internal development Redis URL. Those matches were manually triaged;
+the scanner's full dependency mode was not accepted as evidence because its
+networked `npm audit` exceeded the bounded timeout. Frontend pattern and secret
+scans returned no findings. Residual production risks remain the Docker socket
+boundary, missing PostgreSQL RLS/tenant context, and incomplete allowlisted
+egress/preview deployment; these are explicitly not release-accepted.

@@ -27,6 +27,10 @@ All notable changes to LocalForge OS will be documented in this file.
 - Added production response headers to the Nginx frontend template: CSP,
   `X-Content-Type-Options`, `X-Frame-Options`, strict referrer policy, and a
   deny-by-default camera/geolocation/microphone policy.
+- Updated the Cloud conformity report to classify the Compose Docker-socket
+  sandbox and rootless/cgroups-v2 production enforcement as `PARTIAL`, and to
+  record the bounded security-scan limitations and remaining RLS, egress, and
+  preview-deployment risks explicitly.
 - Root `.env`, workspace defaults, and the frontend model settings now suggest
   only the same free/freemium OmniRoute route family.
 - Docker SDK bootstrap operations now have bounded timeouts, and the HP12C

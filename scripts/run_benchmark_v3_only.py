@@ -509,6 +509,7 @@ async def main():
             "LOCALFORGE_CHIEF_VISUAL_MODEL": "auto/best-free",
             "LOCALFORGE_CHIEF_FALLBACK_MODELS": "auto/coding:free,oc/nemotron-3-ultra-free,oc/mimo-v2.5-free,oc/north-mini-code-free",
             "LOCALFORGE_CHIEF_VISUAL_FALLBACK_MODELS": "auto/best-free,oc/mimo-v2.5-free,oc/north-mini-code-free",
+            "LOCALFORGE_OMNIROUTE_REASONING_EFFORT": "none",
         }
     )
     

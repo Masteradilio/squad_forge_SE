@@ -103,6 +103,9 @@ class OmniRouteClient:
             payload["tools"] = tools
         if response_format is not None:
             payload["response_format"] = response_format
+        reasoning_effort = os.getenv("LOCALFORGE_OMNIROUTE_REASONING_EFFORT", "none").strip()
+        if reasoning_effort in {"none", "minimal", "low", "medium", "high"}:
+            payload["reasoning_effort"] = reasoning_effort
 
         response = await self.client.post(url, json=payload, headers=self._headers())
         response.raise_for_status()

@@ -125,7 +125,7 @@ async def test_omniroute_caps_structured_output_for_free_routes(monkeypatch):
             response_schema={"type": "object"},
         )
     assert mock_post.call_args.kwargs["json"]["max_tokens"] == 6000
-    assert mock_post.call_args.kwargs["json"]["reasoning_effort"] == "low"
+    assert mock_post.call_args.kwargs["json"]["reasoning_effort"] == "none"
 
 
 @pytest.mark.anyio

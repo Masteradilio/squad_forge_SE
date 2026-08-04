@@ -93,6 +93,12 @@ All notable changes to LocalForge OS will be documented in this file.
 - Updated the SprintBoard preflight contract for the current PRD compiler:
   five numbered requirements plus the deterministic `LF-PRD-006` release-
   assembly task are accepted, while arbitrary task-count drift remains blocked.
+- Changed the OmniRoute transport default for hidden reasoning from `low` to
+  `none` and applied the same bounded setting to direct `OmniRouteClient`
+  calls and the Cloud benchmark. This avoids spending free-route latency on
+  unneeded hidden reasoning while preserving structured-output and tool-use
+  validation. Targeted LLM, Cloud compliance, and configuration tests pass
+  (`51 passed`).
 
 ### Reliability and Evidence
 - Permanent Chief-provider failures (billing, credits, and authentication) now

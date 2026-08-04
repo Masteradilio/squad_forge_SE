@@ -257,7 +257,7 @@ class OpenAICompatibleProvider(BaseLLMProvider):
         # emitted. OmniRoute accepts this field, while other providers must
         # not see it.
         if self.provider_name.lower() == "omniroute":
-            reasoning_effort = os.getenv("LOCALFORGE_OMNIROUTE_REASONING_EFFORT", "low").strip()
+            reasoning_effort = os.getenv("LOCALFORGE_OMNIROUTE_REASONING_EFFORT", "none").strip()
             if reasoning_effort in {"none", "minimal", "low", "medium", "high"}:
                 payload["reasoning_effort"] = reasoning_effort
 

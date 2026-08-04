@@ -157,8 +157,9 @@ class GitAdapter:
             with open(git_pointer, "w", encoding="utf-8", newline="\n") as handle:
                 handle.write(f"gitdir: {host_pointer}\n")
             gitdir_file = os.path.join(host_worktree_git, "gitdir")
+            git_pointer_path = os.path.abspath(git_pointer).replace("\\", "/")
             with open(gitdir_file, "w", encoding="utf-8", newline="\n") as handle:
-                handle.write(f"{os.path.abspath(git_pointer).replace('\\', '/') }\n")
+                handle.write(f"{git_pointer_path}\n")
         except OSError:
             return
 

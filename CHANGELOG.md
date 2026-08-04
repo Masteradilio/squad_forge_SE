@@ -18,6 +18,15 @@ All notable changes to LocalForge OS will be documented in this file.
 - Pipeline local-worker selection now rejects non-free OmniRoute overrides and
   appends a bounded live free-route catalog, so stale paid aliases cannot be
   reintroduced by a role profile during execution.
+- Chief preflight now skips an alias after an upstream `500/502` or connection
+  failure and probes at most four distinct free routes before fail-closed
+  blocking; this prevents retrying the same broken route while preserving a
+  bounded chance for another OmniRoute route to recover the run.
+- Fixed a Python parser error in Git worktree pointer repair by normalizing the
+  Windows path before interpolating it into the output string.
+- Added production response headers to the Nginx frontend template: CSP,
+  `X-Content-Type-Options`, `X-Frame-Options`, strict referrer policy, and a
+  deny-by-default camera/geolocation/microphone policy.
 - Root `.env`, workspace defaults, and the frontend model settings now suggest
   only the same free/freemium OmniRoute route family.
 - Docker SDK bootstrap operations now have bounded timeouts, and the HP12C
@@ -31,6 +40,16 @@ All notable changes to LocalForge OS will be documented in this file.
   return `500/502` or timeout; no E2E success claim is made.
 - Final local regression after the live-route fallback hardening: `482 passed,
   1 skipped`; frontend production build also passed.
+- Real acceptance attempt `hp12c-cloud-acceptance-117` (local development
+  sandbox) imported 19 HP12C tasks but stopped before execution after two
+  OmniRoute free-route HTTP 502 responses with `UND_ERR_CONNECT_TIMEOUT`.
+  SQLite recorded one `BLOCKED_NEEDS_HUMAN_REVIEW` run, 19 `READY` tasks, zero
+  `task_runs`, and zero artifacts. This evidence is intentionally not reported
+  as product or ten-function acceptance.
+- Follow-up Run 118 exercised the new distinct-route retry behavior and tested
+  four free aliases before receiving upstream 500/502 failures. Its SQLite
+  state remained 19 `READY` tasks, zero `task_runs`, and zero artifacts; the
+  product acceptance gate therefore remains open.
 
 ### Reliability and Evidence
 - Permanent Chief-provider failures (billing, credits, and authentication) now

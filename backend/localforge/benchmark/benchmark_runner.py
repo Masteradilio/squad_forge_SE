@@ -34,7 +34,13 @@ class V3BenchmarkHarness:
 
         # 2. Gather task outcomes
         # Using session direct query
-        db_tasks = await self.uow.session.execute(text(f"SELECT status, COUNT(*) FROM tasks WHERE project_id = {project_id} GROUP BY status"))
+        db_tasks = await self.uow.session.execute(
+            text(
+                "SELECT status, COUNT(*) FROM tasks "
+                "WHERE project_id = :project_id GROUP BY status"
+            ),
+            {"project_id": project_id},
+        )
         task_counts = {row[0]: row[1] for row in db_tasks.fetchall()}
 
         pr_ready = task_counts.get("PR_READY", 0)

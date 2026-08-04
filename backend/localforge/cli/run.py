@@ -167,10 +167,14 @@ async def _run_chief_preflight(
             max_attempts = 2
         errors: list[str] = []
         gateway_outage_count = 0
+        gateway_failed_models: set[str] = set()
+        gateway_outage_limit = min(4, max(1, len(probe_models)))
         for attempt in range(max_attempts):
             transient_seen = False
             for probe_model in probe_models:
                 if callable(list_models) and probe_model not in available_models:
+                    continue
+                if probe_model in gateway_failed_models:
                     continue
                 try:
                     response = await asyncio.wait_for(
@@ -210,10 +214,12 @@ async def _run_chief_preflight(
                     errors.append(f"attempt={attempt + 1} {probe_model}: {exc}")
                     if _is_gateway_upstream_outage(exc):
                         gateway_outage_count += 1
-                        if gateway_outage_count >= 2:
+                        gateway_failed_models.add(probe_model)
+                        if gateway_outage_count >= gateway_outage_limit:
                             return (
                                 "OmniRoute gateway is reachable, but its upstream routes "
-                                "are unavailable; preflight stopped after two gateway failures: "
+                                "are unavailable; preflight stopped after "
+                                f"{gateway_outage_limit} distinct gateway failures: "
                                 + "; ".join(errors[-2:])
                             )
                     if _is_transient_probe_error(exc):
@@ -241,8 +247,9 @@ def _is_gateway_upstream_outage(error: Exception) -> bool:
 
     A 500/502 from OmniRoute can contain ``fetch failed`` or a connect/stream
     timeout while the gateway itself remains healthy. Retrying every configured
-    alias in that state only burns the run budget; two independent observations
-    are enough to stop the pre-flight with an actionable blocker.
+    alias in that state only burns the run budget; the pre-flight skips failed
+    aliases and tests at most four distinct routes before reporting an
+    actionable blocker.
     """
     if not isinstance(error, LLMHTTPError) or error.status_code < 500:
         return False

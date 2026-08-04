@@ -210,14 +210,21 @@ def _draft_pr_body(test_output: str) -> str:
 
 def _write_static_replay(path: Path, demo_payload: object) -> None:
     data = json.dumps(demo_payload, sort_keys=True)
+    # Keep untrusted demo fields out of executable HTML and render them through
+    # textContent instead of interpolating them into innerHTML.
+    safe_json = data.replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
     path.write_text(
         "<!doctype html><meta charset=\"utf-8\"><title>LocalForge Demo Replay</title>"
         "<main id=\"app\"></main><script>"
-        f"const demo={data};"
-        "document.getElementById('app').innerHTML=`<h1>${demo.scenario}</h1>"
-        "<p>Status: <strong>${demo.status}</strong></p>"
-        "<p>Mode: ${demo.worker_output_mode}</p>"
-        "<ol>${demo.timeline.map(e=>`<li><strong>${e.title}</strong>: ${e.summary}</li>`).join('')}</ol>`;"
+        f"const demo=JSON.parse({json.dumps(safe_json)});"
+        "const app=document.getElementById('app');"
+        "const heading=document.createElement('h1'); heading.textContent=demo.scenario; app.append(heading);"
+        "const status=document.createElement('p'); status.textContent='Status: '+demo.status; app.append(status);"
+        "const mode=document.createElement('p'); mode.textContent='Mode: '+demo.worker_output_mode; app.append(mode);"
+        "const timeline=document.createElement('ol');"
+        "demo.timeline.forEach(e=>{const item=document.createElement('li');"
+        "item.textContent=String(e.title)+': '+String(e.summary); timeline.append(item);});"
+        "app.append(timeline);"
         "</script>",
         encoding="utf-8",
         newline="\n",

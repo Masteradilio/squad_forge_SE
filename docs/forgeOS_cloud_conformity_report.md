@@ -98,3 +98,28 @@ successful HP12C product run or ten-function validation is claimed. The next
 acceptance run requires a responsive Docker daemon or an explicitly selected
 local development sandbox, plus at least one healthy free/freemium OmniRoute
 route, followed by SQLite inspection and manual verification of the product.
+
+## Latest real acceptance attempt
+
+The bounded local-sandbox attempts on 2026-08-03 used
+`benchmarks/workspaces/hp12c-cloud-acceptance-117` and
+`benchmarks/workspaces/hp12c-cloud-acceptance-118` through the real CLI path.
+Both successfully imported the HP12C PRD and created 19 typed tasks. Run 117
+stopped after two upstream failures. After the preflight retry hardening, Run
+118 skipped failed aliases and tested four distinct free routes before
+stopping because the OmniRoute free-route preflight still received upstream
+HTTP 500/502 responses, including `UND_ERR_CONNECT_TIMEOUT`. The persisted
+SQLite state for Run 118 is:
+
+```text
+projects: 1
+tasks: 19 (all READY)
+runs: 1 (`BLOCKED_NEEDS_HUMAN_REVIEW`)
+task_runs: 0
+artifacts: 0
+```
+
+This is a valid fail-closed runtime result, not product acceptance. It proves
+that PRD import and backlog creation work in the Cloud path, while proving no
+completion, repair, PR generation, or ten-function HP12C behavior until at
+least one OmniRoute free/freemium route completes a bounded chat request.

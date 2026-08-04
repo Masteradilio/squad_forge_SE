@@ -98,6 +98,9 @@ successful HP12C product run or ten-function validation is claimed. The next
 acceptance run requires a responsive Docker daemon or an explicitly selected
 local development sandbox, plus at least one healthy free/freemium OmniRoute
 route, followed by SQLite inspection and manual verification of the product.
+The current preflight also permits two short, configurable recovery rounds
+after a complete route-ladder outage; this change is covered by the targeted
+preflight test but has not yet produced a successful live completion.
 
 ## Latest real acceptance attempt
 

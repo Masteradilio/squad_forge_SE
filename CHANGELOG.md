@@ -22,6 +22,9 @@ All notable changes to LocalForge OS will be documented in this file.
   failure and probes at most four distinct free routes before fail-closed
   blocking; this prevents retrying the same broken route while preserving a
   bounded chance for another OmniRoute route to recover the run.
+- Added a second bounded gateway recovery round with configurable delay so a
+  transient OmniRoute-wide outage can recover unattended; the preflight test
+  covers four failed routes followed by a successful route on round two.
 - Fixed a Python parser error in Git worktree pointer repair by normalizing the
   Windows path before interpolating it into the output string.
 - Added production response headers to the Nginx frontend template: CSP,

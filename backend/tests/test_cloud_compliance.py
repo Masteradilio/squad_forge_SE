@@ -534,6 +534,53 @@ async def test_cli_chief_preflight_stops_on_gateway_wide_upstream_outage(monkeyp
 
 
 @pytest.mark.asyncio
+async def test_cli_chief_preflight_recovers_on_bounded_gateway_round(monkeypatch) -> None:
+    attempted: list[str] = []
+
+    class RecoveringGateway:
+        async def list_models(self) -> list[str]:
+            return ["route-a", "route-b", "route-c", "route-d"]
+
+        async def chat_completion(self, *args: object, **kwargs: object) -> str:
+            del args
+            model = str(kwargs["model"])
+            attempted.append(model)
+            if len(attempted) <= 4:
+                raise LLMHTTPError(
+                    "Completion API failed (502): fetch failed connect timeout",
+                    status_code=502,
+                )
+            return '{"actions":[{"kind":"write_file","path":"probe.txt","content":"ok"}]}'
+
+    monkeypatch.setattr(
+        "localforge.cli.run.build_chief_engineer_provider",
+        lambda config: RecoveringGateway(),
+    )
+    monkeypatch.setenv("LOCALFORGE_CHIEF_PREFLIGHT_MAX_ATTEMPTS", "1")
+    monkeypatch.setenv("LOCALFORGE_CHIEF_PREFLIGHT_GATEWAY_ROUNDS", "2")
+    monkeypatch.setenv("LOCALFORGE_CHIEF_PREFLIGHT_GATEWAY_RETRY_DELAY", "0")
+    config = LocalForgeConfig.model_validate(
+        {
+            "chief_engineer": {
+                "provider": "omniroute",
+                "model": "route-a",
+                "fallback_models": ["route-b", "route-c", "route-d"],
+            }
+        }
+    )
+    task = Task(
+        project_id=1,
+        key="LF-PRD-001",
+        title="Chief task",
+        description="Needs the Chief Engineer.",
+        metadata={"task_contract": {"seniority_class": "chief_only"}},
+    )
+
+    assert await _run_chief_preflight(config, [task]) is None
+    assert attempted == ["route-a", "route-b", "route-c", "route-d", "route-a"]
+
+
+@pytest.mark.asyncio
 async def test_cli_chief_preflight_discovers_free_gateway_routes(monkeypatch) -> None:
     attempted: list[str] = []
 

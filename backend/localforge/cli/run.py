@@ -165,70 +165,102 @@ async def _run_chief_preflight(
             )
         except ValueError:
             max_attempts = 2
+        try:
+            gateway_rounds = min(
+                3,
+                max(1, int(os.getenv("LOCALFORGE_CHIEF_PREFLIGHT_GATEWAY_ROUNDS", "2"))),
+            )
+        except ValueError:
+            gateway_rounds = 2
+        try:
+            gateway_retry_delay = min(
+                30.0,
+                max(0.0, float(os.getenv("LOCALFORGE_CHIEF_PREFLIGHT_GATEWAY_RETRY_DELAY", "2"))),
+            )
+        except ValueError:
+            gateway_retry_delay = 2.0
+
         errors: list[str] = []
-        gateway_outage_count = 0
-        gateway_failed_models: set[str] = set()
         gateway_outage_limit = min(4, max(1, len(probe_models)))
-        for attempt in range(max_attempts):
-            transient_seen = False
-            for probe_model in probe_models:
-                if callable(list_models) and probe_model not in available_models:
-                    continue
-                if probe_model in gateway_failed_models:
-                    continue
-                try:
-                    response = await asyncio.wait_for(
-                        probe_provider.chat_completion(
-                            [
-                                {
-                                    "role": "system",
-                                    "content": (
-                                        "You are a provider readiness probe. Return only valid JSON "
-                                        "with one concrete action: "
-                                        '{"actions":[{"kind":"write_file","path":"probe.txt",'
-                                        '"content":"ok"}]}'
-                                    ),
-                                },
-                                {"role": "user", "content": "Return the structured probe now."},
-                            ],
-                            stream=False,
-                            response_schema={"type": "object"},
-                            timeout=min(float(chief.timeout), request_timeout),
-                            model=probe_model,
-                        ),
-                        timeout=probe_timeout,
-                    )
-                    if not isinstance(response, str) or not response.strip():
-                        raise ValueError("empty response")
-                    probe_payload = json.loads(response)
-                    if (
-                        not isinstance(probe_payload, dict)
-                        or not isinstance(probe_payload.get("actions"), list)
-                        or not probe_payload["actions"]
-                    ):
-                        raise ValueError("expected a non-empty actions array")
-                    if chief.provider.lower() == "omniroute":
-                        os.environ["LOCALFORGE_CHIEF_MODEL"] = probe_model
-                    return None
-                except Exception as exc:
-                    errors.append(f"attempt={attempt + 1} {probe_model}: {exc}")
-                    if _is_gateway_upstream_outage(exc):
-                        gateway_outage_count += 1
-                        gateway_failed_models.add(probe_model)
-                        if gateway_outage_count >= gateway_outage_limit:
-                            return (
-                                "OmniRoute gateway is reachable, but its upstream routes "
-                                "are unavailable; preflight stopped after "
-                                f"{gateway_outage_limit} distinct gateway failures: "
-                                + "; ".join(errors[-2:])
-                            )
-                    if _is_transient_probe_error(exc):
-                        transient_seen = True
-            if transient_seen and attempt + 1 < max_attempts:
-                await asyncio.sleep(2.0)
-        return "Chief Engineer readiness probe exhausted provider ladder: " + "; ".join(
-            errors
-        )
+        for gateway_round in range(gateway_rounds):
+            gateway_outage_count = 0
+            gateway_failed_models: set[str] = set()
+            gateway_outage_seen = False
+            for attempt in range(max_attempts):
+                transient_seen = False
+                for probe_model in probe_models:
+                    if callable(list_models) and probe_model not in available_models:
+                        continue
+                    if probe_model in gateway_failed_models:
+                        continue
+                    try:
+                        response = await asyncio.wait_for(
+                            probe_provider.chat_completion(
+                                [
+                                    {
+                                        "role": "system",
+                                        "content": (
+                                            "You are a provider readiness probe. Return only valid JSON "
+                                            "with one concrete action: "
+                                            '{"actions":[{"kind":"write_file","path":"probe.txt",'
+                                            '"content":"ok"}]}'
+                                        ),
+                                    },
+                                    {"role": "user", "content": "Return the structured probe now."},
+                                ],
+                                stream=False,
+                                response_schema={"type": "object"},
+                                timeout=min(float(chief.timeout), request_timeout),
+                                model=probe_model,
+                            ),
+                            timeout=probe_timeout,
+                        )
+                        if not isinstance(response, str) or not response.strip():
+                            raise ValueError("empty response")
+                        probe_payload = json.loads(response)
+                        if (
+                            not isinstance(probe_payload, dict)
+                            or not isinstance(probe_payload.get("actions"), list)
+                            or not probe_payload["actions"]
+                        ):
+                            raise ValueError("expected a non-empty actions array")
+                        if chief.provider.lower() == "omniroute":
+                            os.environ["LOCALFORGE_CHIEF_MODEL"] = probe_model
+                        return None
+                    except Exception as exc:
+                        errors.append(
+                            f"round={gateway_round + 1} attempt={attempt + 1} "
+                            f"{probe_model}: {exc}"
+                        )
+                        if _is_gateway_upstream_outage(exc):
+                            gateway_outage_count += 1
+                            gateway_failed_models.add(probe_model)
+                            if gateway_outage_count >= gateway_outage_limit:
+                                gateway_outage_seen = True
+                                break
+                        if _is_transient_probe_error(exc):
+                            transient_seen = True
+                if gateway_outage_seen:
+                    break
+                if transient_seen and attempt + 1 < max_attempts:
+                    await asyncio.sleep(2.0)
+
+            if gateway_outage_seen and gateway_round + 1 < gateway_rounds:
+                if gateway_retry_delay:
+                    await asyncio.sleep(gateway_retry_delay)
+                continue
+            if gateway_outage_seen:
+                return (
+                    "OmniRoute gateway is reachable, but its upstream routes are unavailable; "
+                    f"preflight stopped after {gateway_rounds} bounded round(s) with "
+                    f"{gateway_outage_limit} distinct gateway failures per round: "
+                    + "; ".join(errors[-2:])
+                )
+            return "Chief Engineer readiness probe exhausted provider ladder: " + "; ".join(
+                errors
+            )
+
+        return "Chief Engineer readiness probe exhausted provider ladder: " + "; ".join(errors)
     except Exception as exc:
         return f"Chief Engineer readiness probe failed: {exc}"
 
@@ -248,8 +280,8 @@ def _is_gateway_upstream_outage(error: Exception) -> bool:
     A 500/502 from OmniRoute can contain ``fetch failed`` or a connect/stream
     timeout while the gateway itself remains healthy. Retrying every configured
     alias in that state only burns the run budget; the pre-flight skips failed
-    aliases and tests at most four distinct routes before reporting an
-    actionable blocker.
+    aliases, tests at most four distinct routes per round, and allows a small
+    bounded recovery window before reporting an actionable blocker.
     """
     if not isinstance(error, LLMHTTPError) or error.status_code < 500:
         return False

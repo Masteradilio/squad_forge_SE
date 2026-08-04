@@ -74,6 +74,90 @@ async def check_omniroute_status(base_url: str) -> tuple[bool, list[str], str]:
     except Exception as e:
         return False, [], f"OmniRoute catalog probe failed at {url}: {e}"
 
+
+def _explicit_free_routes(models: list[str]) -> list[str]:
+    """Keep only catalog routes whose identifier explicitly denotes free use."""
+    return list(
+        dict.fromkeys(
+            model
+            for model in models
+            if model.endswith(":free") or "-free" in model or model.startswith("free/")
+        )
+    )
+
+
+async def probe_omniroute_completion(
+    base_url: str, routes: list[str]
+) -> tuple[bool, str | None, list[str]]:
+    """Prove that at least one live free route can complete a tiny JSON action.
+
+    ``/v1/models`` only proves that the gateway process is alive. This probe is
+    deliberately separate so a stale catalog cannot launch an unattended run
+    that will spend its entire budget waiting for a dead upstream connection.
+    """
+    import urllib.error
+    import urllib.request
+
+    try:
+        timeout = min(
+            30.0,
+            max(5.0, float(os.environ.get("LOCALFORGE_CLOUD_PREFLIGHT_ROUTE_TIMEOUT", "15"))),
+        )
+    except ValueError:
+        timeout = 15.0
+    failures: list[str] = []
+
+    def fetch(route: str) -> tuple[bool, str]:
+        payload = json.dumps(
+            {
+                "model": route,
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": (
+                            "Return only valid JSON with one action: "
+                            '{"actions":[{"kind":"write_file","path":"probe.txt",'
+                            '"content":"ok"}]}'
+                        ),
+                    },
+                    {"role": "user", "content": "Return the structured probe now."},
+                ],
+                "stream": False,
+                "max_tokens": 128,
+                "temperature": 0,
+                "reasoning_effort": "none",
+            }
+        ).encode("utf-8")
+        request = urllib.request.Request(
+            f"{base_url.rstrip('/')}/chat/completions",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        api_key = os.environ.get("OMNIROUTE_API_KEY") or root_env_values().get("OMNIROUTE_API_KEY")
+        if api_key:
+            request.add_header("Authorization", f"Bearer {api_key}")
+        try:
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                body = json.loads(response.read().decode("utf-8"))
+            content = body.get("choices", [{}])[0].get("message", {}).get("content", "")
+            parsed = json.loads(content.strip()) if isinstance(content, str) else None
+            if isinstance(parsed, dict) and isinstance(parsed.get("actions"), list) and parsed["actions"]:
+                return True, "structured probe passed"
+            return False, "response did not contain a non-empty actions array"
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")[:180]
+            return False, f"HTTP {exc.code}: {detail}"
+        except Exception as exc:
+            return False, str(exc)
+
+    for route in routes[:4]:
+        passed, detail = await asyncio.get_running_loop().run_in_executor(None, fetch, route)
+        if passed:
+            return True, route, failures
+        failures.append(f"{route}: {detail}")
+    return False, None, failures
+
 async def run_cli_command(cwd: str, args: list[str]) -> tuple[int, str, str]:
     """Run one CLI command with a hard timeout and no orphaned child process."""
     env = os.environ.copy()
@@ -155,6 +239,7 @@ async def patch_workspace_config(
     default_model: str,
     docker_active: bool,
     chief_config: dict[str, Any],
+    free_routes: list[str] | None = None,
 ):
     """Write an OmniRoute-only Cloud config for the benchmark workspace."""
     config_path = os.path.join(workspace_dir, ".localforge", "config.yaml")
@@ -170,13 +255,7 @@ async def patch_workspace_config(
                 or root_env_values().get("OMNIROUTE_URL")
                 or "http://127.0.0.1:20128/v1"
             )
-            free_routes = [
-                "auto/best-free",
-                "auto/coding:free",
-                "oc/nemotron-3-ultra-free",
-                "oc/mimo-v2.5-free",
-                "oc/north-mini-code-free",
-            ]
+            free_routes = list(dict.fromkeys(free_routes or [default_model]))
             cfg["models"]["provider"] = "omniroute"
             cfg["models"]["base_url"] = gateway_url
             cfg["models"]["default_model"] = default_model
@@ -448,22 +527,42 @@ async def run_preflight_checks(
         except Exception:
             pass
             
-    free_models = [
-        model
-        for model in available_models
-        if model.endswith(":free") or "-free" in model or model.startswith("free/")
-    ]
+    free_models = _explicit_free_routes(available_models)
     for model in [*preferred_models, *free_models]:
         if model in free_models:
             chosen_model = model
             break
 
+    completion_passed = False
+    completion_route: str | None = None
+    completion_failures: list[str] = []
+    if gateway_active and free_models:
+        completion_passed, completion_route, completion_failures = await probe_omniroute_completion(
+            gateway_url, free_models
+        )
+        # A catalog candidate is not a usable route. Only the route that
+        # completed the structured probe may be selected for the workspace.
+        chosen_model = completion_route if completion_passed else None
+
     results["omniroute_gateway"] = {
-        "passed": gateway_active and chosen_model is not None,
+        "passed": gateway_active and chosen_model is not None and completion_passed,
         "detail": (
-            f"{gateway_detail}; selected free route: {chosen_model!r}"
-            if gateway_active
-            else gateway_detail
+            f"{gateway_detail}; selected completing free route: {chosen_model!r}"
+            if gateway_active and completion_passed
+            else (
+                f"{gateway_detail}; no advertised free route completed the structured probe"
+                if gateway_active
+                else gateway_detail
+            )
+        ),
+        "free_routes": free_models,
+    }
+    results["omniroute_completion"] = {
+        "passed": completion_passed,
+        "detail": (
+            f"Free route {completion_route!r} returned a structured action probe."
+            if completion_passed
+            else "; ".join(completion_failures) or "No explicit free route was advertised."
         ),
     }
     
@@ -568,15 +667,9 @@ async def main():
             or root_env_values().get("OMNIROUTE_URL")
             or "http://127.0.0.1:20128/v1"
         )
+        discovered_routes = preflight["omniroute_gateway"].get("free_routes", [])
         free_route_ladder = ",".join(
-            [
-                chosen_model,
-                "auto/best-free",
-                "auto/coding:free",
-                "oc/nemotron-3-ultra-free",
-                "oc/mimo-v2.5-free",
-                "oc/north-mini-code-free",
-            ]
+            list(dict.fromkeys([chosen_model, *discovered_routes]))
         )
         # Override inherited legacy Ollama/OpenRouter variables so this
         # benchmark cannot accidentally execute a different architecture.
@@ -595,7 +688,13 @@ async def main():
                 "LOCALFORGE_CHIEF_VISUAL_FALLBACK_MODELS": free_route_ladder,
             }
         )
-        await patch_workspace_config(v3_dir, chosen_model, docker_active, chief_config)
+        await patch_workspace_config(
+            v3_dir,
+            chosen_model,
+            docker_active,
+            chief_config,
+            free_routes=list(dict.fromkeys([chosen_model, *discovered_routes])),
+        )
 
     v3_run_code, v3_run_out, v3_run_err = -1, "", ""
     
@@ -695,6 +794,15 @@ async def main():
             status_classification = "REJECTED"
 
     execution_error = v3_run_err or v3_run_out
+    if preflight_failed:
+        execution_evidence = (
+            "CLI run was not started because the OmniRoute completion pre-flight failed. "
+            "The scheduler and task pipeline were intentionally not invoked."
+        )
+    elif execution_error:
+        execution_evidence = execution_error
+    else:
+        execution_evidence = "CLI run completed without captured stderr."
     
     # 1. Format JSON metrics
     metrics_json_path = os.path.join(ROOT_DIR, "docs", "e2e", "v3_only_benchmark_metrics.json")
@@ -707,6 +815,7 @@ async def main():
       "preflight_checklist": {
           "docker_or_dev_passed": preflight["docker_or_dev"]["passed"],
           "omniroute_gateway_passed": preflight["omniroute_gateway"]["passed"],
+          "omniroute_completion_passed": preflight["omniroute_completion"]["passed"],
           "task_count_match_passed": preflight["task_count_match"]["passed"],
           "chief_engineer_configured_passed": preflight["chief_engineer_configured"]["passed"]
       },
@@ -849,12 +958,13 @@ Abaixo consta a distribuição real de status das {v3_tasks_imported} tarefas ap
 ### Resultados do Pré-flight
 - **docker_or_dev**: {"PASSED" if preflight["docker_or_dev"]["passed"] else "FAILED"} - {preflight["docker_or_dev"]["detail"]}
 - **omniroute_gateway**: {"PASSED" if preflight["omniroute_gateway"]["passed"] else "FAILED"} - {preflight["omniroute_gateway"]["detail"]}
+- **omniroute_completion**: {"PASSED" if preflight["omniroute_completion"]["passed"] else "FAILED"} - {preflight["omniroute_completion"]["detail"]}
 - **task_count_match**: {"PASSED" if preflight["task_count_match"]["passed"] else "FAILED"} - {preflight["task_count_match"]["detail"]}
 - **chief_engineer_configured**: {"PASSED" if preflight["chief_engineer_configured"]["passed"] else "FAILED"} - {preflight["chief_engineer_configured"]["detail"]}
 
 ### Logs de Execução / Erros da CLI
 ```text
-{execution_error if execution_error else "Executado sem erros de encerramento da CLI principal."}
+{execution_evidence}
 ```
 
 ---

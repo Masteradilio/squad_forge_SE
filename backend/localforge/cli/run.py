@@ -143,9 +143,12 @@ async def _run_chief_preflight(
                     f"{', '.join(available_models[:20])}."
                 )
         if chief.provider.lower() == "omniroute":
-            # Free/freemium OmniRoute lanes can take longer than the health
-            # probe's old 15-second budget even when the gateway is healthy.
-            request_timeout = min(max(float(chief.timeout), 30.0), 45.0)
+            # A readiness probe is intentionally much smaller than a task. A
+            # free route that cannot produce a tiny structured response within
+            # this window must not hold an unattended run for the full task
+            # timeout; the bounded route ladder/recovery rounds remain the
+            # source of resilience.
+            request_timeout = min(max(float(chief.timeout), 20.0), 35.0)
         else:
             # A paid primary must get enough time to produce its structured
             # readiness response. Keep the probe bounded, but do not reject a
@@ -153,7 +156,7 @@ async def _run_chief_preflight(
             request_timeout = min(max(float(chief.timeout), 45.0), 120.0)
         try:
             configured_probe_timeout = float(
-                os.getenv("LOCALFORGE_CHIEF_PREFLIGHT_TIMEOUT", "50")
+                os.getenv("LOCALFORGE_CHIEF_PREFLIGHT_TIMEOUT", "30")
             )
         except ValueError:
             configured_probe_timeout = 50.0

@@ -1,6 +1,7 @@
 """Pre-Flight Discovery Engine — Fine-grained daily recency, agentic capability filter & combo injector."""
 
 import logging
+import os
 from datetime import UTC, datetime
 from typing import Any
 
@@ -35,12 +36,31 @@ class PreFlightDiscoveryEngine:
             str(model.get("id")) for model in raw_models if isinstance(model.get("id"), str)
         }
         verified_gateway_routes: set[str] = set()
+        verified_route_order: list[str] = []
         if getattr(self.client, "gateway_json_contract_verified", False):
             verify_agentic = getattr(self.client, "verify_agentic_contract", None)
             verify_json = getattr(self.client, "verify_json_contract", None)
-            for route in FREEMIUM_GATEWAY_ROUTES:
-                if route not in catalog_ids:
-                    continue
+            catalog_free_routes = [
+                model_id
+                for model_id in catalog_ids
+                if is_free_gateway_model(model_id)
+            ]
+            route_candidates = list(
+                dict.fromkeys(
+                    [
+                        *[route for route in FREEMIUM_GATEWAY_ROUTES if route in catalog_ids],
+                        *sorted(catalog_free_routes),
+                    ]
+                )
+            )
+            try:
+                max_route_probes = min(
+                    12,
+                    max(1, int(os.getenv("LOCALFORGE_OMNIROUTE_MAX_ROUTE_PROBES", "6"))),
+                )
+            except ValueError:
+                max_route_probes = 6
+            for route in route_candidates[:max_route_probes]:
                 if callable(verify_agentic):
                     verified = await verify_agentic(route)
                 elif callable(verify_json):
@@ -52,6 +72,7 @@ class PreFlightDiscoveryEngine:
                     verified = False
                 if verified:
                     verified_gateway_routes.add(route)
+                    verified_route_order.append(route)
                 if len(verified_gateway_routes) >= 4:
                     break
             if not verified_gateway_routes:
@@ -151,9 +172,7 @@ class PreFlightDiscoveryEngine:
         mid_tier = [m["id"] for m in sorted_models if m.get("param_score", 0) < 32]
 
         if verified_gateway_routes:
-            verified_free_routes = [
-                route for route in FREEMIUM_GATEWAY_ROUTES if route in verified_gateway_routes
-            ]
+            verified_free_routes = verified_route_order
             # Free routes do not publish parameter sizes consistently. Keep
             # the tiers deterministic without introducing paid aliases.
             high_tier = verified_free_routes[:1]

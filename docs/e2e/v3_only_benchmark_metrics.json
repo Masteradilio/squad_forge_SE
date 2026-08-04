@@ -2,24 +2,26 @@
   "benchmark_name": "SprintBoard Lite V3-Only Empirical Benchmark",
   "date": "2026-08-04",
   "prd_file": "docs/PRD_SPRINTBOARD_LITE.md",
-  "status": "REJECTED",
+  "status": "BLOCKED",
   "blockers": [
-    "OmniRoute-only routing did not execute any Chief Engineer call; benchmark did not exercise the intended Cloud architecture."
+    "Pre-flight 'omniroute_gateway' failed: GET http://127.0.0.1:20128/v1/models returned HTTP 0: timed out",
+    "Pre-flight 'omniroute_completion' failed: No explicit free route was advertised."
   ],
   "preflight_checklist": {
     "docker_or_dev_passed": true,
-    "omniroute_gateway_passed": true,
+    "omniroute_gateway_passed": false,
+    "omniroute_completion_passed": false,
     "task_count_match_passed": true,
     "chief_engineer_configured_passed": true
   },
   "run_summary": {
-    "run_id": "V3-Run-1",
+    "run_id": "V3-Run-None",
     "tasks_planned": 6,
     "prd_requirements": 5,
     "tasks_imported": 6,
     "task_runs_executed": 0,
     "task_statuses": {
-      "READY": 6
+      "BACKLOG": 6
     },
     "artifacts_generated": 0,
     "artifact_types": {},
@@ -29,7 +31,7 @@
     "chief_engineer_calls_logged": 0,
     "local_calls_logged": 0,
     "estimated_cost_usd": 0.0,
-    "exit_code": 124,
+    "exit_code": -1,
     "routing_contract_summary": {
       "chief_only": 1,
       "chief_led": 4,
@@ -39,7 +41,7 @@
   "conclusions": {
     "quality_score": "Failed/Blocked",
     "has_pr_artifacts": false,
-    "is_auditable": true,
+    "is_auditable": false,
     "api_led_economy_first_exercised": false
   }
 }

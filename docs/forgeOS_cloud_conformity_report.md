@@ -107,6 +107,14 @@ The current preflight also permits two short, configurable recovery rounds
 after a complete route-ladder outage; this change is covered by the targeted
 preflight test but has not yet produced a successful live completion.
 
+The latest V3-only benchmark run on 2026-08-04 validated the new completion
+gate. The OmniRoute catalog was reachable, but `auto/best-free`,
+`auto/coding:free`, `oc/deepseek-v4-flash-free`, and `oc/mimo-v2.5-free` all
+failed the bounded structured probe. The scheduler was therefore not started:
+SQLite recorded six imported tasks, zero task runs, zero artifacts, and zero
+model calls. This is an honest infrastructure/readiness block, not a partial
+product run and not evidence of HP12C behavior.
+
 ## Latest real acceptance attempt
 
 The bounded local-sandbox attempts on 2026-08-03 used

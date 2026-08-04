@@ -73,6 +73,19 @@ All notable changes to LocalForge OS will be documented in this file.
 - Fixed the generated V3 metrics/report contract to use the
   `omniroute_gateway` preflight key and to distinguish OmniRoute calls from
   forbidden direct-provider calls.
+- Added a structured completion gate to the Cloud benchmark: catalog discovery
+  is no longer treated as provider readiness. The preflight now probes a
+  bounded set of explicitly free OmniRoute routes with a tiny action request,
+  selects only a route that actually completes, and blocks before the
+  scheduler when every route times out or returns an upstream error.
+- Corrected the blocked-run report so a preflight stop cannot be described as
+  a completed CLI execution. The report now records that the scheduler was not
+  invoked and keeps product acceptance, PR artifacts, and API-led evidence
+  false until a real OmniRoute completion is persisted.
+- Added bounded OmniRoute upstream timeout and provider-cooldown defaults to
+  Compose and `.env.example`, plus dynamic free-route discovery from the live
+  catalog. These settings limit route probing and prevent stale aliases from
+  creating unbounded unattended waits.
 - Added hard timeouts and child-process cleanup to the Cloud benchmark's Docker
   probe and CLI invocations. A stalled local gateway or CLI now produces a
   bounded diagnostic instead of leaving a Python benchmark process running

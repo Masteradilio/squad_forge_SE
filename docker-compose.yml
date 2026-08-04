@@ -12,6 +12,15 @@ services:
       - HOST=0.0.0.0
       - NODE_ENV=production
       - DATA_DIR=/home/node/.omniroute
+      # Bound upstream stalls and cool down failed providers before the next
+      # ForgeOS route probe. ForgeOS still consumes OmniRoute exclusively.
+      - FETCH_TIMEOUT_MS=${OMNIROUTE_FETCH_TIMEOUT_MS:-60000}
+      - FETCH_HEADERS_TIMEOUT_MS=${OMNIROUTE_FETCH_HEADERS_TIMEOUT_MS:-30000}
+      - FETCH_BODY_TIMEOUT_MS=${OMNIROUTE_FETCH_BODY_TIMEOUT_MS:-60000}
+      - FETCH_CONNECT_TIMEOUT_MS=${OMNIROUTE_FETCH_CONNECT_TIMEOUT_MS:-10000}
+      - PROVIDER_COOLDOWN_ENABLED=${OMNIROUTE_PROVIDER_COOLDOWN_ENABLED:-true}
+      - PROVIDER_COOLDOWN_MIN_MS=${OMNIROUTE_PROVIDER_COOLDOWN_MIN_MS:-5000}
+      - PROVIDER_COOLDOWN_MAX_MS=${OMNIROUTE_PROVIDER_COOLDOWN_MAX_MS:-60000}
     volumes:
       - omniroute-data:/home/node/.omniroute
     restart: unless-stopped

@@ -8,9 +8,9 @@ O benchmark foi executado de forma física e real para produzir o produto **Spri
 
 ### Status do Benchmark
 > [!IMPORTANT]
-> **STATUS: REJECTED**
+> **STATUS: BLOCKED**
 >
-> A execução empírica real do LocalForge V3 foi finalizada com classificação **REJECTED** de acordo com as validações de pré-flight e os resultados persistidos no banco de runtime.
+> A execução empírica real do LocalForge V3 foi finalizada com classificação **BLOCKED** de acordo com as validações de pré-flight e os resultados persistidos no banco de runtime.
 
 ---
 
@@ -18,7 +18,8 @@ O benchmark foi executado de forma física e real para produzir o produto **Spri
 
 Os seguintes impedimentos técnicos reais foram validados pelo pré-flight:
 
-1. **OmniRoute-only routing did not execute any Chief Engineer call; benchmark did not exercise the intended Cloud architecture.**
+1. **Pre-flight 'omniroute_gateway' failed: GET http://127.0.0.1:20128/v1/models returned HTTP 0: timed out**
+2. **Pre-flight 'omniroute_completion' failed: No explicit free route was advertised.**
 
 
 ---
@@ -29,7 +30,7 @@ Métricas de execução extraídas diretamente da base de dados `.localforge/loc
 
 | Metric | Variant: V3 Candidate | Detail / Evidence |
 | :--- | :---: | :--- |
-| **Run ID** | f"V3-Run-1" | ID de execução real do controle do LocalForge |
+| **Run ID** | f"V3-Run-0" | ID de execução real do controle do LocalForge |
 | **SQLite DB Path** | `benchmarks/workspaces/sprintboard-v3/.localforge/localforge.db` | Banco SQLite físico do runtime |
 | **Tasks Planned** | 6 | 5 requisitos do PRD + assembly determinístico |
 | **Tasks Imported** | 6 | Sucesso na importação real |
@@ -48,8 +49,8 @@ Métricas de execução extraídas diretamente da base de dados `.localforge/loc
 ## 4. Distribuição de Estados das Tarefas
 
 Abaixo consta a distribuição real de status das 6 tarefas após a rodada:
-- **BACKLOG**: 0
-- **READY**: 6
+- **BACKLOG**: 6
+- **READY**: 0
 - **CLAIMED**: 0
 - **PLANNING**: 0
 - **IMPLEMENTING**: 0
@@ -63,13 +64,14 @@ Abaixo consta a distribuição real de status das 6 tarefas após a rodada:
 
 ### Resultados do Pré-flight
 - **docker_or_dev**: PASSED - Docker active: False, Dev mode (local sandbox) config: True
-- **omniroute_gateway**: PASSED - OmniRoute catalog reachable at http://127.0.0.1:20128/v1/models; routes advertised: ['auto/best-coding', 'auto/best-reasoning', 'auto/best-fast', 'auto/best-vision', 'auto/best-chat', 'auto/best-coding-fast', 'auto/pro-coding', 'auto/pro-reasoning', 'auto/pro-vision', 'auto/pro-chat', 'auto/pro-fast', 'auto/coding']; selected free route: 'auto/best-free'
+- **omniroute_gateway**: FAILED - GET http://127.0.0.1:20128/v1/models returned HTTP 0: timed out
+- **omniroute_completion**: FAILED - No explicit free route was advertised.
 - **task_count_match**: PASSED - Tasks imported: 6 = 5 PRD requirements + deterministic LF-PRD-006 release-assembly task
 - **chief_engineer_configured**: PASSED - provider=omniroute, model configured: True, credentials/configuration ready: True
 
 ### Logs de Execução / Erros da CLI
 ```text
-Command 'run --unattended' exceeded the benchmark timeout of 60s and was terminated.
+CLI run was not started because the OmniRoute completion pre-flight failed. The scheduler and task pipeline were intentionally not invoked.
 ```
 
 ---
@@ -77,5 +79,5 @@ Command 'run --unattended' exceeded the benchmark timeout of 60s and was termina
 ## 6. Conclusão e Próximos Passos
 
 > [!IMPORTANT]
-> **CLASSIFICACAO: REJECTED**
+> **CLASSIFICACAO: BLOCKED**
 > The V3-only run proves the OmniRoute-only API-led/economy-first architecture only when at least one `omniroute` call is recorded in `model_call_ledger`, no non-OmniRoute call is recorded, and costs are consolidated in the report. Otherwise the result remains **REJECTED** or **BLOCKED**, even if the CLI exits with code 0.

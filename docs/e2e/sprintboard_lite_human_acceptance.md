@@ -2,7 +2,7 @@
 
 This document records the human validation checks for the **SprintBoard Lite** benchmark.
 
-## STATUS: REJECTED
+## STATUS: BLOCKED
 
 The product is accepted only when the benchmark reaches `ACCEPTED`. A `PARTIAL` result means LocalForge generated some PR artifacts but did not complete the product end-to-end.
 
@@ -22,7 +22,7 @@ The product is accepted only when the benchmark reaches `ACCEPTED`. A `PARTIAL` 
 - **Workspace Path**: `benchmarks/workspaces/sprintboard-v3`
 - **Total Task Runs**: 0 of 6 planned.
 - **Total Artifacts**: 0 generated under `.localforge/artifacts/`.
-- **Task Statuses**: {"READY": 6}
+- **Task Statuses**: {"BACKLOG": 6}
 - **Artifact Types**: {}
 - **V3 Routing Contracts**: {"chief_only": 1, "chief_led": 4, "local_assisted": 1}
 - **Chief Engineer Calls**: 0 (OmniRoute: 0; non-OmniRoute: 0)

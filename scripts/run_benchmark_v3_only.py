@@ -320,7 +320,7 @@ def chief_engineer_config_from_env() -> dict[str, Any]:
         model.strip()
         for model in env.get(
             "LOCALFORGE_CHIEF_FALLBACK_MODELS",
-            "auto/coding:free,oc/nemotron-3-ultra-free,oc/mimo-v2.5-free,oc/north-mini-code-free",
+            "auto/coding:free,auto/best-free",
         ).split(",")
         if model.strip()
     ]
@@ -601,13 +601,13 @@ async def main():
             "LOCALFORGE_MODEL_PROVIDER": "omniroute",
             "LOCALFORGE_MODEL_BASE_URL": gateway_url,
             "LOCALFORGE_DEFAULT_MODEL": "auto/best-free",
-            "LOCALFORGE_FALLBACK_MODELS": "auto/coding:free,oc/nemotron-3-ultra-free,oc/mimo-v2.5-free,oc/north-mini-code-free",
+            "LOCALFORGE_FALLBACK_MODELS": "auto/coding:free,auto/best-free",
             "LOCALFORGE_CHIEF_PROVIDER": "omniroute",
             "LOCALFORGE_CHIEF_BASE_URL": gateway_url,
             "LOCALFORGE_CHIEF_MODEL": "auto/best-free",
             "LOCALFORGE_CHIEF_VISUAL_MODEL": "auto/best-free",
-            "LOCALFORGE_CHIEF_FALLBACK_MODELS": "auto/coding:free,oc/nemotron-3-ultra-free,oc/mimo-v2.5-free,oc/north-mini-code-free",
-            "LOCALFORGE_CHIEF_VISUAL_FALLBACK_MODELS": "auto/best-free,oc/mimo-v2.5-free,oc/north-mini-code-free",
+            "LOCALFORGE_CHIEF_FALLBACK_MODELS": "auto/coding:free,auto/best-free",
+            "LOCALFORGE_CHIEF_VISUAL_FALLBACK_MODELS": "auto/best-free,auto/coding:free",
             "LOCALFORGE_OMNIROUTE_REASONING_EFFORT": "none",
         }
     )

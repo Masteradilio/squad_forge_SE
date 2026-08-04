@@ -16,8 +16,6 @@ DEFAULT_CONFIG_TEMPLATE: dict[str, Any] = {
         "default_model": "auto/best-free",
         "fallback_models": [
             "auto/coding:free",
-            "oc/nemotron-3-ultra-free",
-            "oc/mimo-v2.5-free",
         ],
     },
 }

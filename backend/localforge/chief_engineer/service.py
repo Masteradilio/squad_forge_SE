@@ -1853,44 +1853,25 @@ def _visual_section_models(provider_name: str, requested_model: str) -> list[str
     else:
         preferred = requested_model
     # Visual sections are bounded code-generation calls. Keep the Chief role
-    # authoritative while preferring an explicitly configured OmniRoute model
-    # when one is supplied. This lets operators pin a known free/freemium route
-    # for reproducible runs; dynamic aliases remain the finite fallback.
-    dynamic_aliases = {
-        "auto/best-free",
-        "auto/coding:free",
-        "oc/nemotron-3-ultra-free",
-        "oc/mimo-v2.5-free",
-        "oc/north-mini-code-free",
-    }
-    free_only = is_free_gateway_model(preferred)
-    if free_only:
-        ladder = [
-            preferred,
-            "auto/coding:free",
-            "oc/nemotron-3-ultra-free",
-            "oc/mimo-v2.5-free",
-            "oc/north-mini-code-free",
-            "auto/best-free",
-        ]
-    elif preferred not in dynamic_aliases:
-        ladder = [
-            preferred,
-            "auto/best-free",
-            "auto/coding:free",
-            "oc/nemotron-3-ultra-free",
-            "oc/mimo-v2.5-free",
-            "oc/north-mini-code-free",
-        ]
-    else:
-        ladder = [
-            preferred,
-            "auto/best-free",
-            "auto/coding:free",
-            "oc/nemotron-3-ultra-free",
-            "oc/mimo-v2.5-free",
-            "oc/north-mini-code-free",
-        ]
+    # authoritative while deriving the finite ladder from the workspace's
+    # current OmniRoute configuration. The benchmark and the server-owned
+    # discovery path can replace this list with routes verified in the live
+    # catalog; this helper must not reintroduce stale provider aliases.
+    configured_routes: list[str] = []
+    try:
+        from localforge.core.config import configured_free_gateway_models, load_config
+
+        config = load_config()
+        configured_routes.extend(configured_free_gateway_models(config))
+    except Exception:
+        # Keep the pure normalization helper usable in minimal/unit-test
+        # environments where a workspace config is intentionally absent.
+        configured_routes = []
+
+    free_routes = list(dict.fromkeys(configured_routes))
+    if not free_routes:
+        free_routes = ["auto/best-free"]
+    ladder = [preferred, *free_routes]
     return list(dict.fromkeys(ladder))
 
 

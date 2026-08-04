@@ -123,17 +123,34 @@ def test_visual_section_normalizer_extracts_full_document_body_fragments() -> No
     assert "data-key='k0'" not in controls
 
 
-def test_omniroute_visual_sections_use_equivalent_coding_alias() -> None:
+def test_omniroute_visual_sections_use_equivalent_coding_alias(monkeypatch) -> None:
+    monkeypatch.setenv("LOCALFORGE_FALLBACK_MODELS", "auto/coding:free,auto/best-free")
+    monkeypatch.setenv("LOCALFORGE_CHIEF_FALLBACK_MODELS", "auto/coding:free,auto/best-free")
+    monkeypatch.setenv(
+        "LOCALFORGE_CHIEF_VISUAL_FALLBACK_MODELS", "auto/coding:free,auto/best-free"
+    )
     assert _visual_section_models("omniroute", "auto/pro-vision") == [
         "auto/best-free",
         "auto/coding:free",
-        "oc/nemotron-3-ultra-free",
-        "oc/mimo-v2.5-free",
-        "oc/north-mini-code-free",
     ]
     assert _visual_section_models("omniroute", "auto/best-vision")[0] == "auto/best-free"
     assert _visual_section_models("nvidia", "vendor/vision-model") == [
         "vendor/vision-model"
+    ]
+
+
+def test_omniroute_visual_sections_follow_configured_free_ladder(monkeypatch) -> None:
+    monkeypatch.setenv("LOCALFORGE_CHIEF_FALLBACK_MODELS", "oc/catalog-a-free")
+    monkeypatch.setenv(
+        "LOCALFORGE_CHIEF_VISUAL_FALLBACK_MODELS", "oc/catalog-visual-free"
+    )
+    monkeypatch.setenv("LOCALFORGE_FALLBACK_MODELS", "oc/catalog-b-free")
+
+    assert _visual_section_models("omniroute", "auto/pro-vision") == [
+        "auto/best-free",
+        "oc/catalog-a-free",
+        "oc/catalog-visual-free",
+        "oc/catalog-b-free",
     ]
 
 

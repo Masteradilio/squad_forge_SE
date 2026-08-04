@@ -4,7 +4,7 @@ import os
 from datetime import UTC, datetime
 from typing import Any, cast
 
-from localforge.core.config import load_config
+from localforge.core.config import configured_free_gateway_models, load_config
 from localforge.gitops.manager import WorktreeManager
 from localforge.llm.base import is_permanent_provider_error
 from localforge.models import domain
@@ -603,6 +603,10 @@ class Scheduler:
         self, uow: UnitOfWork, tasks: list[domain.Task]
     ) -> None:
         assert uow.tasks is not None
+        try:
+            scrum_master_model = configured_free_gateway_models(load_config())[0]
+        except Exception:
+            scrum_master_model = "auto/best-free"
         for task in tasks:
             if task.id is None or task.status not in (
                 TaskStatus.PR_READY,
@@ -621,7 +625,7 @@ class Scheduler:
             check = {
                 "status": status,
                 "checked_by": AgentRole.SCRUM_MASTER.value,
-                "model": "oc/north-mini-code-free",
+                "model": scrum_master_model,
                 "task_status": task.status.value,
                 "blocker": blocker[:1200],
                 "checked_at": datetime.now(UTC).isoformat(),

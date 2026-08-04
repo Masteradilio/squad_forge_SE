@@ -47,7 +47,7 @@ from localforge.api.schemas import (
     TaskUpdateRequest,
     WorktreeRevertRequest,
 )
-from localforge.core.config import load_config
+from localforge.core.config import configured_free_gateway_models, load_config
 from localforge.core.policy import PolicyRules
 from localforge.events.bus import EventBus, LifecycleEvent
 from localforge.gitops.manager import WorktreeManager
@@ -1219,6 +1219,7 @@ def create_app(
     async def get_squad_composition(project_id: int) -> list[dict[str, Any]]:
         async with UnitOfWork(manager) as uow:
             assert uow.routing is not None
+            free_routes = configured_free_gateway_models(load_config())
             composition = []
             for role, meta in domain.SQUAD_ROLE_METADATA.items():
                 model_profile_id = None
@@ -1246,13 +1247,13 @@ def create_app(
                             domain.SeniorityClass.CHIEF_ONLY,
                             domain.SeniorityClass.CHIEF_LED,
                         ):
-                            model_profile_id = "auto/best-free"
+                            model_profile_id = free_routes[0]
                             provider = "omniroute"
                         elif meta.seniority_class == domain.SeniorityClass.LOCAL_ASSISTED:
-                            model_profile_id = "auto/coding:free"
+                            model_profile_id = free_routes[min(1, len(free_routes) - 1)]
                             provider = "omniroute"
                         else:
-                            model_profile_id = "oc/north-mini-code-free"
+                            model_profile_id = free_routes[-1]
                             provider = "omniroute"
 
                 composition.append(

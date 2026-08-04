@@ -5,6 +5,17 @@ All notable changes to LocalForge OS will be documented in this file.
 ## [Unreleased] - 2026-08-01 (V6 Compliance Hardening)
 
 ### ForgeOS Cloud OmniRoute Hardening
+- Consolidated the configured free-route ladder so the API, CLI, Scrum Master,
+  Chief Engineer, templates, Compose defaults, and benchmarks use the same
+  OmniRoute-only source of truth. Static provider-specific aliases are no
+  longer required by the default configuration; live catalog discovery remains
+  responsible for selecting currently advertised routes.
+- Replaced the HP12C Cloud acceptance launcher with a synchronous Python runner
+  that performs a real OmniRoute catalog and structured-completion preflight,
+  waits for every CLI stage, captures bounded output, inspects SQLite task/run
+  and model-call state, and writes an explicit `ACCEPTED`, `PARTIAL`, or
+  `BLOCKED` report. The PowerShell entry point now selects `.venv` or
+  `.codex_venv` and propagates the real exit code instead of returning a PID.
 - Aligned Cloud defaults, workspace templates, Compose defaults, Squad profiles,
   discovery tiers, and visual fallback ladders with OmniRoute free/freemium
   routes (`auto/best-free`, `auto/coding:free`, and `oc/*-free`), while keeping

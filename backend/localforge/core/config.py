@@ -6,6 +6,8 @@ import yaml
 from dotenv import dotenv_values
 from pydantic import BaseModel, Field, ValidationError
 
+from localforge.services.pricing import is_free_gateway_model
+
 # Default configuration dictionary used as baseline
 DEFAULT_CONFIG = {
     "version": 1,
@@ -23,8 +25,6 @@ DEFAULT_CONFIG = {
         "default_model": "auto/best-free",
         "fallback_models": [
             "auto/coding:free",
-            "oc/nemotron-3-ultra-free",
-            "oc/mimo-v2.5-free",
         ],
         "roles": {},
     },
@@ -35,13 +35,9 @@ DEFAULT_CONFIG = {
         "api_key": None,
         "fallback_models": [
             "auto/coding:free",
-            "oc/nemotron-3-ultra-free",
-            "oc/mimo-v2.5-free",
-            "oc/north-mini-code-free",
         ],
         "visual_fallback_models": [
-            "oc/mimo-v2.5-free",
-            "oc/north-mini-code-free",
+            "auto/coding:free",
             "auto/best-free",
         ],
         "fallback_provider": None,
@@ -98,8 +94,6 @@ class ModelsConfig(BaseModel):
     fallback_models: list[str] = Field(
         default_factory=lambda: [
             "auto/coding:free",
-            "oc/nemotron-3-ultra-free",
-            "oc/mimo-v2.5-free",
         ]
     )
     roles: dict[str, str] = Field(default_factory=dict)
@@ -114,15 +108,11 @@ class ChiefEngineerConfig(BaseModel):
     fallback_models: list[str] = Field(
         default_factory=lambda: [
             "auto/coding:free",
-            "oc/nemotron-3-ultra-free",
-            "oc/mimo-v2.5-free",
-            "oc/north-mini-code-free",
         ]
     )
     visual_fallback_models: list[str] = Field(
         default_factory=lambda: [
-            "oc/mimo-v2.5-free",
-            "oc/north-mini-code-free",
+            "auto/coding:free",
             "auto/best-free",
         ]
     )
@@ -175,6 +165,29 @@ class LocalForgeConfig(BaseModel):
     chief_engineer: ChiefEngineerConfig = Field(default_factory=ChiefEngineerConfig)
     sandbox: SandboxConfig = Field(default_factory=SandboxConfig)
     budgets: BudgetsConfig = Field(default_factory=BudgetsConfig)
+
+
+def configured_free_gateway_models(config: LocalForgeConfig) -> list[str]:
+    """Return the configured OmniRoute-only free route ladder.
+
+    Runtime discovery may replace this list with routes verified by the live
+    gateway. The configuration fallback must still be deterministic, must not
+    contain direct-provider identifiers, and must never advertise a paid or
+    unknown route as a free one.
+    """
+    candidates = [
+        config.models.default_model,
+        *config.chief_engineer.fallback_models,
+        *config.chief_engineer.visual_fallback_models,
+        *config.models.fallback_models,
+        *config.models.roles.values(),
+    ]
+    routes = [
+        route
+        for route in dict.fromkeys(candidates)
+        if route and is_free_gateway_model(route)
+    ]
+    return routes or ["auto/best-free"]
 
 
 def _find_env_file(start_dir: str) -> str | None:

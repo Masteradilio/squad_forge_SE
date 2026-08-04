@@ -2,6 +2,7 @@ import asyncio
 import os
 
 import typer
+from localforge.core.config import configured_free_gateway_models, load_config
 from localforge.models import domain
 from localforge.storage import UnitOfWork, db_manager
 from rich.console import Console
@@ -43,6 +44,7 @@ async def run_squad_composition() -> None:
         table.add_column("Responsibility", style="white")
         table.add_column("Mapped Model", style="magenta")
         table.add_column("Provider", style="blue")
+        free_routes = configured_free_gateway_models(load_config())
 
         for role, meta in domain.SQUAD_ROLE_METADATA.items():
             model_profile_id = None
@@ -70,13 +72,13 @@ async def run_squad_composition() -> None:
                         domain.SeniorityClass.CHIEF_ONLY,
                         domain.SeniorityClass.CHIEF_LED,
                     ):
-                        model_profile_id = "auto/best-free"
+                        model_profile_id = free_routes[0]
                         provider = "omniroute"
                     elif meta.seniority_class == domain.SeniorityClass.LOCAL_ASSISTED:
-                        model_profile_id = "auto/coding:free"
+                        model_profile_id = free_routes[min(1, len(free_routes) - 1)]
                         provider = "omniroute"
                     else:
-                        model_profile_id = "oc/north-mini-code-free"
+                        model_profile_id = free_routes[-1]
                         provider = "omniroute"
 
             table.add_row(

@@ -13,9 +13,6 @@ logger = logging.getLogger(__name__)
 FREEMIUM_GATEWAY_ROUTES = (
     "auto/best-free",
     "auto/coding:free",
-    "oc/nemotron-3-ultra-free",
-    "oc/mimo-v2.5-free",
-    "oc/north-mini-code-free",
 )
 
 

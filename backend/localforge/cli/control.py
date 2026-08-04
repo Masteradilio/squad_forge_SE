@@ -175,6 +175,7 @@ def models_list_cmd() -> None:
         config = load_config()
         provider = OpenAICompatibleProvider(
             base_url=config.models.base_url,
+            api_key=config.models.api_key,
             default_model=config.models.default_model,
         )
         console.print_json(

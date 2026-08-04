@@ -2664,6 +2664,7 @@ class RolePipelineEngine:
 
         provider = OpenAICompatibleProvider(
             base_url=config.models.base_url,
+            api_key=config.models.api_key,
             default_model=config.models.default_model,
             provider_name=config.models.provider,
         )
@@ -2753,6 +2754,7 @@ class RolePipelineEngine:
         for model in candidates:
             local_provider = OpenAICompatibleProvider(
                 base_url=config.models.base_url,
+                api_key=config.models.api_key,
                 default_model=model,
                 provider_name=config.models.provider,
             )

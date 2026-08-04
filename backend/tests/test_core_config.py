@@ -1,3 +1,5 @@
+import os
+
 import pytest
 import yaml
 from localforge.core.config import LocalForgeConfig, load_config
@@ -118,6 +120,27 @@ def test_load_config_reads_safe_local_env_settings(tmp_path, monkeypatch):
     config = load_config()
 
     assert config.models.default_model == "auto/best-coding"
+
+
+def test_load_config_reads_omniroute_gateway_aliases_without_mutating_environment(
+    tmp_path, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("OMNIROUTE_URL", raising=False)
+    monkeypatch.delenv("OMNIROUTE_API_KEY", raising=False)
+    (tmp_path / ".env").write_text(
+        "OMNIROUTE_URL=http://localhost:20128/v1\n"
+        "OMNIROUTE_API_KEY=endpoint-key\n",
+        encoding="utf-8",
+    )
+
+    config = load_config()
+
+    assert config.models.base_url == "http://localhost:20128/v1"
+    assert config.chief_engineer.base_url == "http://localhost:20128/v1"
+    assert config.models.api_key == "endpoint-key"
+    assert config.chief_engineer.api_key == "endpoint-key"
+    assert os.getenv("OMNIROUTE_API_KEY") is None
 
 
 def test_omniroute_client_rejects_direct_provider_endpoint(monkeypatch):

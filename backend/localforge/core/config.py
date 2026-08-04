@@ -19,6 +19,7 @@ DEFAULT_CONFIG = {
     "models": {
         "provider": "omniroute",
         "base_url": "http://localhost:20128/v1",
+        "api_key": None,
         "default_model": "auto/best-free",
         "fallback_models": [
             "auto/coding:free",
@@ -92,6 +93,7 @@ class GitConfig(BaseModel):
 class ModelsConfig(BaseModel):
     provider: str = Field(default="omniroute")
     base_url: str = Field(default="http://localhost:20128/v1")
+    api_key: str | None = Field(default=None)
     default_model: str = Field(default="auto/best-free")
     fallback_models: list[str] = Field(
         default_factory=lambda: [
@@ -256,6 +258,22 @@ def load_config(cli_args: dict[str, Any] | None = None) -> LocalForgeConfig:
             if key is not None
         }
 
+    def env_value(name: str) -> str | None:
+        value = os.getenv(name)
+        return value if value is not None else env_file_values.get(name)
+
+    # OmniRoute is the only gateway boundary. Support its canonical aliases
+    # directly so a .env containing OMNIROUTE_URL/API_KEY cannot be silently
+    # ignored by the OpenAI-compatible transport.
+    omniroute_url = env_value("OMNIROUTE_URL")
+    if omniroute_url:
+        config_dict["models"]["base_url"] = omniroute_url
+        config_dict["chief_engineer"]["base_url"] = omniroute_url
+    omniroute_api_key = env_value("OMNIROUTE_API_KEY")
+    if omniroute_api_key:
+        config_dict["models"]["api_key"] = omniroute_api_key
+        config_dict["chief_engineer"]["api_key"] = omniroute_api_key
+
     # 3. Load from Environment Variables
     env_mappings = {
         "LOCALFORGE_PROJECT_NAME": ("project", "name"),
@@ -263,6 +281,7 @@ def load_config(cli_args: dict[str, Any] | None = None) -> LocalForgeConfig:
         "LOCALFORGE_REMOTE_URL": ("git", "remote_url"),
         "LOCALFORGE_MODEL_PROVIDER": ("models", "provider"),
         "LOCALFORGE_MODEL_BASE_URL": ("models", "base_url"),
+        "LOCALFORGE_MODEL_API_KEY": ("models", "api_key"),
         "LOCALFORGE_DEFAULT_MODEL": ("models", "default_model"),
         "LOCALFORGE_SANDBOX_TYPE": ("sandbox", "type"),
         "LOCALFORGE_SANDBOX_IMAGE": ("sandbox", "image"),
@@ -295,9 +314,7 @@ def load_config(cli_args: dict[str, Any] | None = None) -> LocalForgeConfig:
         "LOCALFORGE_MAX_RUN_RECOVERY_CYCLES": ("budgets", "max_run_recovery_cycles"),
     }
     for env_var, path in env_mappings.items():
-        val = os.getenv(env_var)
-        if val is None:
-            val = env_file_values.get(env_var)
+        val = env_value(env_var)
         if val is not None:
             section, key = path
             config_dict[section][key] = val

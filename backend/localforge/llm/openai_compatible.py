@@ -131,7 +131,13 @@ class OpenAICompatibleProvider(BaseLLMProvider):
         max_output_tokens: int | None = None,
     ):
         self.base_url = base_url.rstrip("/")
-        self.api_key = api_key or os.getenv("LOCALFORGE_MODEL_API_KEY") or "no-key"
+        gateway_key = os.getenv("OMNIROUTE_API_KEY") if provider_name.lower() == "omniroute" else None
+        self.api_key = (
+            api_key
+            or os.getenv("LOCALFORGE_MODEL_API_KEY")
+            or gateway_key
+            or "no-key"
+        )
         self.default_model = default_model
         self.provider_name = provider_name
         # Honour ``LOCALFORGE_LLM_MAX_OUTPUT_TOKENS`` (and the

@@ -29,7 +29,7 @@
     "chief_engineer_calls_logged": 0,
     "local_calls_logged": 0,
     "estimated_cost_usd": 0.0,
-    "exit_code": 0,
+    "exit_code": 124,
     "routing_contract_summary": {
       "chief_only": 1,
       "chief_led": 4,

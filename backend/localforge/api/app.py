@@ -600,8 +600,12 @@ def create_app(
 
             # Attempt to call OmniRoute LLM Gateway for Scrum Master response
             from localforge.services.omniroute_client import OmniRouteClient
-            omni_url = load_config().models.base_url
-            client = OmniRouteClient(base_url=omni_url)
+            chat_config = load_config()
+            omni_url = chat_config.models.base_url
+            client = OmniRouteClient(
+                base_url=omni_url,
+                api_key=chat_config.chief_engineer.api_key or chat_config.models.api_key,
+            )
 
             system_prompt = (
                 "Você é o Scrum Master sênior da Squad do LocalForge OS. "
@@ -610,7 +614,7 @@ def create_app(
             llm_text = ""
             try:
                 res = await client.chat_completion(
-                    model="auto",
+                    model=chat_config.models.default_model,
                     messages=[
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": f"{user_message} (Anexos: {attachments})"},
@@ -855,7 +859,10 @@ def create_app(
         config = load_config()
         base_url = os.getenv("LOCALFORGE_MODEL_BASE_URL") or os.getenv("OMNIROUTE_URL") or config.models.base_url
         provider = llm_provider or OpenAICompatibleProvider(
-            base_url=base_url, default_model=config.models.default_model
+            base_url=base_url,
+            api_key=config.models.api_key,
+            default_model=config.models.default_model,
+            provider_name=config.models.provider,
         )
         try:
             models = await provider.list_models()
@@ -2485,7 +2492,15 @@ async def _run_omniroute_preflight(config: Any) -> dict[str, list[dict[str, Any]
     from localforge.discovery.engine import PreFlightDiscoveryEngine
     from localforge.services.omniroute_client import OmniRouteClient
 
-    client = OmniRouteClient(base_url=config.models.base_url)
+    chief_config = getattr(config, "chief_engineer", None)
+    gateway_api_key = (
+        getattr(chief_config, "api_key", None)
+        or getattr(config.models, "api_key", None)
+    )
+    client_kwargs: dict[str, Any] = {"base_url": config.models.base_url}
+    if gateway_api_key:
+        client_kwargs["api_key"] = gateway_api_key
+    client = OmniRouteClient(**client_kwargs)
     try:
         discovery = PreFlightDiscoveryEngine(client)
         result = await asyncio.wait_for(discovery.discover_and_rank_models(), timeout=20.0)

@@ -165,6 +165,7 @@ async def check_omniroute() -> tuple[str, str, str]:
     try:
         provider = OpenAICompatibleProvider(
             base_url=provider_url,
+            api_key=config.models.api_key,
             default_model=default_model,
             provider_name="omniroute",
         )

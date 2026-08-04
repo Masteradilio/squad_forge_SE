@@ -78,6 +78,18 @@ All notable changes to LocalForge OS will be documented in this file.
   bounded diagnostic instead of leaving a Python benchmark process running
   after the operator shell times out; `run` defaults to a 900-second command
   ceiling and can be adjusted with `LOCALFORGE_BENCHMARK_RUN_TIMEOUT`.
+- Hardened the OmniRoute credential boundary: `OMNIROUTE_URL` and
+  `OMNIROUTE_API_KEY` from `.env` now populate both gateway configurations
+  without mutating the process environment, and the API, CLI, discovery,
+  pipeline, and Chief Engineer transports pass the configured endpoint key
+  explicitly. Failed Chief Engineer ledger entries now remain attributed to
+  `omniroute` instead of an obsolete direct-provider default. Added a focused
+  configuration regression test for this path.
+- Re-ran the OmniRoute-only benchmark with a bounded smoke timeout after the
+  credential fix. The catalog and all pre-flight checks passed, but the real
+  run timed out before its first model call (`exit 124`), leaving 6 tasks
+  `READY`, zero task runs/artifacts/calls, and an accurate `REJECTED` report;
+  this remains infrastructure/readiness evidence, not product acceptance.
 - Updated the SprintBoard preflight contract for the current PRD compiler:
   five numbered requirements plus the deterministic `LF-PRD-006` release-
   assembly task are accepted, while arbitrary task-count drift remains blocked.

@@ -16,12 +16,13 @@ logger = logging.getLogger(__name__)
 class OmniRouteClient:
     """Client for communicating with the OmniRoute AI Gateway proxy."""
 
-    def __init__(self, base_url: str | None = None):
+    def __init__(self, base_url: str | None = None, api_key: str | None = None):
         self.base_url = (
             base_url
             or os.getenv("OMNIROUTE_URL")
             or "http://localhost:20128/v1"
         ).rstrip("/")
+        self.api_key = api_key or os.getenv("OMNIROUTE_API_KEY") or ""
         from localforge.core.config import _validate_omniroute_endpoint
 
         _validate_omniroute_endpoint(self.base_url, "omniroute")
@@ -61,7 +62,7 @@ class OmniRouteClient:
         url = f"{management_base}/api/combos"
         payload = {"name": combo_name, "models": models, "strategy": "priority"}
         headers: dict[str, str] = {}
-        api_key = os.getenv("OMNIROUTE_API_KEY")
+        api_key = self.api_key
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
         try:
@@ -207,7 +208,5 @@ class OmniRouteClient:
     async def close(self):
         await self.client.aclose()
 
-    @staticmethod
-    def _headers() -> dict[str, str]:
-        api_key = os.getenv("OMNIROUTE_API_KEY")
-        return {"Authorization": f"Bearer {api_key}"} if api_key else {}
+    def _headers(self) -> dict[str, str]:
+        return {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}

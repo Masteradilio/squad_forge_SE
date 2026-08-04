@@ -69,11 +69,7 @@ Abaixo consta a distribuição real de status das 6 tarefas após a rodada:
 
 ### Logs de Execução / Erros da CLI
 ```text
-2026-08-04 00:22:48,549 INFO httpx HTTP Request: GET http://127.0.0.1:20128/v1/models "HTTP/1.1 200 OK"
-2026-08-04 00:23:27,830 INFO httpx HTTP Request: POST http://127.0.0.1:20128/v1/chat/completions "HTTP/1.1 502 Bad Gateway"
-2026-08-04 00:23:37,116 INFO httpx HTTP Request: POST http://127.0.0.1:20128/v1/chat/completions "HTTP/1.1 502 Bad Gateway"
-2026-08-04 00:23:46,386 INFO httpx HTTP Request: POST http://127.0.0.1:20128/v1/chat/completions "HTTP/1.1 502 Bad Gateway"
-2026-08-04 00:23:55,664 INFO httpx HTTP Request: POST http://127.0.0.1:20128/v1/chat/completions "HTTP/1.1 502 Bad Gateway"
+Command 'run --unattended' exceeded the benchmark timeout of 60s and was terminated.
 ```
 
 ---

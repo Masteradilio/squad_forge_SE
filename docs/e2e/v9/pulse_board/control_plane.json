@@ -1,0 +1,434 @@
+{
+  "schema_version": 1,
+  "revision": 12,
+  "goal": {
+    "goal_id": "project:1:run:1",
+    "vision": "Complete the PRD task backlog for project v9-pulse-board-20260805T065013890569Z.",
+    "non_negotiables": [
+      "Never bypass the Safety Kernel.",
+      "Never mark PR_READY without server-owned evidence.",
+      "Stop at bounded quota and preserve an auditable blocker."
+    ],
+    "scope": [
+      "E:\\Projetos\\local_forge_os\\benchmarks\\workspaces\\v9-pulse-board-20260805T065013890569Z"
+    ],
+    "authority": {
+      "scheduler": "claim_and_writeback",
+      "scrum_master": "diagnose_and_delegate",
+      "chief_engineer": "repair_under_contract",
+      "human": "approve_merge_and_deploy"
+    },
+    "source_revision": "unknown",
+    "acceptance_target": "all_tasks_pr_ready_and_reviewable",
+    "last_receipt_id": "receipt-ca723dc6d91642e8803cc3f02495f49d",
+    "status": "COMPLETED",
+    "current_todo_id": "LF-PRD-004",
+    "created_at": "2026-08-05T06:50:27.462782+00:00",
+    "updated_at": "2026-08-05T06:56:40.333030+00:00"
+  },
+  "todos": [
+    {
+      "todo_id": "LF-PRD-001",
+      "title": "Criar e listar pulsos",
+      "dependencies": [],
+      "allowed_actions": [],
+      "status": "PASSED",
+      "owner": null,
+      "current_turn_id": null,
+      "lease_token": null,
+      "lease_expires_at": null,
+      "attempts": 1,
+      "last_error": null,
+      "next_retry_at": null,
+      "updated_at": "2026-08-05T06:53:20.892664+00:00"
+    },
+    {
+      "todo_id": "LF-PRD-002",
+      "title": "Validar e concluir pulsos",
+      "dependencies": [
+        "LF-PRD-001"
+      ],
+      "allowed_actions": [],
+      "status": "PASSED",
+      "owner": null,
+      "current_turn_id": null,
+      "lease_token": null,
+      "lease_expires_at": null,
+      "attempts": 2,
+      "last_error": null,
+      "next_retry_at": null,
+      "updated_at": "2026-08-05T06:54:58.772772+00:00"
+    },
+    {
+      "todo_id": "LF-PRD-003",
+      "title": "Exportar resumo",
+      "dependencies": [
+        "LF-PRD-002"
+      ],
+      "allowed_actions": [],
+      "status": "PASSED",
+      "owner": null,
+      "current_turn_id": null,
+      "lease_token": null,
+      "lease_expires_at": null,
+      "attempts": 1,
+      "last_error": null,
+      "next_retry_at": null,
+      "updated_at": "2026-08-05T06:55:48.524051+00:00"
+    },
+    {
+      "todo_id": "LF-PRD-004",
+      "title": "Release assembly: publish PulseBoard evidence manifest",
+      "dependencies": [
+        "LF-PRD-003"
+      ],
+      "allowed_actions": [],
+      "status": "PASSED",
+      "owner": null,
+      "current_turn_id": null,
+      "lease_token": null,
+      "lease_expires_at": null,
+      "attempts": 1,
+      "last_error": null,
+      "next_retry_at": null,
+      "updated_at": "2026-08-05T06:56:40.333030+00:00"
+    }
+  ],
+  "gates": [],
+  "agents": [
+    {
+      "agent_id": "scheduler:1",
+      "role": "scheduler",
+      "capabilities": [
+        "claim_bounded_turn",
+        "write_receipt"
+      ],
+      "allowed_actions": [
+        "read_contract",
+        "run_checks",
+        "emit_receipt"
+      ],
+      "authority": "scheduler",
+      "active": true,
+      "registered_at": "2026-08-05T06:50:27.462265+00:00"
+    },
+    {
+      "agent_id": "scrum-master:1",
+      "role": "scrum_master",
+      "capabilities": [
+        "diagnose_blocker",
+        "delegate_repair"
+      ],
+      "allowed_actions": [
+        "inspect_evidence",
+        "create_repair_handoff"
+      ],
+      "authority": "scrum_master",
+      "active": true,
+      "registered_at": "2026-08-05T06:50:27.462265+00:00"
+    },
+    {
+      "agent_id": "chief-engineer:1",
+      "role": "chief_engineer",
+      "capabilities": [
+        "repair_under_contract",
+        "rerun_checks"
+      ],
+      "allowed_actions": [
+        "write_allowed_files",
+        "run_checks",
+        "emit_receipt"
+      ],
+      "authority": "chief_engineer",
+      "active": true,
+      "registered_at": "2026-08-05T06:50:27.462265+00:00"
+    }
+  ],
+  "receipts": [
+    {
+      "receipt_id": "receipt-20a014d336944dc092a5659d1a0850b4",
+      "todo_id": "LF-PRD-001",
+      "turn_id": "turn-9e52b3538dd0423ab1fc862861e321cf",
+      "result_kind": "VALIDATED_PROGRESS",
+      "summary": "Task reached PR_READY evidence gate.",
+      "evidence": {
+        "run_id": 1,
+        "task_status": "PR_READY",
+        "source": "scheduler_task_outcome"
+      },
+      "changed_files": [
+        "tests/test_pulse_board_create.py",
+        "app/pulse_board.py"
+      ],
+      "checks": [],
+      "source_revision": null,
+      "content_hash": "ee7903718bcb43134c010acc4c960ff92009ab27c0e6c35b50a3a4f5809e2edc",
+      "validated_by": "forgeos.scheduler",
+      "idempotency_key": "run:1:task:LF-PRD-001:attempt:1:status:PR_READY",
+      "created_at": "2026-08-05T06:51:14.250463+00:00"
+    },
+    {
+      "receipt_id": "receipt-a03d248ccb3f4c018c4bf2e779513bf6",
+      "todo_id": "LF-PRD-002",
+      "turn_id": "turn-9c1f9625f52e49d39e3333e2dfb49218",
+      "result_kind": "VALIDATION_FAILED",
+      "summary": "Pipeline execution failed: ValueError('Chief Engineer validation repair failed: [compressed output sha256=d089dc89c381a719 original_chars=1201]\\nF                                                                        [100%]\\r\\n================================== FAILURES ===================================\\r\\n_____________ test_pulse_board_validates_completion_and_persists ______________\\r\\n\\r\\ntmp_p\\n[...compressed...]\\n============\\r\\nFAILED tests/test_pulse_board_validation.py::test_pulse_board_validates_completion_and_persists\\r\\n1 failed in 0.17s\\r\\n')",
+      "evidence": {
+        "run_id": 1,
+        "task_status": "READY",
+        "source": "scheduler_task_outcome"
+      },
+      "changed_files": [],
+      "checks": [],
+      "source_revision": null,
+      "content_hash": "5d969ffc1d603c871685833a8e4cdc9f05f62c6a10d12877881f15f12535e412",
+      "validated_by": "forgeos.scheduler",
+      "idempotency_key": "run:1:task:LF-PRD-002:attempt:1:status:READY",
+      "created_at": "2026-08-05T06:53:20.376297+00:00"
+    },
+    {
+      "receipt_id": "receipt-f22524071f7642e08b485a2253555b2f",
+      "todo_id": "LF-PRD-002",
+      "turn_id": "turn-b93f5fb14ff24d32a27cc88c035c3de5",
+      "result_kind": "VALIDATED_PROGRESS",
+      "summary": "Task reached PR_READY evidence gate.",
+      "evidence": {
+        "run_id": 1,
+        "task_status": "PR_READY",
+        "source": "scheduler_task_outcome"
+      },
+      "changed_files": [
+        "tests/test_pulse_board_validation.py",
+        "app/pulse_board.py"
+      ],
+      "checks": [],
+      "source_revision": null,
+      "content_hash": "2ed741b8525c4d1a4fb73e24439d088264131196397a8970586fe2f2260dc9a1",
+      "validated_by": "forgeos.scheduler",
+      "idempotency_key": "run:1:task:LF-PRD-002:attempt:2:status:PR_READY",
+      "created_at": "2026-08-05T06:54:58.772772+00:00"
+    },
+    {
+      "receipt_id": "receipt-4463b62081394051b2e6c7f11001d876",
+      "todo_id": "LF-PRD-003",
+      "turn_id": "turn-55f5a33f8fa34a44aa62b85edcabceff",
+      "result_kind": "VALIDATED_PROGRESS",
+      "summary": "Task reached PR_READY evidence gate.",
+      "evidence": {
+        "run_id": 1,
+        "task_status": "PR_READY",
+        "source": "scheduler_task_outcome"
+      },
+      "changed_files": [
+        "tests/test_pulse_board_summary.py"
+      ],
+      "checks": [],
+      "source_revision": null,
+      "content_hash": "c48b37e56cd61456df638635a713153093a8a00f4c5ff65c4b682b09fc930f47",
+      "validated_by": "forgeos.scheduler",
+      "idempotency_key": "run:1:task:LF-PRD-003:attempt:1:status:PR_READY",
+      "created_at": "2026-08-05T06:55:48.524051+00:00"
+    },
+    {
+      "receipt_id": "receipt-ca723dc6d91642e8803cc3f02495f49d",
+      "todo_id": "LF-PRD-004",
+      "turn_id": "turn-b2eefc532b964ab5968d192da28aae47",
+      "result_kind": "VALIDATED_PROGRESS",
+      "summary": "Task reached PR_READY evidence gate.",
+      "evidence": {
+        "run_id": 1,
+        "task_status": "PR_READY",
+        "source": "scheduler_task_outcome"
+      },
+      "changed_files": [
+        "docs/release_manifest.md"
+      ],
+      "checks": [],
+      "source_revision": null,
+      "content_hash": "bbb656f839c919b37c93d985e51e85ed89cd99a730e94cb797e903cd8418a8db",
+      "validated_by": "forgeos.scheduler",
+      "idempotency_key": "run:1:task:LF-PRD-004:attempt:1:status:PR_READY",
+      "created_at": "2026-08-05T06:56:40.333030+00:00"
+    }
+  ],
+  "handoffs": [
+    {
+      "handoff_id": "run:1:task:LF-PRD-002:repair:1",
+      "todo_id": "LF-PRD-002",
+      "diagnosis": "Pipeline execution failed: ValueError('Chief Engineer validation repair failed: [compressed output sha256=d089dc89c381a719 original_chars=1201]\\nF                                                                        [100%]\\r\\n================================== FAILURES ===================================\\r\\n_____________ test_pulse_board_validates_completion_and_persists ______________\\r\\n\\r\\ntmp_p\\n[...compressed...]\\n============\\r\\nFAILED tests/test_pulse_board_validation.py::test_pulse_board_validates_completion_and_persists\\r\\n1 failed in 0.17s\\r\\n')",
+      "evidence": {
+        "run_id": 1,
+        "task_id": 2,
+        "attempt": 1,
+        "contract": {
+          "allowed_files": [
+            "app/pulse_board.py",
+            "tests/test_pulse_board_create.py",
+            "tests/test_pulse_board_validation.py",
+            "tests/test_pulse_board_summary.py",
+            "docs/pr.md",
+            "docs/cost_benchmark.md",
+            "docs/review.md",
+            "docs/risk.md",
+            "docs/release_manifest.md"
+          ],
+          "canonical_test_command": "python -m pytest tests/test_pulse_board_validation.py -q",
+          "seniority_class": "chief_only",
+          "visual_required": false,
+          "acceptance_test_policy": "observable_behavior_only",
+          "acceptance_behaviors": [
+            "blank titles fail and complete_pulse changes only the selected record"
+          ],
+          "acceptance_test_fixture_source": "E:\\Projetos\\local_forge_os\\scripts\\fixtures\\v9_pulse_board_validation_acceptance.py",
+          "acceptance_test_fixture_target": "tests/test_pulse_board_validation.py",
+          "required_product_files": [
+            "app/pulse_board.py"
+          ],
+          "required_artifact": null,
+          "implementation_notes": [
+            "Use the exact public functions named in the PRD.",
+            "This is a Python product: create and execute app/pulse_board.py; do not infer an HTML entrypoint.",
+            "Acceptance must execute app/pulse_board.py, never a duplicate algorithm in the test.",
+            "The public API is exactly add_pulse(store, title), list_pulses(store), complete_pulse(store, pulse_id), and summarize(store).",
+            "add_pulse must persist a positive integer id starting at 1, a non-empty ISO-8601 created_at string, the supplied title, and completed=False.",
+            "complete_pulse must raise KeyError for every unknown id, including non-numeric values such as 'missing'; do not leak ValueError from int conversion.",
+            "Preserve all accumulated behaviors and the JSON file format; do not replace the module with an unrelated class, metrics API, or test-only implementation.",
+            "For the release task, create docs/release_manifest.md with the required markers; do not rewrite a product module that already passes the accumulated suite unless validation proves it is broken.",
+            "ScrumMaster unblock: Chief Engineer must remove this blocker before PR readiness: Pipeline execution failed: ValueError('Chief Engineer validation repair failed: [compressed output sha256=d089dc89c381a719 original_chars=1201]\\nF                                                                        [100%]\\r\\n================================== FAILURES ===================================\\r\\n_____________ test_pulse_board_validates_completion_and_persists ______________\\r\\n\\r\\ntmp_p\\n[...compressed...]\\n============\\r\\nFAILED tests/test_pulse_board_validation.py::test_pulse_board_validates_completion_and_persists\\r\\n1 failed in 0.17s\\r\\n')"
+          ],
+          "v9_loopx_like_benchmark": true,
+          "source_title": "Validar e concluir pulsos",
+          "source_description": "Validar e concluir pulsos",
+          "chief_engineer_unblock_required": true,
+          "blocked_reason": "Pipeline execution failed: ValueError('Chief Engineer validation repair failed: [compressed output sha256=d089dc89c381a719 original_chars=1201]\\nF                                                                        [100%]\\r\\n================================== FAILURES ===================================\\r\\n_____________ test_pulse_board_validates_completion_and_persists ______________\\r\\n\\r\\ntmp_p\\n[...compressed...]\\n============\\r\\nFAILED tests/test_pulse_board_validation.py::test_pulse_board_validates_completion_and_persists\\r\\n1 failed in 0.17s\\r\\n')"
+        }
+      },
+      "authority": "ScrumMaster",
+      "status": "OPEN",
+      "created_at": "2026-08-05T06:53:20.650738+00:00"
+    }
+  ],
+  "signals": [],
+  "quota": {
+    "max_turns": 100,
+    "turns_started": 5,
+    "turns_committed": 5,
+    "max_attempts_per_todo": 3,
+    "max_cost_usd": 0.5,
+    "cost_committed_usd": 0.0,
+    "max_wall_seconds": null,
+    "started_at": "2026-08-05T06:50:27.462782+00:00"
+  },
+  "applied_operations": {
+    "start:project:1:run:1": 0,
+    "next:scheduler:1:1785912627.472167": 1,
+    "result:run:1:task:LF-PRD-001:attempt:1:status:PR_READY": 2,
+    "next:scheduler:1:1785912674.556572": 3,
+    "result:run:1:task:LF-PRD-002:attempt:1:status:READY": 4,
+    "repair-handoff:LF-PRD-002:run:1:task:LF-PRD-002:repair:1": 5,
+    "next:scheduler:1:1785912800.90135": 7,
+    "result:run:1:task:LF-PRD-002:attempt:2:status:PR_READY": 8,
+    "next:scheduler:1:1785912899.005639": 9,
+    "result:run:1:task:LF-PRD-003:attempt:1:status:PR_READY": 10,
+    "next:scheduler:1:1785912948.761611": 11,
+    "result:run:1:task:LF-PRD-004:attempt:1:status:PR_READY": 12
+  },
+  "events": [
+    {
+      "event": "turn_writeback",
+      "todo_id": "LF-PRD-001",
+      "turn_id": "turn-9e52b3538dd0423ab1fc862861e321cf",
+      "route": "VALIDATED_PROGRESS",
+      "receipt_id": "receipt-20a014d336944dc092a5659d1a0850b4",
+      "at": "2026-08-05T06:51:14.250463+00:00"
+    },
+    {
+      "event": "turn_writeback",
+      "todo_id": "LF-PRD-002",
+      "turn_id": "turn-9c1f9625f52e49d39e3333e2dfb49218",
+      "route": "VALIDATION_FAILED",
+      "receipt_id": "receipt-a03d248ccb3f4c018c4bf2e779513bf6",
+      "at": "2026-08-05T06:53:20.376297+00:00"
+    },
+    {
+      "event": "repair_handoff",
+      "todo_id": "LF-PRD-002",
+      "handoff_id": "run:1:task:LF-PRD-002:repair:1",
+      "authority": "ScrumMaster",
+      "diagnosis": "Pipeline execution failed: ValueError('Chief Engineer validation repair failed: [compressed output sha256=d089dc89c381a719 original_chars=1201]\\nF                                                                        [100%]\\r\\n================================== FAILURES ===================================\\r\\n_____________ test_pulse_board_validates_completion_and_persists ______________\\r\\n\\r\\ntmp_p\\n[...compressed...]\\n============\\r\\nFAILED tests/test_pulse_board_validation.py::test_pulse_board_validates_completion_and_persists\\r\\n1 failed in 0.17s\\r\\n')",
+      "evidence": {
+        "run_id": 1,
+        "task_id": 2,
+        "attempt": 1,
+        "contract": {
+          "allowed_files": [
+            "app/pulse_board.py",
+            "tests/test_pulse_board_create.py",
+            "tests/test_pulse_board_validation.py",
+            "tests/test_pulse_board_summary.py",
+            "docs/pr.md",
+            "docs/cost_benchmark.md",
+            "docs/review.md",
+            "docs/risk.md",
+            "docs/release_manifest.md"
+          ],
+          "canonical_test_command": "python -m pytest tests/test_pulse_board_validation.py -q",
+          "seniority_class": "chief_only",
+          "visual_required": false,
+          "acceptance_test_policy": "observable_behavior_only",
+          "acceptance_behaviors": [
+            "blank titles fail and complete_pulse changes only the selected record"
+          ],
+          "acceptance_test_fixture_source": "E:\\Projetos\\local_forge_os\\scripts\\fixtures\\v9_pulse_board_validation_acceptance.py",
+          "acceptance_test_fixture_target": "tests/test_pulse_board_validation.py",
+          "required_product_files": [
+            "app/pulse_board.py"
+          ],
+          "required_artifact": null,
+          "implementation_notes": [
+            "Use the exact public functions named in the PRD.",
+            "This is a Python product: create and execute app/pulse_board.py; do not infer an HTML entrypoint.",
+            "Acceptance must execute app/pulse_board.py, never a duplicate algorithm in the test.",
+            "The public API is exactly add_pulse(store, title), list_pulses(store), complete_pulse(store, pulse_id), and summarize(store).",
+            "add_pulse must persist a positive integer id starting at 1, a non-empty ISO-8601 created_at string, the supplied title, and completed=False.",
+            "complete_pulse must raise KeyError for every unknown id, including non-numeric values such as 'missing'; do not leak ValueError from int conversion.",
+            "Preserve all accumulated behaviors and the JSON file format; do not replace the module with an unrelated class, metrics API, or test-only implementation.",
+            "For the release task, create docs/release_manifest.md with the required markers; do not rewrite a product module that already passes the accumulated suite unless validation proves it is broken.",
+            "ScrumMaster unblock: Chief Engineer must remove this blocker before PR readiness: Pipeline execution failed: ValueError('Chief Engineer validation repair failed: [compressed output sha256=d089dc89c381a719 original_chars=1201]\\nF                                                                        [100%]\\r\\n================================== FAILURES ===================================\\r\\n_____________ test_pulse_board_validates_completion_and_persists ______________\\r\\n\\r\\ntmp_p\\n[...compressed...]\\n============\\r\\nFAILED tests/test_pulse_board_validation.py::test_pulse_board_validates_completion_and_persists\\r\\n1 failed in 0.17s\\r\\n')"
+          ],
+          "v9_loopx_like_benchmark": true,
+          "source_title": "Validar e concluir pulsos",
+          "source_description": "Validar e concluir pulsos",
+          "chief_engineer_unblock_required": true,
+          "blocked_reason": "Pipeline execution failed: ValueError('Chief Engineer validation repair failed: [compressed output sha256=d089dc89c381a719 original_chars=1201]\\nF                                                                        [100%]\\r\\n================================== FAILURES ===================================\\r\\n_____________ test_pulse_board_validates_completion_and_persists ______________\\r\\n\\r\\ntmp_p\\n[...compressed...]\\n============\\r\\nFAILED tests/test_pulse_board_validation.py::test_pulse_board_validates_completion_and_persists\\r\\n1 failed in 0.17s\\r\\n')"
+        }
+      },
+      "at": "2026-08-05T06:53:20.650738+00:00"
+    },
+    {
+      "event": "turn_writeback",
+      "todo_id": "LF-PRD-002",
+      "turn_id": "turn-b93f5fb14ff24d32a27cc88c035c3de5",
+      "route": "VALIDATED_PROGRESS",
+      "receipt_id": "receipt-f22524071f7642e08b485a2253555b2f",
+      "at": "2026-08-05T06:54:58.772772+00:00"
+    },
+    {
+      "event": "turn_writeback",
+      "todo_id": "LF-PRD-003",
+      "turn_id": "turn-55f5a33f8fa34a44aa62b85edcabceff",
+      "route": "VALIDATED_PROGRESS",
+      "receipt_id": "receipt-4463b62081394051b2e6c7f11001d876",
+      "at": "2026-08-05T06:55:48.524051+00:00"
+    },
+    {
+      "event": "turn_writeback",
+      "todo_id": "LF-PRD-004",
+      "turn_id": "turn-b2eefc532b964ab5968d192da28aae47",
+      "route": "VALIDATED_PROGRESS",
+      "receipt_id": "receipt-ca723dc6d91642e8803cc3f02495f49d",
+      "at": "2026-08-05T06:56:40.333030+00:00"
+    }
+  ],
+  "capability_proposals": []
+}

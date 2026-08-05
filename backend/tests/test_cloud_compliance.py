@@ -536,6 +536,7 @@ async def test_cli_chief_preflight_stops_on_gateway_wide_upstream_outage(monkeyp
 @pytest.mark.asyncio
 async def test_cli_chief_preflight_recovers_on_bounded_gateway_round(monkeypatch) -> None:
     attempted: list[str] = []
+    monkeypatch.setenv("LOCALFORGE_CHIEF_MODEL", "route-a")
 
     class RecoveringGateway:
         async def list_models(self) -> list[str]:

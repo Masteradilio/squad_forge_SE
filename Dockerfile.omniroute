@@ -1,26 +1,4 @@
-# Dockerfile.omniroute - Node.js 22 OmniRoute AI Gateway Proxy
-FROM node:22-alpine
-
-WORKDIR /app
-
-# Install curl for the container healthcheck.
-RUN apk add --no-cache curl
-
-# Install the gateway locally. A failed install must fail the image build rather
-# than producing a container that reports healthy while serving no models.
-RUN npm init -y && \
-    npm install --omit=dev --no-audit --no-fund omniroute@3.8.49 && \
-    chown -R node:node /app
-
-EXPOSE 20128
-
-# Set default environment variables for OmniRoute
-ENV PORT=20128
-ENV HOST=0.0.0.0
-ENV NODE_ENV=production
-ENV DATA_DIR=/home/node/.omniroute
-
-USER node
-
-# Run the cloud gateway without downloading or replacing packages at runtime.
-CMD ["npx", "--no-install", "omniroute", "serve", "--port", "20128", "--no-open", "--no-tray"]
+# Compatibility wrapper for callers that still build this file directly.
+# Compose uses the upstream image directly; keeping this wrapper aligned avoids
+# reintroducing the incomplete npm-on-Alpine runtime through a manual build.
+FROM diegosouzapw/omniroute:latest

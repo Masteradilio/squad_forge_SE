@@ -2,8 +2,21 @@ import asyncio
 import logging
 import os
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any, cast
 
+from localforge.control_plane import (
+    AgentIdentity,
+    ControlPlaneKernel,
+    ControlPlaneStore,
+    GoalRegistry,
+    TaskSnapshot,
+    TurnResult,
+    TurnResultKind,
+    TurnRoute,
+    goal_id_for_project,
+    state_path_for_goal,
+)
 from localforge.core.config import configured_free_gateway_models, load_config
 from localforge.gitops.manager import WorktreeManager
 from localforge.llm.base import is_permanent_provider_error
@@ -171,6 +184,7 @@ class Scheduler:
         self._task: asyncio.Task | None = None
         self._trigger_event = asyncio.Event()
         self._loop_count = 0
+        self._control_plane: ControlPlaneKernel | None = None
 
     async def start(self) -> None:
         """Start the scheduler background loop task."""
@@ -245,6 +259,149 @@ class Scheduler:
         except Exception as e:
             logger.warning(f"Orphan worktrees cleanup failed or timed out: {e}")
 
+    async def _sync_control_plane(
+        self, uow: UnitOfWork, run: domain.Run, tasks: list[domain.Task]
+    ) -> None:
+        """Project DB tasks into one durable, lifetime-goal journal."""
+        if uow.projects is None:
+            return
+        project = await uow.projects.get_project(self.project_id)
+        if project is None:
+            return
+        database_identity = getattr(self.db_manager, "db_url", "default")
+        if ":memory:" in str(database_identity):
+            database_identity = f"{database_identity}:instance:{id(self.db_manager)}"
+        limits = dict(run.resource_limits or {})
+        goal_id = goal_id_for_project(self.project_id, limits)
+        state_path = state_path_for_goal(project.root_path, goal_id, database_identity)
+        self._control_plane = ControlPlaneKernel(ControlPlaneStore(state_path))
+        GoalRegistry(Path(project.root_path) / ".localforge" / "registry.json").connect(
+            goal_id=goal_id,
+            workspace=project.root_path,
+            state_path=state_path,
+            source_revision=str((run.resource_limits or {}).get("source_revision") or "unknown"),
+            authority={
+                "scheduler": "claim_and_writeback",
+                "scrum_master": "diagnose_and_delegate",
+                "chief_engineer": "repair_under_contract",
+                "human": "approve_merge_and_deploy",
+            },
+        )
+        task_keys = {task.id: task.key for task in tasks if task.id is not None}
+        snapshots = [
+            TaskSnapshot(
+                todo_id=task.key,
+                title=task.title,
+                status=task.status.value,
+                dependencies=[
+                    task_keys[dependency_id]
+                    for dependency_id in task.dependency_task_ids
+                    if dependency_id in task_keys
+                ],
+            )
+            for task in tasks
+        ]
+        if self._control_plane.status() is None:
+            self._control_plane.start(
+                goal_id=goal_id,
+                vision=f"Complete the PRD task backlog for project {project.name}.",
+                non_negotiables=[
+                    "Never bypass the Safety Kernel.",
+                    "Never mark PR_READY without server-owned evidence.",
+                    "Stop at bounded quota and preserve an auditable blocker.",
+                ],
+                scope=[project.root_path],
+                authority={
+                    "scheduler": "claim_and_writeback",
+                    "scrum_master": "diagnose_and_delegate",
+                    "chief_engineer": "repair_under_contract",
+                    "human": "approve_merge_and_deploy",
+                },
+                tasks=snapshots,
+                max_turns=max(1, int(limits.get("max_turns", 100))),
+                max_attempts_per_todo=max(
+                    1, int(limits.get("max_attempts_per_todo", 3))
+                ),
+                max_cost_usd=max(0.0, float(limits.get("max_paid_usd", 5.0) or 5.0)),
+                max_wall_seconds=(
+                    float(limits["max_run_time"])
+                    if limits.get("max_run_time") is not None
+                    else None
+                ),
+                source_revision=str((run.resource_limits or {}).get("source_revision") or "unknown"),
+                acceptance_target="all_tasks_pr_ready_and_reviewable",
+                agents=[
+                    AgentIdentity(
+                        agent_id=f"scheduler:{self.run_id}",
+                        role="scheduler",
+                        capabilities=["claim_bounded_turn", "write_receipt"],
+                        allowed_actions=["read_contract", "run_checks", "emit_receipt"],
+                        authority="scheduler",
+                    ),
+                    AgentIdentity(
+                        agent_id=f"scrum-master:{self.run_id}",
+                        role="scrum_master",
+                        capabilities=["diagnose_blocker", "delegate_repair"],
+                        allowed_actions=["inspect_evidence", "create_repair_handoff"],
+                        authority="scrum_master",
+                    ),
+                    AgentIdentity(
+                        agent_id=f"chief-engineer:{self.run_id}",
+                        role="chief_engineer",
+                        capabilities=["repair_under_contract", "rerun_checks"],
+                        allowed_actions=["write_allowed_files", "run_checks", "emit_receipt"],
+                        authority="chief_engineer",
+                    ),
+                ],
+            )
+        self._control_plane.sync_tasks(snapshots)
+
+    def _record_control_plane_outcome(
+        self, task: domain.Task, *, passed: bool, summary: str
+    ) -> None:
+        """Write a bounded-turn receipt after the DB-owned task outcome exists."""
+        if self._control_plane is None:
+            return
+        state = self._control_plane.status()
+        if state is None:
+            return
+        todo = next((item for item in state.todos if item.todo_id == task.key), None)
+        if todo is None or todo.status.value != "CLAIMED" or not todo.current_turn_id:
+            return
+        result_kind = (
+            TurnResultKind.VALIDATED_PROGRESS
+            if passed
+            else TurnResultKind.VALIDATION_FAILED
+        )
+        self._control_plane.record_result(
+            TurnResult(
+                todo_id=task.key,
+                turn_id=todo.current_turn_id,
+                result_kind=result_kind,
+                summary=summary[:1200],
+                evidence={
+                    "run_id": self.run_id,
+                    "task_status": task.status.value,
+                    "source": "scheduler_task_outcome",
+                },
+                validated_by="forgeos.scheduler",
+                idempotency_key=(
+                    f"run:{self.run_id}:task:{task.key}:attempt:{todo.attempts}:"
+                    f"status:{task.status.value}"
+                ),
+                changed_files=[
+                    str(path)
+                    for path in (task.metadata or {}).get("changed_files", [])
+                    if isinstance(path, str)
+                ],
+                checks=[
+                    str(check)
+                    for check in (task.metadata or {}).get("checks_executed", [])
+                    if isinstance(check, str)
+                ],
+            )
+        )
+
     async def _process_iteration(self) -> None:
         async with UnitOfWork(self.db_manager) as uow:
             assert uow.executions is not None
@@ -302,6 +459,7 @@ class Scheduler:
 
             # 2. Get executing TaskRuns counts to respect limits
             tasks = await uow.tasks.list_tasks_for_project(self.project_id)
+            await self._sync_control_plane(uow, run, tasks)
 
             counts = self._classify_task_statuses(tasks)
             executing_count = counts["__executing__"]
@@ -400,6 +558,30 @@ class Scheduler:
                 # Resolve dependencies
                 runnable = await uow.tasks.is_task_runnable(t.id, tasks)
                 if runnable:
+                    if self._control_plane is not None:
+                        self._control_plane.recover_expired_leases()
+                        packet = self._control_plane.should_run()
+                        contract = packet.get("interaction_contract", {})
+                        if not isinstance(contract, dict) or not contract.get(
+                            "should_run"
+                        ) or not contract.get("spend_allowed"):
+                            logger.info(
+                                "Control plane deferred task %s: interaction=%s",
+                                t.key,
+                                contract,
+                            )
+                            break
+                        decision = self._control_plane.next_turn(
+                            f"scheduler:{self.run_id}"
+                        )
+                        if decision.route != TurnRoute.READY or decision.todo_id != t.key:
+                            logger.info(
+                                "Control plane withheld task %s: %s (%s)",
+                                t.key,
+                                decision.route.value,
+                                decision.reason,
+                            )
+                            break
                     # Claim the task
                     # Update status READY -> CLAIMED -> PLANNING (as per transition rules)
                     await uow.tasks.update_task_status(t.id, TaskStatus.CLAIMED)
@@ -462,6 +644,9 @@ class Scheduler:
                                 failed_task_run.ended_at = datetime.now(UTC)
                                 await recovery_uow.tasks.update_task_run(failed_task_run)
                             await self._mark_task_failed_safe(recovery_uow, t.id)
+                        self._record_control_plane_outcome(
+                            t, passed=False, summary=f"Governed dispatch failed: {e!r}"
+                        )
                         failed_in_iteration = True
                         break
                     if governed_result.status != "STARTED":
@@ -490,6 +675,11 @@ class Scheduler:
                                     pipeline_uow,
                                     project_id=self.project_id,
                                     run_id=self.run_id,
+                                    run_mode=(
+                                        RunMode.UNATTENDED
+                                        if self.execute_pipeline
+                                        else RunMode.INTERACTIVE
+                                    ),
                                 ).run_task(
                                     task_id=t.id,
                                     task_run_id=task_run.id,
@@ -526,6 +716,15 @@ class Scheduler:
                                             task_run_id=task_run.id,
                                             lease_token=governed_result.runner_lease_token,
                                         )
+                                    self._record_control_plane_outcome(
+                                        refreshed_task or t,
+                                        passed=False,
+                                        summary=(
+                                            refreshed_run.final_summary
+                                            if refreshed_run and refreshed_run.final_summary
+                                            else "Pipeline task did not pass its deterministic gates."
+                                        ),
+                                    )
                                     failed_in_iteration = True
                                     break
                                 if (
@@ -538,6 +737,11 @@ class Scheduler:
                                         task_run_id=task_run.id,
                                         lease_token=governed_result.runner_lease_token,
                                     )
+                                self._record_control_plane_outcome(
+                                    refreshed_task or t,
+                                    passed=True,
+                                    summary="Task reached PR_READY evidence gate.",
+                                )
                         except Exception as e:
                             logger.error(
                                 f"Task {t.key} failed during pipeline execution: {e!r}",
@@ -588,6 +792,9 @@ class Scheduler:
                                         task_run_id=task_run.id,
                                         lease_token=governed_result.runner_lease_token,
                                     )
+                            self._record_control_plane_outcome(
+                                t, passed=False, summary=f"Pipeline execution failed: {e!r}"
+                            )
                             failed_in_iteration = True
                             break
 
@@ -779,6 +986,21 @@ class Scheduler:
             task.metadata = metadata
             await uow.tasks.update_task(task)
             await uow.tasks.update_task_status(task_id, TaskStatus.READY)
+            if self._control_plane is not None:
+                self._control_plane.record_repair_handoff(
+                    todo_id=task.key,
+                    diagnosis=blocker,
+                    evidence={
+                        "run_id": self.run_id,
+                        "task_id": task_id,
+                        "attempt": attempts + 1,
+                        "contract": contract,
+                    },
+                    authority=AgentRole.SCRUM_MASTER.value,
+                    handoff_id=(
+                        f"run:{self.run_id}:task:{task.key}:repair:{attempts + 1}"
+                    ),
+                )
             if uow.audits is not None:
                 await uow.audits.append_audit_event(
                     domain.AuditEvent(

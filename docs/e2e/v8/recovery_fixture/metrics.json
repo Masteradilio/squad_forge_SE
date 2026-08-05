@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "benchmark": "ForgeOS V8 interruption and blocker recovery fixture",
+  "status": "ACCEPTED",
+  "interruption_recovered": true,
+  "injected_blocker_repaired": true,
+  "duplicate_writeback_receipts": 0,
+  "receipts": 3,
+  "journal_verified": true,
+  "final_goal_status": "COMPLETED",
+  "final_todo_statuses": [
+    "PASSED",
+    "PASSED"
+  ]
+}

@@ -1,0 +1,254 @@
+{
+  "schema_version": 1,
+  "revision": 11,
+  "goal": {
+    "goal_id": "v7:mini-control-plane",
+    "vision": "Complete the Mini Control Plane PRD with reviewable evidence.",
+    "non_negotiables": [
+      "No progress without a validated receipt.",
+      "No unbounded retries.",
+      "No merge or deployment authority."
+    ],
+    "scope": [
+      "docs/e2e/v7/PRD_MINI_CONTROL_PLANE.md"
+    ],
+    "authority": {
+      "scrum_master": "diagnose_and_delegate",
+      "chief_engineer": "repair_under_contract",
+      "human": "approve_merge"
+    },
+    "status": "COMPLETED",
+    "current_todo_id": "MINI-003",
+    "created_at": "2026-08-04T13:04:43.545284+00:00",
+    "updated_at": "2026-08-04T13:04:43.560565+00:00"
+  },
+  "todos": [
+    {
+      "todo_id": "MINI-001",
+      "title": "Create skeleton",
+      "dependencies": [],
+      "allowed_actions": [],
+      "status": "PASSED",
+      "owner": null,
+      "current_turn_id": null,
+      "lease_token": null,
+      "lease_expires_at": null,
+      "attempts": 1,
+      "last_error": null,
+      "updated_at": "2026-08-04T13:04:43.548284+00:00"
+    },
+    {
+      "todo_id": "MINI-002",
+      "title": "Add checks",
+      "dependencies": [
+        "MINI-001"
+      ],
+      "allowed_actions": [],
+      "status": "PASSED",
+      "owner": null,
+      "current_turn_id": null,
+      "lease_token": null,
+      "lease_expires_at": null,
+      "attempts": 2,
+      "last_error": null,
+      "updated_at": "2026-08-04T13:04:43.557795+00:00"
+    },
+    {
+      "todo_id": "MINI-003",
+      "title": "Assemble evidence",
+      "dependencies": [
+        "MINI-002"
+      ],
+      "allowed_actions": [],
+      "status": "PASSED",
+      "owner": null,
+      "current_turn_id": null,
+      "lease_token": null,
+      "lease_expires_at": null,
+      "attempts": 1,
+      "last_error": null,
+      "updated_at": "2026-08-04T13:04:43.560565+00:00"
+    }
+  ],
+  "gates": [
+    {
+      "gate_id": "review-evidence",
+      "name": "Review evidence",
+      "required": true,
+      "status": "PASSED",
+      "receipt_ids": [
+        "receipt-474f89029c5046e99f0c8c218de45c95"
+      ]
+    }
+  ],
+  "receipts": [
+    {
+      "receipt_id": "receipt-91049e88ed824b81a9867f29daec4594",
+      "todo_id": "MINI-001",
+      "turn_id": "turn-5b6415dcc0b846c0bec05c75439281cb",
+      "result_kind": "VALIDATED_PROGRESS",
+      "summary": "Skeleton validated.",
+      "evidence": {
+        "source": "v7_control_plane_benchmark",
+        "validated": true
+      },
+      "changed_files": [
+        "app/mini_board.py"
+      ],
+      "checks": [
+        "python -m compileall app/mini_board.py"
+      ],
+      "source_revision": "benchmark-source",
+      "content_hash": "c2c9f9d2ffbb2ba59cbae71a8c96aff008fc3e873a97f10f427d6513a5df85ad",
+      "validated_by": "forgeos.benchmark.verifier",
+      "idempotency_key": "mini-001-pass-1",
+      "created_at": "2026-08-04T13:04:43.548284+00:00"
+    },
+    {
+      "receipt_id": "receipt-a244f6d47aaf4508afd5796228ef58b4",
+      "todo_id": "MINI-002",
+      "turn_id": "turn-5dc7d590441f4c1788066e2493997c99",
+      "result_kind": "VALIDATION_FAILED",
+      "summary": "The first deterministic check failed once.",
+      "evidence": {
+        "source": "v7_control_plane_benchmark",
+        "validated": true
+      },
+      "changed_files": [],
+      "checks": [
+        "pytest -q"
+      ],
+      "source_revision": "benchmark-source",
+      "content_hash": "b66063f199b4e5f03346ef58dd64c14c184bf2262d300329c9ceb296f33fb82e",
+      "validated_by": "forgeos.benchmark.verifier",
+      "idempotency_key": "mini-002-failure-1",
+      "created_at": "2026-08-04T13:04:43.551285+00:00"
+    },
+    {
+      "receipt_id": "receipt-fdec54a5314b4c1dad67198d79791c71",
+      "todo_id": "MINI-002",
+      "turn_id": "turn-f16884abec3d4cd2ae71b2047ea2ecc6",
+      "result_kind": "VALIDATED_PROGRESS",
+      "summary": "Checks pass after bounded repair.",
+      "evidence": {
+        "source": "v7_control_plane_benchmark",
+        "validated": true
+      },
+      "changed_files": [
+        "tests/test_mini_board.py"
+      ],
+      "checks": [
+        "pytest -q"
+      ],
+      "source_revision": "benchmark-source",
+      "content_hash": "94e85ab3cdcba6ca3f090745fdcb840312a2b79240980a17a2fa8d677a7685e4",
+      "validated_by": "forgeos.benchmark.verifier",
+      "idempotency_key": "mini-002-pass-2",
+      "created_at": "2026-08-04T13:04:43.557795+00:00"
+    },
+    {
+      "receipt_id": "receipt-474f89029c5046e99f0c8c218de45c95",
+      "todo_id": "MINI-003",
+      "turn_id": "turn-7d594c99fecd4fecab7443f773e847f1",
+      "result_kind": "VALIDATED_COMPLETION",
+      "summary": "Review evidence assembled.",
+      "evidence": {
+        "source": "v7_control_plane_benchmark",
+        "validated": true
+      },
+      "changed_files": [
+        "docs/mini-pr.md"
+      ],
+      "checks": [
+        "receipt-schema",
+        "dependency-frontier"
+      ],
+      "source_revision": "benchmark-source",
+      "content_hash": "f4bf06792fb9c42d9eddd3c67999c59ad469af713268bed25acd8596ff56a278",
+      "validated_by": "forgeos.benchmark.verifier",
+      "idempotency_key": "mini-003-pass-1",
+      "created_at": "2026-08-04T13:04:43.560565+00:00"
+    }
+  ],
+  "quota": {
+    "max_turns": 8,
+    "turns_started": 4,
+    "turns_committed": 4,
+    "max_attempts_per_todo": 3,
+    "max_cost_usd": 0.05,
+    "cost_committed_usd": 0.0,
+    "max_wall_seconds": 30.0,
+    "started_at": "2026-08-04T13:04:43.545284+00:00"
+  },
+  "applied_operations": {
+    "start:v7:mini-control-plane": 0,
+    "next:scheduler:1785848683.546284": 1,
+    "result:mini-001-pass-1": 2,
+    "next:scheduler:1785848683.549284": 3,
+    "result:mini-002-failure-1": 4,
+    "next:scheduler:1785848683.552284": 5,
+    "repair-handoff:MINI-002:mini-002-repair-1": 6,
+    "repair-reopen:MINI-002:mini-002-repair-1": 7,
+    "next:scheduler:1785848683.555794": 8,
+    "result:mini-002-pass-2": 9,
+    "next:scheduler:1785848683.558496": 10,
+    "result:mini-003-pass-1": 11
+  },
+  "events": [
+    {
+      "event": "turn_writeback",
+      "todo_id": "MINI-001",
+      "turn_id": "turn-5b6415dcc0b846c0bec05c75439281cb",
+      "route": "VALIDATED_PROGRESS",
+      "receipt_id": "receipt-91049e88ed824b81a9867f29daec4594",
+      "at": "2026-08-04T13:04:43.548284+00:00"
+    },
+    {
+      "event": "turn_writeback",
+      "todo_id": "MINI-002",
+      "turn_id": "turn-5dc7d590441f4c1788066e2493997c99",
+      "route": "VALIDATION_FAILED",
+      "receipt_id": "receipt-a244f6d47aaf4508afd5796228ef58b4",
+      "at": "2026-08-04T13:04:43.551285+00:00"
+    },
+    {
+      "event": "repair_handoff",
+      "todo_id": "MINI-002",
+      "handoff_id": "mini-002-repair-1",
+      "authority": "scrum_master",
+      "diagnosis": "The deterministic check failed once.",
+      "evidence": {
+        "failed_check": "pytest -q",
+        "owner": "scrum_master"
+      },
+      "at": "2026-08-04T13:04:43.553789+00:00"
+    },
+    {
+      "event": "repair_writeback",
+      "todo_id": "MINI-002",
+      "handoff_id": "mini-002-repair-1",
+      "summary": "Chief repair completed and check is ready to rerun.",
+      "evidence": {
+        "repair_owner": "chief_engineer",
+        "rerun_required": true
+      },
+      "at": "2026-08-04T13:04:43.554794+00:00"
+    },
+    {
+      "event": "turn_writeback",
+      "todo_id": "MINI-002",
+      "turn_id": "turn-f16884abec3d4cd2ae71b2047ea2ecc6",
+      "route": "VALIDATED_PROGRESS",
+      "receipt_id": "receipt-fdec54a5314b4c1dad67198d79791c71",
+      "at": "2026-08-04T13:04:43.557795+00:00"
+    },
+    {
+      "event": "turn_writeback",
+      "todo_id": "MINI-003",
+      "turn_id": "turn-7d594c99fecd4fecab7443f773e847f1",
+      "route": "VALIDATED_COMPLETION",
+      "receipt_id": "receipt-474f89029c5046e99f0c8c218de45c95",
+      "at": "2026-08-04T13:04:43.560565+00:00"
+    }
+  ]
+}

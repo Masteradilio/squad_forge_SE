@@ -1,0 +1,291 @@
+{
+  "schema_version": 1,
+  "revision": 8,
+  "goal": {
+    "goal_id": "project:1:run:1",
+    "vision": "Complete the PRD task backlog for project v8-tiny-ledger.",
+    "non_negotiables": [
+      "Never bypass the Safety Kernel.",
+      "Never mark PR_READY without server-owned evidence.",
+      "Stop at bounded quota and preserve an auditable blocker."
+    ],
+    "scope": [
+      "E:\\Projetos\\local_forge_os\\benchmarks\\workspaces\\v8-tiny-ledger"
+    ],
+    "authority": {
+      "scheduler": "claim_and_writeback",
+      "scrum_master": "diagnose_and_delegate",
+      "chief_engineer": "repair_under_contract",
+      "human": "approve_merge_and_deploy"
+    },
+    "source_revision": "unknown",
+    "acceptance_target": "all_tasks_pr_ready_and_reviewable",
+    "last_receipt_id": "receipt-056839f27fef416ea8c53f35cad5627e",
+    "status": "COMPLETED",
+    "current_todo_id": "LF-PRD-004",
+    "created_at": "2026-08-05T05:13:35.386689+00:00",
+    "updated_at": "2026-08-05T05:16:24.949280+00:00"
+  },
+  "todos": [
+    {
+      "todo_id": "LF-PRD-001",
+      "title": "Criar e listar lançamentos",
+      "dependencies": [],
+      "allowed_actions": [],
+      "status": "PASSED",
+      "owner": null,
+      "current_turn_id": null,
+      "lease_token": null,
+      "lease_expires_at": null,
+      "attempts": 1,
+      "last_error": null,
+      "next_retry_at": null,
+      "updated_at": "2026-08-05T05:14:00.936244+00:00"
+    },
+    {
+      "todo_id": "LF-PRD-002",
+      "title": "Validar e liquidar lançamentos",
+      "dependencies": [],
+      "allowed_actions": [],
+      "status": "PASSED",
+      "owner": null,
+      "current_turn_id": null,
+      "lease_token": null,
+      "lease_expires_at": null,
+      "attempts": 1,
+      "last_error": null,
+      "next_retry_at": null,
+      "updated_at": "2026-08-05T05:14:26.761583+00:00"
+    },
+    {
+      "todo_id": "LF-PRD-003",
+      "title": "Exportar resumo",
+      "dependencies": [],
+      "allowed_actions": [],
+      "status": "PASSED",
+      "owner": null,
+      "current_turn_id": null,
+      "lease_token": null,
+      "lease_expires_at": null,
+      "attempts": 1,
+      "last_error": null,
+      "next_retry_at": null,
+      "updated_at": "2026-08-05T05:15:05.507555+00:00"
+    },
+    {
+      "todo_id": "LF-PRD-004",
+      "title": "Integration & Release Assembly: Consolidate touched modules into main release entrypoints",
+      "dependencies": [
+        "LF-PRD-001",
+        "LF-PRD-002",
+        "LF-PRD-003"
+      ],
+      "allowed_actions": [],
+      "status": "PASSED",
+      "owner": null,
+      "current_turn_id": null,
+      "lease_token": null,
+      "lease_expires_at": null,
+      "attempts": 1,
+      "last_error": null,
+      "next_retry_at": null,
+      "updated_at": "2026-08-05T05:16:24.949280+00:00"
+    }
+  ],
+  "gates": [],
+  "agents": [
+    {
+      "agent_id": "scheduler:1",
+      "role": "scheduler",
+      "capabilities": [
+        "claim_bounded_turn",
+        "write_receipt"
+      ],
+      "allowed_actions": [
+        "read_contract",
+        "run_checks",
+        "emit_receipt"
+      ],
+      "authority": "scheduler",
+      "active": true,
+      "registered_at": "2026-08-05T05:13:35.385631+00:00"
+    },
+    {
+      "agent_id": "scrum-master:1",
+      "role": "scrum_master",
+      "capabilities": [
+        "diagnose_blocker",
+        "delegate_repair"
+      ],
+      "allowed_actions": [
+        "inspect_evidence",
+        "create_repair_handoff"
+      ],
+      "authority": "scrum_master",
+      "active": true,
+      "registered_at": "2026-08-05T05:13:35.385631+00:00"
+    },
+    {
+      "agent_id": "chief-engineer:1",
+      "role": "chief_engineer",
+      "capabilities": [
+        "repair_under_contract",
+        "rerun_checks"
+      ],
+      "allowed_actions": [
+        "write_allowed_files",
+        "run_checks",
+        "emit_receipt"
+      ],
+      "authority": "chief_engineer",
+      "active": true,
+      "registered_at": "2026-08-05T05:13:35.385631+00:00"
+    }
+  ],
+  "receipts": [
+    {
+      "receipt_id": "receipt-2be426c6c4334ad2a088e498c2a8193e",
+      "todo_id": "LF-PRD-001",
+      "turn_id": "turn-4c486b3e1d9d4763994f5a1483284ccb",
+      "result_kind": "VALIDATED_PROGRESS",
+      "summary": "Task reached PR_READY evidence gate.",
+      "evidence": {
+        "run_id": 1,
+        "task_status": "PR_READY",
+        "source": "scheduler_task_outcome"
+      },
+      "changed_files": [
+        "tests/test_tiny_ledger.py"
+      ],
+      "checks": [],
+      "source_revision": null,
+      "content_hash": "2d367aeab60cf242e2f945894e201f110c069956b514acc4d6fd4691221b7c2e",
+      "validated_by": "forgeos.scheduler",
+      "idempotency_key": "run:1:task:LF-PRD-001:attempt:1:status:PR_READY",
+      "created_at": "2026-08-05T05:14:00.936244+00:00"
+    },
+    {
+      "receipt_id": "receipt-ca1a39f2195c4f74abbd69d52cc5a198",
+      "todo_id": "LF-PRD-002",
+      "turn_id": "turn-6269463815e2424a9af8df7a6a09e8e6",
+      "result_kind": "VALIDATED_PROGRESS",
+      "summary": "Task reached PR_READY evidence gate.",
+      "evidence": {
+        "run_id": 1,
+        "task_status": "PR_READY",
+        "source": "scheduler_task_outcome"
+      },
+      "changed_files": [
+        "tests/test_tiny_ledger.py",
+        "app/tiny_ledger.py"
+      ],
+      "checks": [],
+      "source_revision": null,
+      "content_hash": "dc43625b63042d9661272385a200966c964e4110379985fee3ea879f5ed027e8",
+      "validated_by": "forgeos.scheduler",
+      "idempotency_key": "run:1:task:LF-PRD-002:attempt:1:status:PR_READY",
+      "created_at": "2026-08-05T05:14:26.761583+00:00"
+    },
+    {
+      "receipt_id": "receipt-850112623bb143f6abdf76dd283f6d02",
+      "todo_id": "LF-PRD-003",
+      "turn_id": "turn-30776c90205b423e86eee0e0a57ff994",
+      "result_kind": "VALIDATED_PROGRESS",
+      "summary": "Task reached PR_READY evidence gate.",
+      "evidence": {
+        "run_id": 1,
+        "task_status": "PR_READY",
+        "source": "scheduler_task_outcome"
+      },
+      "changed_files": [
+        "tests/test_tiny_ledger.py",
+        "app/tiny_ledger.py"
+      ],
+      "checks": [],
+      "source_revision": null,
+      "content_hash": "4878aba50f1d6d99ede4c15209d4a58009c729cce363335883796335a67a1b9d",
+      "validated_by": "forgeos.scheduler",
+      "idempotency_key": "run:1:task:LF-PRD-003:attempt:1:status:PR_READY",
+      "created_at": "2026-08-05T05:15:05.507555+00:00"
+    },
+    {
+      "receipt_id": "receipt-056839f27fef416ea8c53f35cad5627e",
+      "todo_id": "LF-PRD-004",
+      "turn_id": "turn-7de29d51bf264c63b0ccb1dcee7b94d7",
+      "result_kind": "VALIDATED_PROGRESS",
+      "summary": "Task reached PR_READY evidence gate.",
+      "evidence": {
+        "run_id": 1,
+        "task_status": "PR_READY",
+        "source": "scheduler_task_outcome"
+      },
+      "changed_files": [
+        "app/tiny_ledger.py"
+      ],
+      "checks": [],
+      "source_revision": null,
+      "content_hash": "134b08e7ab6b8f96c41b5fd8182aadca3101d814ecbb144b51365822dc93add4",
+      "validated_by": "forgeos.scheduler",
+      "idempotency_key": "run:1:task:LF-PRD-004:attempt:1:status:PR_READY",
+      "created_at": "2026-08-05T05:16:24.949280+00:00"
+    }
+  ],
+  "handoffs": [],
+  "signals": [],
+  "quota": {
+    "max_turns": 100,
+    "turns_started": 4,
+    "turns_committed": 4,
+    "max_attempts_per_todo": 3,
+    "max_cost_usd": 0.5,
+    "cost_committed_usd": 0.0,
+    "max_wall_seconds": null,
+    "started_at": "2026-08-05T05:13:35.386689+00:00"
+  },
+  "applied_operations": {
+    "start:project:1:run:1": 0,
+    "next:scheduler:1:1785906815.393689": 1,
+    "result:run:1:task:LF-PRD-001:attempt:1:status:PR_READY": 2,
+    "next:scheduler:1:1785906840.943244": 3,
+    "result:run:1:task:LF-PRD-002:attempt:1:status:PR_READY": 4,
+    "next:scheduler:1:1785906867.009285": 5,
+    "result:run:1:task:LF-PRD-003:attempt:1:status:PR_READY": 6,
+    "next:scheduler:1:1785906905.767032": 7,
+    "result:run:1:task:LF-PRD-004:attempt:1:status:PR_READY": 8
+  },
+  "events": [
+    {
+      "event": "turn_writeback",
+      "todo_id": "LF-PRD-001",
+      "turn_id": "turn-4c486b3e1d9d4763994f5a1483284ccb",
+      "route": "VALIDATED_PROGRESS",
+      "receipt_id": "receipt-2be426c6c4334ad2a088e498c2a8193e",
+      "at": "2026-08-05T05:14:00.936244+00:00"
+    },
+    {
+      "event": "turn_writeback",
+      "todo_id": "LF-PRD-002",
+      "turn_id": "turn-6269463815e2424a9af8df7a6a09e8e6",
+      "route": "VALIDATED_PROGRESS",
+      "receipt_id": "receipt-ca1a39f2195c4f74abbd69d52cc5a198",
+      "at": "2026-08-05T05:14:26.761583+00:00"
+    },
+    {
+      "event": "turn_writeback",
+      "todo_id": "LF-PRD-003",
+      "turn_id": "turn-30776c90205b423e86eee0e0a57ff994",
+      "route": "VALIDATED_PROGRESS",
+      "receipt_id": "receipt-850112623bb143f6abdf76dd283f6d02",
+      "at": "2026-08-05T05:15:05.507555+00:00"
+    },
+    {
+      "event": "turn_writeback",
+      "todo_id": "LF-PRD-004",
+      "turn_id": "turn-7de29d51bf264c63b0ccb1dcee7b94d7",
+      "route": "VALIDATED_PROGRESS",
+      "receipt_id": "receipt-056839f27fef416ea8c53f35cad5627e",
+      "at": "2026-08-05T05:16:24.949280+00:00"
+    }
+  ],
+  "capability_proposals": []
+}

@@ -2,6 +2,22 @@ import sys
 
 from localforge import __version__
 
+
+def _configure_cli_stdio() -> None:
+    """Keep diagnostic output from aborting CLI runs on legacy Windows hosts."""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="backslashreplace")
+        except (AttributeError, OSError, ValueError):
+            # Test runners and embedded callers may expose non-configurable streams.
+            continue
+
+
+_configure_cli_stdio()
+
 try:
     import typer
 except ModuleNotFoundError:
@@ -28,6 +44,7 @@ from localforge.cli.control import (
     task_app,
     tasks_app,
 )
+from localforge.cli.control_plane import control_plane_app
 from localforge.cli.costs import costs_app
 from localforge.cli.demo import demo_cmd
 from localforge.cli.doctor import doctor_cmd
@@ -116,6 +133,7 @@ app.add_typer(swarm_app, name="swarm")
 app.add_typer(graph_app, name="graph")
 app.add_typer(memory_app, name="memory")
 app.add_typer(ops_loops_app, name="loops-eval")
+app.add_typer(control_plane_app, name="control-plane")
 
 
 if __name__ == "__main__":

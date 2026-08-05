@@ -41,6 +41,14 @@ def _free_route(model: str) -> bool:
     return model.endswith(":free") or "-free" in model or "free/" in model
 
 
+def _route_priority(route: str, preferred: list[str]) -> tuple[int, str]:
+    normalized = route.strip().lower()
+    try:
+        return preferred.index(normalized), normalized
+    except ValueError:
+        return len(preferred), normalized
+
+
 def _request_json(
     url: str,
     *,
@@ -111,7 +119,35 @@ def _omniroute_preflight(base_url: str) -> tuple[bool, list[str], dict[str, Any]
         "temperature": 0,
         "reasoning_effort": "none",
     }
-    for route in routes[:8]:
+    try:
+        max_probe_routes = max(
+            1, int(_env_value("LOCALFORGE_CLOUD_PREFLIGHT_MAX_ROUTES") or 16)
+        )
+    except ValueError:
+        max_probe_routes = 16
+    configured_preference = _env_value("LOCALFORGE_CLOUD_PREFERRED_FREE_ROUTES")
+    preferred = [
+        item.strip().lower()
+        for item in (
+            configured_preference
+            or (
+                "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free,"
+                "openrouter/nvidia/nemotron-3-super-120b-a12b:free,"
+                "openrouter/google/gemma-4-31b-it:free,"
+                "oc/deepseek-v4-flash-free,oc/north-mini-code-free"
+            )
+        ).split(",")
+        if item.strip()
+    ]
+    probe_routes = sorted(
+        (
+            route
+            for route in routes
+            if not any(marker in route.lower() for marker in ("veo", "seedance"))
+        ),
+        key=lambda route: _route_priority(route, preferred),
+    )[:max_probe_routes]
+    for route in probe_routes:
         probe["model"] = route
         status, body = _request_json(
             f"{base_url.rstrip('/')}/chat/completions",
@@ -137,6 +173,26 @@ def _omniroute_preflight(base_url: str) -> tuple[bool, list[str], dict[str, Any]
         "completion": "no free route completed the structured probe",
         "failures": failures,
     }
+
+
+def _sandbox_image_preflight(image: str) -> tuple[bool, str]:
+    """Require the repository-owned sandbox image before spending model calls."""
+    if not shutil.which("docker"):
+        return False, "Docker CLI is not available on the host"
+    try:
+        result = subprocess.run(
+            ["docker", "image", "inspect", image],
+            capture_output=True,
+            text=True,
+            timeout=20.0,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return False, f"Docker image inspection failed: {exc}"
+    if result.returncode:
+        detail = (result.stderr or result.stdout).strip().splitlines()
+        return False, detail[-1] if detail else f"image not found: {image}"
+    return True, f"image available: {image}"
 
 
 def _run_command(
@@ -167,6 +223,13 @@ def _run_command(
 
 def _initialize_workspace(workspace: Path, python: str) -> None:
     workspace.mkdir(parents=True, exist_ok=True)
+    runtime = workspace / ".localforge"
+    # Every acceptance run must start from a new database and worktree graph.
+    # Reusing a completed or partially initialized runtime makes task statuses,
+    # repair counters, and old blockers contaminate the next result. Product
+    # inputs and the workspace Git history remain untouched.
+    if runtime.is_dir():
+        shutil.rmtree(runtime)
     docs = workspace / "docs"
     docs.mkdir(exist_ok=True)
     for name in ("PRD.md", "hp12c_platinum_design_target.png"):
@@ -201,6 +264,196 @@ def _initialize_workspace(workspace: Path, python: str) -> None:
         subprocess.run(["git", "commit", "-m", "chore: initialize HP12C OmniRoute benchmark"], cwd=workspace, check=True)
 
 
+def _install_hp12c_acceptance_contract(workspace: Path) -> dict[str, str]:
+    """Bind HP12C acceptance contracts and preserve sequential product state."""
+    database = workspace / ".localforge" / "localforge.db"
+    fixture = ROOT / "scripts" / "fixtures" / "hp12c_task_2_1.py"
+    alg_fixture = ROOT / "scripts" / "fixtures" / "hp12c_task_2_2.py"
+    memory_fixture = ROOT / "scripts" / "fixtures" / "hp12c_task_2_3.py"
+    tvm_fixture = ROOT / "scripts" / "fixtures" / "hp12c_task_3_1.py"
+    target = (
+        "tests/test_task_2_1_implement_the_rpn_calculation_stack_x_y_z_t_registers_"
+        "with_stack_manipulation_enter_x_y_r_clx.py"
+    )
+    alg_target = (
+        "tests/test_task_2_2_implement_the_algebraic_calculation_mode_alg_with_"
+        "operator_precedence_and_mode_toggle_g_alg_g_rpn.py"
+    )
+    memory_target = (
+        "tests/test_task_2_3_implement_memory_storage_and_recall_registers_sto_0_9_"
+        "rcl_0_9_sto_sto_sto_sto.py"
+    )
+    tvm_target = (
+        "tests/test_task_3_1_implement_tvm_registers_n_i_pv_pmt_fv_and_"
+        "cash_flow_timing_beg_end.py"
+    )
+    rpn_public_apis = [
+        "RPNStack",
+        "RPNStack.enter",
+        "RPNStack.swap",
+        "RPNStack.rollDown",
+        "RPNStack.clx",
+        "RPNStack.X",
+        "RPNStack.Y",
+        "RPNStack.Z",
+        "RPNStack.T",
+    ]
+    alg_public_apis = ["RPNStack.setMode", "RPNStack.evaluateExpression"]
+    memory_public_apis = [
+        "RPNStack.sto",
+        "RPNStack.rcl",
+        "RPNStack.sto_plus",
+        "RPNStack.sto_minus",
+        "RPNStack.sto_multiply",
+        "RPNStack.sto_divide",
+    ]
+    accumulated_public_apis = rpn_public_apis + alg_public_apis + memory_public_apis
+    connection = sqlite3.connect(database)
+    try:
+        row = connection.execute(
+            "SELECT id, title, metadata_json FROM tasks WHERE key = ?",
+            ("LF-PRD-004",),
+        ).fetchone()
+        if row is None:
+            raise RuntimeError("HP12C Task 2.1 was not imported into the benchmark database")
+        task_id, title, metadata_json = row
+        metadata = json.loads(metadata_json or "{}")
+        contract = metadata.setdefault("task_contract", {})
+        allowed_files = contract.setdefault("allowed_files", [])
+        if target not in allowed_files:
+            allowed_files.append(target)
+        contract["acceptance_test_fixture_source"] = str(fixture)
+        contract["acceptance_test_fixture_target"] = target
+        contract["acceptance_test_policy"] = "repository_owned_observable_behavior"
+        contract["required_public_apis"] = list(rpn_public_apis)
+        contract["required_product_files"] = ["app/index.html"]
+        task_notes = contract.setdefault("implementation_notes", [])
+        required_notes = [
+            "Preserve the RPNStack public API and implementation in app/index.html; this task owns the production stack behavior.",
+            "The acceptance flow calls enter(5), enter(3), swap(), rollDown(), and clx() and requires register snapshots [5,0,0,0], [3,5,0,0], [5,3,0,0], [3,0,0,5], and [0,0,0,5].",
+            "Repair the production HTML implementation when these assertions fail; do not edit or weaken the acceptance test.",
+        ]
+        for note in required_notes:
+            if note not in task_notes:
+                task_notes.append(note)
+        metadata["task_contract"] = contract
+        connection.execute(
+            "UPDATE tasks SET metadata_json = ? WHERE id = ?",
+            (json.dumps(metadata, ensure_ascii=False), task_id),
+        )
+        task_rows = connection.execute(
+            "SELECT id, key, dependency_task_ids, metadata_json FROM tasks ORDER BY id"
+        ).fetchall()
+        for index, (current_id, key, dependencies_json, task_metadata_json) in enumerate(task_rows):
+            if index == 0:
+                continue
+            dependencies = json.loads(dependencies_json or "[]")
+            if not isinstance(dependencies, list):
+                dependencies = []
+            previous_id = int(task_rows[index - 1][0])
+            if previous_id not in dependencies:
+                dependencies.append(previous_id)
+            current_metadata = json.loads(task_metadata_json or "{}")
+            current_contract = current_metadata.setdefault("task_contract", {})
+            if index >= 3:
+                current_contract["seniority_class"] = "chief_only"
+                current_contract["required_product_files"] = ["app/index.html"]
+                current_contract["required_public_apis"] = list(rpn_public_apis)
+                if index >= 6:
+                    current_contract["required_public_apis"] = list(accumulated_public_apis)
+                current_notes = current_contract.setdefault("implementation_notes", [])
+                for note in (
+                    "This HP12C functional task is Chief-only: use the configured high-capacity route, not a local model.",
+                    "Read the accepted predecessor app/index.html before editing and extend it in place; never replace the product with a smaller standalone page.",
+                    "Preserve RPNStack and every previously accepted public method and behavior before adding this task's capability.",
+                ):
+                    if note not in current_notes:
+                        current_notes.append(note)
+            if key == "LF-PRD-005":
+                current_contract["required_public_apis"] = list(rpn_public_apis) + list(alg_public_apis)
+                current_contract["required_product_files"] = ["app/index.html"]
+                current_contract["seniority_class"] = "chief_only"
+                current_allowed_files = current_contract.setdefault("allowed_files", [])
+                if alg_target not in current_allowed_files:
+                    current_allowed_files.append(alg_target)
+                current_contract["acceptance_test_fixture_source"] = str(alg_fixture)
+                current_contract["acceptance_test_fixture_target"] = alg_target
+                current_contract["acceptance_test_policy"] = "repository_owned_observable_behavior"
+                task_notes = current_contract.setdefault("implementation_notes", [])
+                for note in (
+                    "Preserve the RPNStack public API from LF-PRD-004 while adding ALG mode.",
+                    "Expose mode, setMode(mode), and evaluateExpression(expression) on RPNStack; evaluateExpression must honor operator precedence and parentheses.",
+                    "Read the predecessor's accepted app/index.html before editing. Extend its existing RPNStack in place; never replace the complete file with markup or delete enter, swap, rollDown, clx, X, Y, Z, or T.",
+                    "Any candidate that removes an accepted predecessor API is invalid even if the new ALG behavior works; restore the prior implementation and add only the missing ALG behavior.",
+                    "The repository-owned ALG fixture is authoritative; repair app/index.html, never replace or weaken the fixture.",
+                ):
+                    if note not in task_notes:
+                        task_notes.append(note)
+                current_test = next(
+                    (
+                        path
+                        for path in str(current_contract.get("canonical_test_command", "")).split()
+                        if path.endswith(".py") and "task_2_2" in path
+                    ),
+                    None,
+                )
+                if current_test:
+                    current_contract["canonical_test_command"] = (
+                        f"python -m pytest {target} {current_test} -q"
+                    )
+            elif key == "LF-PRD-006":
+                current_contract["required_public_apis"] = list(accumulated_public_apis)
+                current_contract["required_product_files"] = ["app/index.html"]
+                current_allowed_files = current_contract.setdefault("allowed_files", [])
+                if memory_target not in current_allowed_files:
+                    current_allowed_files.append(memory_target)
+                current_contract["acceptance_test_fixture_source"] = str(memory_fixture)
+                current_contract["acceptance_test_fixture_target"] = memory_target
+                current_contract["acceptance_test_policy"] = "repository_owned_observable_behavior"
+                task_notes = current_contract.setdefault("implementation_notes", [])
+                for note in (
+                    "Preserve the RPNStack public API from earlier tasks while adding ten memory registers.",
+                    "Expose sto(register), rcl(register), sto_plus(register), sto_minus(register), sto_multiply(register), and sto_divide(register) on RPNStack.",
+                    "The repository-owned memory fixture is authoritative; repair app/index.html, never replace or weaken the fixture.",
+                ):
+                    if note not in task_notes:
+                        task_notes.append(note)
+            elif key == "LF-PRD-007":
+                current_contract["required_public_apis"] = list(accumulated_public_apis) + ["TVM"]
+                tvm_allowed_files = current_contract.setdefault("allowed_files", [])
+                if tvm_target not in tvm_allowed_files:
+                    tvm_allowed_files.append(tvm_target)
+                current_contract["acceptance_test_fixture_source"] = str(tvm_fixture)
+                current_contract["acceptance_test_fixture_target"] = tvm_target
+                current_contract["acceptance_test_policy"] = "repository_owned_observable_behavior"
+                task_notes = current_contract.setdefault("implementation_notes", [])
+                for note in (
+                    "Expose an inline TVM object in app/index.html with n, i, PV, PMT, FV, timing, setReg, and setTiming; do not depend on an untracked external app/tvm.js file.",
+                    "The repository-owned TVM fixture is authoritative; repair the product and never edit or weaken the fixture.",
+                ):
+                    if note not in task_notes:
+                        task_notes.append(note)
+            current_metadata["task_contract"] = current_contract
+            connection.execute(
+                "UPDATE tasks SET dependency_task_ids = ?, metadata_json = ? WHERE id = ?",
+                (
+                    json.dumps(dependencies),
+                    json.dumps(current_metadata, ensure_ascii=False),
+                    current_id,
+                ),
+            )
+        connection.commit()
+        return {
+            "task_id": str(task_id),
+            "task_title": str(title),
+            "fixture": str(fixture),
+            "sequential_dependencies": str(max(0, len(task_rows) - 1)),
+            "preserved_api": "RPNStack",
+        }
+    finally:
+        connection.close()
+
+
 def _query_summary(database: Path) -> dict[str, Any]:
     connection = sqlite3.connect(database)
     try:
@@ -218,12 +471,32 @@ def _query_summary(database: Path) -> dict[str, Any]:
             "SELECT provider, COUNT(*) FROM model_call_ledger GROUP BY provider"
         ).fetchall()
         calls_by_provider = {str(provider): int(count) for provider, count in calls}
+        control_plane_dir = database.parent / "control_plane"
+        state_files = sorted(
+            control_plane_dir.glob("run-*.json"),
+            key=lambda path: path.stat().st_mtime,
+        )
+        control_plane: dict[str, Any] = {"present": False}
+        if state_files:
+            state_path = state_files[-1]
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+            goal = state.get("goal") if isinstance(state, dict) else {}
+            goal = goal if isinstance(goal, dict) else {}
+            control_plane = {
+                "present": True,
+                "path": str(state_path),
+                "goal_status": goal.get("status"),
+                "completed": goal.get("status") == "COMPLETED",
+                "revision": state.get("revision"),
+                "receipts": len(state.get("receipts", [])),
+            }
         return {
             "tasks": tasks,
             "runs": runs,
             "task_runs": task_runs,
             "artifacts": artifacts,
             "calls_by_provider": calls_by_provider,
+            "control_plane": control_plane,
         }
     finally:
         connection.close()
@@ -257,6 +530,7 @@ def main() -> int:
 
     workspace = args.workspace.resolve()
     base_url = _env_value("OMNIROUTE_URL") or "http://127.0.0.1:20128/v1"
+    sandbox_image = _env_value("LOCALFORGE_SANDBOX_IMAGE") or "forgeos-sandbox:py312"
     os.environ.update(
         {
             "OMNIROUTE_URL": base_url,
@@ -267,7 +541,10 @@ def main() -> int:
             "LOCALFORGE_CHIEF_BASE_URL": base_url,
             "LOCALFORGE_CHIEF_MODEL": "auto/best-free",
             "LOCALFORGE_SANDBOX_TYPE": args.sandbox_type,
+            "LOCALFORGE_SANDBOX_IMAGE": sandbox_image,
             "LOCALFORGE_OMNIROUTE_REASONING_EFFORT": "none",
+            "LOCALFORGE_SEQUENTIAL_TASK_CHAIN": "true",
+            "LOCALFORGE_MAX_PARALLEL_TASKS": "1",
         }
     )
 
@@ -278,12 +555,39 @@ def main() -> int:
         print(f"BLOCKED: OmniRoute completion pre-flight failed. Report: {report}")
         return 2
 
-    ladder = ",".join(routes[:8])
+    sandbox_ready, sandbox_message = _sandbox_image_preflight(sandbox_image)
+    evidence["sandbox"] = {
+        "type": args.sandbox_type,
+        "image": sandbox_image,
+        "ready": sandbox_ready,
+        "message": sandbox_message,
+    }
+    if args.sandbox_type == "docker" and not sandbox_ready:
+        report = _write_report(workspace, "BLOCKED", evidence)
+        print(f"BLOCKED: Docker sandbox pre-flight failed. Report: {report}")
+        return 2
+
+    # Use the route that actually passed the structured probe. The generic
+    # auto/best-free alias can silently select a different upstream model.
+    verified_route = preflight.get("verified_route")
+    route = str(verified_route or (routes[0] if routes else "auto/best-free"))
+    ordered_routes = [route] + [item for item in routes if item != route]
+    ladder = ",".join(ordered_routes[:8])
     os.environ.update(
         {
+            "LOCALFORGE_DEFAULT_MODEL": route,
+            "LOCALFORGE_CHIEF_MODEL": route,
             "LOCALFORGE_FALLBACK_MODELS": ladder,
             "LOCALFORGE_CHIEF_FALLBACK_MODELS": ladder,
             "LOCALFORGE_CHIEF_VISUAL_FALLBACK_MODELS": ladder,
+            "LOCALFORGE_MAX_RUN_TIME": str(args.run_timeout),
+            "LOCALFORGE_MAX_REPAIR_ATTEMPTS": "2",
+            # HP12C is a single-file HTML product. Keep the general diff guard
+            # active, but allow a complete bounded file rewrite to reach the
+            # deterministic visual and behavioral gates.
+            "LOCALFORGE_MAX_DIFF_GROWTH": "24000",
+            "LOCALFORGE_MAX_VISUAL_DIFF_GROWTH": "100000",
+            "LOCALFORGE_MAX_RUN_RECOVERY_CYCLES": "2",
         }
     )
     try:
@@ -299,10 +603,35 @@ def main() -> int:
             code, output = _run_command(workspace, args.python, command, timeout)
             outputs.append({"command": command, "exit_code": code, "tail": output[-4000:]})
             if code:
+                if command[:3] == ["-m", "localforge.cli.main", "run"] and code == 124:
+                    recovery_reason = (
+                        f"external benchmark timeout after {timeout:.0f}s; "
+                        "worker process was terminated"
+                    )
+                    recovery_command = [
+                        "-m",
+                        "localforge.cli.main",
+                        "run",
+                        "--reconcile-interrupted",
+                        "--reason",
+                        recovery_reason,
+                    ]
+                    recovery_code, recovery_output = _run_command(
+                        workspace, args.python, recovery_command, 90.0
+                    )
+                    outputs.append(
+                        {
+                            "command": recovery_command,
+                            "exit_code": recovery_code,
+                            "tail": recovery_output[-4000:],
+                        }
+                    )
                 evidence["commands"] = outputs
                 report = _write_report(workspace, "BLOCKED", evidence)
                 print(f"BLOCKED: command failed. Report: {report}")
                 return 3
+            if command[:3] == ["-m", "localforge.cli.main", "import-prd"]:
+                evidence["acceptance_contract"] = _install_hp12c_acceptance_contract(workspace)
 
         database = workspace / ".localforge" / "localforge.db"
         summary = _query_summary(database)
@@ -321,6 +650,7 @@ def main() -> int:
             and summary["runs"].get("COMPLETED", 0) > 0
             and summary["calls_by_provider"].get("omniroute", 0) > 0
             and non_omniroute == 0
+            and summary["control_plane"].get("completed", False)
             else "PARTIAL"
         )
         report = _write_report(workspace, status, evidence)

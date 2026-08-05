@@ -118,6 +118,20 @@ class SafeFileEditor:
                         load_config().budgets, "max_visual_diff_growth", 100000
                     )
                     max_diff = max(max_diff, visual_limit)
+                elif isinstance(contract, dict) and contract.get("seniority_class") in {
+                    "chief_only",
+                    "chief_led",
+                }:
+                    # Chief work may materialize a complete bounded product
+                    # surface. Keep a finite, operator-tunable ceiling while
+                    # avoiding the ordinary local-worker 2k diff cap.
+                    try:
+                        chief_diff_limit = int(
+                            os.getenv("LOCALFORGE_CHIEF_MAX_DIFF_GROWTH", "20000")
+                        )
+                    except ValueError:
+                        chief_diff_limit = 20000
+                    max_diff = max(max_diff, min(max(chief_diff_limit, 2000), 100000))
 
         # Run git checks in worktree_root
         import subprocess

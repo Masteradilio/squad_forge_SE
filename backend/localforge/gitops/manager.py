@@ -8,6 +8,7 @@ import shutil
 from sqlalchemy import select
 
 from localforge.gitops.adapter import GitAdapter
+from localforge.models import domain
 from localforge.models.enums import RunMode, TaskStatus, WorktreeAttemptStatus
 from localforge.storage import UnitOfWork
 from localforge.storage.orm import WorktreeAttemptManifestORM
@@ -116,7 +117,15 @@ class WorktreeManager:
 
         default_branch = await git.default_branch()
         base_branch = await self._base_branch_for_task(task_id, default_branch)
-        source_commit = await git.resolve_ref(base_branch, use_task_context=False)
+        # A retry reuses the task/run branch so previously validated repair
+        # commits remain available. Its manifest must start at that branch's
+        # actual HEAD, not at the original base branch, otherwise the PR gate
+        # rejects valid evidence as stale on the next attempt.
+        branch_exists = await git.branch_exists(branch_name)
+        source_commit = await git.resolve_ref(
+            branch_name if branch_exists else base_branch,
+            use_task_context=False,
+        )
         lock = self._get_worktree_lock(worktree_path)
         async with lock:
             # Prune any stale worktree registrations BEFORE attempting to add.
@@ -167,18 +176,87 @@ class WorktreeManager:
         assert self.uow.tasks is not None
 
         task = await self.uow.tasks.get_task(task_id)
-        if not task or not task.dependency_task_ids:
+        if not task:
             return default_branch
 
-        for dependency_id in reversed(task.dependency_task_ids):
-            dependency = await self.uow.tasks.get_task(dependency_id)
-            if not dependency or dependency.status not in (TaskStatus.PR_READY, TaskStatus.DONE):
-                continue
-            for task_run in await self.uow.tasks.list_runs_for_task(dependency_id):
-                if task_run.branch_name:
-                    return task_run.branch_name
+        if task.dependency_task_ids:
+            for dependency_id in reversed(task.dependency_task_ids):
+                dependency = await self.uow.tasks.get_task(dependency_id)
+                if not dependency or dependency.status not in (TaskStatus.PR_READY, TaskStatus.DONE):
+                    continue
+                for task_run in await self.uow.tasks.list_runs_for_task(dependency_id):
+                    if task_run.branch_name:
+                        return task_run.branch_name
+            return default_branch
+
+        chain_required, chain_branch = await self._sequential_base_branch_for_task(task)
+        if chain_required:
+            if chain_branch:
+                return chain_branch
+            raise RuntimeError(
+                f"Sequential task chain predecessor is not PR_READY for {task.key}; "
+                "refusing to create a worktree from the repository root."
+            )
 
         return default_branch
+
+    async def _sequential_base_branch_for_task(
+        self, task: domain.Task
+    ) -> tuple[bool, str | None]:
+        """Resolve an opt-in product chain for PRDs without explicit dependencies.
+
+        The HP12C acceptance run is intentionally sequential: each task must
+        start from the latest PR-ready branch produced by the previous task.
+        Normal projects retain the existing dependency-only behavior.
+        """
+        if not await self._sequential_task_chain_enabled():
+            return False, None
+
+        sequence = self._task_sequence_number(task.key)
+        if sequence is None:
+            return False, None
+
+        assert self.uow.tasks is not None
+        tasks = await self.uow.tasks.list_tasks_for_project(self.project_id)
+        predecessors: list[domain.Task] = []
+        for candidate in tasks:
+            candidate_sequence = self._task_sequence_number(candidate.key)
+            if (
+                candidate.id is not None
+                and candidate.id != task.id
+                and candidate_sequence is not None
+                and candidate_sequence < sequence
+            ):
+                predecessors.append(candidate)
+        if not predecessors:
+            return False, None
+
+        predecessor = max(
+            predecessors,
+            key=lambda candidate: self._task_sequence_number(candidate.key) or -1,
+        )
+        if predecessor.status not in (TaskStatus.PR_READY, TaskStatus.DONE):
+            return True, None
+
+        for task_run in await self.uow.tasks.list_runs_for_task(predecessor.id):
+            if task_run.run_id == self.run_id and task_run.branch_name:
+                return True, task_run.branch_name
+        return True, None
+
+    @staticmethod
+    def _task_sequence_number(task_key: str) -> int | None:
+        match = re.search(r"(\d+)$", task_key)
+        return int(match.group(1)) if match else None
+
+    async def _sequential_task_chain_enabled(self) -> bool:
+        value = os.getenv("LOCALFORGE_SEQUENTIAL_TASK_CHAIN", "")
+        if value.strip().lower() in {"1", "true", "yes", "on"}:
+            return True
+
+        if self.run_id is None or self.uow.executions is None:
+            return False
+        run = await self.uow.executions.get_run(self.run_id)
+        return bool((run.resource_limits or {}).get("sequential_task_chain")) if run else False
 
     async def create_checkpoint(self, task_id: int, checkpoint_name: str) -> str:
         """Create a checkpoint commit in the task's worktree.

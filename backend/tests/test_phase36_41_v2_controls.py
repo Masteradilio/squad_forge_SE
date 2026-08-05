@@ -71,6 +71,25 @@ def test_contract_verifier_reports_scope_import_api_and_dependency_failures(tmp_
     assert FailureClass.PUBLIC_API_MISMATCH in failure_classes
 
 
+def test_contract_verifier_accepts_public_api_declared_in_html(tmp_path):
+    (tmp_path / "index.html").write_text(
+        "<script>class RPNStack {} window.RPNStack = RPNStack;</script>",
+        encoding="utf-8",
+    )
+
+    result = ContractVerifier().verify(
+        worktree_path=str(tmp_path),
+        task_contract={
+            "allowed_files": ["index.html"],
+            "required_public_apis": ["RPNStack"],
+        },
+        changed_files=["index.html"],
+    )
+
+    assert result.passed is True
+    assert result.findings == []
+
+
 def test_failure_classifier_prefers_deterministic_playbooks():
     classified = FailureClassifier().classify(
         output="ModuleNotFoundError: No module named 'calculator'",

@@ -5,13 +5,20 @@ import os
 import sqlite3
 import sys
 from datetime import UTC, datetime
+from pathlib import Path
 
 import typer
 from localforge.core.config import LocalForgeConfig, load_config
+from localforge.control_plane import (
+    ControlPlaneKernel,
+    ControlPlaneStore,
+    goal_id_for_project,
+    state_path_for_goal,
+)
 from localforge.llm.base import LLMConnectionError, LLMHTTPError, LLMTimeoutError
 from localforge.llm.factory import build_chief_engineer_provider
 from localforge.models import domain
-from localforge.models.enums import RunMode, RunStatus, TaskStatus
+from localforge.models.enums import RunMode, RunStatus, TaskRunStatus, TaskStatus
 from localforge.services.pricing import is_free_gateway_model
 from localforge.services.scheduler import Scheduler
 from localforge.storage import UnitOfWork, db_manager
@@ -489,13 +496,96 @@ async def run_execution(unattended: bool) -> None:
         await scheduler.stop(timeout=2.0)
 
 
+async def reconcile_interrupted_run(
+    *, run_id: int | None = None, reason: str
+) -> bool:
+    """Reconcile a run whose worker was terminated outside the scheduler."""
+
+    cwd = Path.cwd()
+    async with UnitOfWork(db_manager) as uow:
+        assert uow.projects is not None
+        assert uow.executions is not None
+        assert uow.tasks is not None
+        project = await uow.projects.get_project_by_path(str(cwd))
+        if project is None or project.id is None:
+            return False
+        runs = await uow.executions.list_runs_for_project(project.id)
+        candidates = [run for run in runs if run_id is None or run.id == run_id]
+        if not candidates:
+            return False
+        target = max(candidates, key=lambda item: item.id or 0)
+        terminal = {
+            RunStatus.COMPLETED,
+            RunStatus.FAILED,
+            RunStatus.CANCELLED,
+            RunStatus.BLOCKED_NEEDS_HUMAN_REVIEW,
+        }
+        if target.status not in terminal:
+            active_statuses = {
+                TaskStatus.CLAIMED,
+                TaskStatus.PLANNING,
+                TaskStatus.IMPLEMENTING,
+                TaskStatus.TESTING,
+                TaskStatus.REPAIRING,
+                TaskStatus.REVIEWING,
+            }
+            for task in await uow.tasks.list_tasks_for_project(project.id):
+                if task.id is not None and task.status in active_statuses:
+                    await uow.tasks.update_task_status(task.id, TaskStatus.FAILED_SAFE)
+            for task_run in await uow.tasks.list_runs_for_run(target.id or -1):
+                if task_run.status in {TaskRunStatus.PENDING, TaskRunStatus.RUNNING}:
+                    task_run.status = TaskRunStatus.FAILED
+                    task_run.ended_at = datetime.now(UTC)
+                    task_run.final_summary = reason[:1200]
+                    await uow.tasks.update_task_run(task_run)
+            target.status = RunStatus.BLOCKED_NEEDS_HUMAN_REVIEW
+            target.ended_at = datetime.now(UTC)
+            target.summary = (
+                "Run reconciled after external worker interruption.\n"
+                f"Reason: {reason[:1200]}"
+            )
+            await uow.executions.update_run(target)
+
+    if project.id is not None:
+        database_identity = getattr(db_manager, "db_url", "default")
+        if ":memory:" in str(database_identity):
+            database_identity = f"{database_identity}:instance:{id(db_manager)}"
+        goal_id = goal_id_for_project(project.id, target.resource_limits)
+        state_path = state_path_for_goal(cwd, goal_id, database_identity)
+        if state_path.exists():
+            ControlPlaneKernel(ControlPlaneStore(state_path)).abort(reason)
+    console.print(
+        f"[bold yellow]Reconciled interrupted Run {target.id} as "
+        f"{target.status.value}.[/bold yellow]"
+    )
+    return True
+
+
 def run_cmd(
     unattended: bool = typer.Option(
         False, "--unattended", help="Run in unattended mode without manual approvals."
     ),
+    reconcile_interrupted: bool = typer.Option(
+        False,
+        "--reconcile-interrupted",
+        help="Close the latest externally interrupted run and its control-plane lease.",
+    ),
+    run_id: int | None = typer.Option(
+        None, "--run-id", help="Run ID to reconcile instead of the latest run."
+    ),
+    reason: str = typer.Option(
+        "worker_process_interrupted",
+        "--reason",
+        help="Auditable reason persisted in the run and task receipts.",
+    ),
 ) -> None:
     """Execute the pipeline loop for ready tasks in the current workspace."""
     try:
+        if reconcile_interrupted:
+            if not asyncio.run(reconcile_interrupted_run(run_id=run_id, reason=reason)):
+                console.print("[bold red]No matching interrupted run found.[/bold red]")
+                raise typer.Exit(code=1)
+            return
         asyncio.run(run_execution(unattended))
     except typer.Exit as e:
         raise e

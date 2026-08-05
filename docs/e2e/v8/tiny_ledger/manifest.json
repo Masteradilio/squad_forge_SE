@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "benchmark": "ForgeOS V8 LoopX-like Tiny Ledger Real PRD Benchmark",
+  "status": "ACCEPTED",
+  "workspace": "benchmarks/workspaces/v8-tiny-ledger",
+  "exported": {
+    "control_plane": "control_plane.json",
+    "events": "events.jsonl"
+  },
+  "report": "tiny_ledger_report.md",
+  "metrics": "tiny_ledger_metrics.json",
+  "exit_code": 0
+}

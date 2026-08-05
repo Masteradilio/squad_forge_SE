@@ -1,6 +1,7 @@
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
+from pathlib import Path
 
 import pytest
 from localforge.benchmark.v2 import BenchmarkRunManifest, BenchmarkV2Reporter
@@ -8,6 +9,7 @@ from localforge.models import domain
 from localforge.models.enums import FailureClass
 from localforge.pipeline.engine import RolePipelineEngine
 from localforge.pr_factory.local import LocalPRFactory
+from localforge.runtime.actions import RuntimeActionProposal
 from localforge.visual.gate import VisualFidelityGate
 
 
@@ -335,6 +337,236 @@ async def test_chief_engineer_receives_expanded_visual_file_context(tmp_path):
     assert repaired is False
     assert "app/dashboard.html" in captured["context"]
     assert len(captured["context"]) > 12_000
+
+
+@pytest.mark.asyncio
+async def test_chief_repair_rejects_unrelated_action_when_canonical_test_is_missing(tmp_path):
+    task = domain.Task(
+        id=2,
+        project_id=1,
+        key="LF-PRD-004",
+        title="RPN behavior",
+        description="Implement the RPN stack",
+        metadata={
+            "task_contract": {
+                "allowed_files": [
+                    "app/index.html",
+                    "tests/test_rpn.py",
+                ],
+                "canonical_test_command": "python -m pytest tests/test_rpn.py -q",
+            }
+        },
+    )
+    task_run = domain.TaskRun(id=3, run_id=10, task_id=2, worktree_path=str(tmp_path))
+
+    class WrongPlan:
+        def runtime_actions(self):
+            return [
+                RuntimeActionProposal(
+                    kind="write_file",
+                    path="app/index.html",
+                    content="<html></html>",
+                )
+            ]
+
+    config = SimpleNamespace(
+        chief_engineer=SimpleNamespace(
+            enabled=True,
+            model="minimax/minimax-m3",
+            fallback_models=[],
+            visual_model=None,
+            visual_fallback_models=[],
+        )
+    )
+    with (
+        patch("localforge.pipeline.engine.load_config", return_value=config),
+        patch(
+            "localforge.pipeline.engine.build_chief_engineer_provider",
+            return_value=MagicMock(provider_name="omniroute"),
+        ),
+        patch("localforge.pipeline.engine.ChiefEngineerService") as service_cls,
+    ):
+        service_cls.return_value.plan_semantic_repair = AsyncMock(return_value=WrongPlan())
+        engine = RolePipelineEngine(MagicMock(), project_id=1, run_id=10)
+        summaries: list[str] = []
+        repaired = await engine._try_chief_engineer_repair(
+            task=task,
+            task_run=task_run,
+            context=MagicMock(),
+            editor=MagicMock(),
+            changed_files=["app/index.html"],
+            command_summaries=summaries,
+            validation_output="canonical acceptance test missing",
+        )
+
+    assert repaired is False
+    assert not (tmp_path / "tests" / "test_rpn.py").exists()
+    assert any("tests/test_rpn.py" in summary for summary in summaries)
+
+
+@pytest.mark.asyncio
+async def test_qa_binds_undefined_product_file_in_node_acceptance_harness(tmp_path):
+    test_path = tmp_path / "tests" / "test_rpn.py"
+    test_path.parent.mkdir()
+    test_path.write_text(
+        """
+import subprocess
+from pathlib import Path
+
+APP_INDEX = Path(__file__).parents[1] / "app" / "index.html"
+NODE_RUNNER = "const sandbox = { location: { href: 'file://' + PRODUCT_FILE } };"
+
+subprocess.run(["node", "-e", NODE_RUNNER, str(APP_INDEX)], check=True)
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    class TestEditor:
+        async def write_text(self, root, relative_path, content, **kwargs):
+            (Path(root) / relative_path).write_text(content, encoding="utf-8")
+
+    task = domain.Task(
+        id=2,
+        project_id=1,
+        key="LF-PRD-004",
+        title="RPN behavior",
+        description="Implement the RPN stack",
+        metadata={"task_contract": {"allowed_files": ["tests/test_rpn.py"]}},
+    )
+    task_run = domain.TaskRun(id=3, run_id=10, task_id=2, worktree_path=str(tmp_path))
+    engine = RolePipelineEngine(MagicMock(), project_id=1, run_id=10)
+    changed_files: list[str] = []
+    summaries: list[str] = []
+
+    with patch.object(engine, "_editor_for_path", return_value=TestEditor()):
+        repaired = await engine._repair_node_product_file_binding(
+            task=task,
+            task_run=task_run,
+            editor=TestEditor(),
+            changed_files=changed_files,
+            command_summaries=summaries,
+            validation_output="ReferenceError: PRODUCT_FILE is not defined",
+        )
+
+    updated = test_path.read_text(encoding="utf-8")
+    assert repaired is True
+    assert "PRODUCT_FILE" not in updated
+    assert "process.argv[1]" in updated
+    assert changed_files == ["tests/test_rpn.py"]
+    assert summaries
+
+
+@pytest.mark.asyncio
+async def test_qa_binds_python_combined_payload_in_node_harness(tmp_path):
+    test_path = tmp_path / "tests" / "test_rpn.py"
+    test_path.parent.mkdir()
+    test_path.write_text(
+        '''
+import subprocess
+from pathlib import Path
+
+PRODUCT_HTML = (Path(__file__).parents[1] / "app" / "index.html").read_text()
+combined = PRODUCT_HTML
+NODE_RUNNER = f"""
+const vm = require('vm');
+vm.runInContext(combined, sandbox, {{ filename: 'product.js' }});
+"""
+subprocess.run(["node", "-e", NODE_RUNNER], check=True)
+'''.strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    class TestEditor:
+        async def write_text(self, root, relative_path, content, **kwargs):
+            (Path(root) / relative_path).write_text(content, encoding="utf-8")
+
+    task = domain.Task(
+        id=2,
+        project_id=1,
+        key="LF-PRD-004",
+        title="RPN behavior",
+        description="Implement the RPN stack",
+        metadata={"task_contract": {"allowed_files": ["tests/test_rpn.py"]}},
+    )
+    task_run = domain.TaskRun(id=3, run_id=10, task_id=2, worktree_path=str(tmp_path))
+    engine = RolePipelineEngine(MagicMock(), project_id=1, run_id=10)
+    changed_files: list[str] = []
+    summaries: list[str] = []
+
+    with patch.object(engine, "_editor_for_path", return_value=TestEditor()):
+        repaired = await engine._repair_node_combined_binding(
+            task=task,
+            task_run=task_run,
+            editor=TestEditor(),
+            changed_files=changed_files,
+            command_summaries=summaries,
+            validation_output="ReferenceError: combined is not defined",
+        )
+
+    updated = test_path.read_text(encoding="utf-8")
+    assert repaired is True
+    assert "vm.runInContext({combined!r}," in updated
+    assert changed_files == ["tests/test_rpn.py"]
+    assert summaries
+
+
+@pytest.mark.asyncio
+async def test_qa_binds_outer_node_vm_window_and_class_constructor(tmp_path):
+    test_path = tmp_path / "tests" / "test_rpn.py"
+    test_path.parent.mkdir()
+    test_path.write_text(
+        '''
+import subprocess
+
+NODE_RUNNER = r"""
+const sandbox = { window: {}, document: {}, console };
+vm.runInContext(appSource, sandbox);
+const stack = (typeof RPNStack !== 'undefined' ? RPNStack :
+              typeof window.RPNStack !== 'undefined' ? window.RPNStack : null);
+const instance = new stack.constructor();
+"""
+subprocess.run(["node", "-e", NODE_RUNNER], check=True)
+'''.strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    class TestEditor:
+        async def write_text(self, root, relative_path, content, **kwargs):
+            (Path(root) / relative_path).write_text(content, encoding="utf-8")
+
+    task = domain.Task(
+        id=2,
+        project_id=1,
+        key="LF-PRD-004",
+        title="RPN behavior",
+        description="Implement the RPN stack",
+        metadata={"task_contract": {"allowed_files": ["tests/test_rpn.py"]}},
+    )
+    task_run = domain.TaskRun(id=3, run_id=10, task_id=2, worktree_path=str(tmp_path))
+    engine = RolePipelineEngine(MagicMock(), project_id=1, run_id=10)
+    changed_files: list[str] = []
+    summaries: list[str] = []
+
+    with patch.object(engine, "_editor_for_path", return_value=TestEditor()):
+        repaired = await engine._repair_node_browser_globals(
+            task=task,
+            task_run=task_run,
+            editor=TestEditor(),
+            changed_files=changed_files,
+            command_summaries=summaries,
+            validation_output="ReferenceError: window is not defined",
+        )
+
+    updated = test_path.read_text(encoding="utf-8")
+    assert repaired is True
+    assert "typeof sandbox.window.RPNStack" in updated
+    assert "new stack()" in updated
+    assert "new stack.constructor()" not in updated
+    assert changed_files == ["tests/test_rpn.py"]
+    assert summaries
 
 
 @pytest.mark.asyncio

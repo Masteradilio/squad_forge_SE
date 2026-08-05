@@ -1,3 +1,5 @@
+import os
+
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -56,12 +58,18 @@ class ModelCallLedgerService:
             )
         elif is_gateway_provider(call.provider):
             metadata = dict(call.metadata or {})
-            metadata["pricing_measurement_source"] = (
-                "GATEWAY_REPORTED_COST"
-                if call.estimated_cost_usd > 0.0
-                else "NON_BILLED_GATEWAY_ROUTE"
-            )
-            call = call.model_copy(update={"metadata": metadata})
+            if is_free_gateway_model(call.model):
+                metadata["pricing_measurement_source"] = "NON_BILLED_GATEWAY_ROUTE"
+                call = call.model_copy(
+                    update={"estimated_cost_usd": 0.0, "metadata": metadata}
+                )
+            else:
+                metadata["pricing_measurement_source"] = (
+                    "GATEWAY_REPORTED_COST"
+                    if call.estimated_cost_usd > 0.0
+                    else "NON_BILLED_GATEWAY_ROUTE"
+                )
+                call = call.model_copy(update={"metadata": metadata})
         else:
             metadata = dict(call.metadata or {})
             metadata["pricing_measurement_source"] = "NON_BILLED_PROVIDER"
@@ -101,8 +109,16 @@ class ModelCallLedgerService:
             is_paid_provider(provider) or is_gateway_provider(provider)
         ):
             return
-        if is_gateway_provider(provider or "") and is_free_gateway_model(model):
-            return
+        if is_gateway_provider(provider or ""):
+            # Several call sites perform a conservative preflight before the
+            # provider has selected its concrete route. Resolve the configured
+            # gateway model in that case so an explicitly free OmniRoute route
+            # is audited without consuming a paid-call budget slot.
+            resolved_model = model or os.getenv("LOCALFORGE_CHIEF_MODEL") or os.getenv(
+                "LOCALFORGE_DEFAULT_MODEL"
+            )
+            if is_free_gateway_model(resolved_model):
+                return
         if run_id is None:
             return
         run = await self.session.get(RunORM, run_id)

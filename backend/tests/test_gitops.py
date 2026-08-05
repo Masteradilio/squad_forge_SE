@@ -1,4 +1,5 @@
 import os
+from types import SimpleNamespace
 
 import git
 import pytest
@@ -33,6 +34,55 @@ def test_run_branch_naming_is_workspace_scoped(tmp_path):
     assert first != second
     assert first.endswith("-run-1")
     assert second.endswith("-run-1")
+
+
+@pytest.mark.anyio
+async def test_worktree_manager_uses_opt_in_sequential_product_chain(monkeypatch):
+    previous = domain.Task(
+        id=1,
+        project_id=10,
+        key="LF-PRD-009",
+        title="Previous task",
+        description="previous",
+        status=TaskStatus.PR_READY,
+    )
+    current = domain.Task(
+        id=2,
+        project_id=10,
+        key="LF-PRD-010",
+        title="Current task",
+        description="current",
+    )
+
+    class FakeTasks:
+        async def get_task(self, task_id: int):
+            return current if task_id == current.id else previous
+
+        async def list_tasks_for_project(self, project_id: int):
+            return [previous, current]
+
+        async def list_runs_for_task(self, task_id: int):
+            if task_id == previous.id:
+                return [
+                    domain.TaskRun(
+                        id=20,
+                        run_id=77,
+                        task_id=previous.id,
+                        branch_name="localforge/lf-prd-009-previous-ws-run-77",
+                    )
+                ]
+            return []
+
+    monkeypatch.setenv("LOCALFORGE_SEQUENTIAL_TASK_CHAIN", "true")
+    manager = WorktreeManager(
+        project_id=10,
+        uow=SimpleNamespace(tasks=FakeTasks(), executions=None),
+        run_id=77,
+    )
+
+    assert await manager._base_branch_for_task(current.id, "main") == (
+        "localforge/lf-prd-009-previous-ws-run-77"
+    )
 
 
 @pytest.fixture
@@ -330,6 +380,52 @@ async def test_worktree_manager_replaces_stale_task_worktree_path(temp_git_repo,
     assert os.path.exists(worktree_path)
     assert not (stale_path / "stale.txt").exists()
     assert (stale_path / ".git").exists()
+
+
+@pytest.mark.anyio
+async def test_worktree_manager_manifest_source_follows_reused_run_branch(
+    temp_git_repo, db_session
+):
+    """A retry manifest starts at the branch HEAD preserved by the previous attempt."""
+    uow = UnitOfWork()
+    uow.session = db_session
+
+    from localforge.services.audit import AuditService
+    from localforge.services.project import ProjectService
+    from localforge.services.safety import SafetyService
+    from localforge.services.task import TaskService
+
+    uow.projects = ProjectService(db_session)
+    uow.tasks = TaskService(db_session)
+    uow.audits = AuditService(db_session)
+    uow.executions = ExecutionService(db_session)
+    uow.safety = SafetyService(db_session)
+
+    project = await uow.projects.create_project(
+        domain.Project(name="RetryManifest", root_path=str(temp_git_repo), default_branch="main")
+    )
+    assert project.id is not None
+    task = await uow.tasks.create_task(
+        domain.Task(project_id=project.id, key="LF-13", title="Retry source", description="")
+    )
+    assert task.id is not None
+
+    manager = WorktreeManager(project_id=project.id, uow=uow, run_id=78)
+    first_path, branch_name, first_source = await manager.setup_worktree_attempt(task.id)
+    assert first_source == git.Repo(str(temp_git_repo)).head.commit.hexsha
+    repo = git.Repo(first_path)
+    changed = os.path.join(first_path, "app.txt")
+    with open(changed, "w", encoding="utf-8") as handle:
+        handle.write("preserved repair\n")
+    repo.index.add(["app.txt"])
+    repo.index.commit("LF-13: preserve repair")
+    preserved_head = repo.head.commit.hexsha
+
+    second_path, second_branch, second_source = await manager.setup_worktree_attempt(task.id)
+
+    assert second_path == first_path
+    assert second_branch == branch_name
+    assert second_source == preserved_head
 
 
 @pytest.mark.anyio

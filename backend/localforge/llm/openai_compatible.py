@@ -332,13 +332,30 @@ class OpenAICompatibleProvider(BaseLLMProvider):
                                 break
                             try:
                                 chunk_data = json.loads(data_str)
+                                # OmniRoute may report upstream quota and
+                                # provider failures as SSE JSON frames while
+                                # keeping the HTTP response at 200. Do not
+                                # discard those frames and wait for the
+                                # structured-output timeout.
+                                error_payload = chunk_data.get("error")
+                                if isinstance(error_payload, dict):
+                                    message = error_payload.get("message") or error_payload
+                                    code = error_payload.get("code")
+                                    suffix = f" ({code})" if code else ""
+                                    raise LLMError(
+                                        f"Streaming upstream error{suffix}: {message}"
+                                    )
                                 choices = chunk_data.get("choices", [])
                                 if choices:
                                     delta = choices[0].get("delta", {})
                                     content = delta.get("content", "")
                                     if content:
                                         yield content
-                            except Exception:
+                            except Exception as exc:
+                                if isinstance(exc, LLMError):
+                                    raise
+                                # Ignore malformed non-data SSE frames; the
+                                # provider error path above remains fatal.
                                 pass
         except httpx.TimeoutException as e:
             raise LLMTimeoutError("Streaming connection timed out") from e

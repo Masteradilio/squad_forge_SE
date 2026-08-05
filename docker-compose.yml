@@ -1,9 +1,9 @@
 services:
   # 1. OmniRoute AI Gateway Proxy (Node.js 22 - 290+ Free Tier LLMs)
   omniroute:
-    build:
-      context: .
-      dockerfile: Dockerfile.omniroute
+    # Use the upstream runtime image. It includes the built Next.js server,
+    # migrations, native SQLite driver, and the official healthcheck.
+    image: diegosouzapw/omniroute:latest
     container_name: forgeos-omniroute
     ports:
       - "127.0.0.1:20128:20128"
@@ -11,7 +11,7 @@ services:
       - PORT=20128
       - HOST=0.0.0.0
       - NODE_ENV=production
-      - DATA_DIR=/home/node/.omniroute
+      - DATA_DIR=/app/data
       # Bound upstream stalls and cool down failed providers before the next
       # ForgeOS route probe. ForgeOS still consumes OmniRoute exclusively.
       - FETCH_TIMEOUT_MS=${OMNIROUTE_FETCH_TIMEOUT_MS:-60000}
@@ -22,13 +22,10 @@ services:
       - PROVIDER_COOLDOWN_MIN_MS=${OMNIROUTE_PROVIDER_COOLDOWN_MIN_MS:-5000}
       - PROVIDER_COOLDOWN_MAX_MS=${OMNIROUTE_PROVIDER_COOLDOWN_MAX_MS:-60000}
     volumes:
-      - omniroute-data:/home/node/.omniroute
+      # Keep the previous custom-image volume untouched while bootstrapping
+      # the official runtime with a clean, compatible data directory.
+      - omniroute-data-official:/app/data
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:20128/v1/models"]
-      interval: 5s
-      timeout: 5s
-      retries: 3
 
   # 2. PostgreSQL + Pgvector Vector Database & Persistence
   postgres:
@@ -133,4 +130,5 @@ services:
 volumes:
   pgdata:
   omniroute-data:
+  omniroute-data-official:
   forgeos-projects:

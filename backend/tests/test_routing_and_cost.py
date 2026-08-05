@@ -52,6 +52,28 @@ async def test_omniroute_preserves_gateway_reported_cost_without_snapshot(
 
 
 @pytest.mark.asyncio
+async def test_free_omniroute_route_is_recorded_at_zero_cost(
+    db_session: AsyncSession,
+):
+    ledger_service = ModelCallLedgerService(db_session)
+    call = await ledger_service.record_call(
+        domain.ModelCallLedger(
+            project_id=1,
+            provider="omniroute",
+            model="openrouter/nvidia/nemotron-3-ultra-550b-a55b:free",
+            reason=ChiefEngineerCallReason.SEMANTIC_REPAIR_PLAN,
+            input_tokens=100,
+            output_tokens=50,
+            estimated_cost_usd=0.25,
+            status="success",
+        )
+    )
+
+    assert call.estimated_cost_usd == 0.0
+    assert call.metadata["pricing_measurement_source"] == "NON_BILLED_GATEWAY_ROUTE"
+
+
+@pytest.mark.asyncio
 async def test_model_capabilities_tracking(db_session: AsyncSession):
     routing_service = ModelRoutingService(db_session)
 

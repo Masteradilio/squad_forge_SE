@@ -77,13 +77,39 @@ async def check_omniroute_status(base_url: str) -> tuple[bool, list[str], str]:
 
 def _explicit_free_routes(models: list[str]) -> list[str]:
     """Keep only catalog routes whose identifier explicitly denotes free use."""
-    return list(
+    routes = list(
         dict.fromkeys(
             model
             for model in models
-            if model.endswith(":free") or "-free" in model or model.startswith("free/")
+            if (model.endswith(":free") or "-free" in model or model.startswith("free/"))
+            and not any(video in model.lower() for video in ("veo", "seedance"))
         )
     )
+
+    # Prefer an explicitly configured OpenRouter free connection over the
+    # built-in OpenCode ``auto/*`` aliases.  The aliases can remain in the
+    # catalog after their upstream pool is exhausted, while an OpenRouter
+    # ``:free`` model is tied to the operator's actual connection and quota.
+    def route_priority(route: str) -> int:
+        normalized = route.lower()
+        if normalized.startswith("openrouter/poolside/laguna-s"):
+            return 0
+        if normalized.startswith("openrouter/poolside/laguna-xs"):
+            return 1
+        if normalized.startswith("openrouter/"):
+            return 2
+        if normalized.startswith("free/"):
+            return 3
+        if normalized.startswith("auto/"):
+            return 4
+        if normalized.startswith("oc/"):
+            return 5
+        return 6
+
+    return [
+        route
+        for _, route in sorted(enumerate(routes), key=lambda item: (route_priority(item[1]), item[0]))
+    ]
 
 
 async def probe_omniroute_completion(
@@ -100,8 +126,8 @@ async def probe_omniroute_completion(
 
     try:
         timeout = min(
-            30.0,
-            max(5.0, float(os.environ.get("LOCALFORGE_CLOUD_PREFLIGHT_ROUTE_TIMEOUT", "15"))),
+            12.0,
+            max(5.0, float(os.environ.get("LOCALFORGE_CLOUD_PREFLIGHT_ROUTE_TIMEOUT", "8"))),
         )
     except ValueError:
         timeout = 15.0
@@ -151,7 +177,7 @@ async def probe_omniroute_completion(
         except Exception as exc:
             return False, str(exc)
 
-    for route in routes[:4]:
+    for route in routes:
         passed, detail = await asyncio.get_running_loop().run_in_executor(None, fetch, route)
         if passed:
             return True, route, failures

@@ -2,6 +2,13 @@ import asyncio
 
 from fastapi.testclient import TestClient
 from localforge.api.app import create_app
+from localforge.control_plane import (
+    ControlPlaneKernel,
+    ControlPlaneStore,
+    TaskSnapshot,
+    goal_id_for_project,
+    state_path_for_goal,
+)
 from localforge.llm.fake import FakeLLMProvider
 from localforge.models import domain
 from localforge.models.enums import (
@@ -155,6 +162,51 @@ def test_api_comments_runtimes_and_task_ancestry(tmp_path):
         assert payload["epic"]["title"] == "Traceability"
         assert payload["task"]["key"] == "LF-1401"
         assert payload["task_runs"][0]["artifacts"][0]["type"] == "TestArtifact"
+    finally:
+        close_manager(manager)
+
+
+def test_api_exposes_durable_control_plane_operator_surface(tmp_path):
+    manager = make_db_manager(tmp_path)
+    try:
+        ids = seed_api_state(manager, tmp_path)
+        database_identity = manager.db_url
+        state_path = state_path_for_goal(
+            tmp_path,
+            goal_id_for_project(ids["project_id"]),
+            database_identity,
+        )
+        kernel = ControlPlaneKernel(ControlPlaneStore(state_path))
+        kernel.start(
+            goal_id=goal_id_for_project(ids["project_id"]),
+            vision="complete API fixture",
+            non_negotiables=["keep evidence"],
+            tasks=[TaskSnapshot(todo_id="LF-1401", title="API task", status="READY")],
+        )
+        client = TestClient(create_app(db_manager=manager))
+
+        status = client.get(
+            f"/projects/{ids['project_id']}/runs/{ids['run_id']}/control-plane"
+        )
+        assert status.status_code == 200
+        assert status.json()["goal"]["vision"] == "complete API fixture"
+        heartbeat = client.get(
+            f"/projects/{ids['project_id']}/runs/{ids['run_id']}/control-plane/should-run"
+        )
+        assert heartbeat.status_code == 200
+        assert heartbeat.json()["next_action"]["route"] == "READY"
+        events = client.get(
+            f"/projects/{ids['project_id']}/runs/{ids['run_id']}/control-plane/events"
+        )
+        assert events.status_code == 200
+        assert events.json()
+        assert client.post(
+            f"/projects/{ids['project_id']}/runs/{ids['run_id']}/control-plane/pause",
+            json={"reason": "operator test"},
+        ).json()["goal"]["status"] == "PAUSED"
+        assert client.post(
+            f"/projects/{ids['project_id']}/runs/{ids['run_id']}/control-plane/resume"
+        ).json()["goal"]["status"] == "ACTIVE"
     finally:
         close_manager(manager)
 

@@ -200,6 +200,38 @@ async def test_openai_compatible_provider_stream():
 
 
 @pytest.mark.anyio
+async def test_openai_compatible_provider_stream_surfaces_embedded_upstream_error():
+    provider = OpenAICompatibleProvider(
+        base_url="http://omniroute:20128/v1",
+        default_model="auto/best-free",
+        provider_name="omniroute",
+    )
+
+    class ErrorStreamResponse:
+        status_code = 200
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc_val, exc_tb):
+            pass
+
+        async def aread(self):
+            return b""
+
+        async def aiter_lines(self):
+            yield 'data: {"error":{"message":"upstream quota exhausted","code":"insufficient_quota"}}'
+
+    with patch("httpx.AsyncClient.stream", return_value=ErrorStreamResponse()):
+        stream_iter = await provider.chat_completion(
+            [{"role": "user", "content": "hello"}], stream=True
+        )
+        with pytest.raises(LLMError, match="upstream quota exhausted"):
+            async for _ in stream_iter:
+                pass
+
+
+@pytest.mark.anyio
 async def test_chat_completion_validated_success():
     """Verify that chat_completion_validated returns a validated Pydantic model."""
     mock_responses = ['{"name": "Valid Output", "attempts": 1}']

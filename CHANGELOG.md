@@ -2,7 +2,315 @@
 
 All notable changes to LocalForge OS will be documented in this file.
 
+### LoopX-like resilience tranche: lifetime goals and bounded worker recovery
+- Replaced the scheduler's per-run control-plane identity with a stable
+  project-lifetime goal identity. A run may still opt into an isolated goal by
+  setting `resource_limits.goal_id`; otherwise restarts and later runs resume
+  the same durable objective.
+- Centralized goal-to-state-path resolution for the scheduler and API so both
+  reconnect to the same snapshot and event journal instead of silently
+  creating divergent run journals.
+- Added the machine-readable `forgeos.interaction_contract.v1` projection to
+  `review-packet`/`should-run`, including `should_run`, route, mode, reason,
+  human-gate requirement, wait deadline, and spend permission. These control
+  decisions remain deterministic and do not require an LLM call.
+- Added lease renewal with turn/token/owner validation and idempotent renewal
+  IDs, exposed through the bounded worker bridge and
+  `localforge control-plane renew`.
+- Expired leases now create explicit `lease_expired_recovered` evidence before
+  returning work to the frontier or marking the attempt blocked.
+- Added `PersistentWorkerRunner`, which consumes `interaction_contract` with
+  bounded ticks, stop-file shutdown, exponential backoff, restart lease
+  recovery, typed host-failure writeback, repair callbacks, and signal wake-up
+  callbacks. The scheduler now checks the same contract before spending a
+  task turn.
+- Added targeted regression coverage for stable goal bindings, interaction
+  contracts, idempotent heartbeats, auditable lease recovery, persistent
+  backoff, and external-signal wake-up.
+- Aligned `localforge run --reconcile-interrupted` with the stable goal state,
+  so manual interruption recovery no longer searches only for legacy run-scoped
+  journals.
+- Targeted validation passed: 27 control-plane tests and 6 CLI tests.
+- Full validation passed: 549 backend tests passed with 1 documented skip,
+  mypy reported no issues in 273 source files, the frontend production build
+  completed successfully, and `git diff --check` found no whitespace errors.
+
+### V9 LoopX-like Control Plane: PulseBoard Acceptance
+- Completed a clean, real PRD benchmark for the small PulseBoard product using
+  the durable control-plane workflow, bounded retries, Chief Engineer routing,
+  local-assisted delegation, receipts, and release evidence.
+- Fixed Chief Engineer repair context so missing required production files and
+  required release artifacts are explicit recovery blockers, including the
+  exact artifact path and required markers.
+- Raised the benchmark's finite OmniRoute recovery ceiling from 12 to 24 calls,
+  with bounded task/recovery limits, so a recoverable validation failure is not
+  prematurely classified as a budget blocker.
+- Accepted evidence is recorded in
+  `docs/e2e/v9/pulse_board/pulse_board_metrics.json` and
+  `docs/e2e/v9/pulse_board/pulse_board_report.md`: 4/4 tasks `PR_READY`, 17
+  OmniRoute calls, estimated cost `$0.017656`, 75 artifacts, completed control
+  plane, and independent product/fixture validation passed.
+- Targeted validation passed: 26 pipeline/control tests and mypy for the
+  changed pipeline, Chief Engineer, and control-plane modules.
+
+### V8 HP12C Acceptance Hardening
+- Added a repository-owned observable-behavior fixture for HP12C Task 2.1.
+  The benchmark binds it to the imported task contract after PRD import, protects
+  it from model writes, and still executes the real app/index.html through a
+  Node VM.
+- Added deterministic QA repair for generated Node VM harnesses that reference
+  window outside the sandbox or instantiate a discovered class through
+  stack.constructor.
+- Added explicit RPN semantic diagnostics to Chief Engineer repair context.
+- Hardened the HP12C OmniRoute preflight to fail closed when no free route can
+  complete a structured probe; current evidence shows upstream quota/credential
+  blockers, not a ForgeOS pipeline result.
+- Targeted validation passed: 52 pipeline/acceptance tests and mypy for the
+  changed engine, Chief service, benchmark runner, and fixture.
+
+### V8 LoopX-like Control Plane Foundation
+- Added `docs/MASTER_BACKLOG_V8.md` with ten bounded workstreams for durable
+  goals, server-owned frontiers, leases, typed evidence, explicit decisions,
+  quota, recovery, external signals, PR lifecycle, runtime adapters, and real
+  long-running acceptance.
+- Added an append-only JSONL event journal beside each control-plane snapshot.
+  Every accepted write records a revision, operation, state hash, and complete
+  materialized state so restart diagnostics can verify snapshot/journal parity.
+- Added typed Scrum Master repair handoffs and deduplicated external signals for
+  CI, provider, review, and host observations.
+- Added `localforge control-plane events`, `review-packet`, and `signal` for
+  bounded operator inspection and writeback without raw model transcripts.
+- Added a pure review projection and no-op write suppression so the scheduler's
+  repeated task sync cannot create an unbounded journal or fake progress.
+- Added regression coverage for journal replay, no-op projection, signal
+  deduplication, handoff lifecycle, restart, stale writeback, and abort cleanup.
+- Added bounded backoff after repeated failures, lane-scoped human gates,
+  durable agent capability registration, and tamper-evident hash-chain
+  verification for replay.
+- Added operator API projections for control-plane status, next-action,
+  events, pause, and resume; the scheduler now registers its scheduler,
+  Scrum Master, and Chief Engineer identities per run.
+- Targeted validation passed: 15 control-plane tests, 49 pipeline/acceptance
+  tests, and mypy for the changed control-plane, pipeline, service, and test
+  modules.
+- Accepted V8 Tiny Ledger evidence is recorded under
+  `docs/e2e/v8/tiny_ledger/`: four tasks reached `PR_READY`, the run completed,
+  four OmniRoute calls were audited, and the control-plane journal recorded
+  four receipts.
+- Accepted restart/recovery fixture evidence is recorded under
+  `docs/e2e/v8/recovery_fixture/`: an expired lease was recovered, an injected
+  blocker was handed from Scrum Master to Chief Engineer, duplicate writeback
+  was suppressed, and the final goal completed.
+- Hardened Chief Engineer repair so a missing canonical acceptance test must be
+  created at the exact contract path; unrelated production edits are rejected
+  and the bounded repair loop advances to the next attempt. A fresh HP12C V8
+  acceptance run is still required before claiming the product gate.
+
 ## [Unreleased] - 2026-08-01 (V6 Compliance Hardening)
+
+### V7 Durable Control Plane Foundation
+- Added `docs/MASTER_BACKLOG_V7.md`, a clean-room ForgeOS backlog that turns
+  the long-running-agent requirements into ten explicit, testable controls:
+  durable goal/frontier, bounded turns, receipts, typed decisions, quota,
+  idempotent writeback, recovery handoffs, and restart evidence.
+- Added a schema-versioned atomic control-plane journal per scheduler run. It
+  persists the goal, task frontier, leases, revisions, receipts, quota, and
+  recovery events outside the model context without becoming a second domain
+  database.
+- Integrated the scheduler with the journal before each task claim and after
+  each DB-owned task outcome. A model or observation cannot advance the control
+  plane without a typed result receipt, and stale/duplicate writebacks do not
+  spend quota twice.
+- Added `localforge control-plane status|next|writeback|pause|resume` for
+  bounded-turn inspection and operator recovery without exposing secrets.
+- Added focused regression tests covering restart persistence, dependency
+  frontier ordering, idempotent writeback, blocker-to-repair routing, and
+  quota exhaustion. Broad benchmark and HP12C acceptance remain intentionally
+  pending until this foundation is validated in a real small-PRD run.
+
+### V7 Control Plane Hardening
+- Fixed `.env` parsing so list-valued fallback model settings remain typed lists
+  when loaded outside the process environment.
+- Isolated per-run control-plane journals by project, run, and database identity;
+  in-memory test databases no longer contaminate later scheduler runs.
+- Added explicit goal scope/authority, typed changed-file/check receipts, wall-time
+  and spend quota checks, stale-turn rejection, repair handoffs, and controlled
+  reopen writeback.
+- Added `localforge control-plane repair-handoff` and `reopen` projections.
+- Added the fast V7 Mini Control Plane benchmark and accepted evidence under
+  `docs/e2e/v7/`; it validates durable recovery mechanics, not model coding
+  quality.
+
+### V7 Bounded OmniRoute Benchmark Hardening
+- Added the real `docs/PRD_MINI_CHECKLIST.md` benchmark runner and durable
+  evidence under `docs/e2e/v7/`, including route, task, control-plane, model-call,
+  cost, and exit-code observations.
+- Fixed benchmark subprocess environment propagation so the live OmniRoute free
+  route ladder cannot be silently replaced by stale fallback values from the
+  repository `.env`.
+- Fixed reused-run Git worktree manifests to bind PR evidence to the actual
+  retry branch head rather than the original base branch.
+- Fixed SSE error-frame handling in the OpenAI-compatible transport. Embedded
+  OmniRoute errors such as `403 insufficient_quota` now fail fast and enter the
+  bounded fallback path instead of being discarded until a structured-output
+  timeout.
+- Made the mini benchmark preflight all advertised chat-capable free routes,
+  exclude video-only routes, and refuse to launch the unattended scheduler
+  unless at least one route returns a non-empty structured action. The latest
+  run is honestly `BLOCKED` in 7 seconds: the catalog is reachable, but
+  OpenCode routes report `403 insufficient_quota` and the `auto/*` aliases do
+  not return a usable structured action. No model call, task run, or PR claim
+  was recorded.
+- Targeted validation passed: 22 LLM/control-plane/Git tests and mypy for the
+  changed transport, Git manager, and benchmark scripts. The real mini-PRD
+  acceptance gate remains pending external OmniRoute route readiness.
+
+### V7 Mini PRD Acceptance Stabilization
+- Diagnosed the latest real benchmark blocker as a bounded Chief Engineer diff
+  rejection: a generated single-page implementation reached 20,424 characters
+  against the 20,000-character repair limit. The benchmark now keeps an
+  explicit 24,000-character ceiling for this deliberately small HTML product,
+  rather than removing the growth guard.
+- Added an observable frontend contract to `docs/PRD_MINI_CHECKLIST.md` for
+  `#add-form`, `#title-input`, `#checklist`, `#exportBtn`, and `#export-output`.
+- Added separate Playwright acceptance fixtures for creation/listing,
+  validation/persistence, and JSON export. The ForgeOS pipeline materializes
+  and protects the fixture required by each feature task from model edits,
+  so acceptance runs the real browser behavior without trusting invented
+  identifiers, static source checks, Selenium dependencies, or weakened tests.
+- Targeted validation passed: 33 tests and mypy for the engine, contract
+  compiler, API endpoint, benchmark runner, and three acceptance fixtures.
+- The subsequent real OmniRoute run was accepted: 4/4 tasks reached `PR_READY`,
+  the run reached `COMPLETED`, the durable control plane recorded revision 12
+  with four receipts, 67 artifacts were generated, and six OmniRoute calls
+  cost an estimated `$0.0062607`. One malformed repair response was contained
+  by the existing bounded recovery path and did not bypass acceptance.
+
+### V7 Long-Run Recovery Hardening
+
+- **Sequential product-chain worktrees:** Added an opt-in `LOCALFORGE_SEQUENTIAL_TASK_CHAIN` mode for long-running product acceptance runs. When a PRD has no explicit task dependencies, each numbered task now inherits the latest same-run `PR_READY` predecessor branch; the worktree manager refuses to fall back to the repository root when that predecessor is unavailable. The HP12C launcher enables this mode and constrains execution to one task at a time, preserving accumulated product state across PRs without changing default project behavior.
+- **Node HTML harness recovery:** Hardened the deterministic QA repair for Python tests that invoke `node -e` with `process.argv[2]`. The repair now detects the invalid argument slot from the test structure instead of relying on a particular uncompressed Node error string, then rewrites only the acceptance harness to `process.argv[1]` before asking the Chief Engineer to spend another call.
+- **Node DOM stub recovery:** Added a bounded QA repair for generated Node acceptance harnesses whose minimal `global.document` stub omits `querySelector`, `querySelectorAll`, or `addEventListener`. The repair enriches only the test stub and leaves the product HTML untouched.
+- **Node browser-global recovery:** Added a bounded QA repair for harnesses that evaluate browser JavaScript under Node without defining `window` or `document`. The repair inserts a minimal browser bootstrap into the acceptance test only, then reruns the real product validation.
+- **Node dependency-free DOM recovery:** Added a bounded QA repair for generated harnesses that require unavailable `jsdom` or Testing Library packages. The repair supplies only the DOM methods exercised by the test and accepts inline product scripts without adding runtime dependencies.
+- **RPN API observability recovery:** When a real RPN acceptance harness cannot observe the shipped plain-script `rpn` API, QA now exports that API through `globalThis` in the product entrypoint before the next bounded validation attempt.
+- **Cross-language harness recovery:** Detects generated tests that pass JavaScript extracted from HTML to Python `compile/exec`, then replaces only that malformed adapter with a Node-backed proxy that executes the shipped RPN implementation and preserves the five behavioral cases.
+- **Node argument-binding recovery:** Normalizes generated `node -e` tests that reference Python-only `APP_INDEX` or mix the HTML path with JSON scenario arguments; the QA adapter now supplies both through explicit environment variables.
+- **Node alias argument recovery:** Recognizes `node -e` harnesses invoked through a `NODE_BIN` alias, so the HTML path is normalized from `process.argv[2]` to the correct `process.argv[1]` slot.
+- **Python/JavaScript f-string recovery:** Escapes JavaScript object literals in Python f-string Node adapters so test construction cannot fail with `NameError` before the real HTML script executes.
+- **Node module-mode recovery:** Converts generated CommonJS harnesses that incorrectly invoke Node as ESM while calling `require`, and aligns their single HTML path argument with `process.argv[1]`.
+- **Node VM browser-fixture recovery:** Completes generated `vm.createContext` fixtures with the minimal `window` and DOM APIs required by the shipped HTML entrypoint.
+- **Node concatenation scope recovery:** Prevents generated acceptance code from redeclaring the product's `stack` binding and bootstraps the DOM before the real inline script is evaluated.
+- **Selenium-free UI recovery:** Replaces generated Selenium-only acceptance tests with a dependency-free Node DOM probe that exercises the real HTML buttons and display, avoiding false skips when Selenium is unavailable.
+- **Malformed Node adapter recovery:** Replaces generated acceptance tests with an unterminated Python triple-quoted Node script by a syntactically valid probe against the shipped HTML, keeping the product behavior gate active.
+- **HTML-to-Node payload recovery:** Rewrites VM harnesses that evaluate the complete HTML document so they extract and execute only the shipped inline JavaScript.
+- **HTML-as-Python import recovery:** Replaces generated `from app import index` tests for `app/index.html` with the same real Node UI probe instead of inventing a Python product module.
+- **HTML module-name recovery:** Covers the equivalent `from index import RPNBehavior` adapter when the generated test adds the HTML directory to `sys.path`.
+- **Empty product-entry recovery:** Restores a zero-byte `app/index.html` from the previous sequential task worktree before returning the task to Chief repair, preventing silent loss of accumulated product state.
+- **js2py harness recovery:** Treats generated Python `js2py` imports as an unsupported HTML adapter and routes the acceptance back through Node against the real product.
+- **HTML entity assertion recovery:** Normalizes generated raw-Unicode label checks to accept the shipped semantic entities and `data-key` selectors for `x<>y` and `R-down`.
+- **Nested DOM-stub recovery:** Completes generated `browserEnv.document` fixtures with `document.addEventListener`, not only `global.document` fixtures.
+- **Button DOM-stub recovery:** Completes generated button fixtures with `addEventListener` registration and click dispatch so UI acceptance tests exercise the real HTML handlers.
+- **Python/JavaScript syntax recovery:** Detects generated `exec(compile(JS_CODE, ...))` adapters and routes them back to the dependency-free Node probe instead of allowing JavaScript to be parsed as Python.
+- **FakeDocument button recovery:** Makes generated Python DOM fixtures tolerate an absent `buttons` collection before bounded Chief repair retries.
+- **Scoped RPN browser-harness recovery:** Replaces generated tests that require an internal `createRPNEngine` global with a DOM-backed probe against the shipped HTML surface, avoiding false production failures from module-scope assumptions.
+- **Internal RPN adapter recovery:** Replaces generated Python tests that call private `RPN.loadX`/`run_js` bridges with the same public HTML-button probe, preventing subprocess-local variables and private APIs from deciding acceptance.
+- **Fail-closed skip gate:** A canonical pytest command that exits 0 while executing only skipped/xfail tests is now rejected and routed through deterministic harness recovery instead of becoming `PR_READY` without behavioral evidence.
+- **Chromium-free acceptance recovery:** Generated browser-session tests that skip when headless Chromium is unavailable are replaced by the dependency-free Node HTML probe.
+- **Private calculator-adapter recovery:** Rejects generated `sandbox.calculator`/`c.stack` tests that assume an undocumented global object and routes them to the public button/display probe.
+- **RPN semantic handoff:** Adds a precise Chief diagnosis for `ENTER` lift and arithmetic drop mismatches, preserving the product gate while directing repair to the production factory.
+- **Browser RPN semantic handoff:** Adds the UI-specific `5 ENTER 6` diagnosis, old-register snapshot rule, fresh digit-entry rule, `R↓` rotation, and `window.__hp12c.stack` observability contract.
+- **Bounded HP12C recovery budget:** Raises the acceptance runner to two repair attempts and two Scrum recovery cycles, still finite and auditable, so one weak repair response cannot terminate the long-run task prematurely.
+
+- Rejeitado reparo do Chief Engineer que escrevesse um arquivo de teste de aceitação vazio ou apenas com whitespace; testes vazios agora exigem um módulo pytest completo, com vínculo ao produto e pelo menos uma função executável, evitando a falsa recuperação `no tests ran` observada no r32.
+- O caminho do teste canônico agora é extraído do `canonical_test_command` e incluído no contexto de recuperação mesmo quando o arquivo não foi materializado; o Chief Engineer recebe uma instrução fail-closed para criar o teste permitido antes de alterar o produto, corrigindo o bloqueio observado no LF-PRD-008 do r33.
+
+- Classified HTML acceptance harnesses that search for unexported global memory functions (`sto`/`rcl`) as QA contract failures when the product exposes the supported `CalculatorApp` API; this prevents the Chief from rewriting valid calculator behavior to satisfy a harness that never calls the product surface.
+- Classified Python f-string Node adapters with unescaped JavaScript `${name}` interpolation as malformed QA harnesses; this prevents fixture-time `NameError` from being misdiagnosed as a product failure.
+- Classified Python `importlib` loaders that attempt to import an embedded JavaScript ES module (`export function`, `.mjs`) as cross-language QA harness failures; the product must be exercised through Node or a browser runtime.
+- Classified HTML acceptance tests that embed `_fallback_evaluate`/`_rpn_operation` Python simulations as untrusted evidence; a missing or incompatible Node surface must fail QA or be repaired against the shipped HTML, never silently substitute a second implementation.
+- Classified Node harnesses that mutate an unexported `stack` variable after evaluating the HTML as invalid internal-state evidence; only `window`/`globalThis`-exported APIs may support an acceptance assertion.
+- Classified HTML acceptance files that retain placeholder harness scaffolding (`_build_harness`/`HARNESS_JS` or “placeholder body”) as QA materialization failures before the Chief can misdiagnose them as production RPN defects.
+- Added `ControlPlaneKernel.abort()` and `localforge run
+  --reconcile-interrupted` so an external watchdog closes claimed leases,
+  active task runs, and the parent run with an auditable blocker instead of
+  leaving SQLite in `RUNNING` or the control plane in `CLAIMED` after a killed
+  worker process.
+- Updated the HP12C OmniRoute acceptance launcher to invoke that reconciliation
+  after a bounded subprocess timeout and to run the exact free route that
+  passed the structured preflight, rather than the opaque `auto/best-free`
+  alias. Internal run, repair, and recovery limits are now aligned with the
+  launcher timeout.
+- Corrected acceptance-test repair state: a malformed or empty generated test
+  may receive a second bounded QA repair, while a valid collected test remains
+  immutable. Previously the first empty repair was marked as final and blocked
+  the Chief from replacing the unusable harness on the next attempt.
+- Hardened the Python CLI entrypoint for Windows legacy consoles by
+  configuring UTF-8 output with a backslash fallback before Rich is loaded.
+  Unicode diagnostics can no longer abort an otherwise valid unattended run
+  with `UnicodeEncodeError` in `cp1252` output.
+- Tightened Chief Engineer recovery for malformed acceptance harnesses: syntax
+  and collection failures now receive the complete test file, are explicitly
+  classified as QA failures, and may use at most three bounded test repairs;
+  valid collected tests remain immutable.
+- Added a narrow generated-test contract check for selector-based calls such as
+  `tvmSolve(...)` without the required `solve_for` selector, routing that
+  mismatch to QA repair instead of changing production APIs to guess omitted
+  inputs.
+- Expanded Chief context only for real behavioral assertion failures so the
+  repair receives the complete allowed product and acceptance harness instead
+  of a compact prefix that can hide the broken handler.
+- Hardened HP12C OmniRoute preflight to search the advertised chat-capable free
+  catalog instead of stopping after the first eight aliases; it now prioritizes
+  `openrouter/*`, skips non-chat video routes, and keeps the structured probe
+  fail-closed with a configurable route-attempt bound.
+- Added detection for generated acceptance files containing unified-diff
+  markers instead of Python source, with a bounded full-file QA repair prompt
+  that explicitly rejects patch-format output.
+- Added deterministic classification for Node tests that evaluate raw HTML with
+  `vm.runInContext`, routing `Unexpected token '<'` to bounded QA repair instead
+  of allowing the Chief to distort production code around an invalid harness.
+- Extended the same QA classification to subprocess tests that interpolate a
+  complete `<!DOCTYPE html>` document into `node -e`, preserving product
+  behavior checks while rejecting invalid JavaScript materialization.
+- Added fail-closed detection for self-contained acceptance-test stubs that
+  copy the requested algorithm and return the copy without executing the
+  product; these tests now receive bounded QA repair context instead of being
+  treated as evidence of a production failure.
+- Added the equivalent guard for generated Python tests that import an HTML
+  entrypoint as `app.index`; when no Python module exists, the test is routed
+  to QA harness repair rather than forcing a production HTML rewrite.
+- Fixed empty generated acceptance files being treated as valid Python; an
+  empty file now fails closed and remains eligible for bounded QA
+  materialization after `pytest` reports `no tests ran`.
+- Added QA classification for Node `-e` HTML harnesses that read the input
+  path from the wrong `process.argv` slot and exit before loading the product.
+- Added QA classification for VM harnesses that expose an API on
+  `window.Calculator` but evaluate an unqualified `Calculator` identifier in
+  the isolated context, preventing scope errors from triggering production
+  repairs.
+- Added QA classification for Node harnesses that parse a complete HTML file
+  with `JSON.parse(fs.readFileSync(...))`, preventing `<!DOCTYPE html>` syntax
+  failures from being misdiagnosed as application defects.
+- Added QA classification for Node harnesses that extract an inline HTML
+  `<script>` and evaluate it without a browser `window` scope, preventing
+  `RPNStack is not defined` from being misdiagnosed as an application defect.
+- Added fail-closed classification for HTML acceptance harnesses that parse the
+  document as Python or expect Python `class`/`def` syntax inside a Node script,
+  preventing cross-language scaffolds from becoming false product evidence.
+- Added QA classification for Node bridges that rely on `eval(script)` to leak
+  a class into global scope or call a dictionary result as a function, avoiding
+  false failures from broken test adapters.
+- Added a deterministic QA repair for `node -e` HTML harnesses that read the
+  product path from `process.argv[2]`; when Node reports an undefined path, the
+  bounded repair changes only the test adapter to the correct `process.argv[1]`.
+- Generalized the HTML acceptance guard from `app.index` to any missing
+  `app.<module>` Python import, so tests cannot turn a permitted HTML entrypoint
+  into an unauthorized Python implementation or consume the repair budget on
+  repeated write-path rejections.
+- Added DOM-contract QA detection for generated browser tests that require
+  missing `data-key` controls or call `input_value()` on the product's display
+  `<div>`, preventing invented selectors from being treated as ALG/RPN defects.
 
 ### ForgeOS Cloud OmniRoute Hardening
 - Consolidated the configured free-route ladder so the API, CLI, Scrum Master,
@@ -347,7 +655,13 @@ All notable changes to LocalForge OS will be documented in this file.
   - **Human-in-the-Loop Gates (`hitl_engine.py`)**: Interruption gates with 1-click PO Approval Modal and Dynamic Input Question in React UI.
 - **Docker Compose Production Stack**: Complete 4-container stack (`Dockerfile.omniroute`, `Dockerfile.backend`, `Dockerfile.frontend`, `docker-compose.yml` with `postgres-pgvector`).
 
- ## [Unreleased]
+## [Unreleased]
+
+- Fixed the OmniRoute Docker runtime to use the upstream image with its
+  compiled server, migrations, native SQLite driver, and healthcheck. The
+  previous npm-on-Alpine wrapper could start while returning HTTP 500 from
+  `/api/init` and `/v1/models`. A fresh named volume is used for the official
+  runtime while the previous volume remains preserved for recovery.
 
 ### Feature: Frontend Reforge (5 Core Minimalist Portfolio Menus) - 2026-07-30
 - **Minimalist 5-Menu Layout**: Reforged `AppSidebar.tsx` and `App.tsx` into 5 clean core navigation sections: 1. Chat & Mission Control, 2. Kanban & PR Review, 3. Compliance Tests, 4. Skills & Agent Editor, 5. Model Settings & `.env`.

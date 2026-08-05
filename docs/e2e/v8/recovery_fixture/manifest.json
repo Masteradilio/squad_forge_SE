@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "benchmark": "ForgeOS V8 interruption and blocker recovery fixture",
+  "status": "ACCEPTED",
+  "control_plane": "control_plane.json",
+  "events": "events.jsonl",
+  "metrics": "metrics.json"
+}

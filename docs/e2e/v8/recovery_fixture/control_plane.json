@@ -1,0 +1,258 @@
+{
+  "schema_version": 1,
+  "revision": 11,
+  "goal": {
+    "goal_id": "v8:recovery-fixture",
+    "vision": "prove restartable bounded work",
+    "non_negotiables": [
+      "no duplicate receipt",
+      "preserve blocker evidence"
+    ],
+    "scope": [],
+    "authority": {},
+    "status": "COMPLETED",
+    "current_todo_id": "B",
+    "created_at": "2026-08-05T03:32:15.723332+00:00",
+    "updated_at": "2026-08-05T03:32:15.752019+00:00"
+  },
+  "todos": [
+    {
+      "todo_id": "A",
+      "title": "interrupted lane",
+      "dependencies": [],
+      "allowed_actions": [],
+      "status": "PASSED",
+      "owner": null,
+      "current_turn_id": null,
+      "lease_token": null,
+      "lease_expires_at": null,
+      "attempts": 2,
+      "last_error": null,
+      "next_retry_at": null,
+      "updated_at": "2026-08-05T03:32:15.733997+00:00"
+    },
+    {
+      "todo_id": "B",
+      "title": "repair lane",
+      "dependencies": [],
+      "allowed_actions": [],
+      "status": "PASSED",
+      "owner": null,
+      "current_turn_id": null,
+      "lease_token": null,
+      "lease_expires_at": null,
+      "attempts": 2,
+      "last_error": null,
+      "next_retry_at": null,
+      "updated_at": "2026-08-05T03:32:15.752019+00:00"
+    }
+  ],
+  "gates": [],
+  "agents": [
+    {
+      "agent_id": "worker-before-restart",
+      "role": "worker",
+      "capabilities": [
+        "bounded_turn",
+        "receipt_writeback"
+      ],
+      "allowed_actions": [
+        "read_contract",
+        "write_allowed_files",
+        "run_checks"
+      ],
+      "authority": "worker",
+      "active": true,
+      "registered_at": "2026-08-05T03:32:15.726992+00:00"
+    },
+    {
+      "agent_id": "worker-after-restart",
+      "role": "worker",
+      "capabilities": [
+        "bounded_turn",
+        "receipt_writeback"
+      ],
+      "allowed_actions": [
+        "read_contract",
+        "write_allowed_files",
+        "run_checks"
+      ],
+      "authority": "worker",
+      "active": true,
+      "registered_at": "2026-08-05T03:32:15.731997+00:00"
+    },
+    {
+      "agent_id": "scrum-master",
+      "role": "worker",
+      "capabilities": [
+        "bounded_turn",
+        "receipt_writeback"
+      ],
+      "allowed_actions": [
+        "read_contract",
+        "write_allowed_files",
+        "run_checks"
+      ],
+      "authority": "worker",
+      "active": true,
+      "registered_at": "2026-08-05T03:32:15.742509+00:00"
+    },
+    {
+      "agent_id": "chief-engineer",
+      "role": "worker",
+      "capabilities": [
+        "bounded_turn",
+        "receipt_writeback"
+      ],
+      "allowed_actions": [
+        "read_contract",
+        "write_allowed_files",
+        "run_checks"
+      ],
+      "authority": "worker",
+      "active": true,
+      "registered_at": "2026-08-05T03:32:15.749018+00:00"
+    }
+  ],
+  "receipts": [
+    {
+      "receipt_id": "receipt-ff8e6d1ccc3044c2834f993829f276f6",
+      "todo_id": "A",
+      "turn_id": "turn-f0d6c3fc7c294f2fa4b26a8cbec6e6da",
+      "result_kind": "VALIDATED_PROGRESS",
+      "summary": "recovered after lease expiry",
+      "evidence": {},
+      "changed_files": [],
+      "checks": [],
+      "source_revision": null,
+      "content_hash": "d21a055469372331e0c553e364f43c91473b83aaf808cc28a77d7be0f165e17e",
+      "validated_by": "worker-after-restart",
+      "idempotency_key": "recovery-a",
+      "created_at": "2026-08-05T03:32:15.733997+00:00"
+    },
+    {
+      "receipt_id": "receipt-ded49cb33f9f489a9ae48e9c63d7e882",
+      "todo_id": "B",
+      "turn_id": "turn-6c2cbb99b85f47b1896c3b9b5c469d99",
+      "result_kind": "VALIDATION_FAILED",
+      "summary": "injected validation blocker",
+      "evidence": {
+        "check": "fixture",
+        "exit_code": 1
+      },
+      "changed_files": [],
+      "checks": [],
+      "source_revision": null,
+      "content_hash": "56428daec067b267796ba1004e49f7dc763577543feddff82bd598c624ee7eaf",
+      "validated_by": "checker",
+      "idempotency_key": "recovery-b-failure",
+      "created_at": "2026-08-05T03:32:15.739509+00:00"
+    },
+    {
+      "receipt_id": "receipt-4ea7fa33c75c458f9f8f2eb65eba4309",
+      "todo_id": "B",
+      "turn_id": "turn-277cec6830aa4633998e1c0eab8f3578",
+      "result_kind": "VALIDATED_COMPLETION",
+      "summary": "repaired and validated",
+      "evidence": {
+        "check": "fixture",
+        "exit_code": 0
+      },
+      "changed_files": [],
+      "checks": [],
+      "source_revision": null,
+      "content_hash": "f733a3eca35274f401a30a17b1a096116491f963bc22027583d038d355bdf542",
+      "validated_by": "chief-engineer",
+      "idempotency_key": "recovery-b-success",
+      "created_at": "2026-08-05T03:32:15.752019+00:00"
+    }
+  ],
+  "handoffs": [
+    {
+      "handoff_id": "recovery-b-handoff",
+      "todo_id": "B",
+      "diagnosis": "injected validation blocker",
+      "evidence": {
+        "authority": "scrum_master",
+        "next": "chief_engineer"
+      },
+      "authority": "scrum_master",
+      "status": "REOPENED",
+      "created_at": "2026-08-05T03:32:15.744509+00:00"
+    }
+  ],
+  "signals": [],
+  "quota": {
+    "max_turns": 10,
+    "turns_started": 4,
+    "turns_committed": 3,
+    "max_attempts_per_todo": 3,
+    "max_cost_usd": 5.0,
+    "cost_committed_usd": 0.0,
+    "max_wall_seconds": null,
+    "started_at": "2026-08-05T03:32:15.723332+00:00"
+  },
+  "applied_operations": {
+    "start:v8:recovery-fixture": 0,
+    "next:worker-before-restart:1785900735.726992": 1,
+    "fixture:expire-lease": 2,
+    "next:worker-after-restart:1785900735.731997": 3,
+    "result:recovery-a": 4,
+    "next:worker-after-restart:1785900735.73651": 5,
+    "result:recovery-b-failure": 6,
+    "next:scrum-master:1785900735.741508": 7,
+    "repair-handoff:B:recovery-b-handoff": 8,
+    "repair-reopen:B:recovery-b-handoff": 9,
+    "next:chief-engineer:1785900735.749018": 10,
+    "result:recovery-b-success": 11
+  },
+  "events": [
+    {
+      "event": "turn_writeback",
+      "todo_id": "A",
+      "turn_id": "turn-f0d6c3fc7c294f2fa4b26a8cbec6e6da",
+      "route": "VALIDATED_PROGRESS",
+      "receipt_id": "receipt-ff8e6d1ccc3044c2834f993829f276f6",
+      "at": "2026-08-05T03:32:15.733997+00:00"
+    },
+    {
+      "event": "turn_writeback",
+      "todo_id": "B",
+      "turn_id": "turn-6c2cbb99b85f47b1896c3b9b5c469d99",
+      "route": "VALIDATION_FAILED",
+      "receipt_id": "receipt-ded49cb33f9f489a9ae48e9c63d7e882",
+      "at": "2026-08-05T03:32:15.739509+00:00"
+    },
+    {
+      "event": "repair_handoff",
+      "todo_id": "B",
+      "handoff_id": "recovery-b-handoff",
+      "authority": "scrum_master",
+      "diagnosis": "injected validation blocker",
+      "evidence": {
+        "authority": "scrum_master",
+        "next": "chief_engineer"
+      },
+      "at": "2026-08-05T03:32:15.744509+00:00"
+    },
+    {
+      "event": "repair_writeback",
+      "todo_id": "B",
+      "handoff_id": "recovery-b-handoff",
+      "summary": "chief repair passed fixture check",
+      "evidence": {
+        "check": "fixture",
+        "exit_code": 0
+      },
+      "at": "2026-08-05T03:32:15.747018+00:00"
+    },
+    {
+      "event": "turn_writeback",
+      "todo_id": "B",
+      "turn_id": "turn-277cec6830aa4633998e1c0eab8f3578",
+      "route": "VALIDATED_COMPLETION",
+      "receipt_id": "receipt-4ea7fa33c75c458f9f8f2eb65eba4309",
+      "at": "2026-08-05T03:32:15.752019+00:00"
+    }
+  ]
+}

@@ -103,7 +103,14 @@ class DeterministicPRDExtractor:
 
     def _is_acceptance_heading(self, title: str) -> bool:
         normalized = title.lower()
-        return "crit" in normalized and "aceita" in normalized
+        # PRDs commonly use either the explicit Portuguese heading
+        # ``Aceitacao`` or the longer ``Criterios de Aceitacao``. Both are
+        # project-level gates; neither should become an implementation task.
+        return (
+            ("crit" in normalized and "aceita" in normalized)
+            or "aceita" in normalized
+            or "acceptance" in normalized
+        )
 
     def _clean_text(self, text: str) -> str:
         return re.sub(r"\s+", " ", text).strip().rstrip(".")

@@ -10,6 +10,7 @@ from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -49,6 +50,12 @@ from localforge.api.schemas import (
 )
 from localforge.core.config import configured_free_gateway_models, load_config
 from localforge.core.policy import PolicyRules
+from localforge.control_plane import (
+    ControlPlaneKernel,
+    ControlPlaneStore,
+    goal_id_for_project,
+    state_path_for_goal,
+)
 from localforge.events.bus import EventBus, LifecycleEvent
 from localforge.gitops.manager import WorktreeManager
 from localforge.llm.base import BaseLLMProvider
@@ -89,6 +96,22 @@ SAFE_ENV_SETTINGS = {
     "LOCALFORGE_MAX_BODY_BYTES",
     "LOCALFORGE_SANDBOX_TYPE",
 }
+
+
+def _same_gateway_endpoint(requested: str, configured: str) -> bool:
+    """Allow equivalent loopback spellings without allowing gateway bypass."""
+    if requested.rstrip("/") == configured.rstrip("/"):
+        return True
+    left = urlsplit(requested)
+    right = urlsplit(configured)
+    loopback = {"localhost", "127.0.0.1", "::1"}
+    return (
+        left.scheme == right.scheme
+        and left.port == right.port
+        and left.path.rstrip("/") == right.path.rstrip("/")
+        and left.hostname in loopback
+        and right.hostname in loopback
+    )
 
 
 def create_app(
@@ -170,6 +193,23 @@ def create_app(
             "auth_required": bool(policy.api_token),
             "max_body_bytes": policy.max_body_bytes,
         }
+
+    async def _control_plane_for_run(
+        project_id: int, run_id: int
+    ) -> ControlPlaneKernel:
+        async with UnitOfWork(manager) as uow:
+            assert uow.projects is not None
+            assert uow.executions is not None
+            project = await uow.projects.get_project(project_id)
+            run = await uow.executions.get_run(run_id)
+        if project is None or run is None or run.project_id != project_id:
+            raise HTTPException(status_code=404, detail="Run not found")
+        database_identity = getattr(manager, "db_url", "default")
+        if ":memory:" in str(database_identity):
+            database_identity = f"{database_identity}:instance:{id(manager)}"
+        goal_id = goal_id_for_project(project.id, run.resource_limits)
+        path = state_path_for_goal(project.root_path, goal_id, database_identity)
+        return ControlPlaneKernel(ControlPlaneStore(path))
 
     app.include_router(loops_router)
     app.include_router(circuit_breakers_router)
@@ -818,6 +858,43 @@ def create_app(
             assert uow.executions is not None
             return [_dump(run) for run in await uow.executions.list_runs_for_project(project_id)]
 
+    @app.get("/projects/{project_id}/runs/{run_id}/control-plane")
+    async def control_plane_status(project_id: int, run_id: int) -> dict[str, Any]:
+        """Return a durable run projection for CLI and dashboard consumers."""
+        state = (await _control_plane_for_run(project_id, run_id)).status()
+        if state is None:
+            raise HTTPException(status_code=404, detail="Control plane not initialized")
+        return state.model_dump(mode="json")
+
+    @app.get("/projects/{project_id}/runs/{run_id}/control-plane/should-run")
+    async def control_plane_should_run(project_id: int, run_id: int) -> dict[str, Any]:
+        """Return the next action without claiming a bounded turn."""
+        return (await _control_plane_for_run(project_id, run_id)).should_run()
+
+    @app.get("/projects/{project_id}/runs/{run_id}/control-plane/events")
+    async def control_plane_events(
+        project_id: int, run_id: int, limit: int = 50
+    ) -> list[dict[str, object]]:
+        if limit < 1 or limit > 500:
+            raise HTTPException(status_code=422, detail="limit must be between 1 and 500")
+        kernel = await _control_plane_for_run(project_id, run_id)
+        return kernel.store.event_records()[-limit:]
+
+    @app.post("/projects/{project_id}/runs/{run_id}/control-plane/pause")
+    async def control_plane_pause(
+        project_id: int, run_id: int, req: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        reason = str((req or {}).get("reason") or "operator_pause")
+        return (await _control_plane_for_run(project_id, run_id)).pause(reason).model_dump(
+            mode="json"
+        )
+
+    @app.post("/projects/{project_id}/runs/{run_id}/control-plane/resume")
+    async def control_plane_resume(project_id: int, run_id: int) -> dict[str, Any]:
+        return (await _control_plane_for_run(project_id, run_id)).resume().model_dump(
+            mode="json"
+        )
+
     @app.get("/agents")
     async def list_agents() -> list[dict[str, Any]]:
         async with UnitOfWork(manager) as uow:
@@ -1017,7 +1094,9 @@ def create_app(
                 status_code=400,
                 detail="ForgeOS Cloud model routes must use OmniRoute.",
             )
-        if req.endpoint_url and req.endpoint_url.rstrip("/") != config.models.base_url.rstrip("/"):
+        if req.endpoint_url and not _same_gateway_endpoint(
+            req.endpoint_url, config.models.base_url
+        ):
             raise HTTPException(
                 status_code=400,
                 detail="Model routes cannot bypass the configured OmniRoute gateway.",

@@ -317,8 +317,11 @@ def load_config(cli_args: dict[str, Any] | None = None) -> LocalForgeConfig:
             "fallback_after_seconds",
         ),
         "LOCALFORGE_MAX_TASK_DURATION": ("budgets", "max_task_duration"),
+        "LOCALFORGE_MAX_PARALLEL_TASKS": ("budgets", "max_parallel_tasks"),
         "LOCALFORGE_MAX_REPAIR_ATTEMPTS": ("budgets", "max_repair_attempts"),
         "LOCALFORGE_MAX_ACTIVE_MODEL_CALLS": ("budgets", "max_active_model_calls"),
+        "LOCALFORGE_MAX_DIFF_GROWTH": ("budgets", "max_diff_growth"),
+        "LOCALFORGE_MAX_VISUAL_DIFF_GROWTH": ("budgets", "max_visual_diff_growth"),
         "LOCALFORGE_MAX_PAID_CALLS": ("budgets", "max_paid_calls"),
         "LOCALFORGE_MAX_PAID_INPUT_TOKENS": ("budgets", "max_paid_input_tokens"),
         "LOCALFORGE_MAX_PAID_OUTPUT_TOKENS": ("budgets", "max_paid_output_tokens"),
@@ -331,17 +334,17 @@ def load_config(cli_args: dict[str, Any] | None = None) -> LocalForgeConfig:
         if val is not None:
             section, key = path
             config_dict[section][key] = val
-    fallback_models = os.getenv("LOCALFORGE_FALLBACK_MODELS")
+    fallback_models = env_value("LOCALFORGE_FALLBACK_MODELS")
     if fallback_models is not None:
         config_dict["models"]["fallback_models"] = [
             model.strip() for model in fallback_models.split(",") if model.strip()
         ]
-    chief_fallback_models = os.getenv("LOCALFORGE_CHIEF_FALLBACK_MODELS")
+    chief_fallback_models = env_value("LOCALFORGE_CHIEF_FALLBACK_MODELS")
     if chief_fallback_models is not None:
         config_dict["chief_engineer"]["fallback_models"] = [
             model.strip() for model in chief_fallback_models.split(",") if model.strip()
         ]
-    chief_visual_fallback_models = os.getenv("LOCALFORGE_CHIEF_VISUAL_FALLBACK_MODELS")
+    chief_visual_fallback_models = env_value("LOCALFORGE_CHIEF_VISUAL_FALLBACK_MODELS")
     if chief_visual_fallback_models is not None:
         config_dict["chief_engineer"]["visual_fallback_models"] = [
             model.strip()

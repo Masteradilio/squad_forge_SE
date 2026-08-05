@@ -183,6 +183,7 @@ def _render_task_contract(task: domain.Task) -> list[str]:
     for key in (
         "allowed_files",
         "required_public_apis",
+        "required_product_files",
         "forbidden_dependencies",
         "canonical_test_command",
         "risk_level",

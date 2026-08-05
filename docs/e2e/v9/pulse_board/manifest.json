@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "benchmark": "ForgeOS V9 LoopX-like PulseBoard Real PRD Benchmark",
+  "status": "ACCEPTED",
+  "workspace": "benchmarks/workspaces/v9-pulse-board-20260805T065013890569Z",
+  "exported": {
+    "control_plane": "control_plane.json",
+    "events": "events.jsonl"
+  },
+  "report": "pulse_board_report.md",
+  "metrics": "pulse_board_metrics.json",
+  "exit_code": 0
+}

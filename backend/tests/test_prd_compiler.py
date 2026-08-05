@@ -112,6 +112,23 @@ def test_deterministic_extractor_does_not_turn_acceptance_bullets_into_tasks():
     assert any("Illegal transitions" in item for item in plan.tasks[1].acceptance_criteria)
 
 
+def test_deterministic_extractor_treats_short_acceptance_heading_as_project_gate():
+    markdown = """# Product
+
+## Requirements
+
+1. **Create items**
+   - Items can be created and listed.
+
+## Aceitacao
+- Human review remains required.
+"""
+    plan = DeterministicPRDExtractor().extract(markdown)
+
+    assert [task.title for task in plan.tasks] == ["Create items"]
+    assert any("Human review remains required" in item for item in plan.tasks[0].acceptance_criteria)
+
+
 @pytest.mark.anyio
 async def test_model_assisted_generation_uses_fake_llm_and_validates_json():
     payload = {

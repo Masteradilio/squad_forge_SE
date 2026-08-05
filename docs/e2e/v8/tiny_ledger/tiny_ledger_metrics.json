@@ -1,0 +1,104 @@
+{
+  "benchmark_name": "ForgeOS V8 LoopX-like Tiny Ledger Real PRD Benchmark",
+  "generated_at": "2026-08-05T05:16:25.834394+00:00",
+  "prd_file": "docs/PRD_V8_TINY_LEDGER.md",
+  "workspace": "benchmarks/workspaces/v8-tiny-ledger",
+  "status": "ACCEPTED",
+  "blockers": [],
+  "gateway": {
+    "base_url": "http://127.0.0.1:20128/v1",
+    "catalog_reachable": true,
+    "structured_probe_passed": true,
+    "structured_probe_advisory": false,
+    "detail": "OmniRoute catalog reachable at http://127.0.0.1:20128/v1/models; routes advertised: ['auto/best-coding', 'auto/best-reasoning', 'auto/best-fast', 'auto/best-vision', 'auto/best-chat', 'auto/best-coding-fast', 'auto/pro-coding', 'auto/pro-reasoning', 'auto/pro-vision', 'auto/pro-chat', 'auto/pro-fast', 'auto/coding']",
+    "selected_route": "openrouter/poolside/laguna-s-2.1:free",
+    "free_routes_seen": [
+      "openrouter/poolside/laguna-s-2.1:free",
+      "openrouter/poolside/laguna-xs-2.1:free",
+      "openrouter/inclusionai/ling-3.0-flash:free",
+      "openrouter/cohere/north-mini-code:free",
+      "openrouter/nvidia/nemotron-3.5-content-safety:free",
+      "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free",
+      "openrouter/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+      "openrouter/google/gemma-4-26b-a4b-it:free",
+      "openrouter/google/gemma-4-31b-it:free",
+      "openrouter/nvidia/nemotron-3-super-120b-a12b:free",
+      "openrouter/nvidia/nemotron-3-nano-30b-a3b:free",
+      "openrouter/nvidia/nemotron-nano-12b-v2-vl:free",
+      "openrouter/nvidia/nemotron-nano-9b-v2:free",
+      "openrouter/openai/gpt-oss-20b:free",
+      "auto/best-free",
+      "auto/coding:free",
+      "oc/deepseek-v4-flash-free",
+      "oc/mimo-v2.5-free",
+      "oc/hy3-free",
+      "oc/nemotron-3-ultra-free",
+      "oc/north-mini-code-free"
+    ]
+  },
+  "routing_contract_summary": {
+    "chief_only": 2,
+    "chief_led": 1,
+    "local_assisted": 1
+  },
+  "imported_task_count": 4,
+  "sqlite": {
+    "task_statuses": {
+      "PR_READY": 4
+    },
+    "runs": {
+      "COMPLETED": 1
+    },
+    "task_runs_executed": 4,
+    "artifacts_generated": 69,
+    "model_calls_logged": 9,
+    "calls_by_provider": {
+      "omniroute": 9
+    },
+    "estimated_cost_usd": 0.0069006
+  },
+  "control_plane": {
+    "present": true,
+    "completed": true,
+    "revision": 8,
+    "receipts": 4,
+    "events": 4
+  },
+  "commands": [
+    {
+      "args": [
+        "init"
+      ],
+      "exit_code": 0,
+      "stderr_tail": "2026-08-05 02:13:28,749 INFO localforge.storage.bootstrap Current database schema version: 0\r\n2026-08-05 02:13:28,750 INFO localforge.storage.bootstrap Initializing new database schema (Version 20)...\r\n2026-08-05 02:13:28,866 INFO localforge.storage.bootstrap Pricing snapshots seeded successfully.\r\n2026-08-05 02:13:28,866 INFO localforge.storage.bootstrap Database schema initialized successfully."
+    },
+    {
+      "args": [
+        "import-prd",
+        "E:\\Projetos\\local_forge_os\\docs\\PRD_V8_TINY_LEDGER.md"
+      ],
+      "exit_code": 0,
+      "stderr_tail": ""
+    },
+    {
+      "args": [
+        "plan",
+        "--approve-all"
+      ],
+      "exit_code": 0,
+      "stderr_tail": ""
+    },
+    {
+      "args": [
+        "run",
+        "--unattended"
+      ],
+      "exit_code": 0,
+      "stderr_tail": "ause of the following exception:\r\n\r\nTraceback (most recent call last):\r\n  File \"E:\\Projetos\\local_forge_os\\backend\\localforge\\pipeline\\engine.py\", line 2348, in _try_chief_engineer_repair\r\n    plan = await ChiefEngineerService(self.uow).plan_semantic_repair(\r\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\r\n  File \"E:\\Projetos\\local_forge_os\\backend\\localforge\\chief_engineer\\service.py\", line 661, in plan_semantic_repair\r\n    raise LLMError(f\"Chief Engineer semantic repair failed: {error_summary}\") from exc\r\nlocalforge.llm.base.LLMError: Chief Engineer semantic repair failed: Failed to validate LLM output after 1 retries. Details: Field '': Value error, Chief Engineer semantic repair requires at least one action.\r\n2026-08-05 02:15:47,402 INFO localforge.chief_engineer.bundler API call budget preview: reason=SEMANTIC_REPAIR_PLAN, estimated_input_tokens=315\r\n2026-08-05 02:15:48,423 INFO httpx HTTP Request: POST http://127.0.0.1:20128/v1/chat/completions \"HTTP/1.1 200 OK\"\r\n2026-08-05 02:16:15,272 INFO httpx HTTP Request: POST http://127.0.0.1:20128/v1/chat/completions \"HTTP/1.1 200 OK\"\r\n2026-08-05 02:16:25,618 INFO localforge.scheduler Scheduler stopped for run 1"
+    }
+  ],
+  "limitations": [
+    "Acceptance means automated PR evidence and durable control-plane completion; human review remains required.",
+    "The benchmark uses a deliberately small PRD and does not predict HP12C success."
+  ]
+}

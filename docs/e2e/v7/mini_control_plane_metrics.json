@@ -1,0 +1,20 @@
+{
+  "benchmark_name": "ForgeOS V7 Mini Control Plane",
+  "generated_at": "2026-08-04T13:04:43.562565+00:00",
+  "status": "ACCEPTED",
+  "execution_mode": "deterministic_control_plane_fixture",
+  "model_calls": 0,
+  "human_interventions": 0,
+  "task_count": 3,
+  "passed_tasks": 3,
+  "receipts": 4,
+  "repair_handoffs": 1,
+  "turns_started": 4,
+  "turns_committed": 4,
+  "elapsed_seconds": 0.032,
+  "state_revision": 11,
+  "limitations": [
+    "This benchmark validates the durable control plane, not model coding quality.",
+    "A real PRD benchmark must separately exercise the scheduler and provider gateway."
+  ]
+}

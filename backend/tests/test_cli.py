@@ -3,10 +3,30 @@ import os
 from pathlib import Path
 
 import localforge.storage.database as db_mod
+import localforge.cli.main as cli_main
 from localforge.cli.main import app
 from typer.testing import CliRunner
 
 runner = CliRunner()
+
+
+def test_cli_stdio_configuration_uses_unicode_safe_fallback(monkeypatch):
+    class FakeStream:
+        def __init__(self):
+            self.options = None
+
+        def reconfigure(self, **options):
+            self.options = options
+
+    stdout = FakeStream()
+    stderr = FakeStream()
+    monkeypatch.setattr(cli_main.sys, "stdout", stdout)
+    monkeypatch.setattr(cli_main.sys, "stderr", stderr)
+
+    cli_main._configure_cli_stdio()
+
+    assert stdout.options == {"encoding": "utf-8", "errors": "backslashreplace"}
+    assert stderr.options == {"encoding": "utf-8", "errors": "backslashreplace"}
 
 
 def test_cli_help():

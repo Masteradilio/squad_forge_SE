@@ -132,12 +132,17 @@ class SafetyKernel:
             is_read_only_git = normalized_command.startswith(
                 ("git rev-parse", "git show-ref")
             )
+            is_pytest = (
+                normalized_command == "pytest"
+                or normalized_command.startswith("pytest ")
+                or " -m pytest " in f" {normalized_command} "
+            )
             is_git_or_test = (
                 command.strip().startswith("git add")
                 or command.strip().startswith("git commit")
                 or command.strip().startswith("git diff --check")
                 or (command.strip().startswith("git checkout") and "localforge" in command)
-                or ("pytest" in command and ("tests/" in command or "test_" in command))
+                or is_pytest
                 or is_read_only_git
             )
 

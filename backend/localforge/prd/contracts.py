@@ -21,6 +21,10 @@ class TaskContract(BaseModel):
     visual_similarity_threshold: float = 0.90
     visual_viewport: str = "1280x720"
     visual_structure_rules: list[str] = Field(default_factory=list)
+    acceptance_test_policy: str = "observable_behavior_only"
+    acceptance_behaviors: list[str] = Field(default_factory=list)
+    acceptance_test_fixture_source: str | None = None
+    acceptance_test_fixture_target: str | None = None
     implementation_notes: list[str] = Field(default_factory=list)
 
 
@@ -133,6 +137,12 @@ def _task_contract(
         visual_actual_output=visual_actual_output,
         visual_viewport=visual_viewport,
         visual_structure_rules=visual_structure_rules,
+        acceptance_test_policy=str(
+            task.metadata.get("acceptance_test_policy", "observable_behavior_only")
+        ),
+        acceptance_behaviors=_string_list_metadata(task, "acceptance_behaviors"),
+        acceptance_test_fixture_source=_metadata_path(task, "acceptance_test_fixture_source"),
+        acceptance_test_fixture_target=_metadata_path(task, "acceptance_test_fixture_target"),
         implementation_notes=implementation_notes,
     )
 

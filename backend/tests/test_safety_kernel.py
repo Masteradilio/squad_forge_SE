@@ -193,6 +193,16 @@ async def test_safety_kernel_evaluate_commands(tmp_path, db_session):
     decision, reason = await SafetyKernel.evaluate(req_validation, uow, str(tmp_path))
     assert decision == SafetyDecision.ALLOW
 
+    req_full_validation = ActionRequest(
+        project_id=project.id,
+        kind=ActionKind.RUN_COMMAND,
+        payload={"command": '"C:/Python/python.exe" -m pytest tests -q'},
+        purpose="automated full acceptance validation",
+        risk_level="high",
+    )
+    decision, reason = await SafetyKernel.evaluate(req_full_validation, uow, str(tmp_path))
+    assert decision == SafetyDecision.ALLOW
+
     req_revision = ActionRequest(
         project_id=project.id,
         kind=ActionKind.RUN_COMMAND,

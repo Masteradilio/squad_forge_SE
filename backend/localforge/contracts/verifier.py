@@ -1,5 +1,6 @@
 import ast
 import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -47,10 +48,13 @@ class ContractVerifier:
 
         exported_symbols: set[str] = set()
         for rel_path in changed_files:
-            if not rel_path.endswith(".py"):
-                continue
             path = Path(worktree_path) / rel_path
             if not path.is_file():
+                continue
+            if path.suffix.lower() in {".html", ".js", ".mjs", ".jsx", ".ts", ".tsx"}:
+                exported_symbols.update(_javascript_exports(path.read_text(encoding="utf-8")))
+                continue
+            if path.suffix.lower() != ".py":
                 continue
             text = path.read_text(encoding="utf-8")
             try:
@@ -90,6 +94,28 @@ def _exports(tree: ast.AST) -> set[str]:
     for node in getattr(tree, "body", []):
         if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
             exports.add(node.name)
+    return exports
+
+
+def _javascript_exports(text: str) -> set[str]:
+    """Collect explicit public declarations from browser/runtime source files."""
+    exports: set[str] = set()
+    patterns = (
+        r"\bclass\s+([A-Za-z_$][\w$]*)",
+        r"\bfunction\s+([A-Za-z_$][\w$]*)",
+        r"\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)",
+        r"\b(?:window|globalThis)\.([A-Za-z_$][\w$]*)\s*=",
+        r"\bexport\s+(?:default\s+)?(?:class|function|const|let|var)\s+([A-Za-z_$][\w$]*)",
+    )
+    for pattern in patterns:
+        exports.update(re.findall(pattern, text))
+    class_names = re.findall(r"\bclass\s+([A-Za-z_$][\w$]*)", text)
+    member_names = re.findall(
+        r"\b(?:get\s+|set\s+|async\s+)?([A-Za-z_$][\w$]*)\s*\([^)]*\)\s*\{",
+        text,
+    )
+    for class_name in class_names:
+        exports.update(f"{class_name}.{member}" for member in member_names)
     return exports
 
 

@@ -35,6 +35,8 @@ class LedgerStore:
     def add_entry(self, label: str, amount: float) -> Dict[str, Any]:
         if not label or not label.strip():
             raise ValueError("Label cannot be blank")
+        if not isinstance(amount, (int, float)) or isinstance(amount, bool) or amount <= 0:
+            raise ValueError("Amount must be a positive number")
         entry_id = self._next_id
         self._next_id += 1
         created_at = datetime.now(timezone.utc).isoformat()

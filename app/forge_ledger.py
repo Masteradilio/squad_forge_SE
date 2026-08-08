@@ -79,26 +79,37 @@ class LedgerStore:
             "total_amount": total_amount,
         }
 
-    def export_snapshot(self) -> str:
-        """Return a JSON string of all entries."""
-        return json.dumps({"entries": self.list_entries()}, indent=2)
-
 
 def add_entry(store: LedgerStore, label: str, amount: float) -> Dict[str, Any]:
-    """Add an entry through the store."""
+    """Add a new open entry to the store and persist it."""
     return store.add_entry(label, amount)
 
 
 def list_entries(store: LedgerStore) -> List[Dict[str, Any]]:
-    """List entries through the store."""
+    """Return all entries sorted by id."""
     return store.list_entries()
 
 
 def close_entry(store: LedgerStore, entry_id: int) -> Dict[str, Any]:
-    """Close an entry through the store."""
+    """Close an existing entry by id."""
     return store.close_entry(entry_id)
 
 
 def summarize(store: LedgerStore) -> Dict[str, Any]:
-    """Summarize the store without mutating JSON."""
+    """Return a deterministic summary without mutating the store."""
     return store.summarize()
+
+
+def export_snapshot(store: LedgerStore) -> str:
+    """Return a deterministic JSON string representing the current ledger state.
+
+    The snapshot includes all entries and the next id.  It does not modify
+    the store or its persistence file; it only reads the in-memory state.
+    """
+    snapshot = {
+        "entries": {
+            str(k): v for k, v in sorted(store._entries.items())
+        },
+        "next_id": store._next_id,
+    }
+    return json.dumps(snapshot, indent=2, sort_keys=True)

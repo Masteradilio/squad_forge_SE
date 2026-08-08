@@ -14,6 +14,7 @@ class LedgerStore:
         self._load()
 
     def _load(self) -> None:
+        """Load entries from JSON if the file exists."""
         if os.path.exists(self.path):
             with open(self.path, "r", encoding="utf-8") as f:
                 data = json.load(f)
@@ -25,6 +26,7 @@ class LedgerStore:
             self._next_id = 1
 
     def _save(self) -> None:
+        """Persist entries and next_id to JSON."""
         data = {
             "entries": {str(k): v for k, v in self._entries.items()},
             "next_id": self._next_id,
@@ -33,6 +35,7 @@ class LedgerStore:
             json.dump(data, f, indent=2)
 
     def add_entry(self, label: str, amount: float) -> Dict[str, Any]:
+        """Add a new open entry and persist it."""
         if not label or not label.strip():
             raise ValueError("Label cannot be blank")
         if not isinstance(amount, (int, float)) or isinstance(amount, bool) or amount <= 0:
@@ -52,9 +55,11 @@ class LedgerStore:
         return entry
 
     def list_entries(self) -> List[Dict[str, Any]]:
+        """Return entries sorted by id."""
         return [self._entries[k] for k in sorted(self._entries)]
 
     def close_entry(self, entry_id: int) -> Dict[str, Any]:
+        """Close an existing entry by id."""
         if entry_id not in self._entries:
             raise KeyError(f"Entry not found: {entry_id}")
         self._entries[entry_id]["closed"] = True
@@ -62,32 +67,49 @@ class LedgerStore:
         return self._entries[entry_id]
 
     def summarize(self) -> Dict[str, Any]:
-        total = sum(e["amount"] for e in self._entries.values() if not e["closed"])
+        """Return deterministic summary without mutating JSON."""
+        all_entries = list(self._entries.values())
+        total_amount = sum(entry["amount"] for entry in all_entries)
+        open_entries = sum(1 for entry in all_entries if not entry["closed"])
+        closed_entries = sum(1 for entry in all_entries if entry["closed"])
         return {
-            "total_open": total,
-            "count_open": sum(1 for e in self._entries.values() if not e["closed"]),
-            "count_closed": sum(1 for e in self._entries.values() if e["closed"]),
+            "total_entries": len(all_entries),
+            "open_entries": open_entries,
+            "closed_entries": closed_entries,
+            "total_amount": total_amount,
         }
-
-    def export_snapshot(self) -> str:
-        return json.dumps({"entries": self.list_entries()}, indent=2)
 
 
 def add_entry(store: LedgerStore, label: str, amount: float) -> Dict[str, Any]:
+    """Add a new open entry to the store and persist it."""
     return store.add_entry(label, amount)
 
 
 def list_entries(store: LedgerStore) -> List[Dict[str, Any]]:
+    """Return all entries sorted by id."""
     return store.list_entries()
 
 
 def close_entry(store: LedgerStore, entry_id: int) -> Dict[str, Any]:
+    """Close an existing entry by id."""
     return store.close_entry(entry_id)
 
 
 def summarize(store: LedgerStore) -> Dict[str, Any]:
+    """Return a deterministic summary without mutating the store."""
     return store.summarize()
 
 
 def export_snapshot(store: LedgerStore) -> str:
-    return store.export_snapshot()
+    """Return a deterministic JSON string representing the current ledger state.
+
+    The snapshot includes all entries and the next id.  It does not modify
+    the store or its persistence file; it only reads the in-memory state.
+    """
+    snapshot = {
+        "entries": {
+            str(k): v for k, v in sorted(store._entries.items())
+        },
+        "next_id": store._next_id,
+    }
+    return json.dumps(snapshot, indent=2, sort_keys=True)

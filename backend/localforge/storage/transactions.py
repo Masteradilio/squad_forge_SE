@@ -8,6 +8,12 @@ from localforge.services.autonomy import AutonomyService
 from localforge.services.circuit_breaker import CircuitBreakerService
 from localforge.services.coordination import CoordinationService
 from localforge.services.cost_benchmark import CostBenchmarkService
+from localforge.services.deepcode_capabilities import (
+    AutomationService,
+    ModelCatalogService,
+    SkillBindingService,
+)
+from localforge.services.engineering import EngineeringContinuityService
 from localforge.services.execution import ExecutionService
 from localforge.services.light_swarm import LightSwarmService
 from localforge.services.loop_coordinator import LoopCoordinator
@@ -17,12 +23,14 @@ from localforge.services.memory import MemoryService
 from localforge.services.model_calls import ModelCallLedgerService
 from localforge.services.path_lease import PathLeaseService
 from localforge.services.project import ProjectService
+from localforge.services.reference_continuity import ReferenceContinuityService
 from localforge.services.routing import ModelRoutingService
 from localforge.services.runner_pool import RunnerPoolService
 from localforge.services.safety import SafetyService
 from localforge.services.simulation import APISimulationService
 from localforge.services.task import TaskService
 from localforge.services.task_graph import TaskGraphService
+from localforge.services.tenant_context import current_context
 from localforge.services.typed_handoff import TypedHandoffService
 from localforge.services.worktree import WorktreeService
 from localforge.storage.database import DatabaseManager, db_manager
@@ -43,6 +51,13 @@ class UnitOfWork:
         self.projects: ProjectService | None = None
         self.tasks: TaskService | None = None
         self.executions: ExecutionService | None = None
+        self.engineering: EngineeringContinuityService | None = None
+        # Alias used by callers that name this bounded runtime "continuity".
+        self.continuity: EngineeringContinuityService | None = None
+        self.model_catalog: ModelCatalogService | None = None
+        self.skill_bindings: SkillBindingService | None = None
+        self.automations: AutomationService | None = None
+        self.references: ReferenceContinuityService | None = None
         self.audits: AuditService | None = None
         self.safety: SafetyService | None = None
         self.routing: ModelRoutingService | None = None
@@ -65,9 +80,18 @@ class UnitOfWork:
 
     async def __aenter__(self) -> Self:
         self.session = await self.db_manager.get_session()
+        self.session.info["tenant_id"] = current_context().tenant_id
+        self.session.info["user_id"] = current_context().user_id
+        self.session.info["tenant_roles"] = current_context().roles
         self.projects = ProjectService(self.session)
         self.tasks = TaskService(self.session)
         self.executions = ExecutionService(self.session)
+        self.engineering = EngineeringContinuityService(self.session)
+        self.continuity = self.engineering
+        self.model_catalog = ModelCatalogService(self.session)
+        self.skill_bindings = SkillBindingService(self.session)
+        self.automations = AutomationService(self.session)
+        self.references = ReferenceContinuityService(self.session)
         self.audits = AuditService(self.session)
         self.safety = SafetyService(self.session)
         self.routing = ModelRoutingService(self.session)

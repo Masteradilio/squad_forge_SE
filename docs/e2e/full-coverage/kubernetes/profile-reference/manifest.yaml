@@ -1,0 +1,254 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: forgeos-benchmark-reference-profile
+  labels:
+    app.kubernetes.io/part-of: forgeos-benchmark
+    forgeos.io/run-id: reference-profile
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: forgeos-benchmark-runner
+  namespace: forgeos-benchmark-reference-profile
+  labels:
+    app.kubernetes.io/part-of: forgeos-benchmark
+    forgeos.io/run-id: reference-profile
+    forgeos.io/benchmark-runner: 'true'
+automountServiceAccountToken: true
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: forgeos-benchmark-runner
+  namespace: forgeos-benchmark-reference-profile
+  labels:
+    app.kubernetes.io/part-of: forgeos-benchmark
+    forgeos.io/run-id: reference-profile
+rules:
+- apiGroups:
+  - ''
+  resources:
+  - pods
+  - pods/log
+  - events
+  - services
+  - configmaps
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  - statefulsets
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - batch
+  resources:
+  - jobs
+  verbs:
+  - get
+  - list
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: forgeos-benchmark-runner
+  namespace: forgeos-benchmark-reference-profile
+  labels:
+    app.kubernetes.io/part-of: forgeos-benchmark
+    forgeos.io/run-id: reference-profile
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: forgeos-benchmark-runner
+subjects:
+- kind: ServiceAccount
+  name: forgeos-benchmark-runner
+  namespace: forgeos-benchmark-reference-profile
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: forgeos-benchmark-config
+  namespace: forgeos-benchmark-reference-profile
+  labels:
+    app.kubernetes.io/part-of: forgeos-benchmark
+    forgeos.io/run-id: reference-profile
+data:
+  FORGEOS_BENCHMARK_SCHEMA: forgeos.kubernetes_benchmark_profile.v1
+  FORGEOS_BENCHMARK_RUN_ID: reference-profile
+  FORGEOS_BENCHMARK_NAMESPACE: forgeos-benchmark-reference-profile
+  LOCALFORGE_ENV: benchmark
+  LOCALFORGE_MAX_RUN_TIME: '5400'
+  LOCALFORGE_MAX_TASK_DURATION: '900'
+  LOCALFORGE_MAX_PARALLEL_TASKS: '2'
+  LOCALFORGE_MAX_ACTIVE_MODEL_CALLS: '4'
+  CONTEXT7_ENABLED: 'true'
+  CONTEXT7_MCP_ENDPOINT: https://mcp.context7.com/mcp
+  OMNIROUTE_URL: http://forgeos-omniroute:20128/v1
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: forgeos-benchmark-quota
+  namespace: forgeos-benchmark-reference-profile
+  labels:
+    app.kubernetes.io/part-of: forgeos-benchmark
+    forgeos.io/run-id: reference-profile
+spec:
+  hard:
+    requests.cpu: '4'
+    limits.cpu: '8'
+    requests.memory: 8Gi
+    limits.memory: 12Gi
+    pods: '12'
+    persistentvolumeclaims: '2'
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: forgeos-benchmark-state
+  namespace: forgeos-benchmark-reference-profile
+  labels:
+    app.kubernetes.io/part-of: forgeos-benchmark
+    forgeos.io/run-id: reference-profile
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: forgeos-benchmark-runner
+  namespace: forgeos-benchmark-reference-profile
+  labels: &id001
+    app.kubernetes.io/part-of: forgeos-benchmark
+    forgeos.io/run-id: reference-profile
+    forgeos.io/benchmark-runner: 'true'
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 5400
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels: *id001
+    spec:
+      serviceAccountName: forgeos-benchmark-runner
+      automountServiceAccountToken: true
+      restartPolicy: Never
+      activeDeadlineSeconds: 5400
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: runner
+        image: localforge/forgeos-benchmark-runner:dev
+        imagePullPolicy: IfNotPresent
+        command:
+        - localforge
+        args:
+        - doctor
+        envFrom:
+        - configMapRef:
+            name: forgeos-benchmark-config
+        env:
+        - name: CONTEXT7_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: forgeos-runtime-secrets
+              key: CONTEXT7_API_KEY
+              optional: false
+        - name: OMNIROUTE_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: forgeos-runtime-secrets
+              key: OMNIROUTE_API_KEY
+              optional: false
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            cpu: 500m
+            memory: 1Gi
+            ephemeral-storage: 1Gi
+          limits:
+            cpu: '2'
+            memory: 4Gi
+            ephemeral-storage: 4Gi
+        volumeMounts:
+        - name: worktrees
+          mountPath: /workspace
+        - name: state
+          mountPath: /var/lib/forgeos
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: worktrees
+        emptyDir:
+          sizeLimit: 4Gi
+      - name: tmp
+        emptyDir:
+          sizeLimit: 1Gi
+      - name: state
+        persistentVolumeClaim:
+          claimName: forgeos-benchmark-state
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: forgeos-benchmark-default-deny
+  namespace: forgeos-benchmark-reference-profile
+  labels:
+    app.kubernetes.io/part-of: forgeos-benchmark
+    forgeos.io/run-id: reference-profile
+spec:
+  podSelector:
+    matchLabels:
+      forgeos.io/benchmark-runner: 'true'
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress: []
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: forgeos-benchmark-reference-profile
+    ports:
+    - protocol: TCP
+      port: 8000
+    - protocol: TCP
+      port: 6379
+    - protocol: TCP
+      port: 20128
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  - ports:
+    - protocol: TCP
+      port: 443

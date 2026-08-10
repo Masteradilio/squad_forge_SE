@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from localforge.models import domain
 from localforge.storage.orm import ProductDocumentORM, ProjectORM
+from localforge.services.tenant_context import session_tenant
 
 
 class ProjectService:
@@ -11,8 +12,13 @@ class ProjectService:
     def __init__(self, session: AsyncSession):
         self.session = session
 
+    def _tenant_id(self) -> str:
+        return session_tenant(self.session)
+
     async def create_project(self, project: domain.Project) -> domain.Project:
         """Create a new project in the database."""
+        if project.tenant_id != self._tenant_id():
+            project = project.model_copy(update={"tenant_id": self._tenant_id()})
         orm_obj = ProjectORM.from_domain(project)
         self.session.add(orm_obj)
         await self.session.flush()
@@ -20,28 +26,45 @@ class ProjectService:
 
     async def get_project(self, project_id: int) -> domain.Project | None:
         """Retrieve a project by its primary key ID."""
-        result = await self.session.execute(select(ProjectORM).where(ProjectORM.id == project_id))
+        result = await self.session.execute(
+            select(ProjectORM).where(
+                ProjectORM.id == project_id,
+                ProjectORM.tenant_id == self._tenant_id(),
+            )
+        )
         orm_obj = result.scalar_one_or_none()
         return orm_obj.to_domain() if orm_obj else None
 
     async def get_project_by_path(self, root_path: str) -> domain.Project | None:
         """Retrieve a project by its root path."""
         result = await self.session.execute(
-            select(ProjectORM).where(ProjectORM.root_path == root_path)
+            select(ProjectORM).where(
+                ProjectORM.root_path == root_path,
+                ProjectORM.tenant_id == self._tenant_id(),
+            )
         )
         orm_obj = result.scalar_one_or_none()
         return orm_obj.to_domain() if orm_obj else None
 
     async def list_projects(self) -> list[domain.Project]:
         """List all projects in the database."""
-        result = await self.session.execute(select(ProjectORM).order_by(ProjectORM.name))
+        result = await self.session.execute(
+            select(ProjectORM)
+            .where(ProjectORM.tenant_id == self._tenant_id())
+            .order_by(ProjectORM.name)
+        )
         return [orm_obj.to_domain() for orm_obj in result.scalars().all()]
 
     async def update_project(self, project: domain.Project) -> domain.Project:
         """Update an existing project's data."""
         if not project.id:
             raise ValueError("Cannot update a project without an ID")
-        result = await self.session.execute(select(ProjectORM).where(ProjectORM.id == project.id))
+        result = await self.session.execute(
+            select(ProjectORM).where(
+                ProjectORM.id == project.id,
+                ProjectORM.tenant_id == self._tenant_id(),
+            )
+        )
         orm_obj = result.scalar_one_or_none()
         if not orm_obj:
             raise ValueError(f"Project with ID {project.id} not found")

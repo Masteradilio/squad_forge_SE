@@ -12,4 +12,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && pip install --no-cache-dir "pytest>=9,<10" "Pillow>=10,<13"
 
 WORKDIR /workspace
+RUN useradd --create-home --uid 10001 forgeos-sandbox \
+    && chown -R forgeos-sandbox:forgeos-sandbox /workspace
+USER forgeos-sandbox
+
 CMD ["tail", "-f", "/dev/null"]

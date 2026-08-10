@@ -9,7 +9,7 @@ describe('AppSidebar', () => {
       <AppSidebar
         projects={[]}
         activeProject={null}
-        currentTab="mission-control"
+        currentTab="chat"
         backendHealthy={null}
         sseConnected={false}
         onProjectChange={vi.fn()}
@@ -17,6 +17,6 @@ describe('AppSidebar', () => {
     );
 
     expect(screen.getByText('API Server: Checking')).toBeTruthy();
-    expect(screen.getByText('Live Stream: Reconnecting')).toBeTruthy();
+    expect(screen.getByText('Live Stream: Checking')).toBeTruthy();
   });
 });

@@ -53,3 +53,16 @@ async def test_global_redis_manager_instance():
     """Verify global redis_manager instance exports property and client interface."""
     assert hasattr(redis_manager, "is_available")
     assert hasattr(redis_manager, "acquire_lock")
+
+
+def test_redis_component_configuration_url_encodes_reserved_password(monkeypatch):
+    for name in ("LOCALFORGE_REDIS_URL", "REDIS_URL"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("REDIS_HOST", "redis")
+    monkeypatch.setenv("REDIS_PORT", "6379")
+    monkeypatch.setenv("REDIS_DB", "0")
+    monkeypatch.setenv("REDIS_PASSWORD", "p@ss:#%")
+
+    manager = RedisManager()
+
+    assert manager.redis_url == "redis://:p%40ss%3A%23%25@redis:6379/0"

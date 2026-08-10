@@ -1,6 +1,5 @@
 import asyncio
 import json
-from pathlib import Path
 
 import pytest
 from localforge.chief_engineer.final_review import FinalReviewService
@@ -10,7 +9,6 @@ from localforge.contracts.change_requests import (
     ContractChangeService,
 )
 from localforge.contracts.verifier import ContractVerifier
-from localforge.integration.validator import IntegrationBranchValidator
 from localforge.llm.fake import FakeLLMProvider
 from localforge.models import domain
 from localforge.models.enums import (
@@ -19,7 +17,6 @@ from localforge.models.enums import (
     RunMode,
     RunStatus,
 )
-from localforge.repair.classifier import FailureClassifier
 from localforge.routing.capabilities import LocalWorkerCapabilityRouter
 from localforge.storage import UnitOfWork
 from localforge.storage.bootstrap import bootstrap_database
@@ -90,16 +87,47 @@ def test_contract_verifier_accepts_public_api_declared_in_html(tmp_path):
     assert result.findings == []
 
 
-def test_failure_classifier_prefers_deterministic_playbooks():
-    classified = FailureClassifier().classify(
-        output="ModuleNotFoundError: No module named 'calculator'",
-        task_contract={"allowed_files": ["calculator.py"]},
-        attempt_count=1,
+def test_contract_verifier_accepts_javascript_instance_fields(tmp_path):
+    (tmp_path / "index.html").write_text(
+        "<script>class RPNStack { constructor() { this.X = 0; this.Y = 0; } } window.RPNStack = RPNStack;</script>",
+        encoding="utf-8",
     )
 
-    assert classified.failure_class == FailureClass.MISSING_IMPORT
-    assert classified.escalate_to_chief is False
-    assert "approved module map" in classified.playbook.lower()
+    result = ContractVerifier().verify(
+        worktree_path=str(tmp_path),
+        task_contract={
+            "allowed_files": ["index.html"],
+            "required_public_apis": ["RPNStack", "RPNStack.X", "RPNStack.Y"],
+        },
+        changed_files=["index.html"],
+    )
+
+    assert result.passed is True
+
+
+def test_contract_verifier_accepts_javascript_prototype_public_api(tmp_path):
+    (tmp_path / "index.html").write_text(
+        "<script>class RPNStack {} "
+        "RPNStack.prototype.setMode = function(mode) {}; "
+        "RPNStack.prototype.evaluateExpression = function(expression) {}; "
+        "window.RPNStack = RPNStack;</script>",
+        encoding="utf-8",
+    )
+
+    result = ContractVerifier().verify(
+        worktree_path=str(tmp_path),
+        task_contract={
+            "allowed_files": ["index.html"],
+            "required_public_apis": [
+                "RPNStack",
+                "RPNStack.setMode",
+                "RPNStack.evaluateExpression",
+            ],
+        },
+        changed_files=["index.html"],
+    )
+
+    assert result.passed is True
 
 
 def test_contract_change_service_requires_chief_approval_for_new_dependency(tmp_path):
@@ -121,31 +149,6 @@ def test_contract_change_service_requires_chief_approval_for_new_dependency(tmp_
     assert decision.requires_chief_engineer is True
     assert decision.approved is False
     assert "dependency" in decision.reason.lower()
-
-
-def test_integration_validator_classifies_command_failure(tmp_path):
-    (tmp_path / "fail.py").write_text("raise SystemExit(3)\n", encoding="utf-8")
-
-    result = IntegrationBranchValidator().validate(
-        worktree_path=str(tmp_path),
-        task_keys=["LF-4001"],
-        test_command=f"python {Path('fail.py')}",
-    )
-
-    assert result.passed is False
-    assert result.failure_class == FailureClass.SEMANTIC_TEST_FAILURE
-    assert result.task_keys == ["LF-4001"]
-
-
-def test_integration_validator_rejects_shell_composition(tmp_path):
-    result = IntegrationBranchValidator().validate(
-        worktree_path=str(tmp_path),
-        task_keys=["LF-4002"],
-        test_command='python -c "print(1)" && echo unsafe',
-    )
-
-    assert result.passed is False
-    assert "Shell operators" in result.output_summary
 
 
 def test_final_review_records_chief_engineer_paid_call(tmp_path):

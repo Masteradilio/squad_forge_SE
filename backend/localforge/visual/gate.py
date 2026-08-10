@@ -119,7 +119,10 @@ class VisualFidelityGate:
 
 
 def validate_visual_html_structure(
-    html_path: str, *, structure_rules: list[str] | None
+    html_path: str,
+    *,
+    structure_rules: list[str] | None,
+    visual_matrix: list[dict[str, object]] | None = None,
 ) -> list[str]:
     """Return deterministic structural findings before an expensive screenshot."""
     if not structure_rules or not os.path.isfile(html_path):
@@ -132,6 +135,95 @@ def validate_visual_html_structure(
 
     findings: list[str] = []
     normalized = re.sub(r"\s+", " ", content.lower())
+    if "stable_interactive_locators" in structure_rules:
+        interactive_tags = re.findall(r"<(button|a|input|select|textarea)\b([^>]*)>", normalized)
+        missing_locators = [
+            tag
+            for tag, attributes in interactive_tags
+            if not re.search(
+                r"\b(?:id|name|data-testid|data-key|data-action|aria-label)\s*=", attributes
+            )
+        ]
+        if missing_locators:
+            findings.append(
+                f"{len(missing_locators)} interactive element(s) lack a stable id, name, data locator, or aria-label."
+            )
+    if "declared_visual_matrix" in structure_rules:
+        if not visual_matrix:
+            findings.append("Visual task has no executable visual acceptance matrix.")
+        else:
+            for index, entry in enumerate(visual_matrix, start=1):
+                if not isinstance(entry, dict):
+                    findings.append(f"Visual matrix entry {index} is not an object.")
+                    continue
+                if entry.get("contract") == "rendered_product_surface":
+                    if not re.search(r"<(?:main|body)\b", normalized):
+                        findings.append(
+                            "Rendered product surface contract requires a main or body surface."
+                        )
+                    if not re.search(r"<(?:button|a|input|select|textarea)\b", normalized):
+                        findings.append(
+                            "Rendered product surface contract requires at least one real interactive element."
+                        )
+                    continue
+                locator = next(
+                    (
+                        str(entry[key]).strip()
+                        for key in ("locator", "selector", "data_locator", "id", "data_key")
+                        if entry.get(key)
+                    ),
+                    "",
+                )
+                if not locator:
+                    findings.append(f"Visual matrix entry {index} has no executable locator.")
+                    continue
+                locator_token = locator.removeprefix("#").lower()
+                locator_present = locator_token in normalized
+                if locator.startswith("[data-row="):
+                    locator_present = all(
+                        re.search(
+                            rf"{attribute}\s*=\s*['\"]{re.escape(value)}['\"]",
+                            normalized,
+                        )
+                        for attribute, value in re.findall(
+                            r"\[(data-[a-z-]+)=['\"]([^'\"]+)['\"]\]",
+                            locator.lower(),
+                        )
+                    )
+                if not locator_present:
+                    findings.append(
+                        f"Visual matrix entry {index} locator {locator!r} is absent from the rendered product."
+                    )
+                for label_key in (
+                    "label",
+                    "primary_label",
+                    "white_label",
+                    "blue_label",
+                    "orange_label",
+                ):
+                    label = entry.get(label_key)
+                    if isinstance(label, str) and label.strip():
+                        label_text = re.sub(r"\s+", " ", label.strip().lower())
+                        if label_text not in normalized:
+                            findings.append(
+                                f"Visual matrix entry {index} label {label!r} is absent from the rendered product."
+                            )
+                if entry.get("row") is not None and entry.get("column") is not None:
+                    row = str(entry["row"])
+                    column = str(entry["column"])
+                    if not (
+                        re.search(rf"data-row\s*=\s*['\"]{re.escape(row)}['\"]", normalized)
+                        and re.search(rf"data-column\s*=\s*['\"]{re.escape(column)}['\"]", normalized)
+                    ):
+                        findings.append(
+                            f"Visual matrix entry {index} does not expose its declared row {row}, column {column}."
+                        )
+                if entry.get("action") and not re.search(
+                    r"(?:onclick\s*=|data-action\s*=|addeventlistener\s*\(|\.click\s*\()", normalized
+                ):
+                    findings.append(
+                        f"Visual matrix entry {index} declares an action but the product exposes no executable interaction wiring."
+                    )
     if "single_parent_keypad_grid" in structure_rules:
         has_parent_grid = "key-grid" in normalized or "keypad-grid" in normalized
         nested_row_grids = len(re.findall(r"key-row", normalized)) >= 2
@@ -188,10 +280,10 @@ def validate_visual_html_structure(
             findings.append(
                 "LCD container must be left-aligned after the model label, not centered."
             )
-    if "rectangular_hp_badge" in structure_rules:
+    if "rectangular_brand_badge" in structure_rules:
         badge_blocks = [
             match.group("body")
-            for match in re.finditer(r"\.hp-badge\s*\{(?P<body>[^}]*)\}", normalized)
+            for match in re.finditer(r"\.brand-badge\s*\{(?P<body>[^}]*)\}", normalized)
         ]
         has_round_badge = any(
             re.search(r"border-radius\s*:\s*50%", body) for body in badge_blocks
@@ -202,7 +294,7 @@ def validate_visual_html_structure(
         )
         if has_round_badge and not has_rectangular_override:
             findings.append(
-                "HP badge must be a small rectangular reference badge, not a circular badge."
+                "Brand badge must be a small rectangular reference badge, not a circular badge."
             )
     return findings
 

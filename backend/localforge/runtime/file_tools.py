@@ -10,6 +10,7 @@ from localforge.models.enums import (
     AutonomyLevel,
 )
 from localforge.safety.action_gateway import ActionGateway
+from localforge.safety.hooks import ToolCall, ToolPolicyHooks, evaluate_after, evaluate_before
 from localforge.safety.kernel import ActionRequest, SafetyDecision, is_path_safe
 from localforge.storage import UnitOfWork
 from localforge.storage.artifacts import ArtifactStore
@@ -31,6 +32,7 @@ class SafeFileEditor:
         task_id: int | None = None,
         agent_role: str | None = None,
         artifact_root: str | None = None,
+        tool_policy: ToolPolicyHooks | None = None,
     ):
         self.uow = uow
         self.project_id = project_id
@@ -40,12 +42,17 @@ class SafeFileEditor:
         # Code edits belong to the isolated task worktree, while artifacts
         # belong to the canonical project workspace consumed by the PR gate.
         self.artifact_root = artifact_root
+        self.tool_policy = tool_policy
 
     async def read_text(self, worktree_root: str, relative_path: str) -> str:
         target = self._resolve(worktree_root, relative_path)
+        call = ToolCall(name="read_file", arguments={"path": relative_path})
+        await evaluate_before(self.tool_policy, call)
         await self._evaluate(ActionKind.READ_FILE, target, worktree_root)
         with open(target, encoding="utf-8") as handle:
-            return handle.read()
+            content = handle.read()
+        await evaluate_after(self.tool_policy, call, result={"path": relative_path})
+        return content
 
     async def write_text(
         self,
@@ -57,6 +64,8 @@ class SafeFileEditor:
         task_key: str | None = None,
     ) -> FileEditResult:
         target = self._resolve(worktree_root, relative_path)
+        call = ToolCall(name="write_file", arguments={"path": relative_path})
+        await evaluate_before(self.tool_policy, call)
         await self._evaluate(ActionKind.WRITE_FILE, target, worktree_root)
         old_content = ""
         if os.path.exists(target):
@@ -189,7 +198,9 @@ class SafeFileEditor:
             pass
 
         await self._audit("write_file", {"path": target, "decision": "ALLOW"})
-        return FileEditResult(path=target, diff=diff)
+        result = FileEditResult(path=target, diff=diff)
+        await evaluate_after(self.tool_policy, call, result=result)
+        return result
 
     def _resolve(self, worktree_root: str, relative_path: str) -> str:
         target = os.path.realpath(os.path.abspath(os.path.join(worktree_root, relative_path)))

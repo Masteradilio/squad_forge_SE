@@ -608,7 +608,7 @@ async def test_light_swarm_recover_swarm_run_on_restart(db_manager) -> None:
 
 
 @pytest.mark.asyncio
-async def test_light_swarm_canonical_pr_ready_evidence_submission(db_manager) -> None:
+async def test_light_swarm_canonical_pr_ready_evidence_submission(db_manager, tmp_path) -> None:
     """V61C-603: Only observed maker/checker evidence can reach PR_READY."""
     from localforge.models.enums import ArtifactType
     from localforge.services.light_swarm_aggregation import aggregate_and_submit_pr_ready
@@ -619,7 +619,11 @@ async def test_light_swarm_canonical_pr_ready_evidence_submission(db_manager) ->
         assert uow.light_swarm is not None
 
         proj = await uow.projects.create_project(
-            domain.Project(name="R3 Gate Test", root_path="E:/tmp/r3_gate", default_branch="main")
+            domain.Project(
+                name="R3 Gate Test",
+                root_path=str(tmp_path / "r3_gate"),
+                default_branch="main",
+            )
         )
         task = await uow.tasks.create_task(
             domain.Task(project_id=proj.id, key="SW-11", title="R3 Gate", description="desc")
@@ -628,7 +632,7 @@ async def test_light_swarm_canonical_pr_ready_evidence_submission(db_manager) ->
             domain.TaskRun(
                 task_id=task.id,
                 run_id=1,
-                worktree_path="E:/tmp/r3_gate",
+                worktree_path=str(tmp_path / "r3_gate"),
                 branch_name="localforge/sw-11",
             )
         )

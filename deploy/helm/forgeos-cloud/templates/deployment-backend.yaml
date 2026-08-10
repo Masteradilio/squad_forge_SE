@@ -1,11 +1,22 @@
+{{- $deploymentEvidence := .Values.deploymentEvidence | default (dict) -}}
+{{- $evidenceEnabled := $deploymentEvidence.enabled | default false -}}
+{{- $evidencePath := $deploymentEvidence.path | default "/tmp/forgeos-evidence" -}}
+{{- $readinessFailurePath := $deploymentEvidence.readinessFailurePath | default "/__forgeos_readiness_failure__" -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "forgeos-cloud.fullname" . }}-backend
   labels:
     app.kubernetes.io/component: backend
+{{- if $evidenceEnabled }}
+  annotations:
+    forgeos.io/evidence-configmap: {{ include "forgeos-cloud.fullname" . }}-deployment-evidence
+    forgeos.io/readiness-failure-path: {{ $readinessFailurePath | quote }}
+{{- end }}
 spec:
   replicas: {{ .Values.backend.replicaCount }}
+  progressDeadlineSeconds: {{ .Values.backend.progressDeadlineSeconds }}
+  revisionHistoryLimit: {{ .Values.backend.revisionHistoryLimit }}
   selector:
     matchLabels:
       app.kubernetes.io/component: backend
@@ -14,6 +25,12 @@ spec:
       labels:
         app.kubernetes.io/component: backend
     spec:
+      {{- if .Values.serviceAccount.create }}
+      serviceAccountName: {{ include "forgeos-cloud.serviceAccountName" . }}
+      {{- end }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automountServiceAccountToken }}
+      securityContext:
+        {{- toYaml .Values.backend.securityContext | nindent 8 }}
       containers:
         - name: backend
           image: "{{ .Values.backend.image.repository }}:{{ .Values.backend.image.tag }}"
@@ -23,5 +40,58 @@ spec:
           envFrom:
             - configMapRef:
                 name: {{ include "forgeos-cloud.fullname" . }}-config
+            {{- if .Values.secrets.existingSecret }}
+            - secretRef:
+                name: {{ .Values.secrets.existingSecret }}
+                optional: false
+            {{- end }}
+          env:
+            {{- if .Values.secrets.existingSecret }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: {{ .Values.postgres.auth.passwordKey }}
+                  optional: false
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: {{ .Values.redis.auth.passwordKey }}
+                  optional: false
+            {{- end }}
+          securityContext:
+            {{- toYaml .Values.backend.containerSecurityContext | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.backend.probes.readiness.path }}
+              port: {{ .Values.backend.port }}
+            initialDelaySeconds: {{ .Values.backend.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.backend.probes.readiness.periodSeconds }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.backend.probes.liveness.path }}
+              port: {{ .Values.backend.port }}
+            initialDelaySeconds: {{ .Values.backend.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.backend.probes.liveness.periodSeconds }}
           resources:
             {{- toYaml .Values.backend.resources | nindent 12 }}
+          volumeMounts:
+            - name: forgeos-runtime
+              mountPath: /app/.localforge
+            - name: tmp
+              mountPath: /tmp
+            {{- if $evidenceEnabled }}
+            - name: forgeos-evidence
+              mountPath: {{ $evidencePath }}
+            {{- end }}
+      volumes:
+        - name: forgeos-runtime
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+        {{- if $evidenceEnabled }}
+        - name: forgeos-evidence
+          emptyDir:
+            sizeLimit: 1Gi
+        {{- end }}

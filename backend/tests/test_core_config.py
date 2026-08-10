@@ -4,6 +4,7 @@ import pytest
 import yaml
 from localforge.core.config import LocalForgeConfig, load_config
 from localforge.core.policy import load_policy
+from localforge.services.pricing import DEFAULT_MAX_GATEWAY_CALLS
 
 
 def test_config_pydantic_defaults():
@@ -16,6 +17,15 @@ def test_config_pydantic_defaults():
     assert config.models.default_model == "auto/best-free"
     assert config.chief_engineer.provider == "omniroute"
     assert config.chief_engineer.model == "auto/best-free"
+    assert config.budgets.max_gateway_calls == DEFAULT_MAX_GATEWAY_CALLS
+
+
+def test_gateway_call_budget_is_configurable(monkeypatch):
+    monkeypatch.setenv("LOCALFORGE_MAX_GATEWAY_CALLS", "7")
+
+    config = load_config()
+
+    assert config.budgets.max_gateway_calls == 7
 
 
 def test_load_config_precedence(tmp_path, monkeypatch):
@@ -120,6 +130,12 @@ def test_load_config_reads_safe_local_env_settings(tmp_path, monkeypatch):
     config = load_config()
 
     assert config.models.default_model == "auto/best-coding"
+
+
+def test_omniroute_structured_timeout_is_explicit_and_bounded(monkeypatch):
+    monkeypatch.setenv("LOCALFORGE_OMNIROUTE_STRUCTURED_TIMEOUT", "180")
+    config = load_config()
+    assert config.chief_engineer.omniroute_structured_timeout == 180
 
 
 def test_load_config_reads_omniroute_gateway_aliases_without_mutating_environment(

@@ -4,6 +4,16 @@ global:
   environment: production
   domain: cloud.localforge.ai
 
+serviceAccount:
+  create: true
+  name: ""
+  automountServiceAccountToken: false
+
+secrets:
+  # Values are injected by the operator/external secret manager at runtime.
+  # The chart never creates a Secret containing credentials.
+  existingSecret: forgeos-runtime-secrets
+
 omniroute:
   replicaCount: 2
   image:
@@ -38,6 +48,29 @@ backend:
     requests:
       cpu: "500m"
       memory: "512Mi"
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    runAsGroup: 10001
+    fsGroup: 10001
+    seccompProfile:
+      type: RuntimeDefault
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop: ["ALL"]
+  probes:
+    readiness:
+      path: /ready
+      initialDelaySeconds: 5
+      periodSeconds: 10
+    liveness:
+      path: /health
+      initialDelaySeconds: 15
+      periodSeconds: 20
+  progressDeadlineSeconds: 180
+  revisionHistoryLimit: 5
 
 frontend:
   replicaCount: 2
@@ -45,7 +78,9 @@ frontend:
     repository: localforge/forgeos-frontend
     tag: 1.0.0
     pullPolicy: IfNotPresent
-  port: 80
+  # Kubernetes runs Nginx as non-root; privileged port 80 remains the Service
+  # port while the container listens on an unprivileged port.
+  port: 8080
   resources:
     limits:
       cpu: "500m"
@@ -53,18 +88,82 @@ frontend:
     requests:
       cpu: "100m"
       memory: "128Mi"
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 10100
+    runAsGroup: 10100
+    fsGroup: 10100
+    seccompProfile:
+      type: RuntimeDefault
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop: ["ALL"]
+  probes:
+    readiness:
+      path: /
+      initialDelaySeconds: 5
+      periodSeconds: 10
+    liveness:
+      path: /
+      initialDelaySeconds: 15
+      periodSeconds: 20
 
 postgres:
   image:
     repository: pgvector/pgvector
     tag: pg16
   port: 5432
+  database: forgeos
+  username: forgeos
   persistence:
+    enabled: true
     size: 20Gi
+  auth:
+    existingSecret: forgeos-runtime-secrets
+    passwordKey: POSTGRES_PASSWORD
+
+redis:
+  enabled: true
+  auth:
+    existingSecret: forgeos-runtime-secrets
+    passwordKey: REDIS_PASSWORD
+  persistence:
+    enabled: true
+    size: 5Gi
+  resources:
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 999
+    runAsGroup: 999
+    fsGroup: 999
+    seccompProfile:
+      type: RuntimeDefault
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop: ["ALL"]
 
 autoscaling:
   enabled: true
+  metricsServerRequired: true
+  metricsApiPath: /apis/metrics.k8s.io/v1beta1
   minReplicas: 2
   maxReplicas: 10
   targetCPUUtilizationPercentage: 70
   targetMemoryUtilizationPercentage: 80
+
+deploymentEvidence:
+  enabled: true
+  schema: forgeos.kubernetes_release_evidence.v1
+  path: /var/lib/forgeos/evidence
+  readinessFailurePath: /__forgeos_readiness_failure__
+  rollbackTimeout: 5m

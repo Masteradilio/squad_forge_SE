@@ -11,6 +11,7 @@ from localforge.models.enums import (
     RunMode,
 )
 from localforge.safety.action_gateway import ActionGateway
+from localforge.safety.hooks import ToolCall, ToolPolicyHooks, evaluate_after, evaluate_before
 from localforge.safety.kernel import ActionRequest, SafetyDecision, SafetyKernel
 from localforge.services.security_controls import redact_secrets as redact_security_value
 from localforge.storage import UnitOfWork
@@ -52,6 +53,7 @@ async def run_safe_command(
     run_mode: RunMode = RunMode.INTERACTIVE,
     poll_interval: float = 0.5,
     max_approval_wait: float = 10.0,  # Short default wait for testing
+    tool_policy: ToolPolicyHooks | None = None,
 ) -> tuple[int, str, str]:
     """Intercept, evaluate, and execute a shell command through the Safety Kernel.
 
@@ -68,6 +70,12 @@ async def run_safe_command(
     if not project:
         raise ValueError(f"Project with ID {project_id} not found.")
     project_root = project.root_path
+
+    tool_call = ToolCall(
+        name="run_command",
+        arguments={"command": command},
+    )
+    await evaluate_before(tool_policy, tool_call)
 
     # Override project_root with active TaskRun's worktree_path if set
     if task_id:
@@ -260,7 +268,13 @@ async def run_safe_command(
         )
         await uow.audits.append_audit_event(audit)
 
-        return exit_code, redacted_out, redacted_err
+        result = (exit_code, redacted_out, redacted_err)
+        await evaluate_after(
+            tool_policy,
+            tool_call,
+            result={"exit_code": exit_code},
+        )
+        return result
 
     except Exception as e:
         if isinstance(e, SafetyViolationError) or isinstance(e, asyncio.TimeoutError):

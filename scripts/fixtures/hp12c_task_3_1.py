@@ -6,7 +6,6 @@ import subprocess
 import textwrap
 from pathlib import Path
 
-
 INDEX_HTML = Path(__file__).parents[1] / "app" / "index.html"
 
 
@@ -44,15 +43,15 @@ def _evaluate_product(js_code: str) -> None:
     )
     if result.returncode:
         raise AssertionError(
-            f"TVM acceptance failed with exit code {{result.returncode}}: "
-            f"{{result.stderr.strip()}}"
+            f"TVM acceptance failed with exit code {result.returncode}: "
+            f"{result.stderr.strip()}"
         )
 
 
 def test_tvm_registers_and_timing_exist() -> None:
     html = INDEX_HTML.read_text(encoding="utf-8")
     for register in ("n", "i", "pv", "pmt", "fv"):
-        assert f'id="{{register}}"' in html, f"Missing input for {{register}}"
+        assert f'id="{register}"' in html, f"Missing input for {register}"
     assert 'id="timing"' in html
     assert "BEG" in html and "END" in html
 

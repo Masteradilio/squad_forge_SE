@@ -2,6 +2,617 @@
 
 All notable changes to LocalForge OS will be documented in this file.
 
+## [Generic Product Acceptance Contracts and Benchmark Reset] - 2026-08-10
+
+### Added
+- Expanded the HP 12C sample PRD with a 40-position row/column matrix,
+  primary/blue/orange legend placement, and observable action contracts.
+- Added generic `visual_acceptance_matrix` task contracts and deterministic
+  Markdown extraction that keeps visual-contract rows out of the backlog.
+- Strengthened the Scrum Master, E2E Release Tester, Reviewer, and Security
+  Auditor role instructions with interface-first Product Acceptance and Visual QA.
+
+### Changed
+- Removed HP12C-specific recovery, visual injection, challenge, bootstrap, and
+  system-prompt branches from the runtime harness. Visual recovery now follows
+  the PRD-declared contract and rendered evidence for any product.
+- Visual structural gates now validate stable locators, declared labels,
+  row/column anchors, and executable interaction wiring when a matrix applies.
+
+### Tests
+- Passed 29 PRD/visual-contract tests, 41 Chief Engineer/control tests, 27
+  scheduler/unattended/operability tests, and 12 harness/coverage tests.
+- Confirmed no HP12C-specific references remain in `backend/localforge` or
+  `.agents/skills`.
+
+### Cleanup
+- Reset `benchmarks/workspaces/hp12c-full-access-20260810T045845Z` to only
+  `docs/PRD.md` and `docs/hp12c_platinum_design_target.png`.
+- Moved the run artifacts and sibling full trace to the Windows Recycle Bin for
+  recoverability; no benchmark was rerun.
+
+## [HP12C Platinum Full-Access Benchmark] - 2026-08-10
+
+### Added
+- Completed the unattended OmniRoute-backed HP12C Platinum benchmark with
+  19/19 tasks at `PR_READY`, release promotion, post-merge Tester and
+  SafetyAuditor gates, and a durable full-run trace.
+- Hardened the bounded HP12C recovery lane so compressed visual/financial
+  validation output still activates the deterministic visual and ten-function
+  challenge contracts.
+- Captured the final product screenshot, benchmark manifest, runner trace,
+  Control Plane event chain, and cloud-acceptance report under the benchmark
+  workspace artifacts.
+
+### Validation
+- Run status `COMPLETED`; 1 autonomous recovery cycle; 0 blocked tasks,
+  fail-safe tasks, human-review tasks, and safety-kernel blocks.
+- Post-merge challenge suite passed: 2 tests, including the ten-function
+  `complex` challenge and the `security`/visual contract.
+- Full trace parsed successfully: 37 JSONL records, ending in `run.completed`
+  with `PASS` and exit code 0.
+
+## [Pipeline Capability Reintegration and Legacy Archive] - 2026-08-09
+
+### Added
+- Added governed `reference`, `full_coverage`, and `saas` operational profiles,
+  API discovery, release-snapshot evidence, live operator metrics, optional
+  release-tree auditing, and an opt-in Chief Engineer semantic release gate.
+- Connected validation failure fingerprints, circuit-breaker progress signals,
+  and TypeScript compiler feedback to the existing repair pipeline.
+- Tightened release-tree secret detection to distinguish credential literals
+  from ordinary API-key/token references and preserved the development-only
+  Key Vault fallback behind an explicit helper.
+- Exposed Light Swarm dispatch, typed worker handoffs, evidence aggregation,
+  restart recovery, and resource release through the main API boundary.
+- Corrected the README trace benchmark to merge parent-process profiles and
+  account for subprocess fixtures and benchmark helper execution.
+
+### Archived
+- Moved superseded healing, duplicate integration/scope/contract validators,
+  the incomplete preview sandbox helper, orphaned Deep Swarm helpers, and
+  historical/demo benchmark scripts to the recoverable `archive/legacy/` tree.
+- Preserved historical reports and current reference/V7-mini benchmark paths.
+
+### Validation
+- Added focused operational-profile coverage and retained the default local
+  profile fail-closed: external SaaS, Redis, Kubernetes, and Helm services are
+  never treated as healthy without an explicit evidence-producing run.
+- Full backend suite passed: 647 tests passed and 3 environment-dependent tests
+  skipped (Helm unavailable and Windows symlink privilege).
+
+## [Full-Access Trace and Module Obsolescence Inventory] - 2026-08-09
+
+### Added
+- Re-ran the README reference benchmark in `full_access` after removing the
+  prior benchmark artifacts, preserving only `docs/PRD_REFERENCE_FORGEOS.md`.
+- Captured the complete ordered run trace, command logs, per-process module
+  profiles, merged profile, module inventory, compliance reports, control-plane
+  export, and isolated release evidence.
+
+### Validation
+- Run accepted with 5/5 tasks at `PR_READY`, one task autonomously recovered
+  after a contract failure, run `COMPLETED`, and full-access release promotion
+  completed with Tester and SafetyAuditor passing.
+- Inventory classified 217 modules as observed used, 76 as not observed in this
+  run, and one benchmark helper as broken; the latter requires a focused fix
+  before being treated as release-ready.
+
+## [Autonomous Recovery and Isolated Release Benchmark] - 2026-08-08
+
+### Fixed
+- Validation timeouts now become repairable evidence for the Chief Engineer
+  lane instead of escaping the pipeline before Scrum Master requeue.
+- Scheduler finalization preserves durable release-promotion evidence, including
+  the merge commit and post-merge Tester/SafetyAuditor results.
+- The README reference benchmark now seeds a real isolated Git repository,
+  preventing benchmark merges from touching the user's checkout or running
+  post-merge tests in an empty directory.
+
+### Validation
+- README reference benchmark accepted in `full_access`: 5/5 PR_READY, one
+  recovered task failure, isolated `main` promotion, control plane completed,
+  and independent acceptance passed.
+
+## [OmniRoute Gateway Budgets] - 2026-08-08 - Separate gateway and paid limits
+
+### Fixed
+- Separated OmniRoute gateway call counts from paid-provider preflight budgets,
+  so zero-cost gateway routes without an explicit `:free` model suffix are not
+  blocked by `max_paid_calls`.
+- Preserved non-zero gateway-reported costs in the ledger and included them in
+  the paid USD ceilings.
+
+### Added
+- Added the finite, configurable `max_gateway_calls` budget with a default of
+  48 calls; the V7 benchmark persists the same explicit gateway limit.
+
+## [Durable Recovery and Completion Gate] - 2026-08-08 - Heartbeat and release truth
+
+### Added
+- Added a durable `TaskRun.heartbeat_at` field and schema v26 migration.
+- Added a release-promotion requirement to new control-plane goals, plus the
+  explicit `mark_release_completed` completion transition.
+
+### Changed
+- Scheduler recovery now records the repair handoff and reopens the matching
+  control-plane todo idempotently.
+- Long-running pipelines now renew the task heartbeat and control-plane lease
+  from independent short transactions; watchdogs use the persisted heartbeat.
+- Scheduler, CLI, and API complete the control-plane goal only after release
+  promotion and post-merge validation succeed.
+
+### Tests
+- Added focused control-plane completion-gate and heartbeat/migration coverage.
+
+### Known Limitations
+- Existing journals without the new release requirement retain their legacy
+  task-only completion semantics.
+
+## [Release Promotion Modes] - 2026-08-08 - Human approval and full-access local release
+
+### Added
+- Added explicit `release.promotion_mode` configuration with
+  `human_approval` as the safe default and `full_access` as an opt-in mode.
+- Added durable release approval, idempotent promotion state, local branch
+  merging, and post-merge Tester/SafetyAuditor execution through the Safety
+  Kernel.
+- Added `localforge release status` and `localforge release approve` commands.
+- Added ADR documentation for the release authority boundary.
+
+### Changed
+- Scheduler no longer treats `PR_READY` as the end of a configured release:
+  human mode pauses for approval, while full-access mode promotes and validates
+  the local target branch before completing.
+- Git merge is reserved for the server-owned release lane; task agents cannot
+  obtain merge authority from an unattended execution profile.
+
+### Tests
+- Added deterministic tests covering default human gating, full-access
+  preconditions, approval unlock, dirty-target blocking, and incomplete-task
+  blocking.
+
+### Known Limitations
+- The current promotion adapter is local-repository only. External GitHub/GitLab
+  merge APIs and production deployment remain outside this phase.
+- Technical post-merge checks do not replace human product/UX acceptance.
+
+## [Benchmark Recovery] - 2026-08-08 - OmniRoute fallback and Chief action compatibility
+
+### Fixed
+- Normalized nested Chief Engineer operation envelopes such as `write_file`,
+  `append_content`, and `run_command` before validator/action dispatch, so
+  structured OmniRoute responses become executable ForgeOS actions.
+- Made the OmniRoute benchmark probe exercise the same SSE streaming transport
+  used by the runtime and propagate the dynamic route ladder into traced child
+  processes, preventing false preflight success followed by a stale fallback.
+- Preserved direct NVIDIA alias filtering while allowing NVIDIA gateway aliases
+  when the transport is OmniRoute.
+
+### Validation
+- Full trace benchmark `run-20260808T170057Z`: `ACCEPTED`; all 19 recorded
+  claims passed, including 12/12 required README claims and 9/9 DeepCode
+  continuity claims.
+- Five imported tasks reached `PR_READY`, the run reached `COMPLETED`, all 11
+  model calls were successful through OmniRoute, and no human gate or pending
+  approval remained.
+
+## [README Trace Benchmark] - 2026-08-08 - Full runtime evidence and module audit
+
+### Added
+- Added `scripts/run_benchmark_readme_trace.py`, which produces one redacted,
+  ordered trace from canonical PRD intake through CLI execution, postconditions,
+  DeepCode continuity, optional infrastructure probes, and compliance reports.
+- Added `backend/localforge/observability/run_trace.py` and focused tests for
+  credential redaction, ordered JSONL events, child-process profiling, and
+  repository module usage evidence.
+- Added per-run module inventory reports classifying tracked backend modules and
+  scripts as `USED`, `PARTIAL`, `BROKEN`, or `UNUSED` with follow-up guidance.
+
+### Fixed
+- Corrected Windows frontend benchmark execution to use `npm.cmd` from the
+  `frontend` working directory.
+- Excluded generated benchmark worktrees and deterministic test fixtures from
+  the security scan so evidence generation does not create false secret hits.
+- Preserved explicit standalone scope for the nine DeepCode continuity gates;
+  their pass does not overstate end-to-end execution when the PRD run is blocked.
+
+### Validation
+- Final trace run `run-20260808T134716Z`: `PARTIAL`; 0/12 required README
+  claims reached final acceptance because OmniRoute Chief Engineer structured
+  repair timed out and the task entered `BLOCKED_NEEDS_HUMAN_REVIEW`.
+- DeepCode continuity: 9/9 gates passed; Context7, imports, security, release
+  truth, approvals, recovery, frontend build/tests, Redis, Playwright,
+  Docker, and kubectl probes passed. Helm and apply-mode Kubernetes profile
+  remained `NOT_PROVEN`.
+- Module inventory: 215 `USED`, 76 `UNUSED`, 0 `PARTIAL`, 0 `BROKEN` in this
+  run; no interactive human gate was used and pending approvals were zero.
+
+## [DeepCode Continuity] - 2026-08-08 - Reference-driven squad runtime
+
+### Added
+- Added durable Engineering Sessions, Goals, Turns, steering transitions, and
+  tenant-scoped Execution Profiles with immutable turn snapshots.
+- Added OmniRoute model catalog/verification evidence, immutable Skill bindings,
+  shared-runtime Automations, and migration schema v25.
+- Added reference ingestion with redaction, content hashes, prompt-injection
+  quarantine, lexical CodeRAG chunks/citations, Reference Decisions, and frozen
+  ProductBlueprints.
+- Added process-tree termination evidence for local Windows/POSIX sandboxes.
+- Added shared FastAPI/CLI surfaces and the frontend Continuity/References view.
+
+### Tests
+- Focused ForgeOS continuity/reference/process suite plus the existing sandbox
+  regression: 22 passed.
+- Frontend production build and Vitest suite: 5 files / 9 tests passed.
+- Integrated benchmark `run-20260808T122507Z`: `ACCEPTED`; DPC-001 through
+  DPC-009 all `PASS` with timestamped hashes and CLI/API parity evidence.
+
+### Known limitations
+- The complete 638-test backend collection still has pre-existing Windows fixture
+  failures/timeouts outside the DPC-focused suite; the release benchmark below
+  remains the authoritative acceptance gate for this phase.
+
+## [Coverage Complete] - 2026-08-08 - Final compliance closure
+
+### Added
+- Added the final integrated coverage evidence package at
+  `.localforge/artifacts/full-coverage/run-compliance-final-20260808-r2/`.
+- Added the completed PA-001 through PA-014 status and evidence index to
+  `docs/PLANO_ACAO_COBERTURA_COMPLETA_FORGEOS.md`.
+
+### Changed
+- Made the full benchmark use one configured Kubernetes `project_id` for both
+  rendered and applied profiles.
+- Made evidence status parsing accept UTF-8 BOM artifacts emitted by Windows
+  tooling while remaining fail-closed on invalid JSON or missing status.
+- Made approval compliance honor `LOCALFORGE_API_TOKEN` when the workspace
+  `.env` enables API authentication, and aligned the UI gate with the installed
+  Vitest reporter set.
+- Hardened the frontend image for non-root Kubernetes execution by placing the
+  Nginx PID in the writable `/var/run` volume.
+
+### Tests
+- Full coverage benchmark `compliance-final-20260808-r2`: `ACCEPTED`;
+  PA-001 through PA-014 all `PASS`.
+- Live Kubernetes profile: succeeded benchmark Job/Pod and cleanup verified.
+- Playwright desktop/mobile: 4/4 tests passed against the live cluster.
+- Approval API/CLI compliance: API and CLI `PASS`; UI approval tests: 3/3.
+- Security audit: `PASS`; controlled load levels and dependency-failure path:
+  `PASS`.
+
+## [Coverage P2] - 2026-08-07 - Kubernetes rollout, structural debt and security gates
+
+### Added
+- Added a portable PostgreSQL datetime boundary in `backend/localforge/storage/orm.py`
+  and regression tests for UTC-aware values.
+- Added the cycle security report at
+  `.localforge/artifacts/reports/cycle_1/relatorio_conformidade_seguranca.md`.
+
+### Changed
+- Kubernetes migration jobs now run with the existing `uv.lock`, repair partial
+  `.localforge` layouts, and execute successfully after normal chart resources
+  are available.
+- Rebuilt the backend/frontend local images and rolled the corrected frontend
+  into the Docker Desktop cluster.
+- Replaced the disconnected legacy frontend `App.tsx` state graph with a typed
+  routing shell for the five active ForgeOS views; fixed component prop
+  contracts, hook dependencies, and unsafe `any` surfaces.
+- Updated frontend `package-lock.json` through `npm audit fix --package-lock-only`.
+- Isolated backend tests from ambient local/provider environment variables and
+  made the Light Swarm artifact fixture portable on Windows.
+
+### Tests
+- Docker Desktop Kubernetes: Helm release `forgeos` deployed; 3/3 backend,
+  2/2 frontend, 2/2 OmniRoute and 1/1 PostgreSQL/Redis pods ready.
+- In-cluster backend `/ready` and frontend `/` returned HTTP 200.
+- In-cluster Redis probe passed cache, Pub/Sub, sequential lock and concurrent
+  lock checks.
+- Backend full suite: 596 passed, 1 Windows symlink skip.
+- Frontend: lint, TypeScript, 6 tests, production build, `npm ci`, and high
+  severity `npm audit` all passed; audit reported 0 vulnerabilities.
+
+### Known Limitations
+- Python dependency audit (`pip-audit`), Python SAST (`ruff`) and Docker image
+  scan were not available in this host and remain release gates.
+- Full Playwright visual benchmark, Helm rollback/readiness-failure exercise,
+  multi-tenancy/RLS, executor Pod recovery, external CI/PR and load tests are
+  still pending.
+
+## [Coverage P2] - 2026-08-07 - Local runtime bootstrap and frontend baseline
+
+### Added
+- Added `scripts/start_forgeos.ps1` with explicit Compose and Helm modes. It
+  validates `.env`, waits for Redis health, runs the real Redis probe, checks
+  backend/frontend HTTP readiness, checks the selected Kubernetes context,
+  verifies the runtime Secret, and performs a waited Helm upgrade/install.
+- Added jsdom test setup for `EventSource` and `scrollIntoView` so frontend
+  component tests exercise UI behavior deterministically.
+
+### Changed
+- Redis now publishes a configurable host-only port through
+  `REDIS_HOST_PORT`, while backend traffic remains on the internal
+  `redis:6379` address.
+- OmniRoute host publishing is configurable through `OMNIROUTE_HOST_PORT` to
+  avoid collisions with another local gateway.
+- `scripts/probe_redis.py` now loads the local `.env`, resolves host versus
+  container URLs, waits for asynchronous Pub/Sub delivery, and verifies a
+  concurrent two-worker lease race.
+- Database and Redis URLs are now assembled from runtime components with
+  percent-encoded credentials, so reserved characters in passwords cannot
+  corrupt service host resolution or authentication.
+- Backend Docker builds no longer block on a Chromium download by default;
+  browser binaries are opt-in through `INSTALL_PLAYWRIGHT_BROWSER=true`.
+- Updated the frontend navigation tests to match the current UI contract.
+
+### Tests
+- Targeted backend coverage: 27 passed, including URL encoding, Redis,
+  Context7, README matrix, Kubernetes profile, and Helm contract tests.
+- Real Docker Compose Redis: cache, Pub/Sub, sequential lock, concurrent lock,
+  and post-restart probe all passed.
+- Complete Docker Compose stack: Redis, PostgreSQL, OmniRoute, backend, and
+  frontend started; backend `/health` and `/ready`, frontend HTTP, and a
+  direct SQL `select 1` probe passed.
+- `scripts/start_forgeos.ps1 -Mode compose` passed its bounded Redis and HTTP
+  readiness gates.
+- Helm v4.2.3: `helm lint` and `helm template` passed.
+- Frontend: `npm ci`, `npm test` (6 passed), and `npm run build` passed.
+
+### Known Limitations
+- Docker Desktop Kubernetes has no configured context in this environment;
+  Helm install, rollout failure, and rollback remain blocked until Kubernetes
+  is enabled or another local cluster is selected.
+- Frontend lint/typecheck still expose pre-existing structural debt and are not
+  reported as passing.
+
+## [Coverage P0] - 2026-08-07 - README evidence and Kubernetes benchmark profile
+
+### Added
+- Added `scripts/build_readme_claim_matrix.py`, which freezes 19 README
+  operational claims into stable IDs, classifications, evidence references,
+  and explicit limitations.
+- Added the generated PA-001 artifacts under
+  `docs/e2e/full-coverage/readme_claim_matrix.json` and
+  `docs/e2e/full-coverage/readme_claim_report.md`.
+- Added `scripts/generate_benchmark_k8s_profile.py` and the benchmark profile
+  guidance under `deploy/benchmark/kubernetes/README.md`.
+- Added the generated reference profile under
+  `docs/e2e/full-coverage/kubernetes/profile-reference/`.
+- Added focused tests for both generators in
+  `backend/tests/test_readme_claim_matrix.py` and
+  `backend/tests/test_benchmark_k8s_profile.py`.
+
+### Changed
+- Changed the coverage plan status to execution in progress, with PA-001 and
+  PA-002 marked complete by their generated evidence.
+
+### Security
+- The Kubernetes profile uses a namespaced ServiceAccount and Role, non-root
+  execution, read-only root filesystem, dropped capabilities, bounded
+  resources, ephemeral worktrees, and runtime-only secret references.
+- Profile validation rejects `hostPath`, privileged mode, host networking,
+  host PID/IPC, and literal Secret data.
+
+### Tests
+- `python -m pytest backend/tests/test_readme_claim_matrix.py backend/tests/test_benchmark_k8s_profile.py backend/tests/test_context7_mcp.py -q` — 12 passed.
+- Both generators passed `--check`; Python compilation and `git diff --check`
+  also passed.
+
+### Known Limitations
+- PA-002 generates and validates the benchmark boundary but does not install
+  it in a Kubernetes cluster yet.
+- The runner command remains the non-destructive `localforge doctor` smoke
+  command until the Redis, Helm, frontend, recovery, and full benchmark gates
+  are implemented.
+
+### Deferred
+- PA-006 through PA-014 remain pending, including frontend/browser proof,
+  multi-tenancy, approval journeys, Pod recovery, security/load evidence, and
+  the final Mission Control benchmark. PA-003 through PA-005 are tracked in the
+  following partial P1 phase.
+
+## [Coverage P1] - 2026-08-07 - Live integration probes and deployment hardening
+
+### Added
+- Added negative Context7 tests for timeout, invalid JSON, authentication
+  errors, and external prompt-injection text. Context7 excerpts are now
+  filtered before entering role context and remain marked as untrusted.
+- Added `scripts/probe_redis.py` for honest cache, pub/sub, and exclusive-lock
+  verification, plus `docs/e2e/full-coverage/redis/probe.json`.
+- Added Redis probe tests and Helm chart contract tests.
+- Hardened the Helm chart with runtime Secret references, Services, probes,
+  namespaced RBAC, NetworkPolicy, PostgreSQL/Redis StatefulSets and PVCs, and a
+  bounded pre-install migration Job.
+
+### Security
+- Redis and PostgreSQL credentials are consumed from runtime Secret refs;
+  values are never embedded in chart templates.
+- Helm workloads use non-root or restricted security contexts where supported,
+  dropped capabilities, bounded resources, and explicit network boundaries.
+
+### Tests
+- Context7 negative/injection suite: 8 passed.
+- Redis probe suite: 3 passed; unavailable-server behavior returned BLOCKED.
+- Helm contract suite: 2 passed, 1 skipped because Helm is not installed.
+- Combined PA-001/PA-002/Helm checks: 8 passed, 1 skipped.
+
+### Known Limitations
+- Redis is now live in the local Compose path and Helm lint/template are live;
+  Kubernetes install, readiness failure, and rollback remain unproven because
+  Docker Desktop has no configured Kubernetes context.
+
+### Deferred
+- Live Redis lock/pub-sub/cache run, Helm lint/template/install/rollback,
+  frontend/browser gates, multi-tenancy, human approvals, recovery, security,
+  load, and the final full-coverage benchmark remain pending.
+
+### Context7 MCP live integration (2026-08-07)
+- Replaced the stale Context7 surface with a Streamable HTTP MCP connector using
+  the current `https://mcp.context7.com/mcp` endpoint, Bearer authentication,
+  session reuse, SSE/JSON parsing, tool discovery, and safe probe errors.
+- Added `Context7Config` and workspace-local `CONTEXT7_*` environment loading
+  without mutating the process environment. The committed example keeps only a
+  placeholder; the real key remains local in `.env`.
+- Added opt-in per-task Context7 references to role context. A task can request
+  technology documentation, which is rendered as untrusted reference material
+  and recorded with source IDs, query, timestamp, summary, and task decision
+  reference in the append-only audit stream.
+- Added deterministic connector/configuration tests and the reusable
+  `scripts/probe_context7.py` live connectivity check. The real probe resolved
+  FastAPI documentation successfully and discovered the hosted `query-docs`
+  compatibility tool.
+
+### Full ForgeOS coverage plan (2026-08-07)
+- Added [`docs/PLANO_ACAO_COBERTURA_COMPLETA_FORGEOS.md`](docs/PLANO_ACAO_COBERTURA_COMPLETA_FORGEOS.md), a deferred action plan for turning the Context7, Redis and Helm surfaces from structural proof into live verification.
+- The plan also covers frontend visual E2E, Kubernetes execution, multi-tenancy, human approvals, Pod recovery, external CI/PR boundaries, security, performance and a future large visual benchmark.
+- The plan was initially recorded as deferred; execution began later with the
+  PA-001/PA-002 baseline and PA-003/PA-005 implementation slices above.
+
+### ForgeOS reference benchmark accepted and feature audit closed (2026-08-07)
+- Added the clean-room adoption audit for OmniRoute, Prime Agent, NVIDIA OO
+  Agents, LoopX, and Matt Pocock's skills repository in
+  `docs/REFERENCE_FEATURE_AUDIT.md`, with explicit implemented, optional, and
+  backlog boundaries.
+- Added the auditable `ForgeLedger` reference PRD, canonical behavioral
+  fixtures, and the real ForgeOS benchmark runner. The runner generates the
+  product only in isolated worktrees, validates the result independently, and
+  publishes stable evidence only after an `ACCEPTED` run.
+- Strengthened incremental task contracts with accumulated-suite regression
+  gates, explicit public API requirements, dependency restrictions, and a
+  documentation-only release assembly task. This caught and prevented a real
+  model-generated API regression during benchmark recovery.
+- Fixed the pipeline's effective Chief Engineer gate so an escalated
+  `chief_engineer` decision with `local_draft_allowed=false` cannot fall
+  through to the ordinary Coder path when its seniority enum remains
+  `chief_led`.
+- Final reference run is `ACCEPTED`: five of five tasks reached `PR_READY`,
+  the run and lifetime goal completed with five receipts, 87 artifacts and
+  seven OmniRoute model calls, 15/15 README conformance claims passed, and the
+  generated product plus four independent canonical fixtures passed 4/4 each.
+- Stable evidence is available at `docs/e2e/reference/`, with the immutable
+  timestamped source under
+  `docs/e2e/reference/run-20260807T110545351555Z/`.
+- Final validation also covered the modified Harness, control-plane, routing,
+  skills, and Chief Engineer suites. The broader backend suite reported
+  `567 passed, 1 skipped`; its single failure is the pre-existing
+  `test_phase8_light_swarm.py` fixture hardcoded to `E:/tmp/r3_gate`, a drive
+  unavailable in this Windows environment, before the application logic runs.
+
+### OmniRoute local connectivity recovery (2026-08-07)
+- Created the ignored local `.env` from `.env.example` without exposing its
+  credential values in logs or documentation.
+- Started the official OmniRoute Docker gateway on `127.0.0.1:20128` and
+  verified a healthy container plus a populated `/v1/models` catalog.
+- Confirmed that the `auto/best-free` aliases and OpenCode Free route were
+  unusable because the upstream pool returned no quota, then validated the
+  no-auth `felo/felo-chat` route with a real ForgeOS OpenAI-compatible request.
+- Updated only the local runtime defaults and fallbacks to the verified
+  `felo/felo-chat` route; the versioned `.env.example` template was not changed
+  by this correction.
+- Restricted implicit dotenv discovery to the active workspace directory so a
+  root project's credentials cannot leak into isolated test workspaces.
+- Validation passed: ForgeOS provider catalog/completion probe, 26 core/LLM
+  tests, 26 cloud-compliance tests, and `git diff --check`.
+
+### V9 PulseBoard rerun after OmniRoute recovery (2026-08-07)
+- Re-executed the real `docs/PRD_V9_PULSE_BOARD.md` through the V9 pipeline
+  using the validated `nvidia/minimaxai/minimax-m3` OmniRoute route.
+- The run completed all four task runs at `PR_READY`, generated 69 artifacts,
+  recorded nine OmniRoute model calls, and passed the independent release
+  acceptance suite (`3 passed` product tests plus `3 passed` canonical fixtures).
+- Fixed V7/V9 evidence discovery to accept the current Harness control-plane
+  filenames (`goal-*.json` and `goal-*.events.jsonl`) alongside the legacy
+  `run-*` names.
+- Updated the V9 preflight to prefer a configured model only when it is present
+  in the live OmniRoute catalog, before trying the explicit free-route ladder.
+- Raw control-plane evidence reached `COMPLETED` with all four todos `PASSED`;
+  the first generated report was labelled `PARTIAL` only because it was created
+  before this filename-compatibility fix.
+
+### V9 comparative rerun after Harness/reporting fixes (2026-08-07)
+- Re-executed the same real `docs/PRD_V9_PULSE_BOARD.md` through the ForgeOS
+  CLI, Scheduler, Chief Engineer path, and configured
+  `nvidia/minimaxai/minimax-m3` OmniRoute route.
+- The new run reached `4/4 PR_READY`, `COMPLETED` run status, four durable
+  receipts, four control-plane todos `PASSED`, 67 artifacts, six OmniRoute
+  calls, and estimated cost `$0.002732`.
+- Independent release acceptance passed both the generated product suite
+  (`3 passed`) and the three canonical acceptance fixtures (`3 passed`). The
+  run also recovered from one bounded Chief Engineer repair timeout without
+  leaving an unresolved task or duplicate receipt.
+- Compared with the previous evidence-only `PARTIAL` report, this run is now
+  honestly classified `ACCEPTED` and exports `control_plane.json` plus
+  `events.jsonl`; the previous raw workspace had already reached the same
+  product outcome but its reporter missed the `goal-*` snapshot.
+- Preserved the run under a timestamped evidence directory and changed future
+  V9 executions to use unique evidence directories instead of overwriting the
+  fixed `docs/e2e/v9/pulse_board/` path.
+
+
+### V9 real PRD execution attempt (2026-08-07)
+- Re-ran the official PulseBoard small-PRD benchmark through the current CLI,
+  preserving the historical evidence under `docs/e2e/v9/pulse_board/`.
+- `init`, `import-prd` and `plan --approve-all` succeeded with four imported
+  tasks; the unattended run was correctly stopped before model execution by
+  the OmniRoute preflight because `http://127.0.0.1:20128/v1/models` refused
+  the connection.
+- Evidence was written to
+  `docs/e2e/v9/runs/pulse_board-20260807T034042Z/`: status `BLOCKED`, zero
+  task runs, zero model calls, zero cost. This is an infrastructure-blocked
+  execution, not a product acceptance result.
+
+### Harness Comparative QA: pre-Harness profile versus current implementation (2026-08-07)
+- Added `backend/tests/test_harness_comparative.py`, a deterministic scorecard
+  comparing the former one-shot execution profile against the current Harness
+  across seven observable capabilities.
+- Current Harness scored 7/7 versus 0/7 for the pre-Harness profile: structured
+  recovery, lifecycle telemetry, pre-execution policy blocking, durable state,
+  bounded subagent admission, pause control, and permissioned Skill execution.
+- Validation passed: comparative scorecard and integrated Harness/API/runtime/
+  pipeline/Chief Engineer suite, 104 tests passed; Python compilation and
+  `git diff --check` also passed.
+
+### Harness Extensions: durable state, bounded subagents, and policy-aware execution
+- Added locked, atomic project-scoped Harness State with snapshots, evidence-backed
+  refinement events, protected base/system prompts, and context injection for
+  pipeline, legacy, and Chief Engineer calls.
+- Added bounded subagent admission/lifecycle contracts, durable Harness State
+  storage, depth/turn/token limits, terminal-state protection, and a deterministic
+  continuation policy for pause files, wall time, retries, and quality gates.
+- Added ordered Agent Harness lifecycle events and telemetry API exposure for
+  agent, turn, message, retry, and tool execution phases.
+- Added pre/post tool hooks while preserving ActionGateway and Safety Kernel as
+  the authoritative enforcement layer, including ordered or parallel tool batches.
+- Added declarative executable-skill manifests and an allowlisted handler executor;
+  arbitrary Python imports remain blocked by design.
+- Extended the project Harness API and Skills UI so new agents can persist their
+  execution profile, declared runtime, entrypoint, permissions, and dependencies.
+- Validation passed: focused Harness/API suites, 75 related pipeline and Chief
+  Engineer tests, Python compilation, and `git diff --check`. Frontend build was
+  not run because `frontend/node_modules` is not present in this checkout.
+
+### Agent Harness: typed execution for built-in and custom agents
+- Added the local-first `AgentHarness` with typed method contracts,
+  deterministic `Predict`/bounded `CodeAct` strategy selection, prioritized
+  context blocks, required-context retention, validated output retries capped
+  at three attempts, and call evidence.
+- Applied the shared harness to role action generation, bounded repair actions,
+  the legacy runtime-action path, and Chief Engineer contract review without
+  bypassing worktree, safety, quota, or human-gate controls.
+- Extended role context with effective strategy, retry budget, context budget,
+  and persisted custom skill prompts so user-created agents receive the same
+  execution contract as built-in roles.
+- Extended tracing with parent/root span IDs and metadata for nested agent
+  calls.
+- Persisted custom agents created in the Skills UI through the project skills
+  API, including strategy, context budget, retry limit, system prompt, and
+  deletion.
+- Added focused harness and custom-agent persistence tests.
+- Validation passed: targeted backend suites, Python compile checks, and
+  `git diff --check`. Targeted mypy reported only the repository's existing
+  missing `types-PyYAML` stubs; frontend build was not run because
+  `frontend/node_modules` is not present in this checkout.
+
 ### LoopX-like resilience tranche: lifetime goals and bounded worker recovery
 - Replaced the scheduler's per-run control-plane identity with a stable
   project-lifetime goal identity. A run may still opt into an isolated goal by

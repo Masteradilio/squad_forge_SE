@@ -57,6 +57,13 @@ class RunMode(StrEnum):
     DRY_RUN = "dry_run"
 
 
+class ReleasePromotionMode(StrEnum):
+    """Authority mode used after all implementation tasks reach PR_READY."""
+
+    HUMAN_APPROVAL = "human_approval"
+    FULL_ACCESS = "full_access"
+
+
 class RunStatus(StrEnum):
     PENDING = "PENDING"
     RUNNING = "RUNNING"
@@ -143,6 +150,77 @@ class ActionKind(StrEnum):
     CREATE_COMMIT = "create_commit"
     CREATE_PR = "create_pr"
     NETWORK_REQUEST = "network_request"
+
+
+class EngineeringSessionStatus(StrEnum):
+    """Durable lifecycle states for a continuous engineering session."""
+
+    DRAFT = "DRAFT"
+    ACTIVE = "ACTIVE"
+    PAUSED = "PAUSED"
+    BLOCKED = "BLOCKED"
+    COMPLETED = "COMPLETED"
+    CANCELLED = "CANCELLED"
+
+
+# ``EngineeringSessionState`` is kept as a descriptive alias for callers that
+# use the terminology from the DeepCode plan.
+EngineeringSessionState = EngineeringSessionStatus
+
+
+class EngineeringTurnKind(StrEnum):
+    USER = "USER"
+    AGENT = "AGENT"
+    STEER = "STEER"
+    SYSTEM = "SYSTEM"
+
+
+class ExecutionMode(StrEnum):
+    READ_ONLY = "READ_ONLY"
+    ASK = "ASK"
+    FULL_ACCESS = "FULL_ACCESS"
+
+
+class ProfileDecision(StrEnum):
+    ALLOW = "allow"
+    ASK = "ask"
+    DENY = "deny"
+
+
+class ModelVerificationStatus(StrEnum):
+    """Durable outcome of an OmniRoute catalog or model probe."""
+
+    PENDING = "PENDING"
+    DISCOVERED = "DISCOVERED"
+    VERIFIED = "VERIFIED"
+    FAILED = "FAILED"
+    TIMEOUT = "TIMEOUT"
+
+
+class AutomationStatus(StrEnum):
+    """Lifecycle state for a project-scoped automation definition."""
+
+    ACTIVE = "ACTIVE"
+    PAUSED = "PAUSED"
+    DISABLED = "DISABLED"
+
+
+class AutomationRunStatus(StrEnum):
+    """Durable lifecycle state for one automation execution."""
+
+    PENDING = "PENDING"
+    RUNNING = "RUNNING"
+    PAUSED = "PAUSED"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    BLOCKED = "BLOCKED"
+    CANCELLED = "CANCELLED"
+
+
+# Compatibility aliases make the public names match both the plan and the
+# shorter names used by existing safety code.
+ExecutionProfileMode = ExecutionMode
+ExecutionProfileDecision = ProfileDecision
 
 
 class RuntimeStatus(StrEnum):

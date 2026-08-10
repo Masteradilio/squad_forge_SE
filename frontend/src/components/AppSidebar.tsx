@@ -5,8 +5,10 @@ export type AppTab =
   | 'kanban'
   | 'tests'
   | 'skills'
+  | 'references'
   | 'settings';
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const CORE_MENUS: { id: AppTab; label: string; icon: string }[] = [
   { id: 'chat', label: '1. PO Chat & Mission Control', icon: '💬' },
   { id: 'kanban', label: '2. Kanban & Revisão de PRs', icon: '📋' },
@@ -14,6 +16,8 @@ export const CORE_MENUS: { id: AppTab; label: string; icon: string }[] = [
   { id: 'skills', label: '4. Skills & Agentes (Matt Pocock TDD)', icon: '🧩' },
   { id: 'settings', label: '5. Modelos (OmniRoute), BYOK & Live Preview', icon: '⚙️' },
 ];
+
+CORE_MENUS.splice(4, 0, { id: 'references', label: '5. Continuity, References & Automations', icon: 'R' });
 
 interface AppSidebarProps {
   projects: Project[];
@@ -35,7 +39,7 @@ export function AppSidebar({
   onTabChange,
 }: AppSidebarProps) {
   return (
-    <aside style={{
+    <aside className="app-sidebar" data-testid="app-sidebar" style={{
       width: 'var(--sidebar-width)',
       backgroundColor: 'var(--bg-sidebar)',
       borderRight: '1px solid var(--border-color)',
@@ -70,6 +74,7 @@ export function AppSidebar({
         </label>
         <select
           id="active-project-select"
+          data-testid="active-project-select"
           aria-label="Active Project"
           value={activeProject?.id || ''}
           onChange={(e) => {
@@ -101,8 +106,9 @@ export function AppSidebar({
           return (
             <a
               key={menu.id}
+              data-testid={`nav-${menu.id}`}
               href={`#/${menu.id}`}
-              onClick={(e) => {
+              onClick={() => {
                 onTabChange?.(menu.id);
               }}
               aria-current={active ? 'page' : undefined}
@@ -126,7 +132,7 @@ export function AppSidebar({
         })}
       </nav>
 
-      <div aria-label="Connection status" style={{
+      <div aria-label="Connection status" data-testid="connection-status" style={{
         padding: '12px',
         borderRadius: '8px',
         backgroundColor: 'rgba(255, 255, 255, 0.02)',

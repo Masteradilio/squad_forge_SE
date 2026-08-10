@@ -109,13 +109,21 @@ def _javascript_exports(text: str) -> set[str]:
     )
     for pattern in patterns:
         exports.update(re.findall(pattern, text))
+    exports.update(
+        f"{owner}.{member}"
+        for owner, member in re.findall(
+            r"\b([A-Za-z_$][\w$]*)\.prototype\.([A-Za-z_$][\w$]*)\s*=",
+            text,
+        )
+    )
     class_names = re.findall(r"\bclass\s+([A-Za-z_$][\w$]*)", text)
     member_names = re.findall(
         r"\b(?:get\s+|set\s+|async\s+)?([A-Za-z_$][\w$]*)\s*\([^)]*\)\s*\{",
         text,
     )
+    instance_members = re.findall(r"\bthis\.([A-Za-z_$][\w$]*)\s*=", text)
     for class_name in class_names:
-        exports.update(f"{class_name}.{member}" for member in member_names)
+        exports.update(f"{class_name}.{member}" for member in [*member_names, *instance_members])
     return exports
 
 

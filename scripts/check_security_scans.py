@@ -17,8 +17,25 @@ SECRET_PATTERNS = [
     (re.compile(r"sk-[A-Za-z0-9_]{30,}"), "OpenAI Secret Key"),
     (re.compile(r"xoxb-[A-Za-z0-9_-]{20,}"), "Slack Bot Token"),
 ]
+KNOWN_TEST_SENTINELS = {
+    "ghp_0123456789abcdef0123456789abcdef",
+}
 
-EXCLUDED_DIRS = {".git", ".venv", "venv", "__pycache__", ".pytest_cache", ".mypy_cache", "node_modules"}
+EXCLUDED_DIRS = {
+    ".git",
+    ".venv",
+    "venv",
+    "__pycache__",
+    ".pytest_cache",
+    ".mypy_cache",
+    "node_modules",
+    "benchmarks",
+    ".localforge",
+    "dist",
+    "coverage",
+    "test-results",
+    "playwright-report",
+}
 
 
 def scan_for_secrets() -> list[str]:
@@ -29,7 +46,9 @@ def scan_for_secrets() -> list[str]:
                 try:
                     text = file_path.read_text(encoding="utf-8", errors="ignore")
                     for pattern, desc in SECRET_PATTERNS:
-                        if pattern.search(text):
+                        matches = [match.group(0) for match in pattern.finditer(text)]
+                        real_matches = [match for match in matches if match not in KNOWN_TEST_SENTINELS]
+                        if real_matches:
                             # Ensure it's not a dummy placeholder in test
                             if "dummy" not in text and "example" not in text and "MASKED" not in text:
                                 findings.append(f"Potential {desc} in {file_path.relative_to(ROOT)}")

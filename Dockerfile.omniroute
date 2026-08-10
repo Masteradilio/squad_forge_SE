@@ -2,3 +2,7 @@
 # Compose uses the upstream image directly; keeping this wrapper aligned avoids
 # reintroducing the incomplete npm-on-Alpine runtime through a manual build.
 FROM diegosouzapw/omniroute:latest
+
+# Keep the wrapper explicit about the non-root identity already used by the
+# upstream image so static Dockerfile policy checks remain fail-closed.
+USER node

@@ -1,0 +1,200 @@
+{
+  "benchmark_name": "ForgeOS README Full Trace Reference Run",
+  "generated_at": "2026-08-09T00:21:44.064391+00:00",
+  "prd_file": "docs/PRD_REFERENCE_FORGEOS.md",
+  "workspace": "benchmarks/workspaces/readme-trace-run-20260809T001429Z",
+  "status": "ACCEPTED",
+  "blockers": [],
+  "gateway": {
+    "base_url": "http://127.0.0.1:20128/v1",
+    "catalog_reachable": true,
+    "structured_probe_passed": true,
+    "structured_probe_advisory": false,
+    "detail": "OmniRoute catalog reachable at http://127.0.0.1:20128/v1/models; routes advertised: ['auto/best-coding', 'auto/best-reasoning', 'auto/best-fast', 'auto/best-vision', 'auto/best-chat', 'auto/best-coding-fast', 'auto/pro-coding', 'auto/pro-reasoning', 'auto/pro-vision', 'auto/pro-chat', 'auto/pro-fast', 'auto/coding']",
+    "selected_route": "nvidia/nvidia/nemotron-3-nano-30b-a3b",
+    "free_routes_seen": [
+      "oc/deepseek-v4-flash-free",
+      "oc/north-mini-code-free",
+      "nvidia/nvidia/nemotron-3-nano-30b-a3b",
+      "nvidia/nvidia/nemotron-3-super-120b-a12b",
+      "nvidia/openai/gpt-oss-120b",
+      "nvidia/meta/llama-3.3-70b-instruct",
+      "nvidia/deepseek-ai/deepseek-v4-flash",
+      "auto/best-free",
+      "auto/coding:free",
+      "oc/mimo-v2.5-free",
+      "oc/hy3-free",
+      "oc/nemotron-3-ultra-free"
+    ]
+  },
+  "routing_contract_summary": {
+    "chief_only": 3,
+    "chief_led": 1,
+    "local_assisted": 1
+  },
+  "imported_task_count": 5,
+  "sqlite": {
+    "task_statuses": {
+      "PR_READY": 5
+    },
+    "runs": {
+      "COMPLETED": 1
+    },
+    "task_runs_executed": 6,
+    "artifacts_generated": 111,
+    "model_calls_logged": 11,
+    "calls_by_provider": {
+      "omniroute": 11
+    },
+    "estimated_cost_usd": 0.0163824
+  },
+  "control_plane": {
+    "present": true,
+    "completed": true,
+    "revision": 73,
+    "receipts": 6,
+    "events": 67
+  },
+  "commands": [
+    {
+      "args": [
+        "init"
+      ],
+      "exit_code": 0,
+      "stderr_tail": "2026-08-08 21:15:37,395 INFO localforge.storage.bootstrap Current database schema version: 0\r\n2026-08-08 21:15:37,395 INFO localforge.storage.bootstrap Initializing new database schema (Version 26)...\r\n2026-08-08 21:15:37,870 INFO localforge.storage.bootstrap Pricing snapshots seeded successfully.\r\n2026-08-08 21:15:37,870 INFO localforge.storage.bootstrap Database schema initialized successfully.\r\n"
+    },
+    {
+      "args": [
+        "import-prd",
+        "C:\\Users\\adili\\projetos_offline\\local_forge_os\\docs\\PRD_REFERENCE_FORGEOS.md"
+      ],
+      "exit_code": 0,
+      "stderr_tail": ""
+    },
+    {
+      "args": [
+        "plan",
+        "--approve-all"
+      ],
+      "exit_code": 0,
+      "stderr_tail": ""
+    },
+    {
+      "args": [
+        "run",
+        "--unattended"
+      ],
+      "exit_code": 0,
+      "stderr_tail": "bundler API call budget preview: reason=SEMANTIC_REPAIR_PLAN, estimated_input_tokens=1524\r\n2026-08-08 21:20:26,314 INFO httpx HTTP Request: POST http://127.0.0.1:20128/v1/chat/completions \"HTTP/1.1 200 OK\"\r\n2026-08-08 21:20:46,267 WARNING localforge.pipeline Chief Engineer repair blocked an empty acceptance-test write: tests/test_forge_ledger_snapshot.py\r\n2026-08-08 21:20:46,267 WARNING localforge.pipeline Chief Engineer repair blocked 1 write(s) to existing acceptance tests\r\n2026-08-08 21:21:00,004 INFO localforge.scheduler Task LF-PRD-005 claim persisted; starting governed dispatch\r\n2026-08-08 21:21:02,432 INFO localforge.pipeline Local delegation contract rejected task LF-PRD-005: Task contract requires Chief Engineer execution.\r\n2026-08-08 21:21:02,483 INFO localforge.chief_engineer.bundler API call budget preview: reason=SEMANTIC_REPAIR_PLAN, estimated_input_tokens=1514\r\n2026-08-08 21:21:04,472 INFO httpx HTTP Request: POST http://127.0.0.1:20128/v1/chat/completions \"HTTP/1.1 200 OK\"\r\n2026-08-08 21:21:09,307 INFO httpx HTTP Request: POST http://127.0.0.1:20128/v1/chat/completions \"HTTP/1.1 200 OK\"\r\n2026-08-08 21:21:43,321 INFO localforge.scheduler Scheduler stopped for run 1\r\n"
+    }
+  ],
+  "limitations": [
+    "Acceptance means automated PR evidence and durable control-plane completion; human review remains required.",
+    "The benchmark uses a deliberately small PRD and does not predict HP12C success."
+  ],
+  "final_validation": {
+    "passed": true,
+    "manifest_ok": true,
+    "commands": [
+      {
+        "command": [
+          "pytest",
+          "tests",
+          "-q"
+        ],
+        "exit_code": 0,
+        "stdout_tail": "....                                                                     [100%]Running teardown with pytest sessionfinish...\n\n4 passed in 0.18s\n",
+        "stderr_tail": ""
+      },
+      {
+        "command": [
+          "pytest",
+          "C:\\Users\\adili\\projetos_offline\\local_forge_os\\scripts\\fixtures\\reference_forgeos_create_acceptance.py",
+          "C:\\Users\\adili\\projetos_offline\\local_forge_os\\scripts\\fixtures\\reference_forgeos_validation_acceptance.py",
+          "C:\\Users\\adili\\projetos_offline\\local_forge_os\\scripts\\fixtures\\reference_forgeos_summary_acceptance.py",
+          "C:\\Users\\adili\\projetos_offline\\local_forge_os\\scripts\\fixtures\\reference_forgeos_snapshot_acceptance.py",
+          "-q"
+        ],
+        "exit_code": 0,
+        "stdout_tail": "....                                                                     [100%]Running teardown with pytest sessionfinish...\n\n4 passed in 0.21s\n",
+        "stderr_tail": ""
+      }
+    ]
+  },
+  "platform_conformance": {
+    "omniroute_gateway": {
+      "status": "PASS",
+      "evidence": "route=nvidia/nvidia/nemotron-3-nano-30b-a3b; providers={'omniroute': 11}"
+    },
+    "prd_pipeline": {
+      "status": "PASS",
+      "evidence": "tasks={'PR_READY': 5}; runs={'COMPLETED': 1}"
+    },
+    "control_plane": {
+      "status": "PASS",
+      "evidence": "revision=73; receipts=6; events=67"
+    },
+    "independent_acceptance": {
+      "status": "PASS",
+      "evidence": "{\"manifest_ok\": true, \"commands\": [{\"exit_code\": 0, \"command\": [\"pytest\", \"tests\", \"-q\"]}, {\"exit_code\": 0, \"command\": [\"pytest\", \"C:\\\\Users\\\\adili\\\\projetos_offline\\\\local_forge_os\\\\scripts\\\\fixtures\\\\reference_forgeos_create_acceptance.py\", \"C:\\\\Users\\\\adili\\\\projetos_offline\\\\local_forge_os\\\\scripts\\\\fixtures\\\\reference_forgeos_validation_acceptance.py\", \"C:\\\\Users\\\\adili\\\\projetos_offline\\\\local_forge_os\\\\scripts\\\\fixtures\\\\reference_forgeos_summary_acceptance.py\", \"C:\\\\Users\\\\adili\\\\projetos_offline\\\\local_forge_os\\\\scripts\\\\fixtures\\\\reference_forgeos_snapshot_acceptance.py\", \"-q\"]}]}"
+    },
+    "artifacts": {
+      "status": "PASS",
+      "evidence": "required=['DiffArtifact', 'PRArtifact', 'PlanArtifact', 'ReviewArtifact', 'RiskArtifact', 'TestArtifact']; observed={'DiffArtifact': 27, 'PRArtifact': 12, 'PlanArtifact': 6, 'RepairArtifact': 6, 'ReviewArtifact': 6, 'RiskArtifact': 6, 'RoleArtifact': 42, 'TestArtifact': 6}"
+    },
+    "typed_agent_harness": {
+      "status": "PASS",
+      "evidence": "code_act strategy and required context retained"
+    },
+    "durable_harness_state": {
+      "status": "PASS",
+      "evidence": "snapshots, refinement, persistence, and prompt protection"
+    },
+    "bounded_subagents": {
+      "status": "PASS",
+      "evidence": "durable parent-child lifecycle and terminal protection"
+    },
+    "skills": {
+      "status": "PASS",
+      "evidence": "three workflow skills and a persisted custom manifest"
+    },
+    "safety_hooks": {
+      "status": "PASS",
+      "evidence": "pre-execution hook denied the tool before executor"
+    },
+    "observability": {
+      "status": "PASS",
+      "evidence": "nested spans and ordered lifecycle events"
+    },
+    "memory": {
+      "status": "PASS",
+      "evidence": "Graphify, MemPalace recall, and sanitized rule synthesis"
+    },
+    "context7_surface": {
+      "status": "PASS",
+      "evidence": "MCP parser and endpoint surface present; live service not required"
+    },
+    "redis_surface": {
+      "status": "PASS",
+      "evidence": "optional cache, pub-sub, and lock interface present; server not required"
+    },
+    "helm_surface": {
+      "status": "PASS",
+      "evidence": "optional chart and HPA template present"
+    }
+  },
+  "artifact_types": {
+    "DiffArtifact": 27,
+    "PRArtifact": 12,
+    "PlanArtifact": 6,
+    "RepairArtifact": 6,
+    "ReviewArtifact": 6,
+    "RiskArtifact": 6,
+    "RoleArtifact": 42,
+    "TestArtifact": 6
+  },
+  "control_plane_export": {
+    "present": true,
+    "events_lines": 74
+  }
+}

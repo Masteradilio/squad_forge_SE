@@ -27,22 +27,32 @@ from localforge.models.enums import (
     TaskRunStatus,
     TaskStatus,
 )
+from localforge.observability.tracer import OpenTelemetryTracer
 from localforge.pipeline.context import RoleContext, RoleContextBuilder
 from localforge.pipeline.roles import PIPELINES, PipelineMode
 from localforge.pr_factory.local import LocalPRFactory
+from localforge.repair.compiler_feedback import CompilerFeedbackLoop
 from localforge.runtime.actions import (
     RuntimeActionProposal,
     normalize_generated_text,
     normalize_runtime_command,
     parse_action_proposals,
 )
+from localforge.runtime.agent_harness import AgentHarness, ContextBlock
 from localforge.runtime.compression import compress_tool_output
 from localforge.runtime.file_tools import SafeFileEditor
 from localforge.runtime.handoffs import RuntimeHandoffService
 from localforge.safety.runner import run_safe_command
+from localforge.services.fingerprint import (
+    compute_artifact_signature,
+    compute_diff_signature,
+    compute_test_signature,
+    evaluate_attempt_progress,
+    generate_error_fingerprint,
+)
+from localforge.services.pricing import is_free_gateway_model
 from localforge.storage import UnitOfWork
 from localforge.storage.artifacts import ArtifactStore
-from localforge.services.pricing import is_free_gateway_model
 
 logger = logging.getLogger("localforge.pipeline")
 
@@ -68,7 +78,8 @@ def _chief_model_sequence(
     primary_name = str(
         getattr(provider, "primary_provider_name", getattr(provider, "provider_name", ""))
     ).lower()
-    if primary_name == "nvidia":
+    transport_name = str(getattr(provider, "provider_name", "")).lower()
+    if primary_name == "nvidia" and transport_name != "omniroute":
         ordered = [
             model
             for index, model in enumerate(ordered)
@@ -130,12 +141,15 @@ class RolePipelineEngine:
         project_id: int,
         run_id: int,
         run_mode: RunMode = RunMode.INTERACTIVE,
+        tracer: OpenTelemetryTracer | None = None,
     ):
         self.uow = uow
         self.project_id = project_id
         self.run_id = run_id
         self.run_mode = run_mode
         self._gateway_free_models: list[str] | None = None
+        self.agent_harness = AgentHarness(tracer=tracer)
+        self._active_role_span_id: str | None = None
 
     async def _commit_checkpoint(self, boundary: str) -> None:
         """Release SQLite write locks before model, sandbox, or test I/O."""
@@ -164,10 +178,12 @@ class RolePipelineEngine:
         task_run = await self.uow.tasks.get_task_run(task_run_id)
         if not project or not task or not task_run:
             raise ValueError("Project, task, and task run are required for role pipeline.")
+        self.agent_harness.attach_harness_state(project.root_path)
         if not task_run.worktree_path:
             task_run.worktree_path = project.root_path
         if not task_run.branch_name:
             task_run.branch_name = f"localforge/{task.key.lower()}"
+        task_run.heartbeat_at = datetime.now(UTC)
 
         # Load budgets configuration
         from localforge.core.config import load_config
@@ -322,6 +338,7 @@ class RolePipelineEngine:
         assert self.uow.tasks is not None
         assert self.uow.executions is not None
         task_run.status = TaskRunStatus.RUNNING
+        task_run.heartbeat_at = datetime.now(UTC)
         task_run = await self.uow.tasks.update_task_run(task_run)
 
         await self._advance_to(task, TaskStatus.PLANNING)
@@ -396,6 +413,17 @@ class RolePipelineEngine:
                 role=role,
                 consumed_handoffs=consumed,
             )
+            role_span = self.agent_harness.tracer.start_span(
+                role.value,
+                f"role:{task.key}",
+                metadata={
+                    "task_id": task.id,
+                    "task_run_id": task_run.id,
+                    "strategy": context.strategy,
+                    "context_budget": context.context_budget,
+                },
+            )
+            self._active_role_span_id = role_span.span_id
             artifact_paths.append(await self._write_role_artifact(project, task, task_run, context))
             await self._write_standard_artifact(project, task, task_run, role)
             if role == AgentRole.CODER:
@@ -408,10 +436,18 @@ class RolePipelineEngine:
                 )
             await self._apply_role_status(task.id or 0, role)
 
-            # Heartbeat update (updating task_run update_at timestamp)
+            # Persist a role-boundary heartbeat as a fallback for callers that
+            # run the engine without the scheduler's parallel heartbeat task.
+            task_run.heartbeat_at = datetime.now(UTC)
             task_run.ended_at = None
             await self.uow.tasks.update_task_run(task_run)
             await self._commit_checkpoint("role boundary")
+            self.agent_harness.tracer.end_span(
+                role_span.span_id,
+                tool_calls=[f"role:{role.value}"],
+                status="SUCCESS",
+            )
+            self._active_role_span_id = None
 
             # Check workspace budgets after this agent role execution
             self._check_workspace_budgets(
@@ -431,6 +467,7 @@ class RolePipelineEngine:
 
         task_run.final_summary = f"{mode.value} role pipeline completed for {task.key}."
         task_run.status = TaskRunStatus.COMPLETED
+        task_run.heartbeat_at = datetime.now(UTC)
         task_run = await self.uow.tasks.update_task_run(task_run)
 
         if self.uow.audits is not None and self.uow.memory is not None and task_run.id is not None:
@@ -822,12 +859,23 @@ class RolePipelineEngine:
         # generating a file or the Chief Engineer is making a repair call.
         await self._commit_checkpoint("model execution")
 
+        # A Chief Engineer decision can be produced by escalation without the
+        # classifier changing the seniority enum to CHIEF_ONLY (for example a
+        # chief-led contract whose local draft was denied by the Cloud
+        # policy). In that state, falling through to the ordinary coder path
+        # raises the V3 "no Chief action" guard even though Chief execution is
+        # required. Treat the effective capability decision as authoritative.
+        requires_chief_initial_action = (
+            self._is_visual_task(task)
+            or decision.seniority_class == TaskSeniorityClass.CHIEF_ONLY
+            or (
+                decision.model_tier == "chief_engineer"
+                and not decision.local_draft_allowed
+            )
+        )
         if (
             raw_actions is None
-            and (
-                self._is_visual_task(task)
-                or decision.seniority_class == TaskSeniorityClass.CHIEF_ONLY
-            )
+            and requires_chief_initial_action
             and not os.getenv("PYTEST_CURRENT_TEST")
         ):
             visual_target = self._visual_actual_output_path(task)
@@ -861,9 +909,11 @@ class RolePipelineEngine:
                     and not decision.local_draft_allowed
                     and not os.getenv("PYTEST_CURRENT_TEST")
                 ):
+                    diagnostic_tail = " | ".join(command_summaries[-4:])
                     raise ValueError(
                         "Task requires Chief Engineer execution under V3 routing, "
-                        f"but no Chief Engineer action was applied. Reason: {decision.rationale}"
+                        f"but no Chief Engineer action was applied. Reason: {decision.rationale}. "
+                        + (f"Diagnostics: {diagnostic_tail}" if diagnostic_tail else "")
                     )
                 if os.getenv("PYTEST_CURRENT_TEST"):
                     return
@@ -960,7 +1010,7 @@ class RolePipelineEngine:
                         command_summaries.append(compress_tool_output(syntax_error, max_chars=800))
                     else:
                         await self._commit_checkpoint("pytest or visual validation")
-                        code, stdout, stderr = await self._run_pytest_validation(
+                        code, stdout, stderr = await self._run_pytest_validation_resilient(
                             task=task,
                             task_run=task_run,
                             command_summaries=command_summaries,
@@ -1305,10 +1355,16 @@ class RolePipelineEngine:
         """Recognize public APIs across the HTML/JS/Python products used by tasks."""
         if "." in api_name:
             owner, member = api_name.split(".", 1)
-            if not re.search(rf"\bclass\s+{re.escape(owner)}\b", content):
+            owner_declared = re.search(rf"\bclass\s+{re.escape(owner)}\b", content)
+            prototype_declared = re.search(
+                rf"\b{re.escape(owner)}\.prototype\s*\.\s*{re.escape(member)}\s*=",
+                content,
+            )
+            if not owner_declared and not prototype_declared:
                 return False
             return re.search(
-                rf"\b(?:get\s+|set\s+|async\s+)?{re.escape(member)}\s*(?:\([^)]*\)|=)",
+                rf"\b(?:get\s+|set\s+|async\s+)?{re.escape(member)}\s*(?:\([^)]*\)|=)|"
+                rf"\b{re.escape(owner)}\.prototype\s*\.\s*{re.escape(member)}\s*=",
                 content,
             ) is not None
         escaped = re.escape(api_name)
@@ -1730,13 +1786,17 @@ class RolePipelineEngine:
                     raw_rules = contract.get("visual_structure_rules", [])
                     if isinstance(raw_rules, list):
                         structure_rules = [item for item in raw_rules if isinstance(item, str)]
+                    raw_matrix = contract.get("visual_acceptance_matrix", [])
+                    visual_matrix = [item for item in raw_matrix if isinstance(item, dict)] if isinstance(raw_matrix, list) else []
+                else:
+                    visual_matrix = []
                 from localforge.visual.normalizer import apply_visual_contract_normalization
 
                 apply_visual_contract_normalization(
                     html_abs_path, structure_rules=structure_rules
                 )
                 structure_findings = validate_visual_html_structure(
-                    html_abs_path, structure_rules=structure_rules
+                    html_abs_path, structure_rules=structure_rules, visual_matrix=visual_matrix
                 )
                 if structure_findings:
                     code = 1
@@ -1786,6 +1846,135 @@ class RolePipelineEngine:
                         f"Visual validation passed: similarity {gate_res.metrics.get('similarity', 1.0):.3f} >= {visual_threshold}"
                     )
         return code, stdout, stderr
+
+    async def _run_pytest_validation_resilient(
+        self,
+        *,
+        task: domain.Task,
+        task_run: domain.TaskRun,
+        command_summaries: list[str],
+    ) -> tuple[int, str, str]:
+        """Convert validation timeouts into repairable evidence.
+
+        A hung acceptance command is a product/runtime failure, not a reason
+        to bypass the Chief Engineer repair lane.  The previous implementation
+        let ``TimeoutError`` escape here, so the scheduler could only requeue
+        the task with a generic pipeline failure and the repair agent never
+        received the failing validation signal.
+        """
+
+        try:
+            result = await self._run_pytest_validation(
+                task=task,
+                task_run=task_run,
+                command_summaries=command_summaries,
+            )
+            await self._record_validation_evidence(task, task_run, result, command_summaries)
+            return result
+        except TimeoutError as exc:
+            message = (
+                "Acceptance validation timed out before producing a test report. "
+                "Chief Engineer must inspect for a deadlock, non-terminating code, "
+                "or an overly broad test command and make the smallest contract-safe repair. "
+                f"Details: {exc}"
+            )
+            command_summaries.append(message)
+            result = 1, "", message
+            await self._record_validation_evidence(task, task_run, result, command_summaries)
+            return result
+
+    async def _record_validation_evidence(
+        self,
+        task: domain.Task,
+        task_run: domain.TaskRun,
+        result: tuple[int, str, str],
+        command_summaries: list[str],
+    ) -> None:
+        """Persist compiler feedback and normalized progress for every failed check."""
+
+        code, stdout, stderr = result
+        output = (stdout + "\n" + stderr).strip()
+        compiler_errors = CompilerFeedbackLoop().parse_typescript_errors(output)
+        if compiler_errors:
+            task.metadata["compiler_feedback"] = [
+                error.model_dump(mode="json") for error in compiler_errors
+            ]
+            command_summaries.append(
+                f"Compiler feedback captured: {len(compiler_errors)} TypeScript error(s)."
+            )
+
+        if code == 0:
+            if compiler_errors and self.uow.tasks is not None:
+                await self.uow.tasks.update_task(task)
+            return
+
+        from localforge.models.enums import CircuitScope
+
+        error_type = "CompilerError" if compiler_errors else "ValidationFailure"
+        location = compiler_errors[0].filepath if compiler_errors else None
+        fingerprint = generate_error_fingerprint(
+            error_type,
+            output or "validation command failed without output",
+            location,
+            metadata={"task_run_id": task_run.id, "exit_code": code},
+        )
+        history_raw = task.metadata.get("attempt_progress", [])
+        history: list[domain.AttemptProgressRecord] = []
+        if isinstance(history_raw, list):
+            for item in history_raw:
+                if isinstance(item, dict):
+                    try:
+                        history.append(domain.AttemptProgressRecord.model_validate(item))
+                    except Exception:
+                        continue
+        failed_test_count = self._failed_test_count(output)
+        previous = history[-1] if history else None
+        previous_failed_test_count = int(task.metadata.get("last_failed_test_count", 0) or 0)
+        progress = evaluate_attempt_progress(
+            previous_attempt=previous,
+            current_attempt_num=len(history) + 1,
+            current_test_sig=compute_test_signature(output),
+            current_diff_sig=compute_diff_signature(
+                "\n".join(
+                    path
+                    for path in task.metadata.get("changed_files", [])
+                    if isinstance(path, str)
+                )
+            ),
+            current_artifact_sig=compute_artifact_signature(
+                task.metadata.get("artifacts", [])
+            ),
+            current_fingerprint_hash=fingerprint.fingerprint_hash,
+            failed_test_count=failed_test_count,
+            previous_failed_test_count=previous_failed_test_count,
+        )
+        history.append(progress)
+        task.metadata["last_failure_fingerprint"] = fingerprint.model_dump(mode="json")
+        task.metadata["last_failed_test_count"] = failed_test_count
+        task.metadata["attempt_progress"] = [item.model_dump(mode="json") for item in history[-10:]]
+        if self.uow.tasks is not None:
+            await self.uow.tasks.update_task(task)
+        if self.uow.circuit_breakers is not None and task.project_id and task.id is not None:
+            try:
+                await self.uow.circuit_breakers.record_failure(
+                    project_id=task.project_id,
+                    scope=CircuitScope.TASK,
+                    target_id=str(task.id),
+                    fingerprint=fingerprint,
+                )
+                await self.uow.circuit_breakers.record_progress_signal(
+                    project_id=task.project_id,
+                    scope=CircuitScope.TASK,
+                    target_id=str(task.id),
+                    record=progress,
+                )
+            except Exception as exc:
+                logger.warning("Could not persist validation circuit evidence: %s", exc)
+
+    @staticmethod
+    def _failed_test_count(output: str) -> int:
+        matches = re.findall(r"\b(\d+)\s+(?:failed|error|errors)\b", output.lower())
+        return sum(int(count) for count in matches)
 
     @staticmethod
     def _container_sandbox_configured() -> bool:
@@ -2575,7 +2764,6 @@ class RolePipelineEngine:
                         "snap.y",
                         "enter duplicate",
                         "y should be 5 after enter",
-                        "window.__hp12c",
                     )
                 )
             )
@@ -2597,7 +2785,6 @@ class RolePipelineEngine:
                         "snap.y",
                         "enter duplicate",
                         "y should be 5 after enter",
-                        "window.__hp12c",
                     )
                 ):
                     repair_validation_output += (
@@ -2606,14 +2793,16 @@ class RolePipelineEngine:
                         "and the first digit after ENTER must replace X rather than "
                         "append to it, so 5 ENTER 6 yields X=6 and Y=5. R-down must "
                         "rotate [X,Y,Z,T] to [Y,Z,T,X]. Keep the observable "
-                        "window.__hp12c.stack reference synchronized with those values. "
+                        "the exported stack reference synchronized with those values. "
                         "If the generated test calls enter(value), inspect its exact "
                         "sequence and preserve every executable assertion; never delete "
                         "the test or invent an alternate API just to make validation green."
                     )
             for repair_model in dict.fromkeys(repair_models):
                 try:
-                    plan = await ChiefEngineerService(self.uow).plan_semantic_repair(
+                    plan = await ChiefEngineerService(
+                        self.uow, tracer=self.agent_harness.tracer
+                    ).plan_semantic_repair(
                         project_id=self.project_id,
                         run_id=self.run_id,
                         task_id=task.id,
@@ -2655,7 +2844,9 @@ class RolePipelineEngine:
                 )
                 for repair_model in dict.fromkeys(text_models):
                     try:
-                        plan = await ChiefEngineerService(self.uow).plan_semantic_repair(
+                        plan = await ChiefEngineerService(
+                            self.uow, tracer=self.agent_harness.tracer
+                        ).plan_semantic_repair(
                             project_id=self.project_id,
                             run_id=self.run_id,
                             task_id=task.id,
@@ -4335,10 +4526,20 @@ def _load_rpn_stack_class():
                 ):
                     updated = content.replace(
                         "const sandbox = {{ console, require, module: {{}}, exports: {{}} }};",
-                        "const sandbox = {{ window: {{}}, document: {{ getElementById: () => ({{ textContent: '', addEventListener: () => {{}} }}), querySelectorAll: () => [] }}, console, require, module: {{}}, exports: {{}} }};",
+                        (
+                            "const sandbox = {{ window: {{}}, document: {{ "
+                            "getElementById: () => ({{ textContent: '', "
+                            "addEventListener: () => {{}} }}), querySelectorAll: () => [] "
+                            "}}, console, require, module: {{}}, exports: {{}} }};"
+                        ),
                     ).replace(
                         "const sandbox = { console, require, module: {}, exports: {} };",
-                        "const sandbox = { window: {}, document: { getElementById: () => ({ textContent: '', addEventListener: () => {} }), querySelectorAll: () => [] }, console, require, module: {}, exports: {} };",
+                        (
+                            "const sandbox = { window: {}, document: { "
+                            "getElementById: () => ({ textContent: '', "
+                            "addEventListener: () => {} }), querySelectorAll: () => [] }, "
+                            "console, require, module: {}, exports: {} };"
+                        ),
                     )
                     if updated != content:
                         qa_editor = self._editor_for_path(editor, task, relative_path)
@@ -5302,7 +5503,7 @@ const waitFor = async callback => callback();""".strip()
                 stdout, stderr = "", syntax_error
                 command_summaries.append(compress_tool_output(syntax_error, max_chars=800))
             else:
-                code, stdout, stderr = await self._run_pytest_validation(
+                code, stdout, stderr = await self._run_pytest_validation_resilient(
                     task=task,
                     task_run=task_run,
                     command_summaries=command_summaries,
@@ -5654,7 +5855,7 @@ const waitFor = async callback => callback();""".strip()
         return isinstance(task.metadata.get("task_contract"), dict)
 
     async def _request_model_actions(self, task: domain.Task, context: RoleContext) -> str:
-        prompt = (
+        instruction = (
             "You are the Coder role in LocalForge OS. Return only valid JSON with this "
             'shape: {"actions":[{"kind":"write_file","path":"relative/path",'
             '"content":"file contents"},{"kind":"append_content",'
@@ -5674,13 +5875,28 @@ const waitFor = async callback => callback();""".strip()
             "public API; never reimplement the requested algorithm inside the "
             "test or validate only duplicated constants. For HTML/JavaScript "
             "products, never pass JavaScript to Python exec(); use Node, a "
-            "browser harness, or a subprocess that returns structured results.\n\n"
-            f"{context.rendered}\n\n"
-            "Create the minimal implementation files needed to satisfy this task's acceptance criteria."
+            "browser harness, or a subprocess that returns structured results."
         )
+        prompt = "Create the minimal implementation files needed to satisfy this task's acceptance criteria."
         task_class = task.metadata.get("task_contract", {}).get("seniority_class", "local_assisted")
-        response, model_used = await self._chat_completion_with_local_fallback(
-            prompt=prompt,
+        response, model_used = await self._harness_completion_with_local_fallback(
+            messages=[
+                {"role": "system", "content": instruction},
+                {"role": "user", "content": prompt},
+            ],
+            context_blocks=[
+                ContextBlock(
+                    name="role_context",
+                    content=context.rendered,
+                    priority=100,
+                    required=True,
+                )
+            ],
+            role=context.role.value,
+            method="generate_actions",
+            strategy=context.strategy,
+            max_retries=context.max_retries,
+            context_budget=context.context_budget,
             preferred_model=context.model_profile_id,
             timeout=180.0,
             task_class=task_class,
@@ -5706,7 +5922,7 @@ const waitFor = async callback => callback();""".strip()
     ) -> str:
         config = load_config()
         config.models.roles.get(AgentRole.FIXER.value, context.model_profile_id)
-        prompt = (
+        instruction = (
             "You are repairing a LocalForge task after validation failed. Return only valid JSON "
             'with actions using this shape: {"actions":[{"kind":"write_file",'
             '"path":"relative/path","content":"file contents"},'
@@ -5722,16 +5938,40 @@ const waitFor = async callback => callback();""".strip()
             "keep validation headless.\n\n"
             "If a task contract is present, preserve allowed_files, required_public_apis, "
             "forbidden_dependencies, implementation_notes, and canonical_test_command. "
-            f"Repair attempt: {attempt}\n"
-            f"{context.rendered}\n\n"
-            "Current generated files:\n"
-            f"{self._render_changed_file_context(worktree_path, changed_files)}\n\n"
-            "Validation failure output:\n"
-            f"{compress_tool_output(validation_output, max_chars=8000)}"
+            "Do not make changes outside the bounded task contract."
         )
+        prompt = f"Repair attempt: {attempt}. Produce the smallest valid set of actions."
         task_class = task.metadata.get("task_contract", {}).get("seniority_class", "local_assisted")
-        response, model_used = await self._chat_completion_with_local_fallback(
-            prompt=prompt,
+        response, model_used = await self._harness_completion_with_local_fallback(
+            messages=[
+                {"role": "system", "content": instruction},
+                {"role": "user", "content": prompt},
+            ],
+            context_blocks=[
+                ContextBlock(
+                    name="role_context",
+                    content=context.rendered,
+                    priority=100,
+                    required=True,
+                ),
+                ContextBlock(
+                    name="changed_files",
+                    content=self._render_changed_file_context(worktree_path, changed_files),
+                    priority=90,
+                    required=True,
+                ),
+                ContextBlock(
+                    name="validation_failure",
+                    content=compress_tool_output(validation_output, max_chars=8000),
+                    priority=95,
+                    required=True,
+                ),
+            ],
+            role=context.role.value,
+            method="repair_actions",
+            strategy="code_act",
+            max_retries=1,
+            context_budget=14000,
             preferred_model=context.model_profile_id,
             timeout=120.0,
             task_class=task_class,
@@ -5744,6 +5984,96 @@ const waitFor = async callback => callback();""".strip()
             response=response,
         )
         return response
+
+    async def _harness_completion_with_local_fallback(
+        self,
+        *,
+        messages: list[dict[str, object]],
+        context_blocks: list[ContextBlock],
+        role: str,
+        method: str,
+        strategy: str,
+        max_retries: int,
+        context_budget: int,
+        preferred_model: str,
+        timeout: float,
+        task_class: str,
+    ) -> tuple[str, str | None]:
+        """Run a local-role call through the common typed harness.
+
+        The existing provider fallback remains authoritative for routing and
+        budget policy; the harness owns only the method contract, bounded
+        context, retry metadata, and nested trace.
+        """
+        config = load_config()
+        # Provider read timeouts can be refreshed by a slow upstream stream;
+        # keep an explicit wall-clock ceiling around the complete Agent
+        # Harness call so the finite OmniRoute ladder can take over.
+        try:
+            agent_timeout_cap = min(
+                240.0,
+                max(30.0, float(os.getenv("LOCALFORGE_AGENT_REQUEST_TIMEOUT", "120"))),
+            )
+        except ValueError:
+            agent_timeout_cap = 120.0
+        bounded_timeout = min(float(timeout), agent_timeout_cap)
+        candidates = await self._local_model_candidates(preferred_model, task_class)
+        last_error: Exception | None = None
+        for model in candidates:
+            try:
+                provider = OpenAICompatibleProvider(
+                    base_url=config.models.base_url,
+                    api_key=config.models.api_key,
+                    default_model=model,
+                    provider_name=config.models.provider,
+                )
+                contract = self.agent_harness.contract_for(
+                    role=role,
+                    method=method,
+                    risk_level="high" if strategy == "code_act" else "medium",
+                    strategy=strategy,
+                    max_retries=max_retries,
+                    context_budget=context_budget,
+                )
+                # Preserve the provider's JSON-object transport contract for
+                # action-producing methods while keeping parsing and gateway
+                # safety in ForgeOS.
+                contract.output_schema = {"type": "object"}
+                result = await self.agent_harness.call(
+                    provider=provider,
+                    contract=contract,
+                    messages=messages,
+                    context_blocks=context_blocks,
+                    model=model,
+                    timeout=bounded_timeout,
+                    parent_span_id=self._active_role_span_id,
+                )
+                return result.content, model
+            except Exception as exc:
+                last_error = exc
+                logger.warning("Agent harness model %s failed for %s.%s: %s", model, role, method, exc)
+        if last_error:
+            # Preserve the existing finite Chief Engineer fallback ladder if
+            # every harness-managed local candidate is unavailable. The
+            # fallback receives the same bounded context, so the new layer
+            # cannot widen the information or provider policy.
+            fallback_prompt = "\n\n".join(
+                [
+                    *[
+                        str(message.get("content", ""))
+                        for message in messages
+                        if message.get("content")
+                    ],
+                    *[block.content for block in context_blocks if block.content.strip()],
+                ]
+            )
+            return await self._chat_completion_with_local_fallback(
+                prompt=fallback_prompt,
+                preferred_model=preferred_model,
+                timeout=bounded_timeout,
+                task_class=task_class,
+            )
+        raise RuntimeError("No local model candidate available for agent harness call.")
 
     async def _record_local_model_call(
         self,

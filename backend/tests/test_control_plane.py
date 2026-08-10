@@ -1,10 +1,8 @@
 from localforge.control_plane import (
     AgentIdentity,
-    GateState,
-)
-from localforge.control_plane import (
     ControlPlaneKernel,
     ControlPlaneStore,
+    GateState,
     TaskSnapshot,
     TurnResult,
     TurnResultKind,
@@ -77,6 +75,48 @@ def test_control_plane_writeback_is_idempotent_and_completes_goal(tmp_path):
     assert second.quota.turns_committed == 1
 
 
+def test_control_plane_release_gate_waits_for_explicit_promotion(tmp_path):
+    kernel = _kernel(tmp_path)
+    kernel.start(
+        goal_id="run:release-gate",
+        vision="finish and promote the bounded fixture",
+        non_negotiables=["keep release evidence"],
+        tasks=[TaskSnapshot(todo_id="A", title="first", status="READY")],
+        requires_release_promotion=True,
+        acceptance_target="all_tasks_pr_ready_merged_and_post_merge_validated",
+    )
+    decision = kernel.next_turn("worker")
+    kernel.record_result(
+        TurnResult(
+            todo_id="A",
+            turn_id=decision.turn_id or "missing",
+            result_kind=TurnResultKind.VALIDATED_COMPLETION,
+            summary="task evidence passed",
+            validated_by="checker",
+            idempotency_key="release-gate-a",
+        )
+    )
+
+    waiting = kernel.next_turn("worker")
+    assert waiting.route == TurnRoute.WAIT
+    assert waiting.reason == "waiting_for_release_promotion"
+    state = kernel.status()
+    assert state is not None
+    assert state.goal.status.value == "ACTIVE"
+
+    completed = kernel.mark_release_completed(
+        summary="release promoted and post-merge checks passed",
+        evidence={"tester": "PASS", "safety_auditor": "PASS"},
+    )
+    repeated = kernel.mark_release_completed(
+        summary="release promoted and post-merge checks passed",
+        evidence={"tester": "PASS", "safety_auditor": "PASS"},
+    )
+    assert completed.goal.status.value == "COMPLETED"
+    assert repeated.goal.status.value == "COMPLETED"
+    assert sum(event["event"] == "release_completed" for event in repeated.events) == 1
+
+
 def test_control_plane_routes_blockers_to_repair_without_claiming_next_task(tmp_path):
     kernel = _kernel(tmp_path)
     _started(kernel)
@@ -131,7 +171,7 @@ def test_control_plane_records_repair_handoff_and_reopens_after_writeback(tmp_pa
 def test_control_plane_rejects_stale_turn_writeback(tmp_path):
     kernel = _kernel(tmp_path)
     _started(kernel)
-    decision = kernel.next_turn("worker")
+    kernel.next_turn("worker")
     try:
         kernel.record_result(
             TurnResult(
@@ -170,7 +210,7 @@ def test_control_plane_stops_new_turns_at_quota(tmp_path):
 def test_control_plane_abort_closes_claimed_lease_and_blocks_goal(tmp_path):
     kernel = _kernel(tmp_path)
     _started(kernel)
-    decision = kernel.next_turn("worker")
+    kernel.next_turn("worker")
 
     aborted = kernel.abort("worker process terminated by bounded watchdog")
 

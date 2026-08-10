@@ -1,0 +1,34 @@
+{{- $deploymentEvidence := .Values.deploymentEvidence | default (dict) -}}
+{{- $evidenceEnabled := $deploymentEvidence.enabled | default false -}}
+{{- $evidenceSchema := $deploymentEvidence.schema | default "disabled" -}}
+{{- $evidencePath := $deploymentEvidence.path | default "/tmp/forgeos-evidence" -}}
+{{- $readinessFailurePath := $deploymentEvidence.readinessFailurePath | default "/__forgeos_readiness_failure__" -}}
+{{- $rollbackTimeout := $deploymentEvidence.rollbackTimeout | default "5m" -}}
+{{- if $evidenceEnabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "forgeos-cloud.fullname" . }}-deployment-evidence
+  labels:
+    {{- include "forgeos-cloud.labels" . | nindent 4 }}
+    app.kubernetes.io/component: deployment-evidence
+data:
+  schema: {{ $evidenceSchema | quote }}
+  evidence_path: {{ $evidencePath | quote }}
+  readiness_backend_path: {{ .Values.backend.probes.readiness.path | quote }}
+  readiness_frontend_path: {{ .Values.frontend.probes.readiness.path | quote }}
+  readiness_failure_path: {{ $readinessFailurePath | quote }}
+  readiness_failure_command: >-
+    helm upgrade {{ .Release.Name }} {{ .Chart.Name }}
+    --set backend.probes.readiness.path={{ $readinessFailurePath }}
+    --wait --timeout {{ $rollbackTimeout }}
+  rollback_command: >-
+    helm rollback {{ .Release.Name }} <revision>
+    --wait --timeout {{ $rollbackTimeout }}
+  hpa_metrics_api_path: {{ .Values.autoscaling.metricsApiPath | quote }}
+  hpa_diagnostic_command: >-
+    kubectl get --raw {{ .Values.autoscaling.metricsApiPath }}
+  status_policy: >-
+    PASS requires observed readiness, a controlled readiness-failure event,
+    and a verified Helm rollback; otherwise report NOT_PROVEN.
+{{- end }}

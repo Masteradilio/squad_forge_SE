@@ -1,8 +1,8 @@
 import hashlib
 import json
 import uuid
+from collections.abc import Iterable
 from datetime import UTC, datetime, timedelta
-from typing import Iterable
 
 from localforge.control_plane.contracts import (
     AgentIdentity,
@@ -10,13 +10,13 @@ from localforge.control_plane.contracts import (
     CapabilityProposalStatus,
     ControlPlaneState,
     ExternalSignal,
-    GateStatus,
     GateState,
+    GateStatus,
     GoalState,
     GoalStatus,
     QuotaState,
-    RepairHandoff,
     Receipt,
+    RepairHandoff,
     TaskSnapshot,
     TodoState,
     TodoStatus,
@@ -89,6 +89,7 @@ class ControlPlaneKernel:
         agents: Iterable[AgentIdentity] | None = None,
         source_revision: str | None = None,
         acceptance_target: str | None = None,
+        requires_release_promotion: bool = False,
     ) -> ControlPlaneState:
         snapshots = list(tasks)
 
@@ -104,6 +105,7 @@ class ControlPlaneKernel:
                     authority=authority or {},
                     source_revision=source_revision,
                     acceptance_target=acceptance_target,
+                    requires_release_promotion=requires_release_promotion,
                 ),
                 todos=[
                     TodoState(
@@ -300,12 +302,26 @@ class ControlPlaneKernel:
                 and gate.status in {GateStatus.OPEN, GateStatus.HUMAN_REVIEW}
                 for gate in current.gates
             )
-            if all_todos_complete and not open_required_gate:
+            if (
+                all_todos_complete
+                and not open_required_gate
+                and (
+                    not current.goal.requires_release_promotion
+                    or self._release_completion_recorded(current)
+                )
+            ):
                 current.goal.status = GoalStatus.COMPLETED
                 decision = TurnDecision(
                     route=TurnRoute.COMPLETE,
                     reason="all_todos_validated",
                     revision=current.revision,
+                )
+            elif all_todos_complete and current.goal.requires_release_promotion:
+                decision = TurnDecision(
+                    route=TurnRoute.WAIT,
+                    reason="waiting_for_release_promotion",
+                    revision=current.revision,
+                    wait_until=(datetime.now(UTC) + timedelta(seconds=60)).isoformat(),
                 )
             else:
                 decision = TurnDecision(
@@ -421,7 +437,14 @@ class ControlPlaneKernel:
                 and gate.status in {GateStatus.OPEN, GateStatus.HUMAN_REVIEW}
                 for gate in current.gates
             )
-            if all_todos_complete and not open_required_gate:
+            if (
+                all_todos_complete
+                and not open_required_gate
+                and (
+                    not current.goal.requires_release_promotion
+                    or self._release_completion_recorded(current)
+                )
+            ):
                 current.goal.status = GoalStatus.COMPLETED
             return current
 
@@ -486,6 +509,74 @@ class ControlPlaneKernel:
             return current
 
         return self.store.update(mutate, operation_id=operation_id)
+
+    def require_release_promotion(
+        self,
+        *,
+        acceptance_target: str = "all_tasks_pr_ready_merged_and_post_merge_validated",
+    ) -> ControlPlaneState:
+        """Enable the release gate for a scheduler-owned lifetime goal.
+
+        This is separate from ``start`` because the lifetime journal may have
+        been created by an earlier scheduler process. Enabling the gate is
+        monotonic and therefore safe to repeat after a restart.
+        """
+
+        def mutate(current: ControlPlaneState | None) -> ControlPlaneState:
+            if current is None:
+                raise ValueError("Control plane is not initialized")
+            current.goal.requires_release_promotion = True
+            current.goal.acceptance_target = acceptance_target
+            return current
+
+        return self.store.update(
+            mutate,
+            operation_id=f"release-gate:{acceptance_target}",
+        )
+
+    def mark_release_completed(
+        self,
+        *,
+        summary: str,
+        evidence: dict[str, object],
+    ) -> ControlPlaneState:
+        """Complete the goal only after release promotion evidence exists.
+
+        Callers are server-owned scheduler/CLI/API release lanes. The kernel
+        still verifies that every todo and required human gate is complete so
+        a premature or partial release callback cannot close the goal.
+        """
+
+        def mutate(current: ControlPlaneState | None) -> ControlPlaneState:
+            if current is None:
+                raise ValueError("Control plane is not initialized")
+            all_todos_complete = all(
+                item.status in {TodoStatus.PASSED, TodoStatus.SKIPPED}
+                for item in current.todos
+            )
+            if not all_todos_complete:
+                raise ValueError("Release cannot complete before every todo is validated")
+            if any(
+                gate.required
+                and gate.status in {GateStatus.OPEN, GateStatus.HUMAN_REVIEW}
+                for gate in current.gates
+            ):
+                raise ValueError("Release cannot complete while a required gate is open")
+            current.goal.status = GoalStatus.COMPLETED
+            current.events.append(
+                {
+                    "event": "release_completed",
+                    "summary": summary[:1200],
+                    "evidence": evidence,
+                    "at": utc_iso(),
+                }
+            )
+            return current
+
+        return self.store.update(
+            mutate,
+            operation_id="release-completed",
+        )
 
     def record_repair_handoff(
         self,
@@ -1107,6 +1198,13 @@ class ControlPlaneKernel:
             return datetime.fromisoformat(item.next_retry_at) > datetime.now(UTC)
         except ValueError:
             return False
+
+    @staticmethod
+    def _release_completion_recorded(current: ControlPlaneState) -> bool:
+        return any(
+            event.get("event") == "release_completed"
+            for event in current.events
+        )
 
     @staticmethod
     def _gate_for_frontier(

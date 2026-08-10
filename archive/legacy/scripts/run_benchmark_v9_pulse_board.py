@@ -19,7 +19,14 @@ from scripts import run_benchmark_v7_mini_prd as base  # noqa: E402
 RUN_SUFFIX = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
 base.WORKSPACE = ROOT / "benchmarks" / "workspaces" / f"v9-pulse-board-{RUN_SUFFIX}"
 base.PRD = ROOT / "docs" / "PRD_V9_PULSE_BOARD.md"
-base.EVIDENCE = ROOT / "docs" / "e2e" / "v9" / "pulse_board"
+base.EVIDENCE = (
+    ROOT
+    / "docs"
+    / "e2e"
+    / "v9"
+    / "runs"
+    / f"pulse_board-{RUN_SUFFIX}"
+)
 base.EXPECTED_TASKS = 4
 base.BENCHMARK_LABEL = "ForgeOS V9 LoopX-like PulseBoard Real PRD Benchmark"
 base.METRICS_FILENAME = "pulse_board_metrics.json"
@@ -29,6 +36,26 @@ base.FIXTURE_SOURCES = [
     ROOT / "scripts" / "fixtures" / "v9_pulse_board_validation_acceptance.py",
     ROOT / "scripts" / "fixtures" / "v9_pulse_board_summary_acceptance.py",
 ]
+
+_EXPLICIT_FREE_ROUTE_SELECTOR = base.cloud._explicit_free_routes
+
+
+def _select_v9_routes(models: list[str]) -> list[str]:
+    """Prefer an explicitly configured live route before free-route fallbacks.
+
+    The V9 benchmark is allowed to exercise the operator's configured
+    OmniRoute provider (for example NVIDIA NIM) when that model is advertised
+    by the live catalog. This keeps the preflight from discarding a valid
+    configured route merely because its identifier does not contain ``free``.
+    """
+    routes = _EXPLICIT_FREE_ROUTE_SELECTOR(models)
+    configured = (
+        os.environ.get("LOCALFORGE_DEFAULT_MODEL")
+        or base.cloud.root_env_values().get("LOCALFORGE_DEFAULT_MODEL")
+    )
+    if configured and configured in models:
+        routes = [configured, *[route for route in routes if route != configured]]
+    return routes
 
 
 def _apply_contracts(database: Path) -> dict[str, int]:
@@ -218,12 +245,20 @@ def _run_final_acceptance() -> dict[str, object]:
 
 async def main() -> int:
     base._apply_contracts = _apply_contracts
+    base.cloud._explicit_free_routes = _select_v9_routes
     code = await base.main()
     base.EVIDENCE.mkdir(parents=True, exist_ok=True)
     control_plane_dir = base.WORKSPACE / ".localforge" / "control_plane"
-    state_files = sorted(control_plane_dir.glob("run-*.json"), key=lambda path: path.stat().st_mtime)
+    state_files = sorted(
+        [*control_plane_dir.glob("run-*.json"), *control_plane_dir.glob("goal-*.json")],
+        key=lambda path: path.stat().st_mtime,
+    )
     event_files = sorted(
-        control_plane_dir.glob("run-*.events.jsonl"), key=lambda path: path.stat().st_mtime
+        [
+            *control_plane_dir.glob("run-*.events.jsonl"),
+            *control_plane_dir.glob("goal-*.events.jsonl"),
+        ],
+        key=lambda path: path.stat().st_mtime,
     )
     exported: dict[str, str | None] = {"control_plane": None, "events": None}
     if state_files:

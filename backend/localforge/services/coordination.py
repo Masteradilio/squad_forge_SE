@@ -11,11 +11,13 @@ from localforge.storage.orm import (
     EpicORM,
     ProductDocumentORM,
     RuntimeRegistrationORM,
+    ProjectORM,
     SquadORM,
     TaskCommentORM,
     TaskORM,
     TaskRunORM,
 )
+from localforge.services.tenant_context import session_tenant
 
 
 class CoordinationService:
@@ -24,7 +26,17 @@ class CoordinationService:
     def __init__(self, session: AsyncSession):
         self.session = session
 
+    def _tenant_id(self) -> str:
+        return session_tenant(self.session)
+
     async def add_task_comment(self, comment: domain.TaskComment) -> domain.TaskComment:
+        task = await self.session.execute(
+            select(TaskORM.id)
+            .join(ProjectORM, ProjectORM.id == TaskORM.project_id)
+            .where(TaskORM.id == comment.task_id, ProjectORM.tenant_id == self._tenant_id())
+        )
+        if task.scalar_one_or_none() is None:
+            raise ValueError("Task comment target is not accessible in the current tenant")
         orm_obj = TaskCommentORM.from_domain(comment)
         self.session.add(orm_obj)
         await self.session.flush()
@@ -33,7 +45,9 @@ class CoordinationService:
     async def list_task_comments(self, task_id: int, limit: int = 50) -> list[domain.TaskComment]:
         result = await self.session.execute(
             select(TaskCommentORM)
-            .where(TaskCommentORM.task_id == task_id)
+            .join(TaskORM, TaskORM.id == TaskCommentORM.task_id)
+            .join(ProjectORM, ProjectORM.id == TaskORM.project_id)
+            .where(TaskCommentORM.task_id == task_id, ProjectORM.tenant_id == self._tenant_id())
             .order_by(TaskCommentORM.created_at.desc(), TaskCommentORM.id.desc())
             .limit(limit)
         )
@@ -48,8 +62,11 @@ class CoordinationService:
         self, runtime: domain.RuntimeRegistration
     ) -> domain.RuntimeRegistration:
         result = await self.session.execute(
-            select(RuntimeRegistrationORM).where(
-                RuntimeRegistrationORM.runtime_id == runtime.runtime_id
+            select(RuntimeRegistrationORM)
+            .join(ProjectORM, ProjectORM.id == RuntimeRegistrationORM.project_id)
+            .where(
+                RuntimeRegistrationORM.runtime_id == runtime.runtime_id,
+                ProjectORM.tenant_id == self._tenant_id(),
             )
         )
         existing = result.scalar_one_or_none()
@@ -76,7 +93,12 @@ class CoordinationService:
         metadata: dict[str, Any] | None = None,
     ) -> domain.RuntimeRegistration | None:
         result = await self.session.execute(
-            select(RuntimeRegistrationORM).where(RuntimeRegistrationORM.runtime_id == runtime_id)
+            select(RuntimeRegistrationORM)
+            .join(ProjectORM, ProjectORM.id == RuntimeRegistrationORM.project_id)
+            .where(
+                RuntimeRegistrationORM.runtime_id == runtime_id,
+                ProjectORM.tenant_id == self._tenant_id(),
+            )
         )
         runtime = result.scalar_one_or_none()
         if not runtime:
@@ -92,13 +114,19 @@ class CoordinationService:
     async def list_runtimes(self, project_id: int) -> list[domain.RuntimeRegistration]:
         result = await self.session.execute(
             select(RuntimeRegistrationORM)
-            .where(RuntimeRegistrationORM.project_id == project_id)
+            .join(ProjectORM, ProjectORM.id == RuntimeRegistrationORM.project_id)
+            .where(RuntimeRegistrationORM.project_id == project_id, ProjectORM.tenant_id == self._tenant_id())
             .order_by(RuntimeRegistrationORM.updated_at.desc())
         )
         return [orm_obj.to_domain() for orm_obj in result.scalars().all()]
 
     async def task_ancestry(self, task_id: int) -> dict[str, Any]:
-        task = await self.session.get(TaskORM, task_id)
+        task_result = await self.session.execute(
+            select(TaskORM)
+            .join(ProjectORM, ProjectORM.id == TaskORM.project_id)
+            .where(TaskORM.id == task_id, ProjectORM.tenant_id == self._tenant_id())
+        )
+        task = task_result.scalar_one_or_none()
         if task is None:
             raise ValueError(f"Task with ID {task_id} not found")
 
@@ -110,7 +138,9 @@ class CoordinationService:
         )
         run_result = await self.session.execute(
             select(TaskRunORM)
-            .where(TaskRunORM.task_id == task_id)
+            .join(TaskORM, TaskORM.id == TaskRunORM.task_id)
+            .join(ProjectORM, ProjectORM.id == TaskORM.project_id)
+            .where(TaskRunORM.task_id == task_id, ProjectORM.tenant_id == self._tenant_id())
             .order_by(TaskRunORM.started_at.desc())
         )
         task_runs = list(run_result.scalars().all())
@@ -120,7 +150,10 @@ class CoordinationService:
         if task_run_ids:
             artifact_result = await self.session.execute(
                 select(ArtifactORM)
-                .where(ArtifactORM.task_run_id.in_(task_run_ids))
+                .join(TaskRunORM, TaskRunORM.id == ArtifactORM.task_run_id)
+                .join(TaskORM, TaskORM.id == TaskRunORM.task_id)
+                .join(ProjectORM, ProjectORM.id == TaskORM.project_id)
+                .where(ArtifactORM.task_run_id.in_(task_run_ids), ProjectORM.tenant_id == self._tenant_id())
                 .order_by(ArtifactORM.created_at.desc())
             )
             for artifact in artifact_result.scalars().all():

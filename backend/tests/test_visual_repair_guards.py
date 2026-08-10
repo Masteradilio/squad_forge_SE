@@ -71,14 +71,14 @@ def test_visual_structure_rejects_centered_lcd_and_round_badge(tmp_path):
         """
         <style>
         .lcd-container { display:flex; justify-content:center; }
-        .hp-badge { border-radius:50%; }
+        .brand-badge { border-radius:50%; }
         </style>
         """,
         encoding="utf-8",
     )
 
     findings = validate_visual_html_structure(
-        str(html), structure_rules=["lcd_left_aligned", "rectangular_hp_badge"]
+        str(html), structure_rules=["lcd_left_aligned", "rectangular_brand_badge"]
     )
 
     assert any("left-aligned" in finding for finding in findings)
@@ -89,16 +89,16 @@ def test_visual_contract_normalizer_adds_scoped_overrides(tmp_path):
     html = tmp_path / "index.html"
     html.write_text(
         "<html><head><style>.lcd-container { justify-content:center; } "
-        ".hp-badge { border-radius:50%; }</style></head></html>",
+        ".brand-badge { border-radius:50%; }</style></head></html>",
         encoding="utf-8",
     )
 
     assert apply_visual_contract_normalization(
         str(html),
-        structure_rules=["lcd_left_aligned", "rectangular_hp_badge"],
+        structure_rules=["lcd_left_aligned", "rectangular_brand_badge"],
     )
     findings = validate_visual_html_structure(
-        str(html), structure_rules=["lcd_left_aligned", "rectangular_hp_badge"]
+        str(html), structure_rules=["lcd_left_aligned", "rectangular_brand_badge"]
     )
 
     assert findings == []
@@ -118,6 +118,56 @@ def test_visual_contract_normalizer_removes_restrictive_frame_cap(tmp_path):
     assert validate_visual_html_structure(
         str(html), structure_rules=["full_frame_physical_body"]
     ) == []
+
+
+def test_visual_matrix_contract_checks_locators_labels_positions_and_actions(tmp_path):
+    html = tmp_path / "index.html"
+    html.write_text(
+        """
+        <main><section class='grid'>
+          <button id='save' data-row='1' data-column='2' aria-label='Save'>Save</button>
+        </section><script>document.querySelector('#save').addEventListener('click', save)</script></main>
+        """,
+        encoding="utf-8",
+    )
+
+    findings = validate_visual_html_structure(
+        str(html),
+        structure_rules=["stable_interactive_locators", "declared_visual_matrix"],
+        visual_matrix=[
+            {
+                "row": 1,
+                "column": 2,
+                "locator": "#save",
+                "primary_label": "Save",
+                "action": "persist",
+            }
+        ],
+    )
+
+    assert findings == []
+
+
+def test_visual_matrix_contract_rejects_missing_declared_surface(tmp_path):
+    html = tmp_path / "index.html"
+    html.write_text("<main><button>Save</button></main>", encoding="utf-8")
+
+    findings = validate_visual_html_structure(
+        str(html),
+        structure_rules=["stable_interactive_locators", "declared_visual_matrix"],
+        visual_matrix=[
+            {
+                "row": 1,
+                "column": 1,
+                "locator": "#save",
+                "primary_label": "Save",
+                "action": "persist",
+            }
+        ],
+    )
+
+    assert any("locator" in finding for finding in findings)
+    assert any("stable" in finding or "row" in finding for finding in findings)
 
 
 def _visual_task() -> domain.Task:

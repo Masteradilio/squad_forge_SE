@@ -1,0 +1,124 @@
+{
+  "schema": "forgeos.kubernetes_benchmark_evidence.v1",
+  "collected_at": "2026-08-07T18:44:00.987229+00:00",
+  "execution_scope": "kubernetes-cluster-observation",
+  "kubernetes_real": true,
+  "release": "forgeos",
+  "namespace": "forgeos",
+  "status": "NOT_PROVEN",
+  "claims": {
+    "readiness": {
+      "status": "PASS",
+      "reason": "observed deployments are ready"
+    },
+    "readiness_failure_rollback_path": {
+      "status": "NOT_PROVEN",
+      "reason": "helm executable is not installed"
+    },
+    "rollback": {
+      "status": "NOT_PROVEN",
+      "reason": "Helm history was not available"
+    },
+    "hpa": {
+      "status": "NOT_PROVEN",
+      "reason": "no HPA object was observed"
+    },
+    "release": {
+      "status": "NOT_PROVEN",
+      "reason": "Helm release status was not observed"
+    }
+  },
+  "commands": [
+    {
+      "command": [
+        "kubectl",
+        "config",
+        "current-context"
+      ],
+      "exit_code": 0,
+      "stdout_tail": "docker-desktop\n",
+      "stderr_tail": ""
+    },
+    {
+      "command": [
+        "kubectl",
+        "get",
+        "deployments",
+        "-n",
+        "forgeos",
+        "-o",
+        "json"
+      ],
+      "exit_code": 0,
+      "stdout_tail": "   },\n                                    \"requests\": {\n                                        \"cpu\": \"250m\",\n                                        \"memory\": \"256Mi\"\n                                    }\n                                },\n                                \"terminationMessagePath\": \"/dev/termination-log\",\n                                \"terminationMessagePolicy\": \"File\"\n                            }\n                        ],\n                        \"dnsPolicy\": \"ClusterFirst\",\n                        \"restartPolicy\": \"Always\",\n                        \"schedulerName\": \"default-scheduler\",\n                        \"securityContext\": {},\n                        \"terminationGracePeriodSeconds\": 30\n                    }\n                }\n            },\n            \"status\": {\n                \"availableReplicas\": 2,\n                \"conditions\": [\n                    {\n                        \"lastTransitionTime\": \"2026-08-07T17:50:49Z\",\n                        \"lastUpdateTime\": \"2026-08-07T17:50:49Z\",\n                        \"message\": \"Deployment has minimum availability.\",\n                        \"reason\": \"MinimumReplicasAvailable\",\n                        \"status\": \"True\",\n                        \"type\": \"Available\"\n                    },\n                    {\n                        \"lastTransitionTime\": \"2026-08-07T17:50:35Z\",\n                        \"lastUpdateTime\": \"2026-08-07T17:50:49Z\",\n                        \"message\": \"ReplicaSet \\\"forgeos-forgeos-cloud-omniroute-7fb84c5849\\\" has successfully progressed.\",\n                        \"reason\": \"NewReplicaSetAvailable\",\n                        \"status\": \"True\",\n                        \"type\": \"Progressing\"\n                    }\n                ],\n                \"observedGeneration\": 1,\n                \"readyReplicas\": 2,\n                \"replicas\": 2,\n                \"updatedReplicas\": 2\n            }\n        }\n    ],\n    \"kind\": \"List\",\n    \"metadata\": {\n        \"resourceVersion\": \"\"\n    }\n}\n",
+      "stderr_tail": ""
+    },
+    {
+      "command": [
+        "kubectl",
+        "get",
+        "hpa",
+        "-n",
+        "forgeos",
+        "-o",
+        "json"
+      ],
+      "exit_code": 0,
+      "stdout_tail": "{\n    \"apiVersion\": \"v1\",\n    \"items\": [],\n    \"kind\": \"List\",\n    \"metadata\": {\n        \"resourceVersion\": \"\"\n    }\n}\n",
+      "stderr_tail": ""
+    },
+    {
+      "command": [
+        "kubectl",
+        "get",
+        "--raw",
+        "/apis/metrics.k8s.io/v1beta1"
+      ],
+      "exit_code": 1,
+      "stdout_tail": "",
+      "stderr_tail": "Error from server (NotFound): the server could not find the requested resource\n"
+    },
+    {
+      "command": [
+        "helm",
+        "status",
+        "forgeos",
+        "-n",
+        "forgeos",
+        "-o",
+        "json"
+      ],
+      "exit_code": null,
+      "stdout_tail": "",
+      "stderr_tail": "executable unavailable: FileNotFoundError"
+    },
+    {
+      "command": [
+        "helm",
+        "history",
+        "forgeos",
+        "-n",
+        "forgeos",
+        "-o",
+        "json"
+      ],
+      "exit_code": null,
+      "stdout_tail": "",
+      "stderr_tail": "executable unavailable: FileNotFoundError"
+    },
+    {
+      "command": [
+        "helm",
+        "template",
+        "forgeos",
+        "C:\\Users\\adili\\projetos_offline\\local_forge_os\\deploy\\helm\\forgeos-cloud"
+      ],
+      "exit_code": null
+    }
+  ],
+  "limitations": [
+    "Readiness failure and rollback are NOT_PROVEN until a controlled rollout and Helm rollback are observed.",
+    "HPA is NOT_PROVEN when metrics.k8s.io/metrics-server is absent; use the recorded diagnostic command.",
+    "No Secret object or Secret value was queried or persisted."
+  ]
+}

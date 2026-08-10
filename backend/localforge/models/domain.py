@@ -10,11 +10,16 @@ from localforge.models.enums import (
     ArtifactType,
     AuditEventActorType,
     AuditEventType,
+    AutomationRunStatus,
+    AutomationStatus,
     ChiefEngineerCallReason,
     CircuitScope,
     CircuitState,
     DeepSwarmStatus,
     DocumentKind,
+    EngineeringSessionStatus,
+    EngineeringTurnKind,
+    ExecutionMode,
     GraphMutationType,
     HandoffKind,
     HandoffStatus,
@@ -23,7 +28,9 @@ from localforge.models.enums import (
     MemoryRecordKind,
     MemoryRelationType,
     MemoryValidityStatus,
+    ModelVerificationStatus,
     PathLeaseWaitStatus,
+    ProfileDecision,
     ProgressSignal,
     RunMode,
     RunnerHealthState,
@@ -67,6 +74,7 @@ class Project(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int | None = None
+    tenant_id: str = "local"
     name: str
     root_path: str
     default_branch: str
@@ -192,6 +200,7 @@ class TaskRun(BaseModel):
     sandbox_id: str | None = None
     attempt_count: int = 1
     started_at: datetime = Field(default_factory=utc_now)
+    heartbeat_at: datetime | None = Field(default_factory=utc_now)
     ended_at: datetime | None = None
     final_summary: str | None = None
 
@@ -459,8 +468,333 @@ class ActionApproval(BaseModel):
     risk_level: str
     status: ActionApprovalStatus = ActionApprovalStatus.PENDING
     created_at: datetime = Field(default_factory=utc_now)
+    expires_at: datetime | None = None
     decided_at: datetime | None = None
     decided_by: str | None = None
+    decision_nonce: str | None = None
+    decision_reason: str | None = None
+    idempotency_key: str | None = None
+
+
+class EngineeringSession(BaseModel):
+    """Tenant-scoped durable unit of continuous engineering work."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str | None = None
+    project_id: int
+    tenant_id: str = "local"
+    title: str = "Engineering Session"
+    status: EngineeringSessionStatus = EngineeringSessionStatus.DRAFT
+    revision: int = Field(default=1, ge=1)
+    default_model: str | None = None
+    current_goal_id: str | None = None
+    max_turns: int | None = Field(default=None, gt=0)
+    max_wall_seconds: float | None = Field(default=None, gt=0)
+    max_retries: int = Field(default=0, ge=0)
+    quality_gate_names: list[str] = Field(default_factory=list)
+    result: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
+    closed_at: datetime | None = None
+
+
+class EngineeringGoal(BaseModel):
+    """Current goal projection with a stable id and monotonically increasing revision."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str | None = None
+    session_id: str
+    project_id: int
+    tenant_id: str = "local"
+    objective: str
+    acceptance_criteria: list[str] = Field(default_factory=list)
+    revision: int = Field(default=1, ge=1)
+    status: EngineeringSessionStatus = EngineeringSessionStatus.DRAFT
+    revision_history: list[dict[str, Any]] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
+
+
+class EngineeringTurn(BaseModel):
+    """Append-only admitted turn. Its snapshots are the replay contract."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str | None = None
+    session_id: str
+    project_id: int
+    tenant_id: str = "local"
+    goal_id: str | None = None
+    goal_revision_snapshot: int | None = None
+    sequence: int = Field(ge=1)
+    kind: EngineeringTurnKind = EngineeringTurnKind.USER
+    input_text: str = ""
+    result: str | None = None
+    status: str = "ADMITTED"
+    idempotency_key: str
+    model_snapshot: str | None = None
+    profile_id_snapshot: str | None = None
+    profile_revision_snapshot: int | None = None
+    profile_snapshot: dict[str, Any] = Field(default_factory=dict)
+    retry_count: int = Field(default=0, ge=0)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    admitted_at: datetime = Field(default_factory=utc_now)
+    completed_at: datetime | None = None
+
+
+class ExecutionProfile(BaseModel):
+    """Resolved project/session execution policy, safe to snapshot on a turn."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str | None = None
+    project_id: int
+    tenant_id: str = "local"
+    session_id: str | None = None
+    name: str = "default"
+    revision: int = Field(default=1, ge=1)
+    trust: str = "standard"
+    mode: ExecutionMode = ExecutionMode.ASK
+    tool_policies: dict[str, ProfileDecision] = Field(default_factory=dict)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
+
+
+class ModelConnection(BaseModel):
+    """Tenant/project-scoped reference to the OmniRoute gateway.
+
+    ``endpoint_ref`` is a sanitized gateway reference and ``credential_ref``
+    is an environment/secret-manager name.  Neither field may contain a
+    credential value.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str | None = None
+    project_id: int
+    tenant_id: str = "local"
+    provider: str = "omniroute"
+    endpoint_ref: str
+    credential_ref: str | None = "env:OMNIROUTE_API_KEY"
+    status: ModelVerificationStatus = ModelVerificationStatus.PENDING
+    capabilities: dict[str, Any] = Field(default_factory=dict)
+    verified_at: datetime | None = None
+    sanitized_error: str | None = None
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
+
+
+class ModelCatalogEntry(BaseModel):
+    """Durable model metadata discovered through one OmniRoute connection."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str | None = None
+    connection_id: str
+    project_id: int
+    tenant_id: str = "local"
+    provider: str = "omniroute"
+    model_name: str
+    status: ModelVerificationStatus = ModelVerificationStatus.DISCOVERED
+    capabilities: dict[str, Any] = Field(default_factory=dict)
+    verified_at: datetime | None = None
+    sanitized_error: str | None = None
+    endpoint_ref: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
+
+
+class ModelVerification(BaseModel):
+    """Append-only evidence for one OmniRoute discovery/probe attempt."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str | None = None
+    connection_id: str
+    catalog_entry_id: str | None = None
+    project_id: int
+    tenant_id: str = "local"
+    provider: str = "omniroute"
+    model_name: str | None = None
+    status: ModelVerificationStatus = ModelVerificationStatus.PENDING
+    capabilities: dict[str, Any] = Field(default_factory=dict)
+    verified_at: datetime | None = None
+    sanitized_error: str | None = None
+    endpoint_ref: str
+    created_at: datetime = Field(default_factory=utc_now)
+
+
+class SkillBinding(BaseModel):
+    """Immutable, replayable Skill manifest bound to one admitted Turn."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str | None = None
+    project_id: int
+    tenant_id: str = "local"
+    session_id: str
+    turn_id: str
+    name: str
+    version: int = Field(ge=1)
+    digest: str
+    origin: str = "builtin"
+    manifest_snapshot: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime = Field(default_factory=utc_now)
+
+    @property
+    def manifest_version(self) -> int:
+        """Compatibility spelling used by SkillDefinition manifests."""
+
+        return self.version
+
+
+class Automation(BaseModel):
+    """Project/tenant-scoped automation definition backed by the loop runtime."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str | None = None
+    project_id: int
+    tenant_id: str = "local"
+    name: str
+    status: AutomationStatus = AutomationStatus.ACTIVE
+    trigger_kind: str = "MANUAL"
+    interval_seconds: int | None = Field(default=None, ge=1)
+    goal_template: dict[str, Any] = Field(default_factory=dict)
+    profile_id: str | None = None
+    profile_snapshot: dict[str, Any] = Field(default_factory=dict)
+    budgets: dict[str, Any] = Field(default_factory=dict)
+    session_id: str | None = None
+    loop_id: int | None = None
+    active_run_id: str | None = None
+    next_run_at: datetime | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
+
+
+class AutomationRun(BaseModel):
+    """Durable automation execution with replay/evidence snapshots."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str | None = None
+    automation_id: str
+    project_id: int
+    tenant_id: str = "local"
+    status: AutomationRunStatus = AutomationRunStatus.PENDING
+    trigger_kind: str = "MANUAL"
+    idempotency_key: str
+    session_id: str | None = None
+    turn_id: str | None = None
+    loop_run_id: int | None = None
+    scheduler_run_id: int | None = None
+    goal_snapshot: dict[str, Any] = Field(default_factory=dict)
+    profile_snapshot: dict[str, Any] = Field(default_factory=dict)
+    budget_snapshot: dict[str, Any] = Field(default_factory=dict)
+    approval_ids: list[int] = Field(default_factory=list)
+    evidence: dict[str, Any] = Field(default_factory=dict)
+    error_message: str | None = None
+    started_at: datetime = Field(default_factory=utc_now)
+    completed_at: datetime | None = None
+    created_at: datetime = Field(default_factory=utc_now)
+
+
+class ProfileEvaluation(BaseModel):
+    """Result of evaluating a tool through Safety Kernel and a frozen profile."""
+
+    decision: str
+    reason: str
+    profile_id: str | None = None
+    profile_revision: int | None = None
+    safety_decision: str | None = None
+    approval_id: int | None = None
+
+
+class ReferenceSource(BaseModel):
+    """Immutable user/reference document normalized for engineering retrieval."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str | None = None
+    project_id: int
+    tenant_id: str = "local"
+    name: str
+    source_type: str = "markdown"
+    path: str | None = None
+    content_hash: str
+    normalized_text: str
+    injection_status: str = "CLEAN"
+    redaction_status: str = "NOT_REQUIRED"
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime = Field(default_factory=utc_now)
+
+
+class DocumentChunk(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str | None = None
+    source_id: str
+    project_id: int
+    tenant_id: str = "local"
+    ordinal: int
+    text: str
+    section: str | None = None
+    line_start: int = 1
+    line_end: int = 1
+    content_hash: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ReferenceDecision(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str | None = None
+    project_id: int
+    tenant_id: str = "local"
+    query: str
+    selected_chunk_ids: list[str] = Field(default_factory=list)
+    citations: list[dict[str, Any]] = Field(default_factory=list)
+    summary: str
+    decision: str = "APPROVED"
+    turn_id: str | None = None
+    artifact_id: int | None = None
+    content_hash: str
+    created_at: datetime = Field(default_factory=utc_now)
+
+
+class ProductBlueprint(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str | None = None
+    project_id: int
+    tenant_id: str = "local"
+    name: str
+    summary: str
+    modules: list[dict[str, Any]] = Field(default_factory=list)
+    entities: list[dict[str, Any]] = Field(default_factory=list)
+    routes: list[dict[str, Any]] = Field(default_factory=list)
+    screens: list[dict[str, Any]] = Field(default_factory=list)
+    acceptance_criteria: list[str] = Field(default_factory=list)
+    citation_ids: list[str] = Field(default_factory=list)
+    source_hashes: list[str] = Field(default_factory=list)
+    status: str = "DRAFT"
+    content_hash: str
+    created_at: datetime = Field(default_factory=utc_now)
+    frozen_at: datetime | None = None
+    approval_id: int | None = None
+    expires_at: datetime | None = None
+    decided_at: datetime | None = None
+    decided_by: str | None = None
+    decision_nonce: str | None = None
+    decision_reason: str | None = None
+    idempotency_key: str | None = None
 
 
 class TaskComment(BaseModel):

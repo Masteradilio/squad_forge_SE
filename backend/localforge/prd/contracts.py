@@ -1,3 +1,4 @@
+import hashlib
 import re
 import unicodedata
 from pathlib import Path
@@ -21,6 +22,8 @@ class TaskContract(BaseModel):
     visual_similarity_threshold: float = 0.90
     visual_viewport: str = "1280x720"
     visual_structure_rules: list[str] = Field(default_factory=list)
+    visual_acceptance_matrix: list[dict[str, object]] = Field(default_factory=list)
+    visual_acceptance_contract_version: str = "visual-contract-v1"
     acceptance_test_policy: str = "observable_behavior_only"
     acceptance_behaviors: list[str] = Field(default_factory=list)
     acceptance_test_fixture_source: str | None = None
@@ -110,6 +113,7 @@ def _task_contract(
             visual_viewport = _viewport_for_reference(project_root / visual_reference_image)
     implementation_notes = _implementation_notes(task)
     visual_structure_rules = _visual_structure_rules_for_task(task.title, visual_required)
+    visual_acceptance_matrix = _visual_acceptance_matrix(task, visual_required)
     if visual_structure_rules:
         implementation_notes.extend(
             [
@@ -137,6 +141,7 @@ def _task_contract(
         visual_actual_output=visual_actual_output,
         visual_viewport=visual_viewport,
         visual_structure_rules=visual_structure_rules,
+        visual_acceptance_matrix=visual_acceptance_matrix,
         acceptance_test_policy=str(
             task.metadata.get("acceptance_test_policy", "observable_behavior_only")
         ),
@@ -287,15 +292,44 @@ def _is_visual_domain_task(title: str) -> bool:
 def _visual_structure_rules_for_task(title: str, visual_required: bool) -> list[str]:
     if not visual_required:
         return []
-    if _contains_term(title, "calculator", "chassis", "keypad", "key grid", "keyboard"):
+    return [
+        "single_product_surface",
+        "stable_interactive_locators",
+        "declared_visual_matrix",
+        "responsive_reference_convergence",
+    ]
+
+
+def _visual_acceptance_matrix(
+    task: ExtractedTask, visual_required: bool
+) -> list[dict[str, object]]:
+    """Normalize an optional PRD-declared visual matrix into an executable contract.
+
+    The harness deliberately does not infer domain labels or controls. A PRD or
+    the Scrum Master may declare a matrix as a list of records; the contract
+    preserves only JSON-safe records and adds generic release requirements when
+    the task is visual. This keeps the mechanism useful for any product surface.
+    """
+    raw = task.metadata.get("visual_acceptance_matrix")
+    if not isinstance(raw, list):
+        raw = task.metadata.get("visual_matrix")
+    matrix = [dict(item) for item in raw if isinstance(item, dict)] if isinstance(raw, list) else []
+    if not visual_required:
+        return matrix
+    if not matrix:
         return [
-            "single_parent_keypad_grid",
-            "spanning_enter_key",
-            "full_frame_physical_body",
-            "lcd_left_aligned",
-            "rectangular_hp_badge",
+            {
+                "contract": "rendered_product_surface",
+                "required": True,
+                "assertions": [
+                    "rendered_surface_exists",
+                    "interactive_elements_have_stable_locators",
+                    "every_declared_user_journey_is_click_executable",
+                    "no_placeholder_or_unwired_control_is_releasable",
+                ],
+            }
         ]
-    return []
+    return matrix
 
 
 def _discover_visual_output(project_root: Path) -> str | None:
@@ -421,4 +455,11 @@ def _contains_term(value: str, *terms: str) -> bool:
 def _slug(value: str) -> str:
     decomposed = unicodedata.normalize("NFD", value.lower())
     ascii_value = "".join(char for char in decomposed if not unicodedata.combining(char))
-    return re.sub(r"[^a-z0-9]+", "_", ascii_value).strip("_") or "task"
+    slug = re.sub(r"[^a-z0-9]+", "_", ascii_value).strip("_") or "task"
+    # Keep generated test/source paths below Windows path-length limits even
+    # when a PRD task title is very descriptive. The digest preserves stable
+    # distinction between titles that share the same shortened prefix.
+    if len(slug) > 64:
+        digest = hashlib.sha256(value.encode("utf-8")).hexdigest()[:8]
+        slug = f"{slug[:55].rstrip('_')}_{digest}"
+    return slug

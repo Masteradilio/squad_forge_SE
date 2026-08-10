@@ -4,6 +4,7 @@ import binascii
 import json
 import logging
 import os
+import secrets
 import subprocess
 from collections.abc import Sequence
 from contextlib import asynccontextmanager
@@ -22,6 +23,7 @@ from localforge import __version__
 from localforge.api.routes import (
     autonomy_router,
     circuit_breakers_router,
+    harness_router,
     light_swarm_router,
     loops_router,
     memory_router,
@@ -31,6 +33,10 @@ from localforge.api.routes import (
     typed_handoffs_router,
     worktrees_router,
 )
+from localforge.api.routes.capabilities import create_capabilities_router
+from localforge.api.routes.engineering import create_engineering_router
+from localforge.api.routes.references import create_references_router
+from localforge.api.routes.release import create_release_router
 from localforge.api.schemas import (
     ImportPRDRequest,
     MemoryFactRequest,
@@ -48,14 +54,14 @@ from localforge.api.schemas import (
     TaskUpdateRequest,
     WorktreeRevertRequest,
 )
-from localforge.core.config import configured_free_gateway_models, load_config
-from localforge.core.policy import PolicyRules
 from localforge.control_plane import (
     ControlPlaneKernel,
     ControlPlaneStore,
     goal_id_for_project,
     state_path_for_goal,
 )
+from localforge.core.config import configured_free_gateway_models, load_config
+from localforge.core.policy import PolicyRules
 from localforge.events.bus import EventBus, LifecycleEvent
 from localforge.gitops.manager import WorktreeManager
 from localforge.llm.base import BaseLLMProvider
@@ -74,12 +80,20 @@ from localforge.pipeline import RolePipelineEngine
 from localforge.prd import import_prd
 from localforge.quality.discovery import TestCommandDiscovery
 from localforge.safety.runner import run_safe_command
+from localforge.services.production_observability import ProductionObservabilityService
 from localforge.services.scheduler import Scheduler
 from localforge.services.security_controls import (
+    PUBLIC_PATHS,
     SecurityPolicy,
     enforce_api_auth,
     enforce_payload_size,
     redact_secrets,
+)
+from localforge.services.tenant_context import (
+    bind_context,
+    context_from_request,
+    current_context,
+    reset_context,
 )
 from localforge.skills import SkillDefinition, SkillRegistry
 from localforge.storage import DatabaseManager, UnitOfWork
@@ -144,6 +158,7 @@ def create_app(
 
     app.state.telemetry_tracer = OpenTelemetryTracer()
     app.state.hitl_engine = HITLEngine(storage_path=os.getenv("LOCALFORGE_HITL_STORE"))
+    app.state.production_observability = ProductionObservabilityService()
 
     allowed_origins_raw = os.getenv("LOCALFORGE_ALLOWED_ORIGINS")
     if allowed_origins_raw:
@@ -164,11 +179,19 @@ def create_app(
         try:
             enforce_payload_size(request, app.state.security_policy)
             enforce_api_auth(request, app.state.security_policy)
+            context_token = bind_context(
+                current_context()
+                if request.url.path in PUBLIC_PATHS
+                else context_from_request(request)
+            )
         except HTTPException as exc:
             return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 
         correlation_id = request.headers.get("x-correlation-id") or f"lf-{datetime.now(UTC).timestamp():.6f}"
-        response = await call_next(request)
+        try:
+            response = await call_next(request)
+        finally:
+            reset_context(context_token)
         response.headers.setdefault("X-Correlation-ID", correlation_id)
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "DENY")
@@ -194,6 +217,16 @@ def create_app(
             "max_body_bytes": policy.max_body_bytes,
         }
 
+    @app.get("/operations/status")
+    async def operations_status(project_id: int = 1) -> dict[str, Any]:
+        """Return live operator metrics from the same UoW as the main API."""
+
+        async with UnitOfWork(manager) as uow:
+            report = await app.state.production_observability.get_operator_status_summary(
+                uow, project_id=project_id
+            )
+            return report.model_dump(mode="json")
+
     async def _control_plane_for_run(
         project_id: int, run_id: int
     ) -> ControlPlaneKernel:
@@ -214,6 +247,7 @@ def create_app(
     app.include_router(loops_router)
     app.include_router(circuit_breakers_router)
     app.include_router(autonomy_router)
+    app.include_router(harness_router)
     app.include_router(worktrees_router)
     app.include_router(runners_router)
     app.include_router(typed_handoffs_router)
@@ -221,6 +255,10 @@ def create_app(
     app.include_router(task_graph_router)
     app.include_router(memory_router)
     app.include_router(operational_loops_router)
+    app.include_router(create_engineering_router(manager))
+    app.include_router(create_capabilities_router(manager))
+    app.include_router(create_references_router(manager))
+    app.include_router(create_release_router(manager))
 
     @app.get("/projects")
     async def list_projects() -> list[dict[str, Any]]:
@@ -628,7 +666,7 @@ def create_app(
                 if projects_list:
                     project = projects_list[0]
                 else:
-                    proj_name = "Calculadora HP 12C Platinum" if ("hp" in user_message.lower() or "12c" in user_message.lower()) else "Projeto LocalForge OS"
+                    proj_name = "Projeto LocalForge OS"
                     project = await uow.projects.create_project(
                         domain.Project(
                             name=proj_name,
@@ -672,46 +710,15 @@ def create_app(
                 llm_text = (
                     f"Entendido, Product Owner! Processei a sua solicitação: '{user_message}'. "
                     f"O projeto **{project.name}** (ID #{project.id}) está ativo e configurado na infraestrutura.\n\n"
-                    "**Etapa 2 Concluída**: O backlog de tarefas da HP 12C Platinum foi gerado e priorizado. "
-                    "Acesse o menu **Kanban** para acompanhar o progresso da Squad em tempo real!"
+                    "Envie um PRD em Markdown para que o Scrum Master possa gerar o backlog "
+                    "contratual e iniciar a orquestração da Squad."
                 )
 
-            if not prd_path_value and req.get("bootstrap_hp12c_demo") is not True:
+            if not prd_path_value:
                 llm_text = (
                     f"Project {project.name} is ready. Provide a project-relative `prd_path` "
                     "to compile the Product Owner's PRD; no backlog was invented."
                 )
-
-            # Compile the supplied PRD only when the PO provided an explicit path.
-            existing_tasks = await uow.tasks.list_tasks_for_project(project.id)
-            if not existing_tasks and req.get("bootstrap_hp12c_demo") is True:
-                default_tasks = [
-                    (
-                        "LF-PRD-001",
-                        "Definição de Contratos de Interface RPN & Tipos",
-                        "Criar interfaces TypeScript e esquemas Pydantic para registradores X, Y, Z, T",
-                    ),
-                    (
-                        "LF-PRD-002",
-                        "Motor de Cálculo RPN (Notação Polonesa Reversa)",
-                        "Implementar pilha RPN, operações de adição, subtração, multiplicação e divisão",
-                    ),
-                    ("LF-PRD-003", "Funções Financeiras TVM (n, i, PV, PMT, FV)", "Implementar fórmulas de juros compostos e amortização"),
-                    ("LF-PRD-004", "Registradores de Memória (STO / RCL)", "Implementar leitura e escrita nos registradores R0 a R9"),
-                    ("LF-PRD-005", "Componente Visor LCD Digital", "Criar componente React com indicador de 10 dígitos e indicadores de status"),
-                    ("LF-PRD-006", "Grade Teclado Responsivo 39 Teclas", "Desenvolver layout visual em grade inspirado na HP 12C Platinum"),
-                    ("LF-PRD-007", "Suíte de Testes Unitários de Integração", "Desenvolver suíte de testes Matt Pocock TDD cobrindo todos os cenários"),
-                ]
-                for key_val, title, desc in default_tasks:
-                    task_obj = domain.Task(
-                        project_id=project.id,
-                        key=key_val,
-                        title=title,
-                        description=desc,
-                        status=domain.TaskStatus.BACKLOG,
-                    )
-                    await uow.tasks.create_task(task_obj)
-                await uow.commit()
 
         import_result: dict[str, Any] | None = None
         if prd_path_value:
@@ -795,7 +802,7 @@ def create_app(
 
         tracer = getattr(app.state, "telemetry_tracer", None)
         if tracer:
-            tracer.spans.clear()
+            tracer.clear()
 
         return {"status": "success", "message": "Banco de dados e telemetria zerados com sucesso!"}
 
@@ -805,6 +812,14 @@ def create_app(
         if not tracer:
             return []
         return tracer.get_timeline()
+
+    @app.get("/projects/{project_id}/telemetry-events")
+    async def list_telemetry_events(project_id: int) -> list[dict[str, Any]]:
+        """Return ordered Agent Harness lifecycle events for the dashboard."""
+        tracer = getattr(app.state, "telemetry_tracer", None)
+        if not tracer:
+            return []
+        return tracer.get_events()
 
     @app.post("/projects/{project_id}/start-squad")
     async def start_squad_execution(project_id: int) -> dict[str, Any]:
@@ -1033,11 +1048,20 @@ def create_app(
                 SkillDefinition(
                     name=req.name,
                     purpose=req.purpose,
+                    system_prompt=req.system_prompt,
                     triggers=req.triggers,
                     allowed_actions=req.allowed_actions,
                     expected_artifacts=req.expected_artifacts,
                     failure_modes=req.failure_modes,
                     examples=req.examples,
+                    strategy=req.strategy,
+                    max_retries=req.max_retries,
+                    context_budget=req.context_budget,
+                    runtime=req.runtime,
+                    entrypoint=req.entrypoint,
+                    permissions=req.permissions,
+                    dependencies=req.dependencies,
+                    manifest_version=req.manifest_version,
                     enabled=req.enabled,
                 )
             )
@@ -1054,15 +1078,50 @@ def create_app(
                 SkillDefinition(
                     name=name,
                     purpose=req.purpose,
+                    system_prompt=req.system_prompt,
                     triggers=req.triggers,
                     allowed_actions=req.allowed_actions,
                     expected_artifacts=req.expected_artifacts,
                     failure_modes=req.failure_modes,
                     examples=req.examples,
+                    strategy=req.strategy,
+                    max_retries=req.max_retries,
+                    context_budget=req.context_budget,
+                    runtime=req.runtime,
+                    entrypoint=req.entrypoint,
+                    permissions=req.permissions,
+                    dependencies=req.dependencies,
+                    manifest_version=req.manifest_version,
                     enabled=req.enabled,
                 )
             )
             return skill.model_dump(mode="json")
+
+    @app.delete("/projects/{project_id}/skills/{name}")
+    async def delete_project_skill(project_id: int, name: str) -> dict[str, Any]:
+        async with UnitOfWork(manager) as uow:
+            assert uow.projects is not None
+            project = await uow.projects.get_project(project_id)
+            if not project:
+                raise HTTPException(status_code=404, detail="Project not found")
+            deleted = SkillRegistry(project.root_path).delete_local(name)
+            if not deleted:
+                raise HTTPException(status_code=404, detail="Local skill not found")
+            return {"status": "deleted", "name": name}
+
+    @app.get("/projects/{project_id}/skills/{name}/manifest")
+    async def get_project_skill_manifest(project_id: int, name: str) -> dict[str, Any]:
+        async with UnitOfWork(manager) as uow:
+            assert uow.projects is not None
+            project = await uow.projects.get_project(project_id)
+            if not project:
+                raise HTTPException(status_code=404, detail="Project not found")
+            try:
+                return SkillRegistry(project.root_path).resolve_execution_manifest(name)
+            except KeyError as exc:
+                raise HTTPException(status_code=404, detail=str(exc)) from exc
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     @app.get("/tasks/{task_id}/skills")
     async def select_task_skills(task_id: int) -> list[dict[str, Any]]:
@@ -1484,7 +1543,10 @@ def create_app(
             if run_id is None or task_run_id is None:
                 raise HTTPException(status_code=500, detail="Pipeline run creation failed")
             result = await RolePipelineEngine(
-                uow, project_id=task.project_id, run_id=run_id
+                uow,
+                project_id=task.project_id,
+                run_id=run_id,
+                tracer=app.state.telemetry_tracer,
             ).run_task(task_id=task_id, task_run_id=task_run_id, mode=req.mode)
             return {
                 "mode": result.mode.value,
@@ -1893,7 +1955,7 @@ def create_app(
             return [_dump(approval) for approval in approvals]
 
     @app.post("/safety/approvals/{approval_id}/{action}")
-    async def decide_approval(approval_id: int, action: str) -> dict[str, Any]:
+    async def decide_approval(approval_id: int, action: str, request: Request) -> dict[str, Any]:
         allowed = {
             "approve": ActionApprovalStatus.APPROVED,
             "reject": ActionApprovalStatus.REJECTED,
@@ -1906,10 +1968,49 @@ def create_app(
             approval = await uow.safety.get_approval(approval_id)
             if not approval:
                 raise HTTPException(status_code=404, detail="Approval request not found")
+            actor_id = request.headers.get("x-approver-id", "local-api").strip() or "local-api"
+            idempotency_key = request.headers.get("x-idempotency-key", "").strip() or None
+            decision_reason = request.headers.get("x-approval-reason", "").strip() or None
+            now = datetime.now(UTC)
+            if approval.status != ActionApprovalStatus.PENDING:
+                if idempotency_key and approval.idempotency_key == idempotency_key:
+                    return _dump(approval)
+                raise HTTPException(status_code=409, detail="Approval request already decided")
+            expires_at = approval.expires_at
+            if expires_at is not None and expires_at.tzinfo is None:
+                expires_at = expires_at.replace(tzinfo=UTC)
+            if expires_at and expires_at <= now:
+                approval.status = ActionApprovalStatus.TIMEOUT
+                approval.decided_at = now
+                approval.decided_by = actor_id
+                approval.decision_reason = "Approval expired before decision"
+                await uow.safety.update_approval(approval)
+                raise HTTPException(status_code=409, detail="Approval request expired")
             approval.status = allowed[action]
-            approval.decided_at = datetime.now(UTC)
-            approval.decided_by = "local-api"
+            approval.decided_at = now
+            approval.decided_by = actor_id
+            approval.decision_nonce = secrets.token_hex(16)
+            approval.decision_reason = decision_reason
+            approval.idempotency_key = idempotency_key
             updated = await uow.safety.update_approval(approval)
+
+            await uow.audits.append_audit_event(
+                domain.AuditEvent(
+                    project_id=updated.project_id,
+                    run_id=updated.run_id,
+                    task_id=updated.task_id,
+                    actor_type=AuditEventActorType.USER,
+                    actor_id=actor_id,
+                    event_type=AuditEventType.SAFETY_DECISION,
+                    payload_redacted={
+                        "approval_id": updated.id,
+                        "action": action,
+                        "status": updated.status.value,
+                        "idempotency_key": idempotency_key,
+                        "reason": decision_reason,
+                    },
+                )
+            )
 
             # Publish event
             await app.state.event_bus.publish(

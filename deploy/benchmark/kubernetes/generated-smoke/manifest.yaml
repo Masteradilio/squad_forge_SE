@@ -1,0 +1,298 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: forgeos-benchmark-smoke123
+  labels:
+    app.kubernetes.io/part-of: forgeos-benchmark
+    forgeos.io/run-id: smoke123
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: forgeos-benchmark-runner
+  namespace: forgeos-benchmark-smoke123
+  labels:
+    app.kubernetes.io/part-of: forgeos-benchmark
+    forgeos.io/run-id: smoke123
+    forgeos.io/benchmark-runner: 'true'
+automountServiceAccountToken: true
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: forgeos-benchmark-runner
+  namespace: forgeos-benchmark-smoke123
+  labels:
+    app.kubernetes.io/part-of: forgeos-benchmark
+    forgeos.io/run-id: smoke123
+rules:
+- apiGroups:
+  - ''
+  resources:
+  - pods
+  - pods/log
+  - events
+  - services
+  - configmaps
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  - statefulsets
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - batch
+  resources:
+  - jobs
+  verbs:
+  - get
+  - list
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: forgeos-benchmark-runner
+  namespace: forgeos-benchmark-smoke123
+  labels:
+    app.kubernetes.io/part-of: forgeos-benchmark
+    forgeos.io/run-id: smoke123
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: forgeos-benchmark-runner
+subjects:
+- kind: ServiceAccount
+  name: forgeos-benchmark-runner
+  namespace: forgeos-benchmark-smoke123
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: forgeos-benchmark-config
+  namespace: forgeos-benchmark-smoke123
+  labels:
+    app.kubernetes.io/part-of: forgeos-benchmark
+    forgeos.io/run-id: smoke123
+data:
+  FORGEOS_BENCHMARK_SCHEMA: forgeos.kubernetes_benchmark_profile.v1
+  FORGEOS_BENCHMARK_RUN_ID: smoke123
+  FORGEOS_BENCHMARK_NAMESPACE: forgeos-benchmark-smoke123
+  LOCALFORGE_ENV: benchmark
+  LOCALFORGE_MAX_RUN_TIME: '5400'
+  LOCALFORGE_MAX_TASK_DURATION: '900'
+  LOCALFORGE_MAX_PARALLEL_TASKS: '2'
+  LOCALFORGE_MAX_ACTIVE_MODEL_CALLS: '4'
+  FORGEOS_BENCHMARK_EXECUTION_SCOPE: kubernetes-pod
+  FORGEOS_BENCHMARK_EVIDENCE_SCHEMA: forgeos.kubernetes_benchmark_evidence.v1
+  FORGEOS_BENCHMARK_EVIDENCE_DIR: /var/lib/forgeos/evidence
+  FORGEOS_BENCHMARK_RESULT_FILE: /var/lib/forgeos/evidence/benchmark.json
+  FORGEOS_BENCHMARK_PROJECT_ID: '1'
+  FORGEOS_BENCHMARK_TARGET_NAMESPACE: forgeos
+  FORGEOS_BACKEND_URL: http://forgeos-forgeos-cloud-backend:8000
+  REDIS_HOST: forgeos-forgeos-cloud-redis
+  REDIS_PORT: '6379'
+  REDIS_DB: '0'
+  POSTGRES_HOST: forgeos-forgeos-cloud-postgres
+  POSTGRES_PORT: '5432'
+  POSTGRES_DB: forgeos
+  POSTGRES_USER: forgeos
+  CONTEXT7_ENABLED: 'true'
+  CONTEXT7_MCP_ENDPOINT: https://mcp.context7.com/mcp
+  OMNIROUTE_URL: http://forgeos-forgeos-cloud-omniroute:20128/v1
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: forgeos-benchmark-quota
+  namespace: forgeos-benchmark-smoke123
+  labels:
+    app.kubernetes.io/part-of: forgeos-benchmark
+    forgeos.io/run-id: smoke123
+spec:
+  hard:
+    requests.cpu: '4'
+    limits.cpu: '8'
+    requests.memory: 8Gi
+    limits.memory: 12Gi
+    pods: '12'
+    persistentvolumeclaims: '2'
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: forgeos-benchmark-state
+  namespace: forgeos-benchmark-smoke123
+  labels:
+    app.kubernetes.io/part-of: forgeos-benchmark
+    forgeos.io/run-id: smoke123
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: forgeos-benchmark-runner
+  namespace: forgeos-benchmark-smoke123
+  labels: &id001
+    app.kubernetes.io/part-of: forgeos-benchmark
+    forgeos.io/run-id: smoke123
+    forgeos.io/benchmark-runner: 'true'
+spec:
+  backoffLimit: 2
+  activeDeadlineSeconds: 5400
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels: *id001
+    spec:
+      serviceAccountName: forgeos-benchmark-runner
+      automountServiceAccountToken: true
+      restartPolicy: OnFailure
+      activeDeadlineSeconds: 5400
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: runner
+        image: localforge/forgeos-benchmark-runner:dev
+        imagePullPolicy: IfNotPresent
+        workingDir: /work
+        command:
+        - localforge
+        args:
+        - benchmark
+        - report
+        - --project-id
+        - '1'
+        envFrom:
+        - configMapRef:
+            name: forgeos-benchmark-config
+        env:
+        - name: CONTEXT7_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: forgeos-runtime-secrets
+              key: CONTEXT7_API_KEY
+              optional: false
+        - name: OMNIROUTE_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: forgeos-runtime-secrets
+              key: OMNIROUTE_API_KEY
+              optional: false
+        - name: LOCALFORGE_API_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: forgeos-runtime-secrets
+              key: LOCALFORGE_API_TOKEN
+              optional: false
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: forgeos-runtime-secrets
+              key: REDIS_PASSWORD
+              optional: false
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: forgeos-runtime-secrets
+              key: POSTGRES_PASSWORD
+              optional: false
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            cpu: 500m
+            memory: 1Gi
+            ephemeral-storage: 1Gi
+          limits:
+            cpu: '2'
+            memory: 4Gi
+            ephemeral-storage: 4Gi
+            pids: '256'
+        volumeMounts:
+        - name: worktrees
+          mountPath: /workspace
+        - name: workdir
+          mountPath: /work
+        - name: state
+          mountPath: /var/lib/forgeos
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: worktrees
+        emptyDir:
+          sizeLimit: 4Gi
+      - name: workdir
+        emptyDir:
+          sizeLimit: 2Gi
+      - name: tmp
+        emptyDir:
+          sizeLimit: 1Gi
+      - name: state
+        persistentVolumeClaim:
+          claimName: forgeos-benchmark-state
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: forgeos-benchmark-default-deny
+  namespace: forgeos-benchmark-smoke123
+  labels:
+    app.kubernetes.io/part-of: forgeos-benchmark
+    forgeos.io/run-id: smoke123
+spec:
+  podSelector:
+    matchLabels:
+      forgeos.io/benchmark-runner: 'true'
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress: []
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: forgeos
+    ports:
+    - protocol: TCP
+      port: 8000
+    - protocol: TCP
+      port: 6379
+    - protocol: TCP
+      port: 5432
+    - protocol: TCP
+      port: 20128
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  - ports:
+    - protocol: TCP
+      port: 443

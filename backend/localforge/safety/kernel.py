@@ -125,6 +125,37 @@ class SafetyKernel:
 
             # Escalate high/medium risk command inputs to requiring approval unless they are automated pipeline actions (staging/test validation)
             normalized_command = command.strip().lower()
+            is_release_merge = normalized_command.startswith("git merge ")
+            if is_release_merge:
+                # Task agents never gain merge authority from a broad
+                # unattended profile. Only the server-owned release
+                # promotion state may merge a reviewed branch into the target.
+                if request.task_id is not None:
+                    return (
+                        SafetyDecision.DENY,
+                        "Git merge is reserved for the server-owned release promotion lane.",
+                    )
+                run = (
+                    await uow.executions.get_run(request.run_id)
+                    if request.run_id is not None and uow.executions is not None
+                    else None
+                )
+                release = dict((run.resource_limits or {}).get("release") or {}) if run else {}
+                release_promotion = (
+                    dict((run.resource_limits or {}).get("release_promotion") or {})
+                    if run
+                    else {}
+                )
+                promotion_mode = str(release.get("promotion_mode", ""))
+                approval_granted = bool(
+                    release.get("approval_granted", False)
+                    or release_promotion.get("approval_granted", False)
+                )
+                if promotion_mode != "full_access" and not approval_granted:
+                    return (
+                        SafetyDecision.REQUIRE_APPROVAL,
+                        "Git merge requires the persisted release approval or full_access mode.",
+                    )
             # Read-only Git identity/ref queries are required by unattended
             # PR assembly (for example ``git rev-parse HEAD``). They do not
             # mutate the worktree and must not create a human-approval gate

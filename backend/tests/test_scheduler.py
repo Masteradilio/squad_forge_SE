@@ -2,6 +2,7 @@ import asyncio
 import os
 
 import pytest
+from localforge.control_plane import ControlPlaneKernel, ControlPlaneStore, TaskSnapshot
 from localforge.models import domain
 from localforge.models.enums import (
     AgentRole,
@@ -159,7 +160,7 @@ async def test_dependency_resolution_blocks_task(db_manager, db_session: AsyncSe
 
 @pytest.mark.anyio
 async def test_scrum_master_records_blocker_and_reopens_for_chief(
-    db_manager, db_session: AsyncSession
+    tmp_path, db_manager, db_session: AsyncSession
 ):
     uow = UnitOfWork(db_manager)
     uow.session = db_session
@@ -201,6 +202,13 @@ async def test_scrum_master_records_blocker_and_reopens_for_chief(
     )
 
     scheduler = Scheduler(project_id=project.id, run_id=run.id, db_manager=db_manager)
+    scheduler._control_plane = ControlPlaneKernel(ControlPlaneStore(tmp_path / "control-plane.json"))
+    scheduler._control_plane.start(
+        goal_id="run:scrum-recovery",
+        vision="recover the failed task",
+        non_negotiables=["preserve evidence"],
+        tasks=[TaskSnapshot(todo_id=task.key, title=task.title, status="FAILED_SAFE")],
+    )
     failed_task = await uow.tasks.get_task(task.id)
     assert failed_task is not None
     await scheduler._scrum_master_record_conformity(uow, [failed_task])
@@ -215,6 +223,10 @@ async def test_scrum_master_records_blocker_and_reopens_for_chief(
     assert refreshed.metadata["scrum_master_conformity"]["status"] == "blocked"
     assert refreshed.metadata["task_contract"]["seniority_class"] == "chief_only"
     assert refreshed.metadata["task_contract"]["chief_engineer_unblock_required"] is True
+    state = scheduler._control_plane.status()
+    assert state is not None
+    assert state.todos[0].status.value == "PENDING"
+    assert state.handoffs[0].status == "REOPENED"
 
 
 @pytest.mark.anyio

@@ -9,6 +9,10 @@ from localforge.api.schemas import (
 )
 from localforge.models import domain
 from localforge.models.enums import SwarmNodeType, SwarmStrategy, TypedArtifactType
+from localforge.services.light_swarm_aggregation import aggregate_and_submit_pr_ready
+from localforge.services.light_swarm_dispatcher import dispatch_ready_swarm_nodes
+from localforge.services.light_swarm_lifecycle import recover_swarm_run, release_swarm_run_resources
+from localforge.services.light_swarm_workers import execute_typed_worker_node
 from localforge.storage import UnitOfWork, db_manager
 
 router = APIRouter(tags=["light-swarm"])
@@ -102,6 +106,65 @@ async def get_swarm_summary(run_id: int) -> domain.SwarmExecutionSummary:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
+@router.post("/swarms/{run_id}/dispatch")
+async def dispatch_swarm_nodes(run_id: int) -> dict[str, Any]:
+    """Dispatch ready nodes through RunnerPool and PathLease governance."""
+
+    async with UnitOfWork(db_manager) as uow:
+        try:
+            nodes = await dispatch_ready_swarm_nodes(run_id, uow)
+            return {
+                "run_id": run_id,
+                "dispatched": [node.model_dump(mode="json") for node in nodes],
+            }
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/swarms/{run_id}/nodes/{node_id}/typed-worker")
+async def execute_swarm_typed_worker(run_id: int, node_id: str) -> dict[str, Any]:
+    """Record a typed worker handoff through the canonical artifact service."""
+
+    async with UnitOfWork(db_manager) as uow:
+        try:
+            artifact = await execute_typed_worker_node(run_id, node_id, uow)
+            return {
+                "run_id": run_id,
+                "node_id": node_id,
+                "artifact": artifact.model_dump(mode="json") if artifact else None,
+            }
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/swarms/{run_id}/aggregate")
+async def aggregate_swarm_pr_ready(run_id: int) -> dict[str, Any]:
+    """Submit completed observed swarm evidence to the mechanical PR gate."""
+
+    async with UnitOfWork(db_manager) as uow:
+        try:
+            task = await aggregate_and_submit_pr_ready(run_id, uow)
+            return {
+                "run_id": run_id,
+                "task": task.model_dump(mode="json") if task else None,
+                "submitted": task is not None,
+            }
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/swarms/{run_id}/recover")
+async def recover_swarm(run_id: int) -> dict[str, Any]:
+    """Reconstruct ready/running nodes and circuit evidence after a restart."""
+
+    async with UnitOfWork(db_manager) as uow:
+        try:
+            run = await recover_swarm_run(run_id, uow)
+            return {"run_id": run_id, "status": run.status, "active_node_ids": run.active_node_ids}
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
 @router.post("/swarms/{run_id}/pause")
 async def pause_swarm(run_id: int) -> dict[str, Any]:
     """Pause a running swarm at swarm scope."""
@@ -118,9 +181,10 @@ async def pause_swarm(run_id: int) -> dict[str, Any]:
 async def kill_swarm(run_id: int) -> dict[str, Any]:
     """Kill a swarm — all active nodes are released."""
     async with UnitOfWork(db_manager) as uow:
-        assert uow.light_swarm is not None
         try:
-            run = await uow.light_swarm.kill_swarm(run_id)
+            await release_swarm_run_resources(run_id, uow, reason="KILLED_BY_USER")
+            assert uow.light_swarm is not None
+            _, run = await uow.light_swarm._load_run(run_id)
             return {"run_id": run_id, "status": run.status, "verdict": run.verdict}
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc

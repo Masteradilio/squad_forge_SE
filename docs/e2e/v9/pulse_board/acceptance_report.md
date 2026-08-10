@@ -2,9 +2,9 @@
 
 - Status: **ACCEPTED**
 - Tasks: **4/4 PR_READY**
-- Task runs: **5**
-- Model calls: **17**
-- Cost: **$0.017656**
+- Task runs: **4**
+- Model calls: **6**
+- Cost: **$0.002732**
 - Control plane completed: **True**
 
 ## Blockers

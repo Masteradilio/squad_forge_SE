@@ -4,7 +4,7 @@ export interface LifecycleEventPayload {
   project_id: number;
   run_id?: number;
   event_type: string;
-  payload: Record<string, any>;
+  payload: Record<string, unknown>;
   id?: number;
   created_at?: string;
 }
@@ -37,6 +37,12 @@ export function useProjectEvents(
     let reconnectTimer: number | null = null;
 
     const pid = projectId && projectId > 0 ? projectId : 0;
+
+    if (pid === 0) {
+      return () => {
+        active = false;
+      };
+    }
 
     const connect = () => {
       if (!active) return;
@@ -92,5 +98,5 @@ export function useProjectEvents(
     };
   }, [projectId, onEvent]);
 
-  return connected;
+  return projectId > 0 && connected;
 }

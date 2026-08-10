@@ -20,6 +20,17 @@ from localforge.storage import UnitOfWork, bootstrap_database, db_manager
 
 console = Console()
 
+WORKSPACE_SUBDIRECTORIES = ("policies", "skills", "memory", "artifacts", "runs", "logs")
+
+
+def ensure_workspace_layout(lf_dir: str) -> bool:
+    """Create every required workspace directory, even after partial setup."""
+    existed = os.path.exists(lf_dir)
+    os.makedirs(lf_dir, exist_ok=True)
+    for subdir in WORKSPACE_SUBDIRECTORIES:
+        os.makedirs(os.path.join(lf_dir, subdir), exist_ok=True)
+    return not existed
+
 
 def get_git_info() -> tuple[str, str]:
     """Retrieve current git default branch and remote URL if applicable."""
@@ -48,18 +59,14 @@ async def run_init() -> None:
 
     console.print(f"[bold blue]Initializing LocalForge OS workspace at:[/bold blue] {cwd}")
 
-    # 1. Idempotency Check
-    if os.path.exists(lf_dir):
+    # 1. Idempotency Check and repair of partially-created workspaces
+    created_layout = ensure_workspace_layout(lf_dir)
+    if not created_layout:
         console.print(
             "[yellow]Warning: .localforge workspace directory already exists. "
-            "Skipping folder creation.[/yellow]"
+            "Reconciled required subdirectories.[/yellow]"
         )
     else:
-        # 2. Create Directory Structure
-        subdirs = ["policies", "skills", "memory", "artifacts", "runs", "logs"]
-        os.makedirs(lf_dir, exist_ok=True)
-        for subdir in subdirs:
-            os.makedirs(os.path.join(lf_dir, subdir), exist_ok=True)
         console.print("[green]Created .localforge directory layout.[/green]")
 
     # 3. Get Git settings

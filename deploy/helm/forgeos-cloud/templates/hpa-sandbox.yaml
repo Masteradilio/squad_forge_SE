@@ -5,6 +5,10 @@ metadata:
   name: {{ include "forgeos-cloud.fullname" . }}-backend-hpa
   labels:
     app.kubernetes.io/component: backend-hpa
+  annotations:
+    forgeos.io/metrics-api-group: metrics.k8s.io
+    forgeos.io/metrics-api-path: {{ .Values.autoscaling.metricsApiPath | quote }}
+    forgeos.io/metrics-server-required: {{ .Values.autoscaling.metricsServerRequired | quote }}
 spec:
   scaleTargetRef:
     apiVersion: apps/v1

@@ -9,7 +9,16 @@ BASELINE_MODELS: dict[str, dict[str, str]] = {
     "Google": {"large": "gemini-2.5-pro", "medium": "gemini-2.5-flash", "small": "gemini-2.5-flash-lite"},
 }
 
-LOCAL_PROVIDERS = {"ollama", "local", "localforge", "omniroute"}
+LOCAL_PROVIDERS = {"ollama", "local", "localforge", "omniroute", "omni_route"}
+# OmniRoute calls are bounded independently from paid-provider budgets. Keep
+# this finite default safe for callers that create a run without explicitly
+# copying the configured resource limits into its Run record.
+DEFAULT_MAX_GATEWAY_CALLS = 48
+
+
+def is_gateway_provider(provider: str) -> bool:
+    """Return whether the call crossed the ForgeOS OmniRoute gateway."""
+    return provider.strip().lower() in {"omniroute", "omni_route"}
 
 
 def is_free_gateway_model(model: str | None) -> bool:
@@ -20,16 +29,11 @@ def is_free_gateway_model(model: str | None) -> bool:
     return normalized.endswith(":free") or "-free" in normalized or "free/" in normalized
 
 
-def is_gateway_provider(provider: str) -> bool:
-    """Return whether the call crossed the ForgeOS OmniRoute gateway."""
-    return provider.strip().lower() == "omniroute"
-
-
 def is_billed_call(provider: str, estimated_cost_usd: float) -> bool:
     """Recognize billed gateway calls without confusing free routes with local work."""
-    return is_paid_provider(provider) or (
-        is_gateway_provider(provider) and estimated_cost_usd > 0.0
-    )
+    if is_gateway_provider(provider):
+        return estimated_cost_usd > 0.0
+    return is_paid_provider(provider)
 
 
 def snapshot_prices(snapshots: Mapping[str, Any], model_name: str) -> tuple[float, float]:

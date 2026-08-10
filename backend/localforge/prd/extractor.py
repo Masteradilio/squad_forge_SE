@@ -12,6 +12,7 @@ class DeterministicPRDExtractor:
         current_epic: ExtractedEpic | None = None
         current_task: ExtractedTask | None = None
         table_headers: list[str] = []
+        visual_matrix_headers: list[str] = []
         in_acceptance_section = False
 
         for raw_line in markdown.splitlines():
@@ -26,11 +27,13 @@ class DeterministicPRDExtractor:
                 if in_acceptance_section:
                     current_task = tasks[-1] if tasks else None
                     table_headers = []
+                    visual_matrix_headers = []
                     continue
                 current_epic = ExtractedEpic(title=title, summary=f"Work related to {title}.")
                 epics.append(current_epic)
                 current_task = None
                 table_headers = []
+                visual_matrix_headers = []
                 continue
 
             numbered = re.match(r"^\d+\.\s+(?:\*\*)?(.+?)(?:\*\*)?:?\s*$", line)
@@ -61,8 +64,17 @@ class DeterministicPRDExtractor:
                     continue
                 if not table_headers:
                     table_headers = [cell.lower() for cell in cells]
+                    if self._is_visual_matrix_header(table_headers):
+                        visual_matrix_headers = table_headers
                     continue
                 if cells:
+                    if visual_matrix_headers:
+                        target_task = current_task or (tasks[-1] if tasks else None)
+                        if target_task is not None:
+                            target_task.metadata.setdefault("visual_acceptance_matrix", []).append(
+                                self._visual_matrix_entry(visual_matrix_headers, cells)
+                            )
+                        continue
                     title = cells[0]
                     acceptance = cells[1] if len(cells) > 1 else f"Complete {title}"
                     tasks.append(
@@ -111,6 +123,46 @@ class DeterministicPRDExtractor:
             or "aceita" in normalized
             or "acceptance" in normalized
         )
+
+    def _is_visual_matrix_header(self, headers: list[str]) -> bool:
+        """Recognize a contract table without turning its rows into backlog tasks."""
+        normalized = " ".join(headers)
+        return (
+            any(token in normalized for token in ("row", "linha"))
+            and any(token in normalized for token in ("column", "coluna"))
+            and any(token in normalized for token in ("action", "acao", "ação"))
+            and any(token in normalized for token in ("label", "legenda"))
+        )
+
+    def _visual_matrix_entry(self, headers: list[str], cells: list[str]) -> dict[str, object]:
+        """Map common localized visual-contract columns to stable contract keys."""
+        entry: dict[str, object] = {}
+        aliases = {
+            "row": ("row", "linha"),
+            "column": ("column", "coluna"),
+            "primary_label": ("primary label", "label principal", "white"),
+            "blue_label": ("blue legend", "legenda azul", "blue"),
+            "orange_label": ("orange legend", "legenda laranja", "orange"),
+            "action": ("action", "ação", "acao"),
+        }
+        for index, header in enumerate(headers):
+            value = cells[index].strip() if index < len(cells) else ""
+            if not value:
+                continue
+            normalized_header = header.lower()
+            key = next(
+                (
+                    candidate
+                    for candidate, names in aliases.items()
+                    if any(name in normalized_header for name in names)
+                ),
+                None,
+            )
+            if key is not None:
+                entry[key] = int(value) if key in {"row", "column"} and value.isdigit() else value
+        if "row" in entry and "column" in entry:
+            entry["locator"] = f"[data-row='{entry['row']}'][data-column='{entry['column']}']"
+        return entry
 
     def _clean_text(self, text: str) -> str:
         return re.sub(r"\s+", " ", text).strip().rstrip(".")

@@ -1,27 +1,115 @@
+import hashlib
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, model_validator
 
 from localforge.models import domain
+
+SkillRuntime = Literal["instruction", "python"]
+SkillPermission = Literal[
+    "read_files",
+    "write_files",
+    "run_tests",
+    "run_commands",
+    "network",
+]
+ALLOWED_EXECUTION_PERMISSIONS = frozenset(
+    {"read_files", "write_files", "run_tests", "run_commands", "network"}
+)
 
 
 class SkillDefinition(BaseModel):
     name: str
     purpose: str
+    system_prompt: str = ""
     triggers: list[str] = Field(default_factory=list)
     allowed_actions: list[str] = Field(default_factory=list)
     expected_artifacts: list[str] = Field(default_factory=list)
     failure_modes: list[str] = Field(default_factory=list)
     examples: list[str] = Field(default_factory=list)
+    # Agent Harness profile. ``auto`` preserves the role-aware default while
+    # allowing user-created skills to request a bounded strategy explicitly.
+    strategy: Literal["auto", "predict", "code_act"] = "auto"
+    max_retries: int = Field(default=1, ge=0, le=3)
+    context_budget: int = Field(default=12000, ge=1000, le=50000)
+    # Executable metadata is declarative only.  SkillRegistry never imports
+    # or executes the referenced entrypoint.
+    runtime: SkillRuntime = "instruction"
+    entrypoint: str | None = None
+    permissions: list[SkillPermission] = Field(default_factory=list)
+    dependencies: list[str] = Field(default_factory=list)
+    manifest_version: int = Field(default=1, ge=1)
     source: str = "builtin"
     enabled: bool = True
     last_used_at: str | None = None
     success_rate: float | None = None
 
+    @model_validator(mode="after")
+    def _validate_execution_metadata(self) -> "SkillDefinition":
+        if self.runtime == "python" and not self.entrypoint:
+            raise ValueError("python skills require a non-empty entrypoint")
+        if self.entrypoint is not None and not self.entrypoint.strip():
+            if self.runtime == "python":
+                raise ValueError("python skills require a non-empty entrypoint")
+            self.entrypoint = None
+        invalid_permissions = set(self.permissions) - ALLOWED_EXECUTION_PERMISSIONS
+        if invalid_permissions:
+            invalid = ", ".join(sorted(invalid_permissions))
+            raise ValueError(f"unsupported skill execution permission(s): {invalid}")
+        return self
+
 
 BUILTIN_SKILLS = [
+    SkillDefinition(
+        name="grill-with-docs",
+        purpose=(
+            "Stress-test requirements against the existing codebase and record "
+            "shared terminology, unresolved decisions, and ADR-ready context before implementation."
+        ),
+        triggers=["grill-with-docs", "requirements interview", "context.md", "adr"],
+        allowed_actions=[
+            "inspect repository context",
+            "ask bounded requirement questions",
+            "write context and ADR notes",
+        ],
+        expected_artifacts=["CONTEXT.md", "docs/ADR.md"],
+        failure_modes=["ambiguous requirement", "unrecorded decision", "terminology drift"],
+        examples=["Resolve the smallest set of unanswered branches before ticket implementation."],
+    ),
+    SkillDefinition(
+        name="to-tickets",
+        purpose=(
+            "Turn an approved specification into dependency-aware tracer-bullet tickets "
+            "with explicit ownership, file scope, and observable acceptance behavior."
+        ),
+        triggers=["to-tickets", "tracer bullet", "vertical slice", "ticket decomposition"],
+        allowed_actions=[
+            "compile task dependencies",
+            "freeze task contracts",
+            "write backlog evidence",
+        ],
+        expected_artifacts=["plan.md"],
+        failure_modes=["synthetic task order", "missing dependency", "unbounded ticket scope"],
+        examples=["Each ticket must expose its blocking edges and a real acceptance command."],
+    ),
+    SkillDefinition(
+        name="tdd",
+        purpose=(
+            "Keep acceptance behavior executable and observable through a red-green-refactor "
+            "workflow; tests must exercise the real production API and cannot bypass failures."
+        ),
+        triggers=["tdd", "red-green-refactor", "acceptance test", "canonical test"],
+        allowed_actions=[
+            "write behavioral tests",
+            "run focused tests",
+            "preserve assertions during repair",
+        ],
+        expected_artifacts=["tests.md"],
+        failure_modes=["duplicated algorithm", "weakened assertion", "skipped test"],
+        examples=["Start from a failing observable behavior, then implement only the bounded contract."],
+    ),
     SkillDefinition(
         name="python-pytest",
         purpose="Use targeted pytest commands for Python backend validation.",
@@ -111,6 +199,19 @@ class SkillRegistry:
             skills[skill.name] = skill
         return sorted(skills.values(), key=lambda skill: skill.name)
 
+    @staticmethod
+    def canonical_manifest(skill: SkillDefinition | dict[str, Any]) -> dict[str, Any]:
+        """Return the stable, data-only manifest used for replay bindings."""
+        definition = skill if isinstance(skill, SkillDefinition) else SkillDefinition.model_validate(skill)
+        return json.loads(
+            json.dumps(definition.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
+        )
+
+    @classmethod
+    def manifest_digest(cls, skill: SkillDefinition | dict[str, Any]) -> str:
+        payload = json.dumps(cls.canonical_manifest(skill), sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
     def select_for_task(self, task: domain.Task) -> list[SkillDefinition]:
         skills = self.load_all()
         metadata_text = " ".join(
@@ -131,6 +232,7 @@ class SkillRegistry:
         return selected[:6]
 
     def write_local(self, skill: SkillDefinition) -> SkillDefinition:
+        self.validate_executable(skill)
         target_dir = Path(self.project_root) / ".localforge" / "skills"
         target_dir.mkdir(parents=True, exist_ok=True)
         target = target_dir / f"{_safe_name(skill.name)}.json"
@@ -138,6 +240,47 @@ class SkillRegistry:
         data["source"] = "local"
         target.write_text(json.dumps(data, indent=2, sort_keys=True), encoding="utf-8")
         return SkillDefinition.model_validate(data)
+
+    def validate_executable(
+        self,
+        skill: SkillDefinition | dict[str, Any] | str,
+    ) -> bool:
+        """Validate declarative executable metadata without executing it."""
+
+        definition = self._resolve_skill(skill)
+        if definition.runtime not in {"instruction", "python"}:
+            raise ValueError(f"unsupported skill runtime: {definition.runtime}")
+        if definition.runtime == "python" and not definition.entrypoint:
+            raise ValueError("python skills require a non-empty entrypoint")
+        invalid_permissions = set(definition.permissions) - ALLOWED_EXECUTION_PERMISSIONS
+        if invalid_permissions:
+            invalid = ", ".join(sorted(invalid_permissions))
+            raise ValueError(f"unsupported skill execution permission(s): {invalid}")
+        return True
+
+    def resolve_execution_manifest(
+        self,
+        skill: SkillDefinition | dict[str, Any] | str,
+    ) -> dict[str, Any]:
+        """Return a validated, data-only execution manifest for a skill."""
+
+        definition = self._resolve_skill(skill)
+        self.validate_executable(definition)
+        return {
+            "name": definition.name,
+            "manifest_version": definition.manifest_version,
+            "runtime": definition.runtime,
+            "entrypoint": definition.entrypoint,
+            "permissions": list(definition.permissions),
+            "dependencies": list(definition.dependencies),
+        }
+
+    def delete_local(self, name: str) -> bool:
+        target = Path(self.project_root) / ".localforge" / "skills" / f"{_safe_name(name)}.json"
+        if not target.is_file():
+            return False
+        target.unlink()
+        return True
 
     def _load_local(self) -> list[SkillDefinition]:
         skill_dir = Path(self.project_root) / ".localforge" / "skills"
@@ -152,6 +295,21 @@ class SkillRegistry:
             except (OSError, json.JSONDecodeError, ValidationError):
                 continue
         return loaded
+
+    def _resolve_skill(
+        self,
+        skill: SkillDefinition | dict[str, Any] | str,
+    ) -> SkillDefinition:
+        if isinstance(skill, SkillDefinition):
+            return skill
+        if isinstance(skill, dict):
+            return SkillDefinition.model_validate(skill)
+        if isinstance(skill, str):
+            for definition in self.load_all():
+                if definition.name == skill:
+                    return definition
+            raise KeyError(f"skill not found: {skill}")
+        raise TypeError("skill must be a SkillDefinition, mapping, or skill name")
 
 
 def _safe_name(name: str) -> str:

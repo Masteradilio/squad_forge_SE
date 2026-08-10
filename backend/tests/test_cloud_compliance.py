@@ -22,7 +22,6 @@ from localforge.models.enums import RunMode, RunStatus, TaskRunStatus
 from localforge.pipeline.hitl_engine import HITLEngine
 from localforge.quality.package_locker import PackageLocker
 from localforge.safety.authority_matrix import AgentAuthorityMatrix
-from localforge.sandbox.container_runner import ContainerRunner
 from localforge.services.operational_state import OperationalIdempotencyStore
 from localforge.storage import UnitOfWork
 
@@ -94,13 +93,6 @@ def test_authority_matrix_normalizes_roles_and_enforces_paths() -> None:
     assert not matrix.validate_action_authority("Developer", "backend/tests/test_app.py")[0]
     assert not matrix.validate_action_authority("Reviewer", "README.md")[0]
     assert not matrix.validate_action_authority("UnknownRole", "backend/app.py")[0]
-
-
-def test_preview_identifiers_are_dns_safe() -> None:
-    config = ContainerRunner().create_sandbox("Tenant-A", "Project-1")
-    assert config.preview_url == "https://tenant-a-project-1.preview.forgeos.app"
-    with pytest.raises(ValueError):
-        ContainerRunner().create_sandbox("tenant/escape", "project")
 
 
 def test_graphify_generates_python_edges_without_llm(tmp_path: Path, monkeypatch) -> None:

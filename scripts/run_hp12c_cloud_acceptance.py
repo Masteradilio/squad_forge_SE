@@ -1,8 +1,9 @@
 """Run the real HP12C acceptance flow through the OmniRoute gateway only.
 
 This runner deliberately fails closed. A reachable /v1/models endpoint is not
-enough: at least one catalog-advertised free route must complete a structured
-probe before the scheduler is allowed to spend time on the PRD.
+enough: at least one catalog-advertised route must complete a structured probe
+before the scheduler is allowed to spend time on the PRD. Free routes are
+preferred, while an explicitly configured paid route is an allowed fallback.
 """
 
 from __future__ import annotations
@@ -25,6 +26,17 @@ from dotenv import dotenv_values
 ROOT = Path(__file__).resolve().parents[1]
 SAMPLE_DOCS = ROOT / "samples" / "e2e-hp12c-platinum" / "docs"
 DEFAULT_WORKSPACE = ROOT / "benchmarks" / "workspaces" / "hp12c-cloud-acceptance-live"
+CHALLENGE_FIXTURE = ROOT / "scripts" / "fixtures" / "hp12c_post_merge_challenge.py"
+CHALLENGE_TARGET = "tests/test_hp12c_post_merge_challenge.py"
+PO_INSTRUCTION = (
+    "Atue como uma squad autônoma de engenharia para entregar a HP 12C Platinum. "
+    "O Tester deve executar o desafio adicional das dez funções mais complexas "
+    "(TVM, NPV, IRR, AMORT, SL, SOYD, DB, PRICE, YTM e DATE) usando o comando "
+    f"python -m pytest {CHALLENGE_TARGET} -q -k complex. Caprichem na fidelidade "
+    "visual: reproduzam o chassis, LCD, posições e nomes dos botões da imagem; "
+    "legendas brancas ficam na parte superior dentro do botão, azuis na parte "
+    "inferior ainda dentro do botão e laranjas acima do botão, fora dele."
+)
 
 
 def _env_value(name: str) -> str | None:
@@ -89,20 +101,26 @@ def _omniroute_preflight(base_url: str) -> tuple[bool, list[str], dict[str, Any]
             "catalog": f"HTTP {catalog_status}: {catalog_body}",
             "completion": "not attempted",
         }
-    routes = [
+    catalog_routes = [
         str(item["id"])
         for item in catalog_body.get("data", [])
-        if isinstance(item, dict) and item.get("id") and _free_route(str(item["id"]))
+        if isinstance(item, dict) and item.get("id")
     ]
-    if not routes:
+    free_routes = [route for route in catalog_routes if _free_route(route)]
+    configured_routes = [
+        item.strip()
+        for item in (_env_value("LOCALFORGE_CLOUD_PREFERRED_ROUTES") or "").split(",")
+        if item.strip()
+    ]
+    if not free_routes and not configured_routes:
         return False, [], {
-            "catalog": "reachable but no explicit free route was advertised",
+            "catalog": "reachable but no free or explicitly configured route was advertised",
             "completion": "not attempted",
         }
 
     failures: list[str] = []
     probe = {
-        "model": routes[0],
+        "model": configured_routes[0] if configured_routes else free_routes[0],
         "messages": [
             {
                 "role": "system",
@@ -139,14 +157,21 @@ def _omniroute_preflight(base_url: str) -> tuple[bool, list[str], dict[str, Any]
         ).split(",")
         if item.strip()
     ]
-    probe_routes = sorted(
-        (
-            route
-            for route in routes
-            if not any(marker in route.lower() for marker in ("veo", "seedance"))
-        ),
-        key=lambda route: _route_priority(route, preferred),
-    )[:max_probe_routes]
+    ordered_candidates = list(
+        dict.fromkeys(
+            [
+                *configured_routes,
+                *preferred,
+                *sorted(free_routes, key=lambda route: _route_priority(route, preferred)),
+            ]
+        )
+    )
+    probe_routes = [
+        route
+        for route in ordered_candidates
+        if route in catalog_routes
+        and not any(marker in route.lower() for marker in ("veo", "seedance"))
+    ][:max_probe_routes]
     for route in probe_routes:
         probe["model"] = route
         status, body = _request_json(
@@ -162,15 +187,21 @@ def _omniroute_preflight(base_url: str) -> tuple[bool, list[str], dict[str, Any]
         except json.JSONDecodeError:
             parsed = None
         if status == 200 and isinstance(parsed, dict) and parsed.get("actions"):
-            return True, routes, {
-                "catalog": f"{len(routes)} free route(s) advertised",
+            return True, catalog_routes, {
+                "catalog": (
+                    f"{len(free_routes)} free route(s) and "
+                    f"{len(catalog_routes)} catalog route(s) advertised"
+                ),
                 "completion": f"structured probe passed via {route}",
                 "verified_route": route,
             }
         failures.append(f"{route}: HTTP {status}: {body}")
-    return False, routes, {
-        "catalog": f"{len(routes)} free route(s) advertised",
-        "completion": "no free route completed the structured probe",
+    return False, catalog_routes, {
+        "catalog": (
+            f"{len(free_routes)} free route(s) and "
+            f"{len(catalog_routes)} catalog route(s) advertised"
+        ),
+        "completion": "no candidate route completed the structured probe",
         "failures": failures,
     }
 
@@ -319,9 +350,16 @@ def _install_hp12c_acceptance_contract(workspace: Path) -> dict[str, str]:
         task_id, title, metadata_json = row
         metadata = json.loads(metadata_json or "{}")
         contract = metadata.setdefault("task_contract", {})
-        allowed_files = contract.setdefault("allowed_files", [])
+        contract["product_owner_instruction"] = PO_INSTRUCTION
+        allowed_files = [
+            path
+            for path in contract.setdefault("allowed_files", [])
+            if path == "app/index.html"
+        ]
         if target not in allowed_files:
             allowed_files.append(target)
+        contract["allowed_files"] = allowed_files
+        contract["canonical_test_command"] = f"python -m pytest {target} -q"
         contract["acceptance_test_fixture_source"] = str(fixture)
         contract["acceptance_test_fixture_target"] = target
         contract["acceptance_test_policy"] = "repository_owned_observable_behavior"
@@ -330,7 +368,11 @@ def _install_hp12c_acceptance_contract(workspace: Path) -> dict[str, str]:
         task_notes = contract.setdefault("implementation_notes", [])
         required_notes = [
             "Preserve the RPNStack public API and implementation in app/index.html; this task owns the production stack behavior.",
-            "The acceptance flow calls enter(5), enter(3), swap(), rollDown(), and clx() and requires register snapshots [5,0,0,0], [3,5,0,0], [5,3,0,0], [3,0,0,5], and [0,0,0,5].",
+            (
+                "The acceptance flow calls enter(5), enter(3), swap(), rollDown(), and clx() "
+                "and requires register snapshots [5,0,0,0], [3,5,0,0], [5,3,0,0], "
+                "[3,0,0,5], and [0,0,0,5]."
+            ),
             "Repair the production HTML implementation when these assertions fail; do not edit or weaken the acceptance test.",
         ]
         for note in required_notes:
@@ -355,6 +397,7 @@ def _install_hp12c_acceptance_contract(workspace: Path) -> dict[str, str]:
                 dependencies.append(previous_id)
             current_metadata = json.loads(task_metadata_json or "{}")
             current_contract = current_metadata.setdefault("task_contract", {})
+            current_contract["product_owner_instruction"] = PO_INSTRUCTION
             if index >= 3:
                 current_contract["seniority_class"] = "chief_only"
                 current_contract["required_product_files"] = ["app/index.html"]
@@ -364,7 +407,10 @@ def _install_hp12c_acceptance_contract(workspace: Path) -> dict[str, str]:
                 current_notes = current_contract.setdefault("implementation_notes", [])
                 for note in (
                     "This HP12C functional task is Chief-only: use the configured high-capacity route, not a local model.",
-                    "Read the accepted predecessor app/index.html before editing and extend it in place; never replace the product with a smaller standalone page.",
+                    (
+                        "Read the accepted predecessor app/index.html before editing and extend it in place; "
+                        "never replace the product with a smaller standalone page."
+                    ),
                     "Preserve RPNStack and every previously accepted public method and behavior before adding this task's capability.",
                 ):
                     if note not in current_notes:
@@ -373,66 +419,129 @@ def _install_hp12c_acceptance_contract(workspace: Path) -> dict[str, str]:
                 current_contract["required_public_apis"] = list(rpn_public_apis) + list(alg_public_apis)
                 current_contract["required_product_files"] = ["app/index.html"]
                 current_contract["seniority_class"] = "chief_only"
-                current_allowed_files = current_contract.setdefault("allowed_files", [])
+                current_allowed_files = [
+                    path
+                    for path in current_contract.setdefault("allowed_files", [])
+                    if path == "app/index.html"
+                ]
                 if alg_target not in current_allowed_files:
                     current_allowed_files.append(alg_target)
+                current_contract["allowed_files"] = current_allowed_files
+                current_contract["canonical_test_command"] = f"python -m pytest {alg_target} -q"
                 current_contract["acceptance_test_fixture_source"] = str(alg_fixture)
                 current_contract["acceptance_test_fixture_target"] = alg_target
                 current_contract["acceptance_test_policy"] = "repository_owned_observable_behavior"
                 task_notes = current_contract.setdefault("implementation_notes", [])
                 for note in (
                     "Preserve the RPNStack public API from LF-PRD-004 while adding ALG mode.",
-                    "Expose mode, setMode(mode), and evaluateExpression(expression) on RPNStack; evaluateExpression must honor operator precedence and parentheses.",
-                    "Read the predecessor's accepted app/index.html before editing. Extend its existing RPNStack in place; never replace the complete file with markup or delete enter, swap, rollDown, clx, X, Y, Z, or T.",
-                    "Any candidate that removes an accepted predecessor API is invalid even if the new ALG behavior works; restore the prior implementation and add only the missing ALG behavior.",
+                    (
+                        "Expose mode, setMode(mode), and evaluateExpression(expression) on RPNStack; "
+                        "evaluateExpression must honor operator precedence and parentheses."
+                    ),
+                    (
+                        "Read the predecessor's accepted app/index.html before editing. Extend its existing "
+                        "RPNStack in place; never replace the complete file with markup or delete enter, "
+                        "swap, rollDown, clx, X, Y, Z, or T."
+                    ),
+                    (
+                        "Any candidate that removes an accepted predecessor API is invalid even if the new ALG "
+                        "behavior works; restore the prior implementation and add only the missing ALG behavior."
+                    ),
                     "The repository-owned ALG fixture is authoritative; repair app/index.html, never replace or weaken the fixture.",
                 ):
                     if note not in task_notes:
                         task_notes.append(note)
-                current_test = next(
-                    (
-                        path
-                        for path in str(current_contract.get("canonical_test_command", "")).split()
-                        if path.endswith(".py") and "task_2_2" in path
-                    ),
-                    None,
-                )
-                if current_test:
-                    current_contract["canonical_test_command"] = (
-                        f"python -m pytest {target} {current_test} -q"
-                    )
             elif key == "LF-PRD-006":
                 current_contract["required_public_apis"] = list(accumulated_public_apis)
                 current_contract["required_product_files"] = ["app/index.html"]
-                current_allowed_files = current_contract.setdefault("allowed_files", [])
+                current_allowed_files = [
+                    path
+                    for path in current_contract.setdefault("allowed_files", [])
+                    if path == "app/index.html"
+                ]
                 if memory_target not in current_allowed_files:
                     current_allowed_files.append(memory_target)
+                current_contract["allowed_files"] = current_allowed_files
+                current_contract["canonical_test_command"] = f"python -m pytest {memory_target} -q"
                 current_contract["acceptance_test_fixture_source"] = str(memory_fixture)
                 current_contract["acceptance_test_fixture_target"] = memory_target
                 current_contract["acceptance_test_policy"] = "repository_owned_observable_behavior"
                 task_notes = current_contract.setdefault("implementation_notes", [])
                 for note in (
                     "Preserve the RPNStack public API from earlier tasks while adding ten memory registers.",
-                    "Expose sto(register), rcl(register), sto_plus(register), sto_minus(register), sto_multiply(register), and sto_divide(register) on RPNStack.",
+                    (
+                        "Expose sto(register), rcl(register), sto_plus(register), sto_minus(register), "
+                        "sto_multiply(register), and sto_divide(register) on RPNStack."
+                    ),
                     "The repository-owned memory fixture is authoritative; repair app/index.html, never replace or weaken the fixture.",
                 ):
                     if note not in task_notes:
                         task_notes.append(note)
             elif key == "LF-PRD-007":
                 current_contract["required_public_apis"] = list(accumulated_public_apis) + ["TVM"]
-                tvm_allowed_files = current_contract.setdefault("allowed_files", [])
+                tvm_allowed_files = [
+                    path
+                    for path in current_contract.setdefault("allowed_files", [])
+                    if path == "app/index.html"
+                ]
                 if tvm_target not in tvm_allowed_files:
                     tvm_allowed_files.append(tvm_target)
+                current_contract["allowed_files"] = tvm_allowed_files
+                current_contract["canonical_test_command"] = f"python -m pytest {tvm_target} -q"
                 current_contract["acceptance_test_fixture_source"] = str(tvm_fixture)
                 current_contract["acceptance_test_fixture_target"] = tvm_target
                 current_contract["acceptance_test_policy"] = "repository_owned_observable_behavior"
                 task_notes = current_contract.setdefault("implementation_notes", [])
                 for note in (
-                    "Expose an inline TVM object in app/index.html with n, i, PV, PMT, FV, timing, setReg, and setTiming; do not depend on an untracked external app/tvm.js file.",
+                    (
+                        "Expose an inline TVM object in app/index.html with n, i, PV, PMT, FV, timing, "
+                        "setReg, and setTiming; do not depend on an untracked external app/tvm.js file."
+                    ),
                     "The repository-owned TVM fixture is authoritative; repair the product and never edit or weaken the fixture.",
                 ):
                     if note not in task_notes:
                         task_notes.append(note)
+            if 7 <= index < len(task_rows) - 1:
+                # Later HP12C capabilities are validated together by the
+                # final protected challenge. Do not let the model invent
+                # Python imports for the single-page HTML product in each
+                # intermediate task; keep those tasks focused on the shared
+                # production surface and deterministic contract checks.
+                current_contract["allowed_files"] = [
+                    path
+                    for path in current_contract.get("allowed_files", [])
+                    if path == "app/index.html"
+                ]
+                current_contract["canonical_test_command"] = "git diff --check"
+                current_contract["acceptance_test_policy"] = "observable_behavior_only"
+                current_notes = current_contract.setdefault("implementation_notes", [])
+                note = (
+                    "This single-page task has no model-generated Python test contract; extend app/index.html "
+                    "and rely on the final protected HP12C challenge for behavior validation."
+                )
+                if note not in current_notes:
+                    current_notes.append(note)
+                if key == "LF-PRD-008":
+                    current_contract["required_public_apis"] = list(accumulated_public_apis) + ["TVM"]
+            if key in {"LF-PRD-018", "LF-PRD-019"}:
+                # Packaging and release assembly are not visual-design tasks.
+                # The visual contract is already exercised by LF-PRD-001..003;
+                # keeping these terminal tasks visual_required would re-enter
+                # the Chief segmented HTML generator and allow a transient
+                # visual route timeout to replace an already validated product.
+                # Their protected behavioral/security challenge remains the
+                # release gate, while the earlier visual tasks remain the
+                # source of visual evidence.
+                current_contract["visual_required"] = False
+                current_contract["visual_reference_image"] = None
+                current_contract["visual_actual_output"] = None
+                current_notes = current_contract.setdefault("implementation_notes", [])
+                note = (
+                    "Packaging/release tasks preserve the accepted visual product; visual compliance "
+                    "is proven by LF-PRD-001..003 and the protected post-merge challenge."
+                )
+                if note not in current_notes:
+                    current_notes.append(note)
             current_metadata["task_contract"] = current_contract
             connection.execute(
                 "UPDATE tasks SET dependency_task_ids = ?, metadata_json = ? WHERE id = ?",
@@ -442,6 +551,55 @@ def _install_hp12c_acceptance_contract(workspace: Path) -> dict[str, str]:
                     current_id,
                 ),
             )
+        if task_rows:
+            final_id = task_rows[-1][0]
+            final_metadata_json = connection.execute(
+                "SELECT metadata_json FROM tasks WHERE id = ?", (final_id,)
+            ).fetchone()[0]
+            final_metadata = json.loads(final_metadata_json or "{}")
+            final_contract = final_metadata.setdefault("task_contract", {})
+            final_allowed_files = final_contract.setdefault("allowed_files", [])
+            if CHALLENGE_TARGET not in final_allowed_files:
+                final_allowed_files.append(CHALLENGE_TARGET)
+            final_contract["acceptance_test_fixture_source"] = str(CHALLENGE_FIXTURE)
+            final_contract["acceptance_test_fixture_target"] = CHALLENGE_TARGET
+            final_contract["acceptance_test_policy"] = "repository_owned_observable_behavior"
+            final_contract["canonical_test_command"] = f"python -m pytest {CHALLENGE_TARGET} -q"
+            final_contract["allowed_files"] = [
+                path
+                for path in final_contract.get("allowed_files", [])
+                if path == "app/index.html"
+            ]
+            if CHALLENGE_TARGET not in final_contract["allowed_files"]:
+                final_contract["allowed_files"].append(CHALLENGE_TARGET)
+            final_contract["required_public_apis"] = list(accumulated_public_apis) + [
+                "HP12CChallenge"
+            ]
+            final_contract["post_merge_tester_command"] = (
+                f"python -m pytest {CHALLENGE_TARGET} -q -k complex"
+            )
+            final_contract["post_merge_security_command"] = (
+                f"python -m pytest {CHALLENGE_TARGET} -q -k security"
+            )
+            final_notes = final_contract.setdefault("implementation_notes", [])
+            for note in (
+                (
+                    "The Product Owner requires the exact HP12C post-merge challenge fixture to be "
+                    "materialized in the final task."
+                ),
+                (
+                    "Expose window.HP12CChallenge with tvm, npv, irr, amortization, depreciationSL, "
+                    "depreciationSOYD, depreciationDB, bondPrice, bondYield, and dateDifference."
+                ),
+                "Do not weaken or replace tests/test_hp12c_post_merge_challenge.py; repair app/index.html when the challenge fails.",
+            ):
+                if note not in final_notes:
+                    final_notes.append(note)
+            final_metadata["task_contract"] = final_contract
+            connection.execute(
+                "UPDATE tasks SET metadata_json = ? WHERE id = ?",
+                (json.dumps(final_metadata, ensure_ascii=False), final_id),
+            )
         connection.commit()
         return {
             "task_id": str(task_id),
@@ -449,6 +607,9 @@ def _install_hp12c_acceptance_contract(workspace: Path) -> dict[str, str]:
             "fixture": str(fixture),
             "sequential_dependencies": str(max(0, len(task_rows) - 1)),
             "preserved_api": "RPNStack",
+            "product_owner_instruction": PO_INSTRUCTION,
+            "post_merge_tester_command": f"python -m pytest {CHALLENGE_TARGET} -q -k complex",
+            "post_merge_security_command": f"python -m pytest {CHALLENGE_TARGET} -q -k security",
         }
     finally:
         connection.close()
@@ -472,8 +633,15 @@ def _query_summary(database: Path) -> dict[str, Any]:
         ).fetchall()
         calls_by_provider = {str(provider): int(count) for provider, count in calls}
         control_plane_dir = database.parent / "control_plane"
+        # The durable Control Plane uses ``goal-<id>.json`` for current runs;
+        # older workspaces used ``run-<id>.json``. Accept both names so the
+        # acceptance supervisor reflects the persisted goal completion instead
+        # of downgrading a completed ForgeOS run to PARTIAL.
         state_files = sorted(
-            control_plane_dir.glob("run-*.json"),
+            [
+                *control_plane_dir.glob("run-*.json"),
+                *control_plane_dir.glob("goal-*.json"),
+            ],
             key=lambda path: path.stat().st_mtime,
         )
         control_plane: dict[str, Any] = {"present": False}
@@ -545,6 +713,10 @@ def main() -> int:
             "LOCALFORGE_OMNIROUTE_REASONING_EFFORT": "none",
             "LOCALFORGE_SEQUENTIAL_TASK_CHAIN": "true",
             "LOCALFORGE_MAX_PARALLEL_TASKS": "1",
+            # Bound the complete Agent Harness request, including slow
+            # upstream response bodies, so a stalled OmniRoute route yields
+            # to the configured finite model ladder.
+            "LOCALFORGE_AGENT_REQUEST_TIMEOUT": "90",
         }
     )
 
@@ -581,13 +753,24 @@ def main() -> int:
             "LOCALFORGE_CHIEF_FALLBACK_MODELS": ladder,
             "LOCALFORGE_CHIEF_VISUAL_FALLBACK_MODELS": ladder,
             "LOCALFORGE_MAX_RUN_TIME": str(args.run_timeout),
-            "LOCALFORGE_MAX_REPAIR_ATTEMPTS": "2",
+            # Financial tasks can legitimately consume several bounded Chief
+            # retries when OmniRoute returns consecutive timeouts. Keep this
+            # finite and below the run-level recovery ceiling.
+            "LOCALFORGE_MAX_REPAIR_ATTEMPTS": "4",
             # HP12C is a single-file HTML product. Keep the general diff guard
             # active, but allow a complete bounded file rewrite to reach the
-            # deterministic visual and behavioral gates.
-            "LOCALFORGE_MAX_DIFF_GROWTH": "24000",
+            # deterministic visual and behavioral gates. The product is
+            # intentionally richer than the generic 24k benchmark fixture;
+            # the 100k ceiling still matches SafeFileEditor's hard upper bound.
+            "LOCALFORGE_MAX_DIFF_GROWTH": "100000",
             "LOCALFORGE_MAX_VISUAL_DIFF_GROWTH": "100000",
-            "LOCALFORGE_MAX_RUN_RECOVERY_CYCLES": "2",
+            # Allow bounded recovery for transient OmniRoute/Chief Engineer timeouts.
+            "LOCALFORGE_MAX_RUN_RECOVERY_CYCLES": "8",
+            # The HP12C run deliberately exercises a long Chief Engineer
+            # ladder across nineteen sequential tasks. Keep the gateway-call
+            # budget finite, but large enough that recoverable route
+            # timeouts do not exhaust it before the post-merge challenge.
+            "LOCALFORGE_MAX_GATEWAY_CALLS": "192",
         }
     )
     try:

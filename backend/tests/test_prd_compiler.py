@@ -356,6 +356,19 @@ def test_web_prd_without_paths_uses_shared_product_surface():
     )
 
 
+def test_generated_paths_bound_long_task_titles_for_windows():
+    from localforge.prd.contracts import build_architecture_contract
+    from localforge.prd.schemas import ExtractedPlan, ExtractedTask
+
+    title = "Design the gold and dark-grey metallic chassis, LCD display screen, and status indicators RPN ALG f g PRGM BEGIN"
+    contract = build_architecture_contract(
+        ExtractedPlan(tasks=[ExtractedTask(title=title, description="")])
+    ).task_contracts[title]
+
+    assert len(contract.allowed_files[1]) <= len("tests/test_") + 64 + len(".py")
+    assert contract.allowed_files[1].startswith("tests/test_")
+
+
 def test_visual_web_tasks_receive_reference_contract_from_workspace(tmp_path):
     from localforge.prd.contracts import build_architecture_contract
     from localforge.prd.schemas import ExtractedPlan, ExtractedTask
@@ -403,6 +416,32 @@ def test_visual_contract_honors_metadata_and_rejects_escape_paths():
     assert contract.visual_required is True
     assert contract.visual_reference_image is None
     assert contract.visual_actual_output is None
+
+
+def test_visual_matrix_table_becomes_contract_metadata_not_backlog_tasks():
+    from localforge.prd.extractor import DeterministicPRDExtractor
+
+    markdown = """
+    # Product
+    ## Visual Surface
+    - Implement the rendered surface
+
+    ### Acceptance
+    | # | Row | Column | Primary label (white) | Blue legend | Orange legend | Action |
+    |---:|---:|---:|---|---|---|---|
+    | 1 | 1 | 1 | Save | Undo | Export | persist |
+    | 2 | 1 | 2 | Cancel | — | — | close |
+    """
+
+    plan = DeterministicPRDExtractor().extract(markdown)
+
+    assert [task.title for task in plan.tasks] == ["Implement the rendered surface"]
+    matrix = plan.tasks[0].metadata["visual_acceptance_matrix"]
+    assert len(matrix) == 2
+    assert matrix[0]["row"] == 1
+    assert matrix[0]["column"] == 1
+    assert matrix[0]["primary_label"] == "Save"
+    assert matrix[0]["locator"] == "[data-row='1'][data-column='1']"
 
 
 @pytest.mark.anyio

@@ -20,16 +20,36 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy pyproject.toml, README.md, LICENSE, and backend code
-COPY pyproject.toml README.md LICENSE requirements.txt* /app/
+COPY pyproject.toml README.md LICENSE requirements.txt* uv.lock /app/
 COPY backend /app/backend
 
 # Install the reproducible Cloud dependency set.
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
     pip install --no-cache-dir -e ".[cloud]" && \
-    pip install --no-cache-dir pgvector
+    pip install --no-cache-dir pgvector && \
+    pip install --no-cache-dir "setuptools>=78.1.1" "msgpack>=1.2.1"
 
-# Install Playwright chromium (optional headless browser)
-RUN playwright install chromium
+# Do not ship build-environment SBOM fragments from third-party wheels. They
+# describe packaging tools used to build a wheel, not the runtime packages,
+# and make image scanners report stale duplicate versions.
+RUN find /usr/local/lib/python3.11/site-packages -type d -path '*/.dist-info/sboms' -prune -exec rm -rf {} +
+
+# The runtime image does not need pip or ensurepip's bundled build wheels.
+# Removing them prevents scanners from inventorying vendored, unused copies of
+# packaging libraries alongside the actual application dependencies.
+RUN python -m pip uninstall -y pip && \
+    rm -rf /usr/local/lib/python3.11/ensurepip/_bundled
+
+# Browser binaries are intentionally opt-in. Downloading Chromium during the
+# default backend build makes local/Kubernetes builds depend on a large,
+# failure-prone external transfer. Visual benchmark images can opt in with
+# --build-arg INSTALL_PLAYWRIGHT_BROWSER=true.
+ARG INSTALL_PLAYWRIGHT_BROWSER=false
+RUN if [ "$INSTALL_PLAYWRIGHT_BROWSER" = "true" ]; then \
+      playwright install chromium; \
+    else \
+      echo "Skipping Playwright browser binaries (opt-in build argument)."; \
+    fi
 
 # Do not run the API as root.  Docker/Podman remains the only execution
 # boundary for agent commands when sandbox.type=docker.

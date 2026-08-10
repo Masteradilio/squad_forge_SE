@@ -1,0 +1,1137 @@
+{
+  "schema_version": 1,
+  "revision": 73,
+  "goal": {
+    "goal_id": "project:1:lifetime",
+    "vision": "Complete the PRD task backlog for project readme-trace-run-20260809T001429Z.",
+    "non_negotiables": [
+      "Never bypass the Safety Kernel.",
+      "Never mark PR_READY without server-owned evidence.",
+      "Stop at bounded quota and preserve an auditable blocker."
+    ],
+    "scope": [
+      "C:\\Users\\adili\\projetos_offline\\local_forge_os\\benchmarks\\workspaces\\readme-trace-run-20260809T001429Z"
+    ],
+    "authority": {
+      "scheduler": "claim_and_writeback",
+      "scrum_master": "diagnose_and_delegate",
+      "chief_engineer": "repair_under_contract",
+      "human": "approve_merge_and_deploy"
+    },
+    "source_revision": "unknown",
+    "acceptance_target": "all_tasks_pr_ready_merged_and_post_merge_validated",
+    "requires_release_promotion": true,
+    "last_receipt_id": "receipt-0c6491c6365543919650c49a73922d11",
+    "status": "COMPLETED",
+    "current_todo_id": "LF-PRD-005",
+    "created_at": "2026-08-09T00:16:05.085768+00:00",
+    "updated_at": "2026-08-09T00:21:43.149569+00:00"
+  },
+  "todos": [
+    {
+      "todo_id": "LF-PRD-001",
+      "title": "Create and list entries",
+      "dependencies": [],
+      "allowed_actions": [],
+      "status": "PASSED",
+      "owner": null,
+      "current_turn_id": null,
+      "lease_token": null,
+      "lease_expires_at": null,
+      "attempts": 1,
+      "last_error": null,
+      "next_retry_at": null,
+      "updated_at": "2026-08-09T00:16:53.145211+00:00"
+    },
+    {
+      "todo_id": "LF-PRD-002",
+      "title": "Validate and close entries",
+      "dependencies": [
+        "LF-PRD-001"
+      ],
+      "allowed_actions": [],
+      "status": "PASSED",
+      "owner": null,
+      "current_turn_id": null,
+      "lease_token": null,
+      "lease_expires_at": null,
+      "attempts": 1,
+      "last_error": null,
+      "next_retry_at": null,
+      "updated_at": "2026-08-09T00:18:50.927377+00:00"
+    },
+    {
+      "todo_id": "LF-PRD-003",
+      "title": "Summarize without mutation",
+      "dependencies": [
+        "LF-PRD-002"
+      ],
+      "allowed_actions": [],
+      "status": "PASSED",
+      "owner": null,
+      "current_turn_id": null,
+      "lease_token": null,
+      "lease_expires_at": null,
+      "attempts": 1,
+      "last_error": null,
+      "next_retry_at": null,
+      "updated_at": "2026-08-09T00:19:20.616163+00:00"
+    },
+    {
+      "todo_id": "LF-PRD-004",
+      "title": "Export a release snapshot",
+      "dependencies": [
+        "LF-PRD-003"
+      ],
+      "allowed_actions": [],
+      "status": "PASSED",
+      "owner": null,
+      "current_turn_id": null,
+      "lease_token": null,
+      "lease_expires_at": null,
+      "attempts": 2,
+      "last_error": null,
+      "next_retry_at": null,
+      "updated_at": "2026-08-09T00:20:59.555770+00:00"
+    },
+    {
+      "todo_id": "LF-PRD-005",
+      "title": "Release assembly: ForgeLedger reference evidence",
+      "dependencies": [
+        "LF-PRD-004"
+      ],
+      "allowed_actions": [],
+      "status": "PASSED",
+      "owner": null,
+      "current_turn_id": null,
+      "lease_token": null,
+      "lease_expires_at": null,
+      "attempts": 1,
+      "last_error": null,
+      "next_retry_at": null,
+      "updated_at": "2026-08-09T00:21:28.947172+00:00"
+    }
+  ],
+  "gates": [],
+  "agents": [
+    {
+      "agent_id": "scheduler:1",
+      "role": "scheduler",
+      "capabilities": [
+        "claim_bounded_turn",
+        "write_receipt"
+      ],
+      "allowed_actions": [
+        "read_contract",
+        "run_checks",
+        "emit_receipt"
+      ],
+      "authority": "scheduler",
+      "active": true,
+      "registered_at": "2026-08-09T00:16:05.085108+00:00"
+    },
+    {
+      "agent_id": "scrum-master:1",
+      "role": "scrum_master",
+      "capabilities": [
+        "diagnose_blocker",
+        "delegate_repair"
+      ],
+      "allowed_actions": [
+        "inspect_evidence",
+        "create_repair_handoff"
+      ],
+      "authority": "scrum_master",
+      "active": true,
+      "registered_at": "2026-08-09T00:16:05.085131+00:00"
+    },
+    {
+      "agent_id": "chief-engineer:1",
+      "role": "chief_engineer",
+      "capabilities": [
+        "repair_under_contract",
+        "rerun_checks"
+      ],
+      "allowed_actions": [
+        "write_allowed_files",
+        "run_checks",
+        "emit_receipt"
+      ],
+      "authority": "chief_engineer",
+      "active": true,
+      "registered_at": "2026-08-09T00:16:05.085143+00:00"
+    }
+  ],
+  "receipts": [
+    {
+      "receipt_id": "receipt-ec7e496aa81c4354b2a2c0723e14586d",
+      "todo_id": "LF-PRD-001",
+      "turn_id": "turn-fc7b17c4a41d4fdb8cb0c28e8e6a83e7",
+      "result_kind": "VALIDATED_PROGRESS",
+      "summary": "Task reached PR_READY evidence gate.",
+      "evidence": {
+        "run_id": 1,
+        "task_status": "PR_READY",
+        "source": "scheduler_task_outcome"
+      },
+      "changed_files": [
+        "tests/test_forge_ledger_create.py",
+        "app/forge_ledger.py"
+      ],
+      "checks": [],
+      "source_revision": null,
+      "content_hash": "1e8761ef7edb063cc35203b1592a8a96350e12344234010994ba56cc49b0c5b2",
+      "validated_by": "forgeos.scheduler",
+      "idempotency_key": "run:1:task:LF-PRD-001:attempt:1:status:PR_READY",
+      "created_at": "2026-08-09T00:16:53.145097+00:00"
+    },
+    {
+      "receipt_id": "receipt-5d13c674b75b489aa8647f428b3306c6",
+      "todo_id": "LF-PRD-002",
+      "turn_id": "turn-4d0f99fbc6d94e82a28ba37e710c59a0",
+      "result_kind": "VALIDATED_PROGRESS",
+      "summary": "Task reached PR_READY evidence gate.",
+      "evidence": {
+        "run_id": 1,
+        "task_status": "PR_READY",
+        "source": "scheduler_task_outcome"
+      },
+      "changed_files": [
+        "tests/test_forge_ledger_validation.py",
+        "app/forge_ledger.py"
+      ],
+      "checks": [],
+      "source_revision": null,
+      "content_hash": "f34ed078b97793f234e6a128195d4fc93d99e143e7e4e5458b9a023139c959a7",
+      "validated_by": "forgeos.scheduler",
+      "idempotency_key": "run:1:task:LF-PRD-002:attempt:1:status:PR_READY",
+      "created_at": "2026-08-09T00:18:50.927273+00:00"
+    },
+    {
+      "receipt_id": "receipt-84630549604d4fcdb1fbd66cc907537a",
+      "todo_id": "LF-PRD-003",
+      "turn_id": "turn-6eedcc189c2043b780e858422fdaff0d",
+      "result_kind": "VALIDATED_PROGRESS",
+      "summary": "Task reached PR_READY evidence gate.",
+      "evidence": {
+        "run_id": 1,
+        "task_status": "PR_READY",
+        "source": "scheduler_task_outcome"
+      },
+      "changed_files": [
+        "tests/test_forge_ledger_summary.py",
+        "app/forge_ledger.py"
+      ],
+      "checks": [],
+      "source_revision": null,
+      "content_hash": "a3db51b38713265039e9c089c977d20baf7a9d38eaeab01eec1e7fe16b4111c3",
+      "validated_by": "forgeos.scheduler",
+      "idempotency_key": "run:1:task:LF-PRD-003:attempt:1:status:PR_READY",
+      "created_at": "2026-08-09T00:19:20.616105+00:00"
+    },
+    {
+      "receipt_id": "receipt-6e6534d299da4f6bbaf74632921ad778",
+      "todo_id": "LF-PRD-004",
+      "turn_id": "turn-9fd2b205b76a4725bf5b3ec8e56b47ad",
+      "result_kind": "VALIDATION_FAILED",
+      "summary": "PR readiness failed: Contract violation: Required public API is missing: LedgerStore; Contract violation: Required public API is missing: add_entry; Contract violation: Required public API is missing: close_entry; Contract violation: Required public API is missing: export_snapshot; Contract violation: Required public API is missing: list_entries; Contract violation: Required public API is missing: summarize",
+      "evidence": {
+        "run_id": 1,
+        "task_status": "FAILED_SAFE",
+        "source": "scheduler_task_outcome"
+      },
+      "changed_files": [
+        "tests/test_forge_ledger_snapshot.py"
+      ],
+      "checks": [],
+      "source_revision": null,
+      "content_hash": "317c9150ad202ddbd8e690b7f86775d81276a2d85d784067e3fcaeae13777f0d",
+      "validated_by": "forgeos.scheduler",
+      "idempotency_key": "run:1:task:LF-PRD-004:attempt:1:status:FAILED_SAFE",
+      "created_at": "2026-08-09T00:19:47.267486+00:00"
+    },
+    {
+      "receipt_id": "receipt-3c6bf3a36f8e4cc48dda737bb5532713",
+      "todo_id": "LF-PRD-004",
+      "turn_id": "turn-755a857e24114dc49acbcf51e199bd38",
+      "result_kind": "VALIDATED_PROGRESS",
+      "summary": "Task reached PR_READY evidence gate.",
+      "evidence": {
+        "run_id": 1,
+        "task_status": "PR_READY",
+        "source": "scheduler_task_outcome"
+      },
+      "changed_files": [
+        "tests/test_forge_ledger_snapshot.py",
+        "app/forge_ledger.py"
+      ],
+      "checks": [],
+      "source_revision": null,
+      "content_hash": "888c840a89a9a385b916d10c4916729574298b88aa928a53ec5cafa20f772f71",
+      "validated_by": "forgeos.scheduler",
+      "idempotency_key": "run:1:task:LF-PRD-004:attempt:2:status:PR_READY",
+      "created_at": "2026-08-09T00:20:59.555712+00:00"
+    },
+    {
+      "receipt_id": "receipt-0c6491c6365543919650c49a73922d11",
+      "todo_id": "LF-PRD-005",
+      "turn_id": "turn-2b562946a74041bdb661c43cf0261043",
+      "result_kind": "VALIDATED_PROGRESS",
+      "summary": "Task reached PR_READY evidence gate.",
+      "evidence": {
+        "run_id": 1,
+        "task_status": "PR_READY",
+        "source": "scheduler_task_outcome"
+      },
+      "changed_files": [
+        "docs/release_manifest.md"
+      ],
+      "checks": [],
+      "source_revision": null,
+      "content_hash": "8a968f17c0bfb70be4b694d97de1b44932d416a0a2049eca52a1158929c4967e",
+      "validated_by": "forgeos.scheduler",
+      "idempotency_key": "run:1:task:LF-PRD-005:attempt:1:status:PR_READY",
+      "created_at": "2026-08-09T00:21:28.947111+00:00"
+    }
+  ],
+  "handoffs": [
+    {
+      "handoff_id": "run:1:task:LF-PRD-004:repair:1",
+      "todo_id": "LF-PRD-004",
+      "diagnosis": "PR readiness failed: Contract violation: Required public API is missing: LedgerStore; Contract violation: Required public API is missing: add_entry; Contract violation: Required public API is missing: close_entry; Contract violation: Required public API is missing: export_snapshot; Contract violation: Required public API is missing: list_entries; Contract violation: Required public API is missing: summarize",
+      "evidence": {
+        "run_id": 1,
+        "task_id": 4,
+        "attempt": 1,
+        "contract": {
+          "allowed_files": [
+            "app/forge_ledger.py",
+            "tests/test_forge_ledger_snapshot.py"
+          ],
+          "canonical_test_command": "python -m pytest tests -q",
+          "seniority_class": "chief_only",
+          "visual_required": false,
+          "acceptance_test_policy": "observable_behavior_only",
+          "acceptance_behaviors": [
+            "export_snapshot contains real ordered entries and summary",
+            "export_snapshot does not mutate JSON"
+          ],
+          "required_public_apis": [
+            "LedgerStore",
+            "add_entry",
+            "list_entries",
+            "close_entry",
+            "summarize",
+            "export_snapshot"
+          ],
+          "forbidden_dependencies": [
+            "third-party runtime dependencies"
+          ],
+          "acceptance_test_fixture_source": "C:\\Users\\adili\\projetos_offline\\local_forge_os\\scripts\\fixtures\\reference_forgeos_snapshot_acceptance.py",
+          "acceptance_test_fixture_target": "tests/test_forge_ledger_snapshot.py",
+          "required_product_files": [
+            "app/forge_ledger.py"
+          ],
+          "required_artifact": null,
+          "required_skills": [
+            "grill-with-docs",
+            "to-tickets",
+            "tdd"
+          ],
+          "implementation_notes": [
+            "Use the exact public API in PRD_REFERENCE_FORGEOS.md.",
+            "Acceptance must import and execute app/forge_ledger.py.",
+            "Do not duplicate the product algorithm inside tests.",
+            "Keep JSON persistence stable and preserve all prior behavior.",
+            "An unknown non-numeric id must raise KeyError, not ValueError.",
+            "Do not add third-party runtime dependencies.",
+            "Preserve every previously accepted public API and behavior; run the full accumulated test suite before declaring readiness.",
+            "Keep the exact amount field and module-level function names from PRD_REFERENCE_FORGEOS.md; do not rename amount to minutes or replace functions with methods.",
+            "Do not use pytest.skip, xfail, importorskip, or placeholder assertions.",
+            "The release task adds docs/release_manifest.md without rewriting a passing module.",
+            "ScrumMaster unblock: Chief Engineer must remove this blocker before PR readiness: PR readiness failed: Contract violation: Required public API is missing: LedgerStore; Contract violation: Required public API is missing: add_entry; Contract violation: Required public API is missing: close_entry; Contract violation: Required public API is missing: export_snapshot; Contract violation: Required public API is missing: list_entries; Contract violation: Required public API is missing: summarize"
+          ],
+          "reference_benchmark": true,
+          "source_title": "Export a release snapshot",
+          "source_description": "Export a release snapshot",
+          "chief_engineer_unblock_required": true,
+          "blocked_reason": "PR readiness failed: Contract violation: Required public API is missing: LedgerStore; Contract violation: Required public API is missing: add_entry; Contract violation: Required public API is missing: close_entry; Contract violation: Required public API is missing: export_snapshot; Contract violation: Required public API is missing: list_entries; Contract violation: Required public API is missing: summarize"
+        }
+      },
+      "authority": "ScrumMaster",
+      "status": "REOPENED",
+      "created_at": "2026-08-09T00:19:47.702262+00:00"
+    }
+  ],
+  "signals": [],
+  "quota": {
+    "max_turns": 100,
+    "turns_started": 6,
+    "turns_committed": 6,
+    "max_attempts_per_todo": 3,
+    "max_cost_usd": 0.5,
+    "cost_committed_usd": 0.0,
+    "max_wall_seconds": null,
+    "started_at": "2026-08-09T00:16:05.085881+00:00"
+  },
+  "applied_operations": {
+    "start:project:1:lifetime": 0,
+    "next:scheduler:1:1786234565.140829": 1,
+    "lease-renew:run:1:task:1:heartbeat:0": 2,
+    "lease-renew:run:1:task:1:heartbeat:1": 3,
+    "lease-renew:run:1:task:1:heartbeat:2": 4,
+    "lease-renew:run:1:task:1:heartbeat:3": 5,
+    "lease-renew:run:1:task:1:heartbeat:4": 6,
+    "lease-renew:run:1:task:1:heartbeat:5": 7,
+    "lease-renew:run:1:task:1:heartbeat:6": 8,
+    "lease-renew:run:1:task:1:heartbeat:7": 9,
+    "lease-renew:run:1:task:1:heartbeat:8": 10,
+    "result:run:1:task:LF-PRD-001:attempt:1:status:PR_READY": 11,
+    "next:scheduler:1:1786234613.512243": 12,
+    "lease-renew:run:1:task:2:heartbeat:0": 13,
+    "lease-renew:run:1:task:2:heartbeat:1": 14,
+    "lease-renew:run:1:task:2:heartbeat:2": 15,
+    "lease-renew:run:1:task:2:heartbeat:3": 16,
+    "lease-renew:run:1:task:2:heartbeat:4": 17,
+    "lease-renew:run:1:task:2:heartbeat:5": 18,
+    "lease-renew:run:1:task:2:heartbeat:6": 19,
+    "lease-renew:run:1:task:2:heartbeat:7": 20,
+    "lease-renew:run:1:task:2:heartbeat:8": 21,
+    "lease-renew:run:1:task:2:heartbeat:9": 22,
+    "lease-renew:run:1:task:2:heartbeat:10": 23,
+    "lease-renew:run:1:task:2:heartbeat:11": 24,
+    "lease-renew:run:1:task:2:heartbeat:12": 25,
+    "lease-renew:run:1:task:2:heartbeat:13": 26,
+    "lease-renew:run:1:task:2:heartbeat:14": 27,
+    "lease-renew:run:1:task:2:heartbeat:15": 28,
+    "lease-renew:run:1:task:2:heartbeat:16": 29,
+    "lease-renew:run:1:task:2:heartbeat:17": 30,
+    "lease-renew:run:1:task:2:heartbeat:18": 31,
+    "lease-renew:run:1:task:2:heartbeat:19": 32,
+    "lease-renew:run:1:task:2:heartbeat:20": 33,
+    "lease-renew:run:1:task:2:heartbeat:21": 34,
+    "result:run:1:task:LF-PRD-002:attempt:1:status:PR_READY": 35,
+    "next:scheduler:1:1786234731.309807": 36,
+    "lease-renew:run:1:task:3:heartbeat:0": 37,
+    "lease-renew:run:1:task:3:heartbeat:1": 38,
+    "lease-renew:run:1:task:3:heartbeat:2": 39,
+    "lease-renew:run:1:task:3:heartbeat:3": 40,
+    "lease-renew:run:1:task:3:heartbeat:4": 41,
+    "result:run:1:task:LF-PRD-003:attempt:1:status:PR_READY": 42,
+    "next:scheduler:1:1786234760.996099": 43,
+    "lease-renew:run:1:task:4:heartbeat:0": 44,
+    "lease-renew:run:1:task:4:heartbeat:1": 45,
+    "lease-renew:run:1:task:4:heartbeat:2": 46,
+    "lease-renew:run:1:task:4:heartbeat:3": 47,
+    "result:run:1:task:LF-PRD-004:attempt:1:status:FAILED_SAFE": 48,
+    "repair-handoff:LF-PRD-004:run:1:task:LF-PRD-004:repair:1": 49,
+    "repair-reopen:LF-PRD-004:run:1:task:LF-PRD-004:repair:1": 50,
+    "next:scheduler:1:1786234788.17763": 51,
+    "lease-renew:run:1:task:5:heartbeat:0": 52,
+    "lease-renew:run:1:task:5:heartbeat:1": 53,
+    "lease-renew:run:1:task:5:heartbeat:2": 54,
+    "lease-renew:run:1:task:5:heartbeat:3": 55,
+    "lease-renew:run:1:task:5:heartbeat:4": 56,
+    "lease-renew:run:1:task:5:heartbeat:5": 57,
+    "lease-renew:run:1:task:5:heartbeat:6": 58,
+    "lease-renew:run:1:task:5:heartbeat:7": 59,
+    "lease-renew:run:1:task:5:heartbeat:8": 60,
+    "lease-renew:run:1:task:5:heartbeat:9": 61,
+    "lease-renew:run:1:task:5:heartbeat:10": 62,
+    "lease-renew:run:1:task:5:heartbeat:11": 63,
+    "lease-renew:run:1:task:5:heartbeat:12": 64,
+    "result:run:1:task:LF-PRD-004:attempt:2:status:PR_READY": 65,
+    "next:scheduler:1:1786234859.973262": 66,
+    "lease-renew:run:1:task:6:heartbeat:0": 67,
+    "lease-renew:run:1:task:6:heartbeat:1": 68,
+    "lease-renew:run:1:task:6:heartbeat:2": 69,
+    "lease-renew:run:1:task:6:heartbeat:3": 70,
+    "lease-renew:run:1:task:6:heartbeat:4": 71,
+    "result:run:1:task:LF-PRD-005:attempt:1:status:PR_READY": 72,
+    "release-completed": 73
+  },
+  "events": [
+    {
+      "event": "lease_renewed",
+      "todo_id": "LF-PRD-001",
+      "turn_id": "turn-fc7b17c4a41d4fdb8cb0c28e8e6a83e7",
+      "owner": "scheduler:1",
+      "renewal_id": "run:1:task:1:heartbeat:0",
+      "lease_expires_at": "2026-08-09T00:17:11.520026+00:00",
+      "at": "2026-08-09T00:16:11.520094+00:00"
+    },
+    {
+      "event": "lease_renewed",
+      "todo_id": "LF-PRD-001",
+      "turn_id": "turn-fc7b17c4a41d4fdb8cb0c28e8e6a83e7",
+      "owner": "scheduler:1",
+      "renewal_id": "run:1:task:1:heartbeat:1",
+      "lease_expires_at": "2026-08-09T00:17:16.643187+00:00",
+      "at": "2026-08-09T00:16:16.643272+00:00"
+    },
+    {
+      "event": "lease_renewed",
+      "todo_id": "LF-PRD-001",
+      "turn_id": "turn-fc7b17c4a41d4fdb8cb0c28e8e6a83e7",
+      "owner": "scheduler:1",
+      "renewal_id": "run:1:task:1:heartbeat:2",
+      "lease_expires_at": "2026-08-09T00:17:21.699935+00:00",
+      "at": "2026-08-09T00:16:21.699971+00:00"
+    },
+    {
+      "event": "lease_renewed",
+      "todo_id": "LF-PRD-001",
+      "turn_id": "turn-fc7b17c4a41d4fdb8cb0c28e8e6a83e7",
+      "owner": "scheduler:1",
+      "renewal_id": "run:1:task:1:heartbeat:3",
+      "lease_expires_at": "2026-08-09T00:17:26.756410+00:00",
+      "at": "2026-08-09T00:16:26.756446+00:00"
+    },
+    {
+      "event": "lease_renewed",
+      "todo_id": "LF-PRD-001",
+      "turn_id": "turn-fc7b17c4a41d4fdb8cb0c28e8e6a83e7",
+      "owner": "scheduler:1",
+      "renewal_id": "run:1:task:1:heartbeat:4",
+      "lease_expires_at": "2026-08-09T00:17:31.805499+00:00",
+      "at": "2026-08-09T00:16:31.805536+00:00"
+    },
+    {
+      "event": "lease_renewed",
+      "todo_id": "LF-PRD-001",
+      "turn_id": "turn-fc7b17c4a41d4fdb8cb0c28e8e6a83e7",
+      "owner": "scheduler:1",
+      "renewal_id": "run:1:task:1:heartbeat:5",
+      "lease_expires_at": "2026-08-09T00:17:36.849699+00:00",
+      "at": "2026-08-09T00:16:36.849732+00:00"
+    },
+    {
+      "event": "lease_renewed",
+      "todo_id": "LF-PRD-001",
+      "turn_id": "turn-fc7b17c4a41d4fdb8cb0c28e8e6a83e7",
+      "owner": "scheduler:1",
+      "renewal_id": "run:1:task:1:heartbeat:6",
+      "lease_expires_at": "2026-08-09T00:17:41.901572+00:00",
+      "at": "2026-08-09T00:16:41.901605+00:00"
+    },
+    {
+      "event": "lease_renewed",
+      "todo_id": "LF-PRD-001",
+      "turn_id": "turn-fc7b17c4a41d4fdb8cb0c28e8e6a83e7",
+      "owner": "scheduler:1",
+      "renewal_id": "run:1:task:1:heartbeat:7",
+      "lease_expires_at": "2026-08-09T00:17:46.952083+00:00",
+      "at": "2026-08-09T00:16:46.952122+00:00"
+    },
+    {
+      "event": "lease_renewed",
+      "todo_id": "LF-PRD-001",
+      "turn_id": "turn-fc7b17c4a41d4fdb8cb0c28e8e6a83e7",
+      "owner": "scheduler:1",
+      "renewal_id": "run:1:task:1:heartbeat:8",
+      "lease_expires_at": "2026-08-09T00:17:52.382652+00:00",
+      "at": "2026-08-09T00:16:52.382687+00:00"
+    },
+    {
+      "event": "turn_writeback",
+      "todo_id": "LF-PRD-001",
+      "turn_id": "turn-fc7b17c4a41d4fdb8cb0c28e8e6a83e7",
+      "route": "VALIDATED_PROGRESS",
+      "receipt_id": "receipt-ec7e496aa81c4354b2a2c0723e14586d",
+      "at": "2026-08-09T00:16:53.145222+00:00"
+    },
+    {
+      "event": "lease_renewed",
+      "todo_id": "LF-PRD-002",
+      "turn_id": "turn-4d0f99fbc6d94e82a28ba37e710c59a0",
+      "owner": "scheduler:1",
+      "renewal_id": "run:1:task:2:heartbeat:0",
+      "lease_expires_at": "2026-08-09T00:18:00.106421+00:00",
+      "at": "2026-08-09T00:17:00.106509+00:00"
+    },
+    {
+      "event": "lease_renewed",
+      "todo_id": "LF-PRD-002",
+      "turn_id": "turn-4d0f99fbc6d94e82a28ba37e710c59a0",
+      "owner": "scheduler:1",
+      "renewal_id": "run:1:task:2:heartbeat:1",
+      "lease_expires_at": "2026-08-09T00:18:05.221204+00:00",
+      "at": "2026-08-09T00:17:05.221268+00:00"
+    },
+    {
+      "event": "lease_renewed",
+      "todo_id": "LF-PRD-002",
+      "turn_id": "turn-4d0f99fbc6d94e82a28ba37e710c59a0",
+      "owner": "scheduler:1",
+      "renewal_id": "run:1:task:2:heartbeat:2",
+      "lease_expires_at": "2026-08-09T00:18:10.310651+00:00",
+      "at": "2026-08-09T00:17:10.310691+00:00"
+    },
+    {
+      "event": "lease_renewed",
+      "todo_id": "LF-PRD-002",
+      "turn_id": "turn-4d0f99fbc6d94e82a28ba37e710c59a0",
+      "owner": "scheduler:1",
+      "renewal_id": "run:1:task:2:heartbeat:3",
+      "lease_expires_at": "2026-08-09T00:18:15.364233+00:00",
+      "at": "2026-08-09T00:17:15.364268+00:00"
+    },
+    {
+      "event": "lease_renewed",
+      "todo_id": "LF-PRD-002",
+      "turn_id": "turn-4d0f99fbc6d94e82a28ba37e710c59a0",
+      "owner": "scheduler:1",
+      "renewal_id": "run:1:task:2:heartbeat:4",
+      "lease_expires_at": "2026-08-09T00:18:20.412513+00:00",
+      "at": "2026-08-09T00:17:20.412548+00:00"
+    },
+    {
+      "event": "lease_renewed",
+      "todo_id": "LF-PRD-002",
+      "turn_id": "turn-4d0f99fbc6d94e82a28ba37e710c59a0",
+      "owner": "scheduler:1",
+      "renewal_id": "run:1:task:2:heartbeat:5",
+      "lease_expires_at": "2026-08-09T00:18:25.470343+00:00",
+      "at": "2026-08-09T00:17:25.470380+00:00"
+    },
+    {
+      "event": "lease_renewed",
+      "todo_id": "LF-PRD-002",
+      "turn_id": "turn-4d0f99fbc6d94e82a28ba37e710c59a0",
+      "owner": "scheduler:1",
+      "renewal_id": "run:1:task:2:heartbeat:6",
+      "lease_expires_at": "2026-08-09T00:18:30.538029+00:00",
+      "at": "2026-08-09T00:17:30.538080+00:00"
+    },
+    {
+      "event": "lease_renewed",
+      "todo_id": "LF-PRD-002",
+      "turn_id": "turn-4d0f99fbc6d94e82a28ba37e710c59a0",
+      "owner": "scheduler:1",
+      "renewal_id": "run:1:task:2:heartbeat:7",
+      "lease_expires_at": "2026-08-09T00:18:35.583704+00:00",
+      "at": "2026-08-09T00:17:35.583741+00:00"
+    },
+    {
+      "event": "lease_renewed",
+      "todo_id": "LF-PRD-002",
+      "turn_id": "turn-4d0f99fbc6d94e82a28ba37e710c59a0",
+      "owner": "scheduler:1",
+      "renewal_id": "run:1:task:2:heartbeat:8",
+      "lease_expires_at": "2026-08-09T00:18:40.630665+00:00",
+      "at": "2026-08-09T00:17:40.630704+00:00"
+    },
+    {
+      "event": "lease_renewed",
+      "todo_id": "LF-PRD-002",
+      "turn_id": "turn-4d0f99fbc6d94e82a28ba37e710c59a0",
+      "owner": "scheduler:1",
+      "renewal_id": "run:1:task:2:heartbeat:9",
+      "lease_expires_at": "2026-08-09T00:18:45.680405+00:00",
+      "at": "2026-08-09T00:17:45.680439+00:00"
+    },
+    {
+      "event": "lease_renewed",
+      "todo_id": "LF-PRD-002",
+      "turn_id": "turn-4d0f99fbc6d94e82a28ba37e710c59a0",
+      "owner": "scheduler:1",
+      "renewal_id": "run:1:task:2:heartbeat:10",
+      "lease_expires_at": "2026-08-09T00:18:50.726978+00:00",
+      "at": "2026-08-09T00:17:50.727012+00:00"
+    },
+    {
+      "event": "lease_renewed",
+      "todo_id": "LF-PRD-002",
+      "turn_id": "turn-4d0f99fbc6d94e82a28ba37e710c59a0",
+      "owner": "scheduler:1",
+      "renewal_id": "run:1:task:2:heartbeat:11",
+      "lease_expires_at": "2026-08-09T00:18:55.775714+00:00",
+      "at": "2026-08-09T00:17:55.775748+00:00"
+    },
+    {
+      "event": "lease_renewed",
+      "todo_id": "LF-PRD-002",
+      "turn_id": "turn-4d0f99fbc6d94e82a28ba37e710c59a0",
+      "owner": "scheduler:1",
+      "renewal_id": "run:1:task:2:heartbeat:12",
+      "lease_expires_at": "2026-08-09T00:19:00.826429+00:00",
+      "at": "2026-08-09T00:18:00.826464+00:00"
+    },
+    {
+      "event": "lease_renewed",
+      "todo_id": "LF-PRD-002",
+      "turn_id": "turn-4d0f99fbc6d94e82a28ba37e710c59a0",
+      "owner": "scheduler:1",
+      "renewal_id": "run:1:task:2:heartbeat:13",
+      "lease_expires_at": "2026-08-09T00:19:05.883140+00:00",
+      "at": "2026-08-09T00:18:05.883174+00:00"
+    },
+    {
+      "event": "lease_renewed",
+      "todo_id": "LF-PRD-002",
+      "turn_id": "turn-4d0f99fbc6d94e82a28ba37e710c59a0",
+      "owner": "scheduler:1",
+      "renewal_id": "run:1:task:2:heartbeat:14",
+      "lease_expires_at": "2026-08-09T00:19:10.936047+00:00",
+      "at": "2026-08-09T00:18:10.936095+00:00"
+    },
+    {
+      "event": "lease_renewed",
+      "todo_id": "LF-PRD-002",
+      "turn_id": "turn-4d0f99fbc6d94e82a28ba37e710c59a0",
+      "owner": "scheduler:1",
+      "renewal_id": "run:1:task:2:heartbeat:15",
+      "lease_expires_at": "2026-08-09T00:19:16.485291+00:00",
+      "at": "2026-08-09T00:18:16.485333+00:00"
+    },
+    {
+      "event": "lease_renewed",
+      "todo_id": "LF-PRD-002",
+      "turn_id": "turn-4d0f99fbc6d94e82a28ba37e710c59a0",
+      "owner": "scheduler:1",
+      "renewal_id": "run:1:task:2:heartbeat:16",
+      "lease_expires_at": "2026-08-09T00:19:21.544606+00:00",
+      "at": "2026-08-09T00:18:21.544640+00:00"
+    },
+    {
+      "event": "lease_renewed",
+      "todo_id": "LF-PRD-002",
+      "turn_id": "turn-4d0f99fbc6d94e82a28ba37e710c59a0",
+      "owner": "scheduler:1",
+      "renewal_id": "run:1:task:2:heartbeat:17",
+      "lease_expires_at": "2026-08-09T00:19:26.599312+00:00",
+      "at": "2026-08-09T00:18:26.599345+00:00"
+    },
+    {
+      "event": "lease_renewed",
+      "todo_id": "LF-PRD-002",
+      "turn_id": "turn-4d0f99fbc6d94e82a28ba37e710c59a0",
+      "owner": "scheduler:1",
+      "renewal_id": "run:1:task:2:heartbeat:18",
+      "lease_expires_at": "2026-08-09T00:19:31.663854+00:00",
+      "at": "2026-08-09T00:18:31.663895+00:00"
+    },
+    {
+      "event": "lease_renewed",
+      "todo_id": "LF-PRD-002",
+      "turn_id": "turn-4d0f99fbc6d94e82a28ba37e710c59a0",
+      "owner": "scheduler:1",
+      "renewal_id": "run:1:task:2:heartbeat:19",
+      "lease_expires_at": "2026-08-09T00:19:36.710563+00:00",
+      "at": "2026-08-09T00:18:36.710597+00:00"
+    },
+    {
+      "event": "lease_renewed",
+      "todo_id": "LF-PRD-002",
+      "turn_id": "turn-4d0f99fbc6d94e82a28ba37e710c59a0",
+      "owner": "scheduler:1",
+      "renewal_id": "run:1:task:2:heartbeat:20",
+      "lease_expires_at": "2026-08-09T00:19:41.763585+00:00",
+      "at": "2026-08-09T00:18:41.763622+00:00"
+    },
+    {
+      "event": "lease_renewed",
+      "todo_id": "LF-PRD-002",
+      "turn_id": "turn-4d0f99fbc6d94e82a28ba37e710c59a0",
+      "owner": "scheduler:1",
+      "renewal_id": "run:1:task:2:heartbeat:21",
+      "lease_expires_at": "2026-08-09T00:19:46.830090+00:00",
+      "at": "2026-08-09T00:18:46.830122+00:00"
+    },
+    {
+      "event": "turn_writeback",
+      "todo_id": "LF-PRD-002",
+      "turn_id": "turn-4d0f99fbc6d94e82a28ba37e710c59a0",
+      "route": "VALIDATED_PROGRESS",
+      "receipt_id": "receipt-5d13c674b75b489aa8647f428b3306c6",
+      "at": "2026-08-09T00:18:50.927393+00:00"
+    },
+    {
+      "event": "lease_renewed",
+      "todo_id": "LF-PRD-003",
+      "turn_id": "turn-6eedcc189c2043b780e858422fdaff0d",
+      "owner": "scheduler:1",
+      "renewal_id": "run:1:task:3:heartbeat:0",
+      "lease_expires_at": "2026-08-09T00:19:57.752143+00:00",
+      "at": "2026-08-09T00:18:57.752223+00:00"
+    },
+    {
+      "event": "lease_renewed",
+      "todo_id": "LF-PRD-003",
+      "turn_id": "turn-6eedcc189c2043b780e858422fdaff0d",
+      "owner": "scheduler:1",
+      "renewal_id": "run:1:task:3:heartbeat:1",
+      "lease_expires_at": "2026-08-09T00:20:02.881940+00:00",
+      "at": "2026-08-09T00:19:02.882032+00:00"
+    },
+    {
+      "event": "lease_renewed",
+      "todo_id": "LF-PRD-003",
+      "turn_id": "turn-6eedcc189c2043b780e858422fdaff0d",
+      "owner": "scheduler:1",
+      "renewal_id": "run:1:task:3:heartbeat:2",
+      "lease_expires_at": "2026-08-09T00:20:08.002027+00:00",
+      "at": "2026-08-09T00:19:08.002118+00:00"
+    },
+    {
+      "event": "lease_renewed",
+      "todo_id": "LF-PRD-003",
+      "turn_id": "turn-6eedcc189c2043b780e858422fdaff0d",
+      "owner": "scheduler:1",
+      "renewal_id": "run:1:task:3:heartbeat:3",
+      "lease_expires_at": "2026-08-09T00:20:13.065849+00:00",
+      "at": "2026-08-09T00:19:13.065892+00:00"
+    },
+    {
+      "event": "lease_renewed",
+      "todo_id": "LF-PRD-003",
+      "turn_id": "turn-6eedcc189c2043b780e858422fdaff0d",
+      "owner": "scheduler:1",
+      "renewal_id": "run:1:task:3:heartbeat:4",
+      "lease_expires_at": "2026-08-09T00:20:18.134989+00:00",
+      "at": "2026-08-09T00:19:18.135037+00:00"
+    },
+    {
+      "event": "turn_writeback",
+      "todo_id": "LF-PRD-003",
+      "turn_id": "turn-6eedcc189c2043b780e858422fdaff0d",
+      "route": "VALIDATED_PROGRESS",
+      "receipt_id": "receipt-84630549604d4fcdb1fbd66cc907537a",
+      "at": "2026-08-09T00:19:20.616173+00:00"
+    },
+    {
+      "event": "lease_renewed",
+      "todo_id": "LF-PRD-004",
+      "turn_id": "turn-9fd2b205b76a4725bf5b3ec8e56b47ad",
+      "owner": "scheduler:1",
+      "renewal_id": "run:1:task:4:heartbeat:0",
+      "lease_expires_at": "2026-08-09T00:20:27.445881+00:00",
+      "at": "2026-08-09T00:19:27.445956+00:00"
+    },
+    {
+      "event": "lease_renewed",
+      "todo_id": "LF-PRD-004",
+      "turn_id": "turn-9fd2b205b76a4725bf5b3ec8e56b47ad",
+      "owner": "scheduler:1",
+      "renewal_id": "run:1:task:4:heartbeat:1",
+      "lease_expires_at": "2026-08-09T00:20:32.576407+00:00",
+      "at": "2026-08-09T00:19:32.576491+00:00"
+    },
+    {
+      "event": "lease_renewed",
+      "todo_id": "LF-PRD-004",
+      "turn_id": "turn-9fd2b205b76a4725bf5b3ec8e56b47ad",
+      "owner": "scheduler:1",
+      "renewal_id": "run:1:task:4:heartbeat:2",
+      "lease_expires_at": "2026-08-09T00:20:37.680701+00:00",
+      "at": "2026-08-09T00:19:37.680785+00:00"
+    },
+    {
+      "event": "lease_renewed",
+      "todo_id": "LF-PRD-004",
+      "turn_id": "turn-9fd2b205b76a4725bf5b3ec8e56b47ad",
+      "owner": "scheduler:1",
+      "renewal_id": "run:1:task:4:heartbeat:3",
+      "lease_expires_at": "2026-08-09T00:20:42.762002+00:00",
+      "at": "2026-08-09T00:19:42.762039+00:00"
+    },
+    {
+      "event": "turn_writeback",
+      "todo_id": "LF-PRD-004",
+      "turn_id": "turn-9fd2b205b76a4725bf5b3ec8e56b47ad",
+      "route": "VALIDATION_FAILED",
+      "receipt_id": "receipt-6e6534d299da4f6bbaf74632921ad778",
+      "at": "2026-08-09T00:19:47.267552+00:00"
+    },
+    {
+      "event": "repair_handoff",
+      "todo_id": "LF-PRD-004",
+      "handoff_id": "run:1:task:LF-PRD-004:repair:1",
+      "authority": "ScrumMaster",
+      "diagnosis": "PR readiness failed: Contract violation: Required public API is missing: LedgerStore; Contract violation: Required public API is missing: add_entry; Contract violation: Required public API is missing: close_entry; Contract violation: Required public API is missing: export_snapshot; Contract violation: Required public API is missing: list_entries; Contract violation: Required public API is missing: summarize",
+      "evidence": {
+        "run_id": 1,
+        "task_id": 4,
+        "attempt": 1,
+        "contract": {
+          "allowed_files": [
+            "app/forge_ledger.py",
+            "tests/test_forge_ledger_snapshot.py"
+          ],
+          "canonical_test_command": "python -m pytest tests -q",
+          "seniority_class": "chief_only",
+          "visual_required": false,
+          "acceptance_test_policy": "observable_behavior_only",
+          "acceptance_behaviors": [
+            "export_snapshot contains real ordered entries and summary",
+            "export_snapshot does not mutate JSON"
+          ],
+          "required_public_apis": [
+            "LedgerStore",
+            "add_entry",
+            "list_entries",
+            "close_entry",
+            "summarize",
+            "export_snapshot"
+          ],
+          "forbidden_dependencies": [
+            "third-party runtime dependencies"
+          ],
+          "acceptance_test_fixture_source": "C:\\Users\\adili\\projetos_offline\\local_forge_os\\scripts\\fixtures\\reference_forgeos_snapshot_acceptance.py",
+          "acceptance_test_fixture_target": "tests/test_forge_ledger_snapshot.py",
+          "required_product_files": [
+            "app/forge_ledger.py"
+          ],
+          "required_artifact": null,
+          "required_skills": [
+            "grill-with-docs",
+            "to-tickets",
+            "tdd"
+          ],
+          "implementation_notes": [
+            "Use the exact public API in PRD_REFERENCE_FORGEOS.md.",
+            "Acceptance must import and execute app/forge_ledger.py.",
+            "Do not duplicate the product algorithm inside tests.",
+            "Keep JSON persistence stable and preserve all prior behavior.",
+            "An unknown non-numeric id must raise KeyError, not ValueError.",
+            "Do not add third-party runtime dependencies.",
+            "Preserve every previously accepted public API and behavior; run the full accumulated test suite before declaring readiness.",
+            "Keep the exact amount field and module-level function names from PRD_REFERENCE_FORGEOS.md; do not rename amount to minutes or replace functions with methods.",
+            "Do not use pytest.skip, xfail, importorskip, or placeholder assertions.",
+            "The release task adds docs/release_manifest.md without rewriting a passing module.",
+            "ScrumMaster unblock: Chief Engineer must remove this blocker before PR readiness: PR readiness failed: Contract violation: Required public API is missing: LedgerStore; Contract violation: Required public API is missing: add_entry; Contract violation: Required public API is missing: close_entry; Contract violation: Required public API is missing: export_snapshot; Contract violation: Required public API is missing: list_entries; Contract violation: Required public API is missing: summarize"
+          ],
+          "reference_benchmark": true,
+          "source_title": "Export a release snapshot",
+          "source_description": "Export a release snapshot",
+          "chief_engineer_unblock_required": true,
+          "blocked_reason": "PR readiness failed: Contract violation: Required public API is missing: LedgerStore; Contract violation: Required public API is missing: add_entry; Contract violation: Required public API is missing: close_entry; Contract violation: Required public API is missing: export_snapshot; Contract violation: Required public API is missing: list_entries; Contract violation: Required public API is missing: summarize"
+        }
+      },
+      "at": "2026-08-09T00:19:47.702287+00:00"
+    },
+    {
+      "event": "repair_writeback",
+      "todo_id": "LF-PRD-004",
+      "handoff_id": "run:1:task:LF-PRD-004:repair:1",
+      "summary": "SQL task requeued after bounded Scrum Master recovery.",
+      "evidence": {
+        "run_id": 1,
+        "task_id": 4,
+        "task_status": "READY",
+        "blocker": "PR readiness failed: Contract violation: Required public API is missing: LedgerStore; Contract violation: Required public API is missing: add_entry; Contract violation: Required public API is missing: close_entry; Contract violation: Required public API is missing: export_snapshot; Contract violation: Required public API is missing: list_entries; Contract violation: Required public API is missing: summarize"
+      },
+      "at": "2026-08-09T00:19:47.736806+00:00"
+    },
+    {
+      "event": "lease_renewed",
+      "todo_id": "LF-PRD-004",
+      "turn_id": "turn-755a857e24114dc49acbcf51e199bd38",
+      "owner": "scheduler:1",
+      "renewal_id": "run:1:task:5:heartbeat:0",
+      "lease_expires_at": "2026-08-09T00:20:55.104737+00:00",
+      "at": "2026-08-09T00:19:55.104817+00:00"
+    },
+    {
+      "event": "lease_renewed",
+      "todo_id": "LF-PRD-004",
+      "turn_id": "turn-755a857e24114dc49acbcf51e199bd38",
+      "owner": "scheduler:1",
+      "renewal_id": "run:1:task:5:heartbeat:1",
+      "lease_expires_at": "2026-08-09T00:21:00.211750+00:00",
+      "at": "2026-08-09T00:20:00.211828+00:00"
+    },
+    {
+      "event": "lease_renewed",
+      "todo_id": "LF-PRD-004",
+      "turn_id": "turn-755a857e24114dc49acbcf51e199bd38",
+      "owner": "scheduler:1",
+      "renewal_id": "run:1:task:5:heartbeat:2",
+      "lease_expires_at": "2026-08-09T00:21:05.306099+00:00",
+      "at": "2026-08-09T00:20:05.306160+00:00"
+    },
+    {
+      "event": "lease_renewed",
+      "todo_id": "LF-PRD-004",
+      "turn_id": "turn-755a857e24114dc49acbcf51e199bd38",
+      "owner": "scheduler:1",
+      "renewal_id": "run:1:task:5:heartbeat:3",
+      "lease_expires_at": "2026-08-09T00:21:10.376394+00:00",
+      "at": "2026-08-09T00:20:10.376435+00:00"
+    },
+    {
+      "event": "lease_renewed",
+      "todo_id": "LF-PRD-004",
+      "turn_id": "turn-755a857e24114dc49acbcf51e199bd38",
+      "owner": "scheduler:1",
+      "renewal_id": "run:1:task:5:heartbeat:4",
+      "lease_expires_at": "2026-08-09T00:21:15.440834+00:00",
+      "at": "2026-08-09T00:20:15.440871+00:00"
+    },
+    {
+      "event": "lease_renewed",
+      "todo_id": "LF-PRD-004",
+      "turn_id": "turn-755a857e24114dc49acbcf51e199bd38",
+      "owner": "scheduler:1",
+      "renewal_id": "run:1:task:5:heartbeat:5",
+      "lease_expires_at": "2026-08-09T00:21:20.494657+00:00",
+      "at": "2026-08-09T00:20:20.494693+00:00"
+    },
+    {
+      "event": "lease_renewed",
+      "todo_id": "LF-PRD-004",
+      "turn_id": "turn-755a857e24114dc49acbcf51e199bd38",
+      "owner": "scheduler:1",
+      "renewal_id": "run:1:task:5:heartbeat:6",
+      "lease_expires_at": "2026-08-09T00:21:25.556923+00:00",
+      "at": "2026-08-09T00:20:25.556956+00:00"
+    },
+    {
+      "event": "lease_renewed",
+      "todo_id": "LF-PRD-004",
+      "turn_id": "turn-755a857e24114dc49acbcf51e199bd38",
+      "owner": "scheduler:1",
+      "renewal_id": "run:1:task:5:heartbeat:7",
+      "lease_expires_at": "2026-08-09T00:21:30.621126+00:00",
+      "at": "2026-08-09T00:20:30.621158+00:00"
+    },
+    {
+      "event": "lease_renewed",
+      "todo_id": "LF-PRD-004",
+      "turn_id": "turn-755a857e24114dc49acbcf51e199bd38",
+      "owner": "scheduler:1",
+      "renewal_id": "run:1:task:5:heartbeat:8",
+      "lease_expires_at": "2026-08-09T00:21:35.676743+00:00",
+      "at": "2026-08-09T00:20:35.676784+00:00"
+    },
+    {
+      "event": "lease_renewed",
+      "todo_id": "LF-PRD-004",
+      "turn_id": "turn-755a857e24114dc49acbcf51e199bd38",
+      "owner": "scheduler:1",
+      "renewal_id": "run:1:task:5:heartbeat:9",
+      "lease_expires_at": "2026-08-09T00:21:40.734439+00:00",
+      "at": "2026-08-09T00:20:40.734478+00:00"
+    },
+    {
+      "event": "lease_renewed",
+      "todo_id": "LF-PRD-004",
+      "turn_id": "turn-755a857e24114dc49acbcf51e199bd38",
+      "owner": "scheduler:1",
+      "renewal_id": "run:1:task:5:heartbeat:10",
+      "lease_expires_at": "2026-08-09T00:21:45.795343+00:00",
+      "at": "2026-08-09T00:20:45.795470+00:00"
+    },
+    {
+      "event": "lease_renewed",
+      "todo_id": "LF-PRD-004",
+      "turn_id": "turn-755a857e24114dc49acbcf51e199bd38",
+      "owner": "scheduler:1",
+      "renewal_id": "run:1:task:5:heartbeat:11",
+      "lease_expires_at": "2026-08-09T00:21:50.860964+00:00",
+      "at": "2026-08-09T00:20:50.861000+00:00"
+    },
+    {
+      "event": "lease_renewed",
+      "todo_id": "LF-PRD-004",
+      "turn_id": "turn-755a857e24114dc49acbcf51e199bd38",
+      "owner": "scheduler:1",
+      "renewal_id": "run:1:task:5:heartbeat:12",
+      "lease_expires_at": "2026-08-09T00:21:55.923939+00:00",
+      "at": "2026-08-09T00:20:55.923973+00:00"
+    },
+    {
+      "event": "turn_writeback",
+      "todo_id": "LF-PRD-004",
+      "turn_id": "turn-755a857e24114dc49acbcf51e199bd38",
+      "route": "VALIDATED_PROGRESS",
+      "receipt_id": "receipt-3c6bf3a36f8e4cc48dda737bb5532713",
+      "at": "2026-08-09T00:20:59.555789+00:00"
+    },
+    {
+      "event": "lease_renewed",
+      "todo_id": "LF-PRD-005",
+      "turn_id": "turn-2b562946a74041bdb661c43cf0261043",
+      "owner": "scheduler:1",
+      "renewal_id": "run:1:task:6:heartbeat:0",
+      "lease_expires_at": "2026-08-09T00:22:06.488056+00:00",
+      "at": "2026-08-09T00:21:06.488150+00:00"
+    },
+    {
+      "event": "lease_renewed",
+      "todo_id": "LF-PRD-005",
+      "turn_id": "turn-2b562946a74041bdb661c43cf0261043",
+      "owner": "scheduler:1",
+      "renewal_id": "run:1:task:6:heartbeat:1",
+      "lease_expires_at": "2026-08-09T00:22:11.608875+00:00",
+      "at": "2026-08-09T00:21:11.608953+00:00"
+    },
+    {
+      "event": "lease_renewed",
+      "todo_id": "LF-PRD-005",
+      "turn_id": "turn-2b562946a74041bdb661c43cf0261043",
+      "owner": "scheduler:1",
+      "renewal_id": "run:1:task:6:heartbeat:2",
+      "lease_expires_at": "2026-08-09T00:22:16.763648+00:00",
+      "at": "2026-08-09T00:21:16.763731+00:00"
+    },
+    {
+      "event": "lease_renewed",
+      "todo_id": "LF-PRD-005",
+      "turn_id": "turn-2b562946a74041bdb661c43cf0261043",
+      "owner": "scheduler:1",
+      "renewal_id": "run:1:task:6:heartbeat:3",
+      "lease_expires_at": "2026-08-09T00:22:21.874779+00:00",
+      "at": "2026-08-09T00:21:21.874820+00:00"
+    },
+    {
+      "event": "lease_renewed",
+      "todo_id": "LF-PRD-005",
+      "turn_id": "turn-2b562946a74041bdb661c43cf0261043",
+      "owner": "scheduler:1",
+      "renewal_id": "run:1:task:6:heartbeat:4",
+      "lease_expires_at": "2026-08-09T00:22:26.936039+00:00",
+      "at": "2026-08-09T00:21:26.936074+00:00"
+    },
+    {
+      "event": "turn_writeback",
+      "todo_id": "LF-PRD-005",
+      "turn_id": "turn-2b562946a74041bdb661c43cf0261043",
+      "route": "VALIDATED_PROGRESS",
+      "receipt_id": "receipt-0c6491c6365543919650c49a73922d11",
+      "at": "2026-08-09T00:21:28.947183+00:00"
+    },
+    {
+      "event": "release_completed",
+      "summary": "Release promoted to main at 3d7645c67c18a9cc3e5e449274d5b2ab640da75d; post-merge agents passed: Tester, SafetyAuditor.",
+      "evidence": {
+        "run_id": 1,
+        "release_state": "COMPLETED",
+        "merge_commit": "3d7645c67c18a9cc3e5e449274d5b2ab640da75d",
+        "post_merge_results": [
+          {
+            "agent": "Tester",
+            "skill": "e2e-release-tester",
+            "command": "python -m pytest tests/test_forge_ledger_create.py tests/test_forge_ledger_validation.py tests/test_forge_ledger_summary.py tests/test_forge_ledger_snapshot.py -q",
+            "status": "PASS",
+            "exit_code": 0,
+            "stdout_tail": "....                                                                     [100%]Running teardown with pytest sessionfinish...\r\n\r\n4 passed in 0.33s\r\n",
+            "stderr_tail": ""
+          },
+          {
+            "agent": "SafetyAuditor",
+            "skill": "security-auditor",
+            "command": "python scripts/check_security_scans.py",
+            "status": "PASS",
+            "exit_code": 0,
+            "stdout_tail": "Running LocalForge OS Security Scan...\r\nSECURITY SCAN PASSED: 0 secrets detected, sanitization integrity verified.\r\n",
+            "stderr_tail": ""
+          }
+        ],
+        "acceptance_target": "all_tasks_pr_ready_merged_and_post_merge_validated"
+      },
+      "at": "2026-08-09T00:21:43.149010+00:00"
+    }
+  ],
+  "capability_proposals": []
+}

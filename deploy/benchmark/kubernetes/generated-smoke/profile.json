@@ -1,0 +1,52 @@
+{
+  "schema": "forgeos.kubernetes_benchmark_profile.v1",
+  "run_id": "smoke123",
+  "namespace": "forgeos-benchmark-smoke123",
+  "secret_values_versioned": false,
+  "resource_bounds": {
+    "active_deadline_seconds": 5400,
+    "task_deadline_seconds": 900,
+    "parallel_tasks": 2,
+    "max_active_model_calls": 4,
+    "pids_limit": 256,
+    "egress": [
+      "namespace services",
+      "cluster DNS",
+      "declared HTTPS connectors"
+    ]
+  },
+  "targets": {
+    "namespace": "forgeos",
+    "services": {
+      "backend": "forgeos-forgeos-cloud-backend",
+      "redis": "forgeos-forgeos-cloud-redis",
+      "postgres": "forgeos-forgeos-cloud-postgres",
+      "omniroute": "forgeos-forgeos-cloud-omniroute"
+    }
+  },
+  "runner": {
+    "image": "localforge/forgeos-benchmark-runner:dev",
+    "command": [
+      "localforge",
+      "benchmark",
+      "report",
+      "--project-id",
+      "1"
+    ],
+    "restart_policy": "OnFailure",
+    "unprivileged": true,
+    "evidence_path": "/var/lib/forgeos/evidence"
+  },
+  "evidence": {
+    "schema": "forgeos.kubernetes_benchmark_evidence.v1",
+    "path": "/var/lib/forgeos/evidence",
+    "readiness_failure": "NOT_PROVEN until a controlled rollout failure is observed",
+    "rollback": "NOT_PROVEN until helm history contains a verified rollback revision",
+    "hpa": "NOT_PROVEN when metrics.k8s.io is unavailable"
+  },
+  "cleanup": {
+    "policy": "ttl-after-finished then explicit namespace deletion",
+    "command": "kubectl delete namespace forgeos-benchmark-smoke123 --wait=true"
+  },
+  "manifest": "manifest.yaml"
+}

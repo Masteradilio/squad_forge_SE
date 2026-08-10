@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, type ChangeEvent } from 'react';
+import { useCallback, useState, useEffect, useRef, type ChangeEvent } from 'react';
 import {
   apiClient,
   type Project,
@@ -8,6 +8,7 @@ import {
 } from '../api/client';
 import { Card } from './Card';
 import { Button } from './Button';
+import { ResourceState } from './ResourceState';
 
 export interface ChatMessage {
   id: string;
@@ -50,11 +51,16 @@ export function POChatView({
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [structureStatus, setStructureStatus] = useState<'loading' | 'ready' | 'empty' | 'error'>('loading');
+  const [structureError, setStructureError] = useState<string | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Load Folders & Sessions from PostgreSQL API
   const loadChatStructure = async () => {
+    setStructureStatus('loading');
+    setStructureError(null);
     try {
       const [fData, sData] = await Promise.all([
         apiClient.fetchChatFolders(),
@@ -92,18 +98,25 @@ export function POChatView({
         setActiveSessionId(newSess.id);
         localStorage.setItem('localforge_active_session_id', String(newSess.id));
       }
+      setStructureStatus('ready');
     } catch (err) {
       console.error('Failed to load chat structure:', err);
+      setStructureStatus('error');
+      setStructureError(err instanceof Error ? err.message : String(err));
     }
   };
 
   useEffect(() => {
-    loadChatStructure();
+    // This effect subscribes to the remote chat structure; its async callback
+    // updates local state after the request resolves.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadChatStructure();
   }, []);
 
   // Load Active Session Details (Full Message History)
-  const loadSessionDetails = async (sessionId: number) => {
+  const loadSessionDetails = useCallback(async (sessionId: number) => {
     setLoadingHistory(true);
+    setHistoryError(null);
     try {
       const details = await apiClient.fetchChatSessionDetails(sessionId);
       if (details.messages) {
@@ -123,17 +136,20 @@ export function POChatView({
       }
     } catch (err) {
       console.error('Error loading session details:', err);
+      setHistoryError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoadingHistory(false);
     }
-  };
+  }, [onSelectProject]);
 
   useEffect(() => {
     if (activeSessionId) {
       localStorage.setItem('localforge_active_session_id', String(activeSessionId));
-      loadSessionDetails(activeSessionId);
+      // Session history is an external resource synchronized by this effect.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      void loadSessionDetails(activeSessionId);
     }
-  }, [activeSessionId]);
+  }, [activeSessionId, loadSessionDetails]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -332,15 +348,13 @@ export function POChatView({
       if (res.project && onSelectProject) {
         onSelectProject(res.project.id);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       const errorText =
         typeof err === 'string'
           ? err
-          : err?.message
+          : err instanceof Error
           ? err.message
-          : typeof err === 'object'
-          ? JSON.stringify(err)
-          : String(err);
+          : JSON.stringify(err);
       const errorMsg: ChatMessage = {
         id: (Date.now() + 1).toString(),
         sender: 'Scrum Master',
@@ -361,7 +375,17 @@ export function POChatView({
   const activeSession = sessions.find((s) => s.id === activeSessionId);
 
   return (
-    <div style={{ display: 'flex', gap: '16px', height: 'calc(100vh - 120px)', width: '100%' }}>
+    <section data-testid="chat-view" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+      {structureStatus === 'loading' && (
+        <ResourceState status="loading" title="Carregando conversas reais" message="Consultando pastas e sessões do backend." testId="chat-state-loading" />
+      )}
+      {structureStatus === 'error' && (
+        <ResourceState status="error" title="Conversas indisponíveis" message={`A API de chat não respondeu. ${structureError ?? ''}`} testId="chat-state-error" />
+      )}
+      {structureStatus === 'empty' && (
+        <ResourceState status="empty" title="Nenhuma conversa retornada" message="Crie uma sessão para iniciar uma conversa persistida." testId="chat-state-empty" />
+      )}
+      <div className="chat-layout" style={{ display: 'flex', gap: '16px', height: 'calc(100vh - 120px)', width: '100%' }}>
       {/* ---------------------------------------------------------------- */}
       {/* Inner Chat Sidebar (Pastas de Projetos & Conversas Soltas) */}
       {/* ---------------------------------------------------------------- */}
@@ -602,7 +626,7 @@ export function POChatView({
                     style={{
                       display: 'flex',
                       alignItems: 'center',
-                      justify: 'space-between',
+                      justifyContent: 'space-between',
                       padding: '8px 10px',
                       borderRadius: '6px',
                       backgroundColor: isActive ? '#2563eb' : 'rgba(255,255,255,0.03)',
@@ -697,6 +721,10 @@ export function POChatView({
             <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '14px' }}>
               Carregando histórico da conversa do PostgreSQL...
             </div>
+          ) : historyError ? (
+            <ResourceState status="error" title="Histórico indisponível" message={historyError} testId="chat-history-state-error" />
+          ) : messages.length === 0 ? (
+            <ResourceState status="empty" title="Nenhuma mensagem nesta sessão" message="A sessão existe, mas a API ainda não retornou mensagens persistidas." testId="chat-history-state-empty" />
           ) : (
             <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '16px', paddingRight: '8px' }}>
               {messages.map((msg) => (
@@ -852,6 +880,7 @@ export function POChatView({
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </section>
   );
 }

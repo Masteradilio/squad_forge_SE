@@ -4,9 +4,10 @@ from urllib.parse import urlsplit
 
 import yaml
 from dotenv import dotenv_values
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, field_validator
 
-from localforge.services.pricing import is_free_gateway_model
+from localforge.models.enums import ReleasePromotionMode
+from localforge.services.pricing import DEFAULT_MAX_GATEWAY_CALLS, is_free_gateway_model
 
 # Default configuration dictionary used as baseline
 DEFAULT_CONFIG = {
@@ -46,8 +47,15 @@ DEFAULT_CONFIG = {
         "fallback_api_key": None,
         "fallback_after_seconds": 30.0,
         "timeout": 240.0,
+        "omniroute_structured_timeout": 120.0,
         "max_input_tokens_per_call": 32000,
         "max_output_tokens_per_call": 8000,
+    },
+    "context7": {
+        "enabled": True,
+        "endpoint": "https://mcp.context7.com/mcp",
+        "api_key": None,
+        "timeout": 30.0,
     },
     "sandbox": {
         "type": "local",
@@ -66,6 +74,7 @@ DEFAULT_CONFIG = {
         # rewrite to pass through to the visual fidelity gate.
         "max_visual_diff_growth": 100000,
         "max_file_count": 12,
+        "max_gateway_calls": DEFAULT_MAX_GATEWAY_CALLS,
         "max_paid_calls": 30,
         "max_paid_input_tokens": 400000,
         "max_paid_output_tokens": 60000,
@@ -73,6 +82,18 @@ DEFAULT_CONFIG = {
         "max_repair_attempts_absolute": 10,
         "max_run_recovery_cycles": 3,
         "max_paid_usd_absolute": 6.0,
+    },
+    "release": {
+        "promotion_mode": ReleasePromotionMode.HUMAN_APPROVAL.value,
+        "target_branch": None,
+        "post_merge_agents": ["Tester", "SafetyAuditor"],
+        "tester_command": "python -m pytest -q",
+        "security_command": "python scripts/check_security_scans.py",
+        "post_merge_timeout": 600.0,
+        "require_clean_target": True,
+        "operational_profiles": [],
+        "require_release_tree_audit": False,
+        "require_semantic_review": False,
     },
 }
 
@@ -123,8 +144,21 @@ class ChiefEngineerConfig(BaseModel):
     fallback_after_seconds: float = Field(default=30.0)
     enabled: bool = Field(default=True)
     timeout: float = Field(default=240.0)
+    # OmniRoute streaming routes can spend longer than the generic request
+    # timeout in hidden reasoning before emitting a complete structured plan.
+    # Keep this explicit and bounded instead of silently hard-capping repairs.
+    omniroute_structured_timeout: float = Field(default=120.0, ge=30.0, le=600.0)
     max_input_tokens_per_call: int = Field(default=32000)
     max_output_tokens_per_call: int = Field(default=8000)
+
+
+class Context7Config(BaseModel):
+    """Configuration for the optional Context7 documentation boundary."""
+
+    enabled: bool = Field(default=True)
+    endpoint: str = Field(default="https://mcp.context7.com/mcp", min_length=1)
+    api_key: str | None = Field(default=None)
+    timeout: float = Field(default=30.0, gt=0, le=120)
 
 
 class SandboxConfig(BaseModel):
@@ -147,6 +181,10 @@ class BudgetsConfig(BaseModel):
     max_diff_growth: int = Field(default=4000)
     max_visual_diff_growth: int = Field(default=100000)
     max_file_count: int = Field(default=12)
+    # OmniRoute is a gateway, not proof that every upstream route is free.
+    # Bound gateway calls separately; the default is finite and can be
+    # overridden with LOCALFORGE_MAX_GATEWAY_CALLS or workspace YAML.
+    max_gateway_calls: int = Field(default=DEFAULT_MAX_GATEWAY_CALLS, ge=0)
     max_paid_calls: int = Field(default=30)
     max_paid_input_tokens: int = Field(default=400000)
     max_paid_output_tokens: int = Field(default=60000)
@@ -157,14 +195,50 @@ class BudgetsConfig(BaseModel):
     max_paid_usd_absolute: float = Field(default=6.0)
 
 
+class ReleaseConfig(BaseModel):
+    """Promotion policy applied after implementation reaches PR_READY."""
+
+    promotion_mode: ReleasePromotionMode = Field(default=ReleasePromotionMode.HUMAN_APPROVAL)
+    target_branch: str | None = Field(default=None, min_length=1)
+    post_merge_agents: list[str] = Field(
+        default_factory=lambda: ["Tester", "SafetyAuditor"], min_length=2
+    )
+    tester_command: str = Field(default="python -m pytest -q", min_length=1)
+    security_command: str = Field(
+        default="python scripts/check_security_scans.py", min_length=1
+    )
+    post_merge_timeout: float = Field(default=600.0, gt=0, le=3600.0)
+    require_clean_target: bool = Field(default=True)
+    operational_profiles: list[str] = Field(default_factory=list)
+    require_release_tree_audit: bool = Field(default=False)
+    require_semantic_review: bool = Field(default=False)
+
+    @field_validator("operational_profiles")
+    @classmethod
+    def validate_operational_profiles(cls, value: list[str]) -> list[str]:
+        from localforge.services.operational_profiles import normalize_profile_names
+
+        return normalize_profile_names(value)
+
+    @field_validator("post_merge_agents")
+    @classmethod
+    def validate_post_merge_agents(cls, value: list[str]) -> list[str]:
+        normalized = [item.lower().replace("_", "").replace("-", "") for item in value]
+        if normalized != ["tester", "safetyauditor"]:
+            raise ValueError("post_merge_agents must contain exactly Tester and SafetyAuditor")
+        return value
+
+
 class LocalForgeConfig(BaseModel):
     version: int = Field(default=1)
     project: ProjectConfig = Field(default_factory=ProjectConfig)
     git: GitConfig = Field(default_factory=GitConfig)
     models: ModelsConfig = Field(default_factory=ModelsConfig)
     chief_engineer: ChiefEngineerConfig = Field(default_factory=ChiefEngineerConfig)
+    context7: Context7Config = Field(default_factory=Context7Config)
     sandbox: SandboxConfig = Field(default_factory=SandboxConfig)
     budgets: BudgetsConfig = Field(default_factory=BudgetsConfig)
+    release: ReleaseConfig = Field(default_factory=ReleaseConfig)
 
 
 def configured_free_gateway_models(config: LocalForgeConfig) -> list[str]:
@@ -191,16 +265,17 @@ def configured_free_gateway_models(config: LocalForgeConfig) -> list[str]:
 
 
 def _find_env_file(start_dir: str) -> str | None:
-    curr = start_dir
-    while True:
-        candidate = os.path.join(curr, ".env")
-        if os.path.exists(candidate):
-            return candidate
-        parent = os.path.dirname(curr)
-        if parent == curr:
-            break
-        curr = parent
-    return None
+    """Return only the workspace-local dotenv file.
+
+    Walking all parent directories makes a root project's credentials leak
+    into unrelated temporary workspaces (and into isolated test projects)
+    whenever the process is started below that root. ForgeOS documents the
+    project-root ``.env`` convention, so the current working directory is the
+    only implicit source; callers that need another workspace must change
+    directory before loading configuration.
+    """
+    candidate = os.path.join(os.path.abspath(start_dir), ".env")
+    return candidate if os.path.exists(candidate) else None
 
 
 def _validate_omniroute_endpoint(value: str, section: str) -> None:
@@ -287,11 +362,30 @@ def load_config(cli_args: dict[str, Any] | None = None) -> LocalForgeConfig:
         config_dict["models"]["api_key"] = omniroute_api_key
         config_dict["chief_engineer"]["api_key"] = omniroute_api_key
 
+    # Context7 is an optional documentation boundary. It may be configured
+    # with its canonical names or the legacy URL alias, without exporting
+    # credentials into the process environment.
+    context7_endpoint = env_value("CONTEXT7_MCP_ENDPOINT") or env_value("CONTEXT7_MCP_URL")
+    if context7_endpoint:
+        config_dict["context7"]["endpoint"] = context7_endpoint
+
     # 3. Load from Environment Variables
     env_mappings = {
         "LOCALFORGE_PROJECT_NAME": ("project", "name"),
         "LOCALFORGE_DEFAULT_BRANCH": ("git", "default_branch"),
         "LOCALFORGE_REMOTE_URL": ("git", "remote_url"),
+        "LOCALFORGE_RELEASE_PROMOTION_MODE": ("release", "promotion_mode"),
+        "LOCALFORGE_RELEASE_TARGET_BRANCH": ("release", "target_branch"),
+        "LOCALFORGE_RELEASE_TESTER_COMMAND": ("release", "tester_command"),
+        "LOCALFORGE_RELEASE_SECURITY_COMMAND": ("release", "security_command"),
+        "LOCALFORGE_RELEASE_POST_MERGE_TIMEOUT": ("release", "post_merge_timeout"),
+        "LOCALFORGE_RELEASE_REQUIRE_CLEAN_TARGET": ("release", "require_clean_target"),
+        "LOCALFORGE_RELEASE_OPERATIONAL_PROFILES": ("release", "operational_profiles"),
+        "LOCALFORGE_RELEASE_REQUIRE_TREE_AUDIT": ("release", "require_release_tree_audit"),
+        "LOCALFORGE_RELEASE_REQUIRE_SEMANTIC_REVIEW": (
+            "release",
+            "require_semantic_review",
+        ),
         "LOCALFORGE_MODEL_PROVIDER": ("models", "provider"),
         "LOCALFORGE_MODEL_BASE_URL": ("models", "base_url"),
         "LOCALFORGE_MODEL_API_KEY": ("models", "api_key"),
@@ -316,12 +410,20 @@ def load_config(cli_args: dict[str, Any] | None = None) -> LocalForgeConfig:
             "chief_engineer",
             "fallback_after_seconds",
         ),
+        "CONTEXT7_API_KEY": ("context7", "api_key"),
+        "CONTEXT7_ENABLED": ("context7", "enabled"),
+        "CONTEXT7_TIMEOUT": ("context7", "timeout"),
+        "LOCALFORGE_OMNIROUTE_STRUCTURED_TIMEOUT": (
+            "chief_engineer",
+            "omniroute_structured_timeout",
+        ),
         "LOCALFORGE_MAX_TASK_DURATION": ("budgets", "max_task_duration"),
         "LOCALFORGE_MAX_PARALLEL_TASKS": ("budgets", "max_parallel_tasks"),
         "LOCALFORGE_MAX_REPAIR_ATTEMPTS": ("budgets", "max_repair_attempts"),
         "LOCALFORGE_MAX_ACTIVE_MODEL_CALLS": ("budgets", "max_active_model_calls"),
         "LOCALFORGE_MAX_DIFF_GROWTH": ("budgets", "max_diff_growth"),
         "LOCALFORGE_MAX_VISUAL_DIFF_GROWTH": ("budgets", "max_visual_diff_growth"),
+        "LOCALFORGE_MAX_GATEWAY_CALLS": ("budgets", "max_gateway_calls"),
         "LOCALFORGE_MAX_PAID_CALLS": ("budgets", "max_paid_calls"),
         "LOCALFORGE_MAX_PAID_INPUT_TOKENS": ("budgets", "max_paid_input_tokens"),
         "LOCALFORGE_MAX_PAID_OUTPUT_TOKENS": ("budgets", "max_paid_output_tokens"),
@@ -350,6 +452,11 @@ def load_config(cli_args: dict[str, Any] | None = None) -> LocalForgeConfig:
             model.strip()
             for model in chief_visual_fallback_models.split(",")
             if model.strip()
+        ]
+    release_profiles = env_value("LOCALFORGE_RELEASE_OPERATIONAL_PROFILES")
+    if release_profiles is not None:
+        config_dict["release"]["operational_profiles"] = [
+            profile.strip() for profile in release_profiles.split(",") if profile.strip()
         ]
     # 4. Load from CLI arguments
     if cli_args:

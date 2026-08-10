@@ -1,11 +1,13 @@
+{{- if .Values.redis.enabled }}
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: {{ include "forgeos-cloud.fullname" . }}-redis
   labels:
     {{- include "forgeos-cloud.labels" . | nindent 4 }}
     app.kubernetes.io/component: redis
 spec:
+  serviceName: {{ include "forgeos-cloud.fullname" . }}-redis
   replicas: 1
   selector:
     matchLabels:
@@ -17,21 +19,59 @@ spec:
         {{- include "forgeos-cloud.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: redis
     spec:
+      securityContext:
+        {{- toYaml .Values.redis.securityContext | nindent 8 }}
       containers:
         - name: redis
           image: "redis:7-alpine"
           imagePullPolicy: IfNotPresent
+          {{- if .Values.redis.auth.existingSecret }}
+          args: ["--requirepass", "$(REDIS_PASSWORD)"]
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.redis.auth.existingSecret }}
+                  key: {{ .Values.redis.auth.passwordKey }}
+                  optional: false
+          {{- end }}
           ports:
             - name: redis
               containerPort: 6379
               protocol: TCP
+          securityContext:
+            {{- toYaml .Values.redis.containerSecurityContext | nindent 12 }}
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "redis-cli -a \"$REDIS_PASSWORD\" ping"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "redis-cli -a \"$REDIS_PASSWORD\" ping"]
+            initialDelaySeconds: 15
+            periodSeconds: 20
           resources:
-            limits:
-              cpu: "500m"
-              memory: "256Mi"
-            requests:
-              cpu: "100m"
-              memory: "64Mi"
+            {{- toYaml .Values.redis.resources | nindent 12 }}
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
+  {{- if .Values.redis.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: redis-data
+        labels:
+          {{- include "forgeos-cloud.labels" . | nindent 10 }}
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.redis.persistence.size }}
+  {{- else }}
+      volumes:
+        - name: redis-data
+          emptyDir: {}
+  {{- end }}
 ---
 apiVersion: v1
 kind: Service
@@ -50,3 +90,4 @@ spec:
   selector:
     {{- include "forgeos-cloud.selectorLabels" . | nindent 4 }}
     app.kubernetes.io/component: redis
+{{- end }}

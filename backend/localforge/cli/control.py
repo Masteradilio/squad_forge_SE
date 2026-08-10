@@ -1,14 +1,18 @@
 import asyncio
 import json
 import os
+import secrets
 import sys
 from datetime import UTC, datetime
 from typing import Any
 
 import typer
+from fastapi import HTTPException
 from localforge.core.config import load_config
 from localforge.llm.openai_compatible import OpenAICompatibleProvider
-from localforge.models.enums import RunStatus, TaskRunStatus
+from localforge.models import domain
+from localforge.models.enums import ActionApprovalStatus, AuditEventActorType, AuditEventType, RunStatus, TaskRunStatus
+from localforge.services.tenant_context import TenantContext, bind_context, normalize_tenant_id, reset_context
 from localforge.skills import SkillRegistry
 from localforge.storage import UnitOfWork, db_manager
 from rich.console import Console
@@ -81,6 +85,82 @@ models_app = typer.Typer(help="Inspect local model configuration.")
 chief_engineer_app = typer.Typer(help="Run scarce paid Chief Engineer gates.")
 skills_app = typer.Typer(help="Inspect workspace skills.")
 safety_app = typer.Typer(help="Inspect safety policy and approval state.")
+
+
+@safety_app.command("decide")
+def safety_decide_cmd(
+    approval_id: int = typer.Argument(...),
+    action: str = typer.Argument(..., help="approve or reject"),
+    approver_id: str = typer.Option("local-cli", "--approver-id"),
+    idempotency_key: str = typer.Option(..., "--idempotency-key"),
+    reason: str = typer.Option("", "--reason"),
+    tenant_id: str = typer.Option("local", "--tenant-id", help="Tenant owning the approval."),
+) -> None:
+    """Approve or reject one high-risk action with an auditable identity."""
+
+    async def run() -> None:
+        allowed = {"approve": ActionApprovalStatus.APPROVED, "reject": ActionApprovalStatus.REJECTED}
+        if action not in allowed:
+            raise typer.BadParameter("action must be approve or reject")
+        try:
+            normalized_tenant_id = normalize_tenant_id(tenant_id)
+        except HTTPException as exc:
+            raise typer.BadParameter(str(exc.detail), param_hint="--tenant-id") from exc
+
+        context_token = bind_context(
+            TenantContext(tenant_id=normalized_tenant_id, user_id=approver_id)
+        )
+        try:
+            async with UnitOfWork(db_manager) as uow:
+                assert uow.safety is not None and uow.audits is not None
+                approval = await uow.safety.get_approval(approval_id)
+                if not approval:
+                    raise typer.BadParameter("approval request not found")
+                if approval.status != ActionApprovalStatus.PENDING:
+                    if approval.idempotency_key == idempotency_key:
+                        console.print_json(approval.model_dump_json())
+                        return
+                    raise typer.BadParameter("approval request already decided")
+                now = datetime.now(UTC)
+                expires_at = approval.expires_at
+                if expires_at is not None and expires_at.tzinfo is None:
+                    expires_at = expires_at.replace(tzinfo=UTC)
+                if expires_at and expires_at <= now:
+                    approval.status = ActionApprovalStatus.TIMEOUT
+                    approval.decided_at = now
+                    approval.decided_by = approver_id
+                    approval.decision_reason = "Approval expired before decision"
+                    await uow.safety.update_approval(approval)
+                    raise typer.BadParameter("approval request expired")
+                approval.status = allowed[action]
+                approval.decided_at = now
+                approval.decided_by = approver_id
+                approval.decision_nonce = secrets.token_hex(16)
+                approval.decision_reason = reason or None
+                approval.idempotency_key = idempotency_key
+                updated = await uow.safety.update_approval(approval)
+                await uow.audits.append_audit_event(
+                    domain.AuditEvent(
+                        project_id=updated.project_id,
+                        run_id=updated.run_id,
+                        task_id=updated.task_id,
+                        actor_type=AuditEventActorType.USER,
+                        actor_id=approver_id,
+                        event_type=AuditEventType.SAFETY_DECISION,
+                        payload_redacted={
+                            "approval_id": updated.id,
+                            "action": action,
+                            "status": updated.status.value,
+                            "idempotency_key": idempotency_key,
+                            "reason": reason or None,
+                        },
+                    )
+                )
+                console.print_json(updated.model_dump_json())
+        finally:
+            reset_context(context_token)
+
+    asyncio.run(run())
 
 
 @tasks_app.command("list")

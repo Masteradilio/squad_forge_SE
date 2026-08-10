@@ -5,7 +5,7 @@ export interface HITLGateData {
   gate_type: string;
   role_name: string;
   prompt_message: string;
-  question_options?: Record<string, any>;
+  question_options?: Record<string, unknown>;
   status: string;
 }
 

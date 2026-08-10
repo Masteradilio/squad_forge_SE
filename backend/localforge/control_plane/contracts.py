@@ -84,6 +84,10 @@ class GoalState(BaseModel):
     authority: dict[str, str] = Field(default_factory=dict)
     source_revision: str | None = None
     acceptance_target: str | None = None
+    # Existing journals remain compatible and keep their historical
+    # task-only completion semantics. New scheduler goals opt into the
+    # server-owned release completion gate explicitly.
+    requires_release_promotion: bool = False
     last_receipt_id: str | None = None
     status: GoalStatus = GoalStatus.ACTIVE
     current_todo_id: str | None = None

@@ -1,10 +1,12 @@
+import type { ReactNode } from 'react';
 
 interface BadgeProps {
-  label: string;
+  label?: ReactNode;
+  children?: ReactNode;
   variant?: 'success' | 'warning' | 'danger' | 'info' | 'primary' | 'muted' | 'blocked';
 }
 
-export function Badge({ label, variant }: BadgeProps) {
+export function Badge({ label, children, variant }: BadgeProps) {
   const getColors = () => {
     switch (variant) {
       case 'success':
@@ -40,7 +42,7 @@ export function Badge({ label, variant }: BadgeProps) {
       border: `1px solid ${color}22`,
       whiteSpace: 'nowrap',
     }}>
-      {label}
+      {children ?? label}
     </span>
   );
 }

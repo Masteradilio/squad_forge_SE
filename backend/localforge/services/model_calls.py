@@ -1,10 +1,9 @@
-import os
-
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from localforge.models import domain
 from localforge.services.pricing import (
+    DEFAULT_MAX_GATEWAY_CALLS,
     is_free_gateway_model,
     is_gateway_provider,
     is_paid_provider,
@@ -109,16 +108,6 @@ class ModelCallLedgerService:
             is_paid_provider(provider) or is_gateway_provider(provider)
         ):
             return
-        if is_gateway_provider(provider or ""):
-            # Several call sites perform a conservative preflight before the
-            # provider has selected its concrete route. Resolve the configured
-            # gateway model in that case so an explicitly free OmniRoute route
-            # is audited without consuming a paid-call budget slot.
-            resolved_model = model or os.getenv("LOCALFORGE_CHIEF_MODEL") or os.getenv(
-                "LOCALFORGE_DEFAULT_MODEL"
-            )
-            if is_free_gateway_model(resolved_model):
-                return
         if run_id is None:
             return
         run = await self.session.get(RunORM, run_id)
@@ -126,20 +115,49 @@ class ModelCallLedgerService:
             return
         limits = run.resource_limits or {}
         totals = await self._run_totals(project_id=project_id, run_id=run_id)
-        estimated_cost = estimate_paid_call_cost_usd(
-            estimated_input_tokens, estimated_output_tokens
-        )
-        checks = [
-            ("max_paid_calls", totals["calls"] + 1),
-            ("max_paid_input_tokens", totals["input_tokens"] + estimated_input_tokens),
-            ("max_paid_output_tokens", totals["output_tokens"] + estimated_output_tokens),
-            ("max_paid_usd", totals["estimated_cost_usd"] + estimated_cost),
-        ]
+        gateway_call = is_gateway_provider(provider or "")
+        if gateway_call:
+            gateway_limit = limits.get("max_gateway_calls", DEFAULT_MAX_GATEWAY_CALLS)
+            gateway_calls = totals["gateway_calls"] + 1
+            if gateway_limit is not None and gateway_calls > gateway_limit:
+                raise ValueError(
+                    "Chief Engineer gateway budget exceeded: "
+                    f"max_gateway_calls={gateway_limit}, requested={gateway_calls}"
+                )
+            # The gateway is the billing authority. Before a call it may not
+            # expose a usable price, so do not invent a paid estimate. Any
+            # non-zero gateway cost already persisted in the ledger remains
+            # part of the USD checks below and can block the next call.
+            checks = [
+                ("max_paid_usd", totals["estimated_cost_usd"]),
+                ("max_paid_usd_absolute", totals["estimated_cost_usd"]),
+            ]
+        else:
+            estimated_cost = estimate_paid_call_cost_usd(
+                estimated_input_tokens, estimated_output_tokens
+            )
+            checks = [
+                ("max_paid_calls", totals["paid_calls"] + 1),
+                (
+                    "max_paid_input_tokens",
+                    totals["paid_input_tokens"] + estimated_input_tokens,
+                ),
+                (
+                    "max_paid_output_tokens",
+                    totals["paid_output_tokens"] + estimated_output_tokens,
+                ),
+                ("max_paid_usd", totals["estimated_cost_usd"] + estimated_cost),
+                (
+                    "max_paid_usd_absolute",
+                    totals["estimated_cost_usd"] + estimated_cost,
+                ),
+            ]
         for key, value in checks:
             limit = limits.get(key)
             if limit is not None and value > limit:
                 raise ValueError(
-                    f"Chief Engineer paid budget exceeded: {key}={limit}, requested={value}"
+                    f"Chief Engineer {'gateway' if gateway_call else 'paid'} budget exceeded: "
+                    f"{key}={limit}, requested={value}"
                 )
 
     async def get_run_totals(self, *, project_id: int, run_id: int) -> dict[str, float]:
@@ -148,21 +166,43 @@ class ModelCallLedgerService:
     async def _run_totals(self, *, project_id: int, run_id: int) -> dict[str, float]:
         result = await self.session.execute(
             select(
-                func.count(ModelCallLedgerORM.id),
-                func.coalesce(func.sum(ModelCallLedgerORM.input_tokens), 0),
-                func.coalesce(func.sum(ModelCallLedgerORM.output_tokens), 0),
-                func.coalesce(func.sum(ModelCallLedgerORM.estimated_cost_usd), 0.0),
+                ModelCallLedgerORM.provider,
+                ModelCallLedgerORM.input_tokens,
+                ModelCallLedgerORM.output_tokens,
+                ModelCallLedgerORM.estimated_cost_usd,
             ).where(
                 ModelCallLedgerORM.project_id == project_id,
                 ModelCallLedgerORM.run_id == run_id,
             )
         )
-        calls, input_tokens, output_tokens, estimated_cost_usd = result.one()
+        calls = 0
+        input_tokens = 0
+        output_tokens = 0
+        estimated_cost_usd = 0.0
+        gateway_calls = 0
+        paid_calls = 0
+        paid_input_tokens = 0
+        paid_output_tokens = 0
+        for provider, call_input, call_output, call_cost in result.all():
+            calls += 1
+            input_tokens += int(call_input or 0)
+            output_tokens += int(call_output or 0)
+            estimated_cost_usd += float(call_cost or 0.0)
+            if is_gateway_provider(provider):
+                gateway_calls += 1
+            elif is_paid_provider(provider):
+                paid_calls += 1
+                paid_input_tokens += int(call_input or 0)
+                paid_output_tokens += int(call_output or 0)
         return {
             "calls": float(calls),
             "input_tokens": float(input_tokens),
             "output_tokens": float(output_tokens),
             "estimated_cost_usd": float(estimated_cost_usd),
+            "gateway_calls": float(gateway_calls),
+            "paid_calls": float(paid_calls),
+            "paid_input_tokens": float(paid_input_tokens),
+            "paid_output_tokens": float(paid_output_tokens),
         }
 
     async def list_pricing_sources(self) -> list[domain.PricingSource]:

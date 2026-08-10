@@ -14,11 +14,62 @@ spec:
       labels:
         app.kubernetes.io/component: frontend
     spec:
+      securityContext:
+        {{- toYaml .Values.frontend.securityContext | nindent 8 }}
       containers:
         - name: frontend
           image: "{{ .Values.frontend.image.repository }}:{{ .Values.frontend.image.tag }}"
           imagePullPolicy: {{ .Values.frontend.image.pullPolicy }}
+          env:
+            - name: NGINX_PORT
+              value: {{ .Values.frontend.port | quote }}
+            - name: BACKEND_HOST
+              value: {{ include "forgeos-cloud.fullname" . }}-backend
+            - name: LOCALFORGE_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: LOCALFORGE_API_TOKEN
+                  optional: false
+            - name: LOCALFORGE_TENANT_ID
+              value: {{ .Values.frontend.tenantId | default "local" | quote }}
+            - name: LOCALFORGE_USER_ID
+              value: {{ .Values.frontend.userId | default "local-user" | quote }}
+            - name: LOCALFORGE_TENANT_ROLES
+              value: {{ .Values.frontend.tenantRoles | default "owner" | quote }}
           ports:
             - containerPort: {{ .Values.frontend.port }}
+          securityContext:
+            {{- toYaml .Values.frontend.containerSecurityContext | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.frontend.probes.readiness.path }}
+              port: {{ .Values.frontend.port }}
+            initialDelaySeconds: {{ .Values.frontend.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.frontend.probes.readiness.periodSeconds }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.frontend.probes.liveness.path }}
+              port: {{ .Values.frontend.port }}
+            initialDelaySeconds: {{ .Values.frontend.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.frontend.probes.liveness.periodSeconds }}
           resources:
             {{- toYaml .Values.frontend.resources | nindent 12 }}
+          volumeMounts:
+            - name: nginx-cache
+              mountPath: /var/cache/nginx
+            - name: nginx-run
+              mountPath: /var/run
+            - name: nginx-conf
+              mountPath: /etc/nginx/conf.d
+            - name: nginx-logs
+              mountPath: /var/log/nginx
+      volumes:
+        - name: nginx-cache
+          emptyDir: {}
+        - name: nginx-run
+          emptyDir: {}
+        - name: nginx-conf
+          emptyDir: {}
+        - name: nginx-logs
+          emptyDir: {}

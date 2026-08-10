@@ -36,6 +36,7 @@ from localforge.services.governed_execution import (
     GovernedExecutionResult,
     GovernedExecutionService,
 )
+from localforge.services.release_promotion import ReleasePromotionService, ReleasePromotionState
 from localforge.services.runners import LocalWorktreeTaskRunner, TaskRunnerPool
 from localforge.storage.transactions import UnitOfWork
 
@@ -67,7 +68,6 @@ def _is_exhausted_chief_blocker(message: str) -> bool:
             "single-document visual repair exhausted",
             "visual section '",
             "chief engineer provider is unavailable",
-            "no chief engineer action was applied",
         )
     )
 
@@ -110,6 +110,8 @@ class Scheduler:
     # Resource-limit keys persisted on Run.resource_limits for the recovery loop:
     RUN_RECOVERY_CYCLES_KEY = "recovery_cycles_used"
     RUN_PAID_USD_SPENT_KEY = "paid_usd_spent_cached"
+    TASK_HEARTBEAT_INTERVAL_SECONDS = 5.0
+    RELEASE_ACCEPTANCE_TARGET = "all_tasks_pr_ready_merged_and_post_merge_validated"
 
     # Status buckets the scheduler considers "terminal-but-not-yet-pr-ready":
     _RECOVERY_BLOCKING_STATES = (
@@ -236,9 +238,58 @@ class Scheduler:
 
             except Exception as e:
                 logger.error(f"Error in scheduler loop: {e}", exc_info=True)
+                # A scheduler iteration must never leave an unattended run
+                # alive after all task workers have stopped.  A persistence,
+                # control-plane, or summary-writing exception can otherwise
+                # be swallowed by this loop and make the CLI wait forever
+                # with a RUNNING run and no active TaskRun.  Reconcile that
+                # exact fail-closed shape using a fresh transaction; recovery
+                # of the product task itself remains the responsibility of
+                # the normal FAILED_SAFE/blocked recovery path.
+                try:
+                    finalized = await self._finalize_stalled_blocker()
+                    if finalized:
+                        self._running = False
+                except Exception as finalize_error:
+                    logger.error(
+                        "Failed to fail-closed stalled scheduler run %s: %s",
+                        self.run_id,
+                        finalize_error,
+                        exc_info=True,
+                    )
 
             # Wait for event trigger or interval timeout
             await self._wait_for_trigger()
+
+    async def _finalize_stalled_blocker(self) -> bool:
+        """Close a run that has no active worker after scheduler failure.
+
+        This is deliberately narrow: it only acts when the durable run is
+        still active, no task is executing, and at least one task is already
+        in a recovery-blocking state.  It preserves the blocker and produces
+        the same auditable terminal summary as the normal recovery path.
+        """
+
+        async with UnitOfWork(self.db_manager) as uow:
+            assert uow.executions is not None
+            assert uow.tasks is not None
+            run = await uow.executions.get_run(self.run_id)
+            if run is None or run.status not in {RunStatus.PENDING, RunStatus.RUNNING}:
+                return False
+            tasks = await uow.tasks.list_tasks_for_project(self.project_id)
+            counts = self._classify_task_statuses(tasks)
+            if counts["__executing__"] > 0 or counts["__blocking_recovery__"] == 0:
+                return False
+            await self._escalate_remaining_blockers(uow, tasks)
+            refreshed = await uow.tasks.list_tasks_for_project(self.project_id)
+            await self._finalize_run(
+                uow,
+                run,
+                refreshed,
+                counts=self._classify_task_statuses(refreshed),
+                run_status=RunStatus.BLOCKED_NEEDS_HUMAN_REVIEW,
+            )
+            return True
 
     async def _wait_for_trigger(self) -> bool:
         """Wait until an event wakes the scheduler or the watchdog interval expires."""
@@ -302,6 +353,31 @@ class Scheduler:
             for task in tasks
         ]
         if self._control_plane.status() is None:
+            try:
+                configured_repair_attempts = int(
+                    limits.get(
+                        "max_repair_attempts",
+                        load_config().budgets.max_repair_attempts,
+                    )
+                )
+                configured_recovery_cycles = int(
+                    limits.get(
+                        "max_run_recovery_cycles",
+                        load_config().budgets.max_run_recovery_cycles,
+                    )
+                )
+            except (AttributeError, TypeError, ValueError):
+                configured_repair_attempts = 3
+                configured_recovery_cycles = 3
+            # The durable goal quota must cover the run-level recovery budget.
+            # Keeping the control-plane default at three attempts can otherwise
+            # turn a recoverable FAILED_SAFE task into an endless READY/PENDING
+            # loop: the SQL scheduler still has recovery cycles available, but
+            # next_turn() rejects the task before a new bounded turn is claimed.
+            max_attempts_per_todo = max(
+                3,
+                configured_repair_attempts + configured_recovery_cycles,
+            )
             self._control_plane.start(
                 goal_id=goal_id,
                 vision=f"Complete the PRD task backlog for project {project.name}.",
@@ -320,7 +396,8 @@ class Scheduler:
                 tasks=snapshots,
                 max_turns=max(1, int(limits.get("max_turns", 100))),
                 max_attempts_per_todo=max(
-                    1, int(limits.get("max_attempts_per_todo", 3))
+                    max_attempts_per_todo,
+                    int(limits.get("max_attempts_per_todo", 0) or 0),
                 ),
                 max_cost_usd=max(0.0, float(limits.get("max_paid_usd", 5.0) or 5.0)),
                 max_wall_seconds=(
@@ -329,7 +406,8 @@ class Scheduler:
                     else None
                 ),
                 source_revision=str((run.resource_limits or {}).get("source_revision") or "unknown"),
-                acceptance_target="all_tasks_pr_ready_and_reviewable",
+                acceptance_target=self.RELEASE_ACCEPTANCE_TARGET,
+                requires_release_promotion=True,
                 agents=[
                     AgentIdentity(
                         agent_id=f"scheduler:{self.run_id}",
@@ -354,6 +432,9 @@ class Scheduler:
                     ),
                 ],
             )
+        self._control_plane.require_release_promotion(
+            acceptance_target=self.RELEASE_ACCEPTANCE_TARGET,
+        )
         self._control_plane.sync_tasks(snapshots)
 
     def _record_control_plane_outcome(
@@ -401,6 +482,77 @@ class Scheduler:
                 ],
             )
         )
+
+    def _control_plane_lease(
+        self, todo_id: str
+    ) -> tuple[str | None, str | None]:
+        if self._control_plane is None:
+            return None, None
+        state = self._control_plane.status()
+        if state is None:
+            return None, None
+        todo = next((item for item in state.todos if item.todo_id == todo_id), None)
+        if todo is None:
+            return None, None
+        return todo.current_turn_id, todo.lease_token
+
+    async def _heartbeat_task_run(
+        self,
+        *,
+        task_run_id: int,
+        todo_id: str,
+        turn_id: str | None,
+        lease_token: str | None,
+        interval_seconds: float | None = None,
+    ) -> None:
+        """Persist liveness from a short transaction while pipeline I/O runs.
+
+        The scheduler's pipeline UoW is intentionally long-lived around model
+        and sandbox calls. Heartbeats use fresh UoWs so that a slow pipeline
+        cannot prevent the watchdog from observing progress or renew the
+        control-plane turn lease.
+        """
+
+        interval = max(
+            0.1,
+            interval_seconds
+            if interval_seconds is not None
+            else self.TASK_HEARTBEAT_INTERVAL_SECONDS,
+        )
+        renewal_number = 0
+        while True:
+            await asyncio.sleep(interval)
+            heartbeat_at = datetime.now(UTC)
+            async with UnitOfWork(self.db_manager) as heartbeat_uow:
+                assert heartbeat_uow.tasks is not None
+                live_run = await heartbeat_uow.tasks.get_task_run(task_run_id)
+                if live_run is None or live_run.status != TaskRunStatus.RUNNING:
+                    return
+                live_run.heartbeat_at = heartbeat_at
+                await heartbeat_uow.tasks.update_task_run(live_run)
+
+            if self._control_plane is not None and turn_id and lease_token:
+                try:
+                    self._control_plane.renew_lease(
+                        todo_id=todo_id,
+                        turn_id=turn_id,
+                        lease_token=lease_token,
+                        owner=f"scheduler:{self.run_id}",
+                        lease_seconds=max(60, int(interval * 4)),
+                        renewal_id=(
+                            f"run:{self.run_id}:task:{task_run_id}:heartbeat:{renewal_number}"
+                        ),
+                    )
+                except (ValueError, RuntimeError) as exc:
+                    # The SQL heartbeat remains authoritative for watchdog
+                    # liveness. A stale/missing CP lease must not interrupt a
+                    # valid long-running pipeline or hide its SQL evidence.
+                    logger.warning(
+                        "Control-plane lease renewal skipped for task %s: %s",
+                        todo_id,
+                        exc,
+                    )
+            renewal_number += 1
 
     async def _process_iteration(self) -> None:
         async with UnitOfWork(self.db_manager) as uow:
@@ -486,6 +638,55 @@ class Scheduler:
                 == counts["__total__"]
             )
             if all_terminal_ok:
+                promotion = await ReleasePromotionService(
+                    uow,
+                    project_id=self.project_id,
+                    run_id=self.run_id,
+                ).promote()
+                # ReleasePromotionService reloads the Run domain object in the
+                # same unit of work. Copy its durable result back to the
+                # scheduler-owned instance before any finalization update;
+                # otherwise _finalize_run can overwrite release evidence with
+                # the stale pre-promotion resource_limits snapshot.
+                run.resource_limits = dict(run.resource_limits or {})
+                release_metadata = dict(
+                    run.resource_limits.get("release_promotion") or {}
+                )
+                release_metadata.update(
+                    {
+                        "state": promotion.state.value,
+                        "reason": promotion.reason,
+                        "merge_commit": promotion.merge_commit,
+                        "post_merge_results": promotion.post_merge_results,
+                    }
+                )
+                run.resource_limits["release_promotion"] = release_metadata
+                if promotion.state == ReleasePromotionState.WAITING_HUMAN_APPROVAL:
+                    # A release approval is a durable pause, not a task failure.
+                    # The release CLI/API resumes promotion after the user decides.
+                    self._running = False
+                    return
+                if promotion.state == ReleasePromotionState.BLOCKED:
+                    await self._finalize_run(
+                        uow,
+                        run,
+                        tasks,
+                        counts=counts,
+                        run_status=RunStatus.BLOCKED_NEEDS_HUMAN_REVIEW,
+                    )
+                    self._running = False
+                    return
+                if self._control_plane is not None:
+                    self._control_plane.mark_release_completed(
+                        summary=promotion.reason,
+                        evidence={
+                            "run_id": self.run_id,
+                            "release_state": promotion.state.value,
+                            "merge_commit": promotion.merge_commit,
+                            "post_merge_results": promotion.post_merge_results,
+                            "acceptance_target": self.RELEASE_ACCEPTANCE_TARGET,
+                        },
+                    )
                 await self._finalize_run(
                     uow,
                     run,
@@ -599,15 +800,20 @@ class Scheduler:
                     runner = self.runner_pool.acquire(t)
                     governed = GovernedExecutionService(runner)
 
-                    async def dispatch_with_transaction() -> GovernedExecutionResult:
+                    async def dispatch_with_transaction(
+                        *,
+                        _governed=governed,
+                        _task=t,
+                        _task_run=task_run,
+                    ) -> GovernedExecutionResult:
                         async with UnitOfWork(self.db_manager) as dispatch_uow:
                             return await asyncio.wait_for(
-                                governed.start_task(
+                                _governed.start_task(
                                     GovernedExecutionRequest(
                                         project_id=self.project_id,
                                         run_id=self.run_id,
-                                        task=t,
-                                        task_run=task_run,
+                                        task=_task,
+                                        task_run=_task_run,
                                     ),
                                     uow=dispatch_uow,
                                 ),
@@ -664,6 +870,15 @@ class Scheduler:
                         if uow.session is not None:
                             await uow.session.rollback()
                         assert task_run.id is not None
+                        turn_id, lease_token = self._control_plane_lease(t.key)
+                        heartbeat_task = asyncio.create_task(
+                            self._heartbeat_task_run(
+                                task_run_id=task_run.id,
+                                todo_id=t.key,
+                                turn_id=turn_id,
+                                lease_token=lease_token,
+                            )
+                        )
                         try:
                             # Do not hold the scheduler's dispatch transaction
                             # while the OmniRoute call, sandbox, tests, and
@@ -797,6 +1012,12 @@ class Scheduler:
                             )
                             failed_in_iteration = True
                             break
+                        finally:
+                            heartbeat_task.cancel()
+                            try:
+                                await heartbeat_task
+                            except asyncio.CancelledError:
+                                pass
 
                     executing_count += 1
 
@@ -868,20 +1089,15 @@ class Scheduler:
     async def _scrum_master_unblock_failed_tasks(
         self, uow: UnitOfWork, tasks: list[domain.Task]
     ) -> int:
-        # Demo guard: when the operator pinned the local lane through
-        # scripts/apply_demo_local_first.py (which sets
-        # demo_local_first = True on the task metadata) the recovery
-        # loop must NOT silently switch into chief_only on every retry.
-        # Without this guard, a single Ollama timeout keeps escalating
-        # the task to Chief Engineer, which is the exact opposite of
-        # what the demo expects.
         """Re-open recoverable FAILED_SAFE tasks with Chief guidance.
 
-        Tasks previously overridden by the demo script keep their
-        original seniority_class (e.g. local_assisted) and are
-        returned to READY with a guardian note, but never escalated
-        to the Chief Engineer lane.
+        Tasks pinned to the local lane through task metadata keep their
+        original seniority class and are returned to READY with a guardian
+        note, but are never silently escalated to the Chief Engineer lane.
         """
+        # A local-lane pin is an explicit task-level policy.  Recovery must
+        # preserve it instead of escalating on every retry after a provider
+        # timeout.
         assert uow.tasks is not None
         try:
             max_attempts = max(6, load_config().budgets.max_repair_attempts + 3)
@@ -986,6 +1202,7 @@ class Scheduler:
             task.metadata = metadata
             await uow.tasks.update_task(task)
             await uow.tasks.update_task_status(task_id, TaskStatus.READY)
+            handoff_id = f"run:{self.run_id}:task:{task.key}:repair:{attempts + 1}"
             if self._control_plane is not None:
                 self._control_plane.record_repair_handoff(
                     todo_id=task.key,
@@ -997,9 +1214,18 @@ class Scheduler:
                         "contract": contract,
                     },
                     authority=AgentRole.SCRUM_MASTER.value,
-                    handoff_id=(
-                        f"run:{self.run_id}:task:{task.key}:repair:{attempts + 1}"
-                    ),
+                    handoff_id=handoff_id,
+                )
+                self._control_plane.reopen_after_repair(
+                    todo_id=task.key,
+                    summary="SQL task requeued after bounded Scrum Master recovery.",
+                    evidence={
+                        "run_id": self.run_id,
+                        "task_id": task_id,
+                        "task_status": TaskStatus.READY.value,
+                        "blocker": blocker[:1200],
+                    },
+                    handoff_id=handoff_id,
                 )
             if uow.audits is not None:
                 await uow.audits.append_audit_event(
@@ -1071,7 +1297,7 @@ class Scheduler:
                     await runner.cleanup(r, uow=uow)
 
     async def _run_watchdog_checks(self, uow: UnitOfWork) -> None:
-        """Scan active task runs and abort those whose heartbeat (updated_at) has stopped."""
+        """Abort active task runs whose persisted heartbeat has stopped."""
         assert uow.tasks is not None
         assert uow.executions is not None
         from localforge.core.config import load_config
@@ -1118,8 +1344,8 @@ class Scheduler:
                         effective_task_timeout = max(task_timeout, 3600.0)
             for r in runs_by_task.get(t.id, []):
                 if r.run_id == self.run_id and r.status == TaskRunStatus.RUNNING:
-                    # For watchdog check, we compare against task run started_at.
-                    elapsed = (datetime.now(UTC) - _as_utc(r.started_at)).total_seconds()
+                    last_heartbeat = r.heartbeat_at or r.started_at
+                    elapsed = (datetime.now(UTC) - _as_utc(last_heartbeat)).total_seconds()
                     if elapsed > effective_task_timeout:
                         logger.warning(
                             f"Task run {r.id} for task {t.key} is unresponsive "
@@ -1265,6 +1491,20 @@ class Scheduler:
         )
 
         recommendations: list[str] = []
+        release_metadata = dict((run.resource_limits or {}).get("release_promotion") or {})
+        release_state = release_metadata.get("state")
+        if release_state == "COMPLETED":
+            recommendations.append(
+                "- Release promoted to the target branch and post-merge Tester/SafetyAuditor checks passed."
+            )
+        elif release_state == "WAITING_HUMAN_APPROVAL":
+            recommendations.append(
+                "- Approve the persisted release promotion request before merging PR_READY branches."
+            )
+        elif release_state == "BLOCKED":
+            recommendations.append(
+                "- Release promotion is blocked; review the persisted release evidence before retrying."
+            )
         if blocked_human_count > 0:
             recommendations.append(
                 f"- {blocked_human_count} task(s) were moved to "

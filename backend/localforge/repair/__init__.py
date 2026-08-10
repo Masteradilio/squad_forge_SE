@@ -1,3 +1,3 @@
-from localforge.repair.classifier import ClassifiedFailure, FailureClassifier
+from localforge.repair.compiler_feedback import CompilerErrorLocation, CompilerFeedbackLoop
 
-__all__ = ["ClassifiedFailure", "FailureClassifier"]
+__all__ = ["CompilerErrorLocation", "CompilerFeedbackLoop"]

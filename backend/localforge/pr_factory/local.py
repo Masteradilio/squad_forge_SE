@@ -136,8 +136,12 @@ class LocalPRFactory:
                     raw_rules = contract.get("visual_structure_rules", [])
                     if isinstance(raw_rules, list):
                         structure_rules = [item for item in raw_rules if isinstance(item, str)]
+                    raw_matrix = contract.get("visual_acceptance_matrix", [])
+                    visual_matrix = [item for item in raw_matrix if isinstance(item, dict)] if isinstance(raw_matrix, list) else []
+                else:
+                    visual_matrix = []
                 structure_findings = validate_visual_html_structure(
-                    html_abs_path, structure_rules=structure_rules
+                    html_abs_path, structure_rules=structure_rules, visual_matrix=visual_matrix
                 )
                 reasons.extend(
                     f"Visual structure mismatch: {finding}" for finding in structure_findings

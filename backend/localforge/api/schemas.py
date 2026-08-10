@@ -1,8 +1,17 @@
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
-from localforge.models.enums import AgentRole, MemoryRecordKind, RuntimeStatus, TaskStatus
+from localforge.models.enums import (
+    ActionKind,
+    AgentRole,
+    EngineeringSessionStatus,
+    EngineeringTurnKind,
+    ExecutionMode,
+    MemoryRecordKind,
+    RuntimeStatus,
+    TaskStatus,
+)
 from localforge.pipeline import PipelineMode
 
 
@@ -88,12 +97,208 @@ class PipelineRunRequest(BaseModel):
 class SkillRequest(BaseModel):
     name: str
     purpose: str
+    system_prompt: str = ""
     triggers: list[str] = Field(default_factory=list)
     allowed_actions: list[str] = Field(default_factory=list)
     expected_artifacts: list[str] = Field(default_factory=list)
     failure_modes: list[str] = Field(default_factory=list)
     examples: list[str] = Field(default_factory=list)
+    strategy: Literal["auto", "predict", "code_act"] = "auto"
+    max_retries: int = Field(default=1, ge=0, le=3)
+    context_budget: int = Field(default=12000, ge=1000, le=50000)
+    runtime: Literal["instruction", "python"] = "instruction"
+    entrypoint: str | None = None
+    permissions: list[
+        Literal["read_files", "write_files", "run_tests", "run_commands", "network"]
+    ] = Field(default_factory=list)
+    dependencies: list[str] = Field(default_factory=list)
+    manifest_version: int = Field(default=1, ge=1)
     enabled: bool = True
+
+    @model_validator(mode="after")
+    def validate_execution_metadata(self) -> "SkillRequest":
+        if self.runtime == "python" and not self.entrypoint:
+            raise ValueError("python skills require a non-empty entrypoint")
+        if self.entrypoint is not None and not self.entrypoint.strip():
+            if self.runtime == "python":
+                raise ValueError("python skills require a non-empty entrypoint")
+            self.entrypoint = None
+        return self
+
+
+class HarnessEntryRequest(BaseModel):
+    id: str
+    kind: Literal["prompt", "memory", "skill", "subagent"]
+    scope: Literal["local", "project", "global"] = "project"
+    content: Any = ""
+    supplemental: bool = True
+    is_system_prompt: bool = False
+    is_base: bool = False
+    source: str = "manual"
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ReleaseApprovalRequest(BaseModel):
+    approver_id: str = Field(default="local-api", min_length=1, max_length=255)
+    idempotency_key: str | None = Field(default=None, min_length=1, max_length=255)
+    reason: str = Field(
+        default="Approved release promotion after PR_READY review.",
+        min_length=1,
+        max_length=2000,
+    )
+
+
+class HarnessRefineRequest(BaseModel):
+    evidence: dict[str, Any]
+    updates: dict[str, Any] = Field(default_factory=dict)
+
+
+class HarnessSubagentRequest(BaseModel):
+    id: str | None = None
+    parent_id: str | None = None
+    task: str
+    role: str
+    allowed_actions: list[str] = Field(default_factory=list)
+    context_blocks: list[dict[str, Any] | str] = Field(default_factory=list)
+    max_depth: int = Field(default=0, ge=0)
+    max_turns: int = Field(default=1, gt=0)
+    max_tokens: int = Field(default=4096, gt=0)
+
+
+class HarnessSubagentTransitionRequest(BaseModel):
+    status: str
+    result: Any | None = None
+    evidence: list[Any] = Field(default_factory=list)
+
+
+class HarnessContinuationCheckRequest(BaseModel):
+    max_turns: int = Field(default=1, gt=0)
+    max_wall_seconds: float | None = Field(default=None, gt=0)
+    max_retries: int = Field(default=0, ge=0)
+    pause_file: str | None = None
+    quality_gate_names: list[str] = Field(default_factory=list)
+    turns: int = Field(default=0, ge=0)
+    elapsed_seconds: float = Field(default=0.0, ge=0)
+    retries: int | None = Field(default=None, ge=0)
+    quality_gates: dict[str, Any] | None = None
+
+
+class EngineeringSessionCreateRequest(BaseModel):
+    title: str = "Engineering Session"
+    default_model: str | None = None
+    max_turns: int | None = Field(default=None, gt=0)
+    max_wall_seconds: float | None = Field(default=None, gt=0)
+    max_retries: int = Field(default=0, ge=0)
+    quality_gate_names: list[str] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class EngineeringSessionTransitionRequest(BaseModel):
+    status: EngineeringSessionStatus
+    reason: str = ""
+    result: str | None = None
+
+
+class EngineeringSteerRequest(BaseModel):
+    instruction: str
+    idempotency_key: str | None = None
+
+
+class EngineeringGoalCreateRequest(BaseModel):
+    objective: str
+    acceptance_criteria: list[str] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class EngineeringGoalRevisionRequest(BaseModel):
+    objective: str
+    acceptance_criteria: list[str] = Field(default_factory=list)
+    expected_revision: int | None = Field(default=None, ge=1)
+    metadata: dict[str, Any] | None = None
+    reason: str = "goal_revision"
+
+
+class EngineeringTurnAdmissionRequest(BaseModel):
+    input_text: str = ""
+    kind: EngineeringTurnKind = EngineeringTurnKind.USER
+    idempotency_key: str
+    model: str | None = None
+    result: str | None = None
+    retry_count: int = Field(default=0, ge=0)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ExecutionProfileRequest(BaseModel):
+    session_id: str | None = None
+    name: str = "default"
+    trust: str = "standard"
+    mode: ExecutionMode = ExecutionMode.ASK
+    tool_policies: dict[str, str] = Field(default_factory=dict)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ExecutionProfileActionRequest(BaseModel):
+    action_kind: ActionKind
+    payload: dict[str, Any] = Field(default_factory=dict)
+    purpose: str = "engineering turn action"
+    risk_level: str = "low"
+    session_id: str | None = None
+    turn_id: str | None = None
+    idempotency_key: str | None = None
+
+
+class ModelProbeRequest(BaseModel):
+    model_name: str
+
+
+class SkillBindingRequest(BaseModel):
+    session_id: str
+    turn_id: str
+    skill: dict[str, Any] | str
+    origin: str | None = None
+
+
+class AutomationCreateRequest(BaseModel):
+    name: str
+    trigger_kind: str = "MANUAL"
+    interval_seconds: int | None = Field(default=None, ge=1)
+    goal_template: dict[str, Any] = Field(default_factory=dict)
+    profile_id: str | None = None
+    profile_snapshot: dict[str, Any] = Field(default_factory=dict)
+    budgets: dict[str, Any] = Field(default_factory=dict)
+    session_id: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class AutomationTriggerRequest(BaseModel):
+    idempotency_key: str
+
+
+class ReferenceIngestRequest(BaseModel):
+    name: str
+    content: str
+    source_type: str = "markdown"
+    path: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ReferenceSearchRequest(BaseModel):
+    query: str
+    limit: int = Field(default=8, ge=1, le=50)
+
+
+class ReferenceDecisionRequest(BaseModel):
+    query: str
+    summary: str
+    selected_chunk_ids: list[str]
+    turn_id: str | None = None
+    decision: str = "APPROVED"
+
+
+class BlueprintRequest(BaseModel):
+    name: str
+    decision_id: str
+    freeze: bool = True
 
 
 class WorktreeRevertRequest(BaseModel):

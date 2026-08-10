@@ -1,4 +1,5 @@
 import React from 'react';
+import { ResourceState } from './ResourceState';
 
 export interface TraceSpanItem {
   span_id: string;
@@ -13,11 +14,13 @@ export interface TraceSpanItem {
 
 interface TracingTimelineViewProps {
   spans: TraceSpanItem[];
+  loading?: boolean;
+  error?: string | null;
 }
 
-export const TracingTimelineView: React.FC<TracingTimelineViewProps> = ({ spans }) => {
+export const TracingTimelineView: React.FC<TracingTimelineViewProps> = ({ spans, loading = false, error = null }) => {
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl">
+    <div data-testid="timeline-view" className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl">
       <div className="flex items-center justify-between mb-6 border-b border-slate-800 pb-4">
         <div>
           <h2 className="text-xl font-bold text-slate-100 flex items-center gap-2">
@@ -26,14 +29,16 @@ export const TracingTimelineView: React.FC<TracingTimelineViewProps> = ({ spans 
           <p className="text-sm text-slate-400 mt-1">Real-time latency metrics & tool execution per Squad role</p>
         </div>
         <span className="bg-cyan-950 text-cyan-400 text-xs font-mono px-3 py-1 rounded-full border border-cyan-800">
-          Live Telemetry: Active
+          Telemetry source: API
         </span>
       </div>
 
-      {spans.length === 0 ? (
-        <div className="text-center py-8 text-slate-500 font-mono text-sm">
-          No telemetry spans recorded yet. Launch a Squad run to visualize execution latency.
-        </div>
+      {loading ? (
+        <ResourceState status="loading" title="Carregando telemetria" message="Consultando spans reais do projeto." testId="timeline-state-loading" />
+      ) : error ? (
+        <ResourceState status="error" title="Telemetria indisponível" message={error} testId="timeline-state-error" />
+      ) : spans.length === 0 ? (
+        <ResourceState status="empty" title="Nenhum span retornado" message="A API de telemetria ainda não registrou spans para este projeto." testId="timeline-state-empty" />
       ) : (
         <div className="space-y-4">
           {spans.map((span) => (

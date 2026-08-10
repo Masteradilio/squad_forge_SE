@@ -213,6 +213,55 @@ async def test_safety_kernel_evaluate_commands(tmp_path, db_session):
     decision, reason = await SafetyKernel.evaluate(req_revision, uow, str(tmp_path))
     assert decision == SafetyDecision.ALLOW
 
+    req_merge_without_release = ActionRequest(
+        project_id=project.id,
+        kind=ActionKind.RUN_COMMAND,
+        payload={"command": "git merge --no-ff --no-edit localforge/lf-001"},
+        purpose="release promotion",
+    )
+    decision, reason = await SafetyKernel.evaluate(req_merge_without_release, uow, str(tmp_path))
+    assert decision == SafetyDecision.REQUIRE_APPROVAL
+
+    from localforge.services.execution import ExecutionService
+
+    uow.executions = ExecutionService(db_session)
+    run = await uow.executions.create_run(
+        domain.Run(
+            project_id=project.id,
+            mode=RunMode.UNATTENDED,
+            initiated_by="release-service",
+            resource_limits={
+                "release": {"promotion_mode": "full_access"},
+            },
+        )
+    )
+    req_authorized_merge = req_merge_without_release.model_copy(update={"run_id": run.id})
+    decision, reason = await SafetyKernel.evaluate(req_authorized_merge, uow, str(tmp_path))
+    assert decision == SafetyDecision.ALLOW
+
+    human_approved_run = await uow.executions.create_run(
+        domain.Run(
+            project_id=project.id,
+            mode=RunMode.UNATTENDED,
+            initiated_by="release-service",
+            resource_limits={
+                "release": {"promotion_mode": "human_approval"},
+                "release_promotion": {"approval_granted": True},
+            },
+        )
+    )
+    req_human_approved_merge = req_merge_without_release.model_copy(
+        update={"run_id": human_approved_run.id}
+    )
+    decision, reason = await SafetyKernel.evaluate(
+        req_human_approved_merge, uow, str(tmp_path)
+    )
+    assert decision == SafetyDecision.ALLOW
+
+    req_task_merge = req_authorized_merge.model_copy(update={"task_id": 44})
+    decision, reason = await SafetyKernel.evaluate(req_task_merge, uow, str(tmp_path))
+    assert decision == SafetyDecision.DENY
+
 
 @pytest.mark.anyio
 async def test_run_safe_command_unattended(tmp_path, db_session):

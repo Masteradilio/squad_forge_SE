@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "benchmark": "ForgeOS README Full Trace Reference Run",
+  "status": "ACCEPTED",
+  "workspace": "benchmarks/workspaces/readme-trace-run-20260809T001429Z",
+  "evidence": ".localforge/artifacts/readme-trace-benchmark/run-20260809T001429Z/reference",
+  "metrics": "forgeos_reference_metrics.json",
+  "report": "forgeos_reference_report.md",
+  "control_plane": "control_plane.json",
+  "events": "events.jsonl",
+  "exit_code": 0
+}

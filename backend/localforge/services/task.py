@@ -3,11 +3,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from localforge.models import domain
 from localforge.models.enums import AuditEventActorType, AuditEventType, HandoffKind, TaskStatus
+from localforge.services.tenant_context import session_tenant
 from localforge.storage.orm import (
     ArtifactORM,
     AuditEventORM,
     EpicORM,
     HandoffORM,
+    ProjectORM,
     TaskORM,
     TaskRunORM,
     WorktreeAttemptManifestORM,
@@ -87,6 +89,18 @@ class TaskService:
     def __init__(self, session: AsyncSession):
         self.session = session
 
+    def _tenant_id(self) -> str:
+        return session_tenant(self.session)
+
+    async def _project_is_visible(self, project_id: int) -> bool:
+        result = await self.session.execute(
+            select(ProjectORM.id).where(
+                ProjectORM.id == project_id,
+                ProjectORM.tenant_id == self._tenant_id(),
+            )
+        )
+        return result.scalar_one_or_none() is not None
+
     # Epic Operations
     async def create_epic(self, epic: domain.Epic) -> domain.Epic:
         """Create a new epic."""
@@ -113,6 +127,8 @@ class TaskService:
     # Task Operations
     async def create_task(self, task: domain.Task) -> domain.Task:
         """Create a new task."""
+        if not await self._project_is_visible(task.project_id):
+            raise ValueError("Project is not accessible in the current tenant")
         orm_obj = TaskORM.from_domain(task)
         self.session.add(orm_obj)
         await self.session.flush()
@@ -120,20 +136,34 @@ class TaskService:
 
     async def get_task(self, task_id: int) -> domain.Task | None:
         """Retrieve a task by database ID."""
-        result = await self.session.execute(select(TaskORM).where(TaskORM.id == task_id))
+        result = await self.session.execute(
+            select(TaskORM)
+            .join(ProjectORM, ProjectORM.id == TaskORM.project_id)
+            .where(TaskORM.id == task_id, ProjectORM.tenant_id == self._tenant_id())
+        )
         orm_obj = result.scalar_one_or_none()
         return orm_obj.to_domain() if orm_obj else None
 
     async def get_task_by_key(self, key: str) -> domain.Task | None:
         """Retrieve a task by its unique key (e.g. LF-0101)."""
-        result = await self.session.execute(select(TaskORM).where(TaskORM.key == key))
+        result = await self.session.execute(
+            select(TaskORM)
+            .join(ProjectORM, ProjectORM.id == TaskORM.project_id)
+            .where(TaskORM.key == key, ProjectORM.tenant_id == self._tenant_id())
+        )
         orm_obj = result.scalar_one_or_none()
         return orm_obj.to_domain() if orm_obj else None
 
     async def list_tasks_for_project(self, project_id: int) -> list[domain.Task]:
         """List all tasks in a project."""
         result = await self.session.execute(
-            select(TaskORM).where(TaskORM.project_id == project_id).order_by(TaskORM.created_at)
+            select(TaskORM)
+            .join(ProjectORM, ProjectORM.id == TaskORM.project_id)
+            .where(
+                TaskORM.project_id == project_id,
+                ProjectORM.tenant_id == self._tenant_id(),
+            )
+            .order_by(TaskORM.created_at)
         )
         return [orm_obj.to_domain() for orm_obj in result.scalars().all()]
 
@@ -151,7 +181,11 @@ class TaskService:
         PR_READY is intentionally private to mark_pr_ready(), where evidence is
         persisted atomically before the state transition.
         """
-        result = await self.session.execute(select(TaskORM).where(TaskORM.id == task_id))
+        result = await self.session.execute(
+            select(TaskORM)
+            .join(ProjectORM, ProjectORM.id == TaskORM.project_id)
+            .where(TaskORM.id == task_id, ProjectORM.tenant_id == self._tenant_id())
+        )
         orm_obj = result.scalar_one_or_none()
         if not orm_obj:
             raise ValueError(f"Task with ID {task_id} not found")
@@ -239,7 +273,10 @@ class TaskService:
 
         result = await self.session.execute(
             select(ArtifactORM)
-            .where(ArtifactORM.task_run_id == evidence.task_run_id)
+            .join(TaskRunORM, TaskRunORM.id == ArtifactORM.task_run_id)
+            .join(TaskORM, TaskORM.id == TaskRunORM.task_id)
+            .join(ProjectORM, ProjectORM.id == TaskORM.project_id)
+            .where(ArtifactORM.task_run_id == evidence.task_run_id, ProjectORM.tenant_id == self._tenant_id())
             .order_by(ArtifactORM.created_at)
         )
         artifacts = result.scalars().all()
@@ -303,7 +340,11 @@ class TaskService:
         if not task.id:
             raise ValueError("Cannot update a task without an ID")
 
-        result = await self.session.execute(select(TaskORM).where(TaskORM.id == task.id))
+        result = await self.session.execute(
+            select(TaskORM)
+            .join(ProjectORM, ProjectORM.id == TaskORM.project_id)
+            .where(TaskORM.id == task.id, ProjectORM.tenant_id == self._tenant_id())
+        )
         orm_obj = result.scalar_one_or_none()
         if not orm_obj:
             raise ValueError(f"Task with ID {task.id} not found")
@@ -328,6 +369,8 @@ class TaskService:
     # Task Run Operations
     async def create_task_run(self, task_run: domain.TaskRun) -> domain.TaskRun:
         """Record the start of a task execution run."""
+        if await self.get_task(task_run.task_id) is None:
+            raise ValueError("Task run task is not accessible in the current tenant")
         orm_obj = TaskRunORM.from_domain(task_run)
         self.session.add(orm_obj)
         await self.session.flush()
@@ -335,14 +378,23 @@ class TaskService:
 
     async def get_task_run(self, task_run_id: int) -> domain.TaskRun | None:
         """Retrieve task run by ID."""
-        result = await self.session.execute(select(TaskRunORM).where(TaskRunORM.id == task_run_id))
+        result = await self.session.execute(
+            select(TaskRunORM)
+            .join(TaskORM, TaskORM.id == TaskRunORM.task_id)
+            .join(ProjectORM, ProjectORM.id == TaskORM.project_id)
+            .where(TaskRunORM.id == task_run_id, ProjectORM.tenant_id == self._tenant_id())
+        )
         orm_obj = result.scalar_one_or_none()
         return orm_obj.to_domain() if orm_obj else None
 
     async def list_runs_for_task(self, task_id: int) -> list[domain.TaskRun]:
         """List all execution runs for a specific task."""
         result = await self.session.execute(
-            select(TaskRunORM).where(TaskRunORM.task_id == task_id).order_by(TaskRunORM.id.desc())
+            select(TaskRunORM)
+            .join(TaskORM, TaskORM.id == TaskRunORM.task_id)
+            .join(ProjectORM, ProjectORM.id == TaskORM.project_id)
+            .where(TaskRunORM.task_id == task_id, ProjectORM.tenant_id == self._tenant_id())
+            .order_by(TaskRunORM.id.desc())
         )
         return [orm_obj.to_domain() for orm_obj in result.scalars().all()]
 
@@ -352,7 +404,9 @@ class TaskService:
             return {}
         result = await self.session.execute(
             select(TaskRunORM)
-            .where(TaskRunORM.task_id.in_(task_ids))
+            .join(TaskORM, TaskORM.id == TaskRunORM.task_id)
+            .join(ProjectORM, ProjectORM.id == TaskORM.project_id)
+            .where(TaskRunORM.task_id.in_(task_ids), ProjectORM.tenant_id == self._tenant_id())
             .order_by(TaskRunORM.task_id, TaskRunORM.id.desc())
         )
         runs_by_task: dict[int, list[domain.TaskRun]] = {}
@@ -364,7 +418,9 @@ class TaskService:
         """List all task runs belonging to a single execution run."""
         result = await self.session.execute(
             select(TaskRunORM)
-            .where(TaskRunORM.run_id == run_id)
+            .join(TaskORM, TaskORM.id == TaskRunORM.task_id)
+            .join(ProjectORM, ProjectORM.id == TaskORM.project_id)
+            .where(TaskRunORM.run_id == run_id, ProjectORM.tenant_id == self._tenant_id())
             .order_by(TaskRunORM.started_at.desc())
         )
         return [orm_obj.to_domain() for orm_obj in result.scalars().all()]
@@ -374,7 +430,12 @@ class TaskService:
         if not task_run.id:
             raise ValueError("Cannot update a task run without an ID")
 
-        result = await self.session.execute(select(TaskRunORM).where(TaskRunORM.id == task_run.id))
+        result = await self.session.execute(
+            select(TaskRunORM)
+            .join(TaskORM, TaskORM.id == TaskRunORM.task_id)
+            .join(ProjectORM, ProjectORM.id == TaskORM.project_id)
+            .where(TaskRunORM.id == task_run.id, ProjectORM.tenant_id == self._tenant_id())
+        )
         orm_obj = result.scalar_one_or_none()
         if not orm_obj:
             raise ValueError(f"TaskRun with ID {task_run.id} not found")
@@ -384,6 +445,7 @@ class TaskService:
         orm_obj.branch_name = task_run.branch_name
         orm_obj.sandbox_id = task_run.sandbox_id
         orm_obj.attempt_count = task_run.attempt_count
+        orm_obj.heartbeat_at = task_run.heartbeat_at
         orm_obj.ended_at = task_run.ended_at
         orm_obj.final_summary = task_run.final_summary
 

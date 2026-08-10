@@ -5,7 +5,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from localforge.models import domain
 from localforge.models.enums import AgentRole, HandoffStatus
-from localforge.storage.orm import AgentORM, HandoffORM, RunORM
+from localforge.storage.orm import AgentORM, HandoffORM, ProjectORM, RunORM
+from localforge.services.tenant_context import session_tenant
 
 
 class ExecutionService:
@@ -14,9 +15,23 @@ class ExecutionService:
     def __init__(self, session: AsyncSession):
         self.session = session
 
+    def _tenant_id(self) -> str:
+        return session_tenant(self.session)
+
+    async def _project_is_visible(self, project_id: int) -> bool:
+        result = await self.session.execute(
+            select(ProjectORM.id).where(
+                ProjectORM.id == project_id,
+                ProjectORM.tenant_id == self._tenant_id(),
+            )
+        )
+        return result.scalar_one_or_none() is not None
+
     # Run Operations
     async def create_run(self, run: domain.Run) -> domain.Run:
         """Create a new run session."""
+        if not await self._project_is_visible(run.project_id):
+            raise ValueError("Project is not accessible in the current tenant")
         orm_obj = RunORM.from_domain(run)
         self.session.add(orm_obj)
         await self.session.flush()
@@ -24,7 +39,11 @@ class ExecutionService:
 
     async def get_run(self, run_id: int) -> domain.Run | None:
         """Retrieve a run session by ID."""
-        result = await self.session.execute(select(RunORM).where(RunORM.id == run_id))
+        result = await self.session.execute(
+            select(RunORM)
+            .join(ProjectORM, ProjectORM.id == RunORM.project_id)
+            .where(RunORM.id == run_id, ProjectORM.tenant_id == self._tenant_id())
+        )
         orm_obj = result.scalar_one_or_none()
         return orm_obj.to_domain() if orm_obj else None
 
@@ -33,7 +52,11 @@ class ExecutionService:
         if not run.id:
             raise ValueError("Cannot update a run without an ID")
 
-        result = await self.session.execute(select(RunORM).where(RunORM.id == run.id))
+        result = await self.session.execute(
+            select(RunORM)
+            .join(ProjectORM, ProjectORM.id == RunORM.project_id)
+            .where(RunORM.id == run.id, ProjectORM.tenant_id == self._tenant_id())
+        )
         orm_obj = result.scalar_one_or_none()
         if not orm_obj:
             raise ValueError(f"Run with ID {run.id} not found")
@@ -49,7 +72,13 @@ class ExecutionService:
     async def list_runs_for_project(self, project_id: int) -> list[domain.Run]:
         """List all runs for a project."""
         result = await self.session.execute(
-            select(RunORM).where(RunORM.project_id == project_id).order_by(RunORM.started_at.desc())
+            select(RunORM)
+            .join(ProjectORM, ProjectORM.id == RunORM.project_id)
+            .where(
+                RunORM.project_id == project_id,
+                ProjectORM.tenant_id == self._tenant_id(),
+            )
+            .order_by(RunORM.started_at.desc())
         )
         return [orm_obj.to_domain() for orm_obj in result.scalars().all()]
 

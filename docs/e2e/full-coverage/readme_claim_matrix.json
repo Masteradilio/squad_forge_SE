@@ -1,0 +1,377 @@
+{
+  "schema": "forgeos.readme_claim_matrix.v1",
+  "generated_at": "2026-08-09T03:28:02.895024+00:00",
+  "repository_root": ".",
+  "claims": [
+    {
+      "id": "README-001",
+      "section": "Model gateway and economy controls",
+      "statement": "Runtime model traffic is routed through the local OmniRoute-compatible endpoint.",
+      "classification": "LIVE",
+      "evidence": [
+        {
+          "kind": "execution",
+          "path": "docs/e2e/reference/forgeos_reference_metrics.json",
+          "assertion": "seven model calls were attributed to OmniRoute"
+        }
+      ],
+      "note": "Observed in the accepted reference run; this does not prove every future deployment configuration."
+    },
+    {
+      "id": "README-002",
+      "section": "Model gateway and economy controls",
+      "statement": "Preflight discovers the live catalog and records the selected route and provider evidence.",
+      "classification": "LIVE",
+      "evidence": [
+        {
+          "kind": "execution",
+          "path": "docs/e2e/reference/forgeos_reference_metrics.json",
+          "assertion": "catalog_reachable and structured_probe_passed are true"
+        }
+      ],
+      "note": "Proven for the accepted run against the reachable gateway recorded in the metrics artifact."
+    },
+    {
+      "id": "README-003",
+      "section": "Model gateway and economy controls",
+      "statement": "The finite route ladder reports infrastructure blockers instead of disguising failure as product success.",
+      "classification": "LIVE",
+      "evidence": [
+        {
+          "kind": "execution",
+          "path": "docs/e2e/reference/forgeos_reference_metrics.json",
+          "assertion": "benchmark status and blocker fields are persisted"
+        },
+        {
+          "kind": "test",
+          "path": "backend/tests/test_llm_provider.py",
+          "assertion": "provider failure classification and fallback behavior"
+        }
+      ],
+      "note": "The accepted run proves the reporting boundary; provider failure variants remain unit-tested rather than production-proven."
+    },
+    {
+      "id": "README-004",
+      "section": "Model gateway and economy controls",
+      "statement": "Structured Chief Engineer calls use a bounded configurable timeout.",
+      "classification": "STRUCTURAL",
+      "evidence": [
+        {
+          "kind": "code",
+          "path": "backend/localforge/core/config.py",
+          "assertion": "bounded omniroute_structured_timeout configuration"
+        },
+        {
+          "kind": "test",
+          "path": "backend/tests/test_core_config.py",
+          "assertion": "timeout setting is explicit and bounded"
+        }
+      ],
+      "note": "The configuration contract is proven; a long-running production timeout scenario is not part of the accepted reference run."
+    },
+    {
+      "id": "README-005",
+      "section": "PRD-to-PR evidence pipeline",
+      "statement": "The PRD-to-PR pipeline reaches bounded agent turns, tests, repair/review, artifacts, and PR_READY.",
+      "classification": "LIVE",
+      "evidence": [
+        {
+          "kind": "execution",
+          "path": "docs/e2e/reference/forgeos_reference_metrics.json",
+          "assertion": "five imported tasks reached PR_READY and the run completed"
+        }
+      ],
+      "note": "Proven by the accepted ForgeLedger reference execution."
+    },
+    {
+      "id": "README-006",
+      "section": "PRD-to-PR evidence pipeline",
+      "statement": "Task contracts constrain files, APIs, tests, dependencies, risk, and required release evidence.",
+      "classification": "LIVE",
+      "evidence": [
+        {
+          "kind": "execution",
+          "path": "docs/e2e/reference/forgeos_reference_report.md",
+          "assertion": "reference report links task artifacts and acceptance evidence"
+        },
+        {
+          "kind": "test",
+          "path": "backend/tests/test_pr_factory.py",
+          "assertion": "PR evidence and contract behavior are tested"
+        }
+      ],
+      "note": "The contract path is observed in the reference run; arbitrary production-scale task shapes are not covered yet."
+    },
+    {
+      "id": "README-007",
+      "section": "Typed Agent Harness",
+      "statement": "The shared Harness provides typed methods, bounded strategies, context compaction, schema validation, retries, spans, and tool hooks.",
+      "classification": "LIVE",
+      "evidence": [
+        {
+          "kind": "execution",
+          "path": "docs/e2e/reference/forgeos_reference_metrics.json",
+          "assertion": "typed_agent_harness conformance passed"
+        },
+        {
+          "kind": "code",
+          "path": "backend/localforge/runtime/agent_harness.py",
+          "assertion": "Harness contract and execution boundary"
+        }
+      ],
+      "note": "Proven for the reference probe and source contract; broad workload coverage remains future work."
+    },
+    {
+      "id": "README-008",
+      "section": "Durable Harness State and subagents",
+      "statement": "Harness state and subagent lifecycles persist with parentage, bounds, snapshots, and terminal protection.",
+      "classification": "LIVE",
+      "evidence": [
+        {
+          "kind": "execution",
+          "path": "docs/e2e/reference/forgeos_reference_metrics.json",
+          "assertion": "durable_harness_state and bounded_subagents conformance passed"
+        },
+        {
+          "kind": "code",
+          "path": "backend/localforge/runtime/harness_state.py",
+          "assertion": "atomic state and refinement boundary"
+        },
+        {
+          "kind": "code",
+          "path": "backend/localforge/runtime/subagents.py",
+          "assertion": "bounded parent-child lifecycle"
+        }
+      ],
+      "note": "Reference probes prove the bounded lifecycle, not Pod restart recovery."
+    },
+    {
+      "id": "README-009",
+      "section": "Long-running control plane",
+      "statement": "Goals, todos, claims, leases, receipts, quotas, signals, and review projections are durable and authoritative.",
+      "classification": "LIVE",
+      "evidence": [
+        {
+          "kind": "execution",
+          "path": "docs/e2e/reference/forgeos_reference_metrics.json",
+          "assertion": "control plane completed with five receipts and ten revisions"
+        },
+        {
+          "kind": "execution",
+          "path": "docs/e2e/reference/control_plane.json",
+          "assertion": "goal, todos, receipts, events, and idempotency keys persisted"
+        }
+      ],
+      "note": "The reference run proves local durable execution; Kubernetes restart and multi-tenant isolation are not proven."
+    },
+    {
+      "id": "README-010",
+      "section": "Skills and engineering workflow",
+      "statement": "Built-in and user-created skills are declarative, bounded, selected from task context, and safety-gated.",
+      "classification": "LIVE",
+      "evidence": [
+        {
+          "kind": "execution",
+          "path": "docs/e2e/reference/forgeos_reference_metrics.json",
+          "assertion": "skills conformance passed for built-ins and a persisted custom manifest"
+        },
+        {
+          "kind": "code",
+          "path": "backend/localforge/skills/registry.py",
+          "assertion": "skill selection and manifest validation"
+        }
+      ],
+      "note": "Proven for the reference skill path; no claim is made about a large community catalog."
+    },
+    {
+      "id": "README-011",
+      "section": "Safety, memory, and observability",
+      "statement": "ActionGateway and Safety Kernel enforce role, path, command, network, Git, protected-file, and human-approval boundaries.",
+      "classification": "LIVE",
+      "evidence": [
+        {
+          "kind": "execution",
+          "path": "docs/e2e/reference/forgeos_reference_metrics.json",
+          "assertion": "safety_hooks conformance denied a tool before execution"
+        },
+        {
+          "kind": "code",
+          "path": "backend/localforge/safety/hooks.py",
+          "assertion": "pre-execution safety hook boundary"
+        },
+        {
+          "kind": "test",
+          "path": "backend/tests/test_safety_kernel.py",
+          "assertion": "safety policy and protected action tests"
+        }
+      ],
+      "note": "The accepted run proves a denial boundary; the complete human approval journey remains a plan item."
+    },
+    {
+      "id": "README-012",
+      "section": "Safety, memory, and observability",
+      "statement": "Graphify, MemPalace, RuleSynthesizer, and OpenTelemetry timeline events provide local evidence and memory boundaries.",
+      "classification": "LIVE",
+      "evidence": [
+        {
+          "kind": "execution",
+          "path": "docs/e2e/reference/forgeos_reference_metrics.json",
+          "assertion": "memory and observability conformance passed"
+        },
+        {
+          "kind": "code",
+          "path": "backend/localforge/memory/graphify_engine.py",
+          "assertion": "local graph construction"
+        },
+        {
+          "kind": "code",
+          "path": "backend/localforge/observability/tracer.py",
+          "assertion": "nested span and lifecycle event model"
+        }
+      ],
+      "note": "Proven for local fixtures and reference spans; long-running production telemetry is not proven."
+    },
+    {
+      "id": "README-013",
+      "section": "Safety, memory, and observability",
+      "statement": "Context7 MCP is an available optional integration surface for current documentation.",
+      "classification": "OPTIONAL",
+      "evidence": [
+        {
+          "kind": "live_probe",
+          "path": "scripts/probe_context7.py",
+          "assertion": "reproducible live probe without printing credentials"
+        },
+        {
+          "kind": "test",
+          "path": "backend/tests/test_context7_mcp.py",
+          "assertion": "authentication, session, fallback, and audit integration tests"
+        }
+      ],
+      "note": "The current reference benchmark intentionally does not require Context7; this is not a benchmark-wide LIVE claim."
+    },
+    {
+      "id": "README-014",
+      "section": "Safety, memory, and observability",
+      "statement": "Redis cache, pub/sub, and lock primitives are available as an optional integration surface.",
+      "classification": "OPTIONAL",
+      "evidence": [
+        {
+          "kind": "code",
+          "path": "backend/localforge/services/redis_manager.py",
+          "assertion": "Redis manager interface"
+        },
+        {
+          "kind": "test",
+          "path": "backend/tests/test_redis_manager.py",
+          "assertion": "Redis manager contract tests"
+        }
+      ],
+      "note": "No live Redis server, lock race, pub/sub, or restart evidence is present in the accepted reference run."
+    },
+    {
+      "id": "README-015",
+      "section": "Safety, memory, and observability",
+      "statement": "Helm templates and autoscaling are available as an optional deployment surface.",
+      "classification": "OPTIONAL",
+      "evidence": [
+        {
+          "kind": "code",
+          "path": "deploy/helm/forgeos-cloud/Chart.yaml",
+          "assertion": "Helm chart metadata"
+        },
+        {
+          "kind": "code",
+          "path": "deploy/helm/forgeos-cloud/templates/hpa-sandbox.yaml",
+          "assertion": "HPA template"
+        }
+      ],
+      "note": "The reference run checks only surface presence; helm lint, install, readiness failure, and rollback remain unproven."
+    },
+    {
+      "id": "README-016",
+      "section": "Frontend product boundary",
+      "statement": "The frontend exposes mission, task, agent, skill, memory, safety, review, and timeline surfaces.",
+      "classification": "STRUCTURAL",
+      "evidence": [
+        {
+          "kind": "code",
+          "path": "frontend/src/App.tsx",
+          "assertion": "frontend route and feature composition"
+        },
+        {
+          "kind": "code",
+          "path": "frontend/src/components/SkillsEditorView.tsx",
+          "assertion": "feature view implementation"
+        }
+      ],
+      "note": "Source presence is proven; reproducible build, browser behavior, accessibility, and hosted deployment are not."
+    },
+    {
+      "id": "README-017",
+      "section": "Frontend product boundary",
+      "statement": "A frontend build or hosted deployment is a separate release gate.",
+      "classification": "NOT_PROVEN",
+      "evidence": [
+        {
+          "kind": "docs",
+          "path": "README.md",
+          "assertion": "README explicitly separates the frontend release gate"
+        },
+        {
+          "kind": "code",
+          "path": "frontend/package.json",
+          "assertion": "frontend package contract"
+        }
+      ],
+      "note": "The repository does not yet contain accepted build, browser, and hosted evidence for the full Mission Control journey."
+    },
+    {
+      "id": "README-018",
+      "section": "Clean-room and runtime boundaries",
+      "statement": "Reference repositories are not runtime dependencies and source code is not copied into ForgeOS.",
+      "classification": "STRUCTURAL",
+      "evidence": [
+        {
+          "kind": "docs",
+          "path": "docs/REFERENCE_FEATURE_AUDIT.md",
+          "assertion": "clean-room adoption boundaries"
+        },
+        {
+          "kind": "code",
+          "path": "pyproject.toml",
+          "assertion": "declared runtime dependencies"
+        }
+      ],
+      "note": "Static dependency and documentation evidence exists; a separate release audit should repeat this check."
+    },
+    {
+      "id": "README-019",
+      "section": "Project status and governance",
+      "statement": "Human review remains required before merge, deploy, publication, or irreversible external action.",
+      "classification": "STRUCTURAL",
+      "evidence": [
+        {
+          "kind": "docs",
+          "path": "README.md",
+          "assertion": "governance statement"
+        },
+        {
+          "kind": "code",
+          "path": "backend/localforge/safety/runner.py",
+          "assertion": "safety-mediated action execution"
+        }
+      ],
+      "note": "The control boundary exists, but the full deny/expire/approve UI/API journey is a later plan task."
+    }
+  ],
+  "summary": {
+    "total_claims": 19,
+    "by_classification": {
+      "LIVE": 11,
+      "NOT_PROVEN": 1,
+      "OPTIONAL": 3,
+      "STRUCTURAL": 4
+    }
+  }
+}

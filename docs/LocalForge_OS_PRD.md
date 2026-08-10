@@ -65,7 +65,10 @@ LocalForge OS is a local-first autonomous software engineering operating system.
 
 It converts a PRD and backlog into small, testable engineering tasks. It assigns those tasks to local AI agents running on the user's machine, coordinates work in isolated sandboxes and Git worktrees, executes tests, performs bounded self-repair, and opens human-reviewable Pull Requests.
 
-The human remains the final reviewer and merger to `main`. LocalForge OS may create branches and PRs but must not merge to `main` automatically.
+The default mode keeps the human as reviewer and merger to `main`. An explicit
+`release.promotion_mode: full_access` opt-in may merge `PR_READY` local branches
+after all PR_READY gates and then run the post-merge Tester and SafetyAuditor
+checks. Human product acceptance remains required in both modes.
 
 Product promise:
 
@@ -348,7 +351,8 @@ LocalForge OS must:
 10. Provide a web dashboard/desktop-like mission control UI.
 11. Provide a CLI for automation and debugging.
 12. Provide full audit logs and replayable runs.
-13. Never merge to `main` automatically.
+13. Support a human-approval release mode and an explicit full-access local
+    promotion mode with post-merge testing and security gates.
 14. Never perform destructive actions outside allowed workspace boundaries.
 
 ### 6.2 Non-Goals
@@ -392,7 +396,9 @@ Codex and Antigravity may be used to implement LocalForge OS during development.
 3. User opens one PR artifact page.
 4. User reviews summary, acceptance criteria, tests, changed files, risk report, agent review notes, and repair attempts.
 5. User opens PR in GitHub or local IDE.
-6. User merges manually or sends adjustment request.
+6. In human-approval mode, user approves/merges manually or sends an adjustment
+   request. In full-access mode, ForgeOS promotes the local target branch and
+   pauses only if a merge or post-merge gate fails.
 
 ### 7.3 Blocked Task Journey
 
@@ -851,7 +857,8 @@ Shutdown must:
 - save audit events;
 - leave worktrees intact for PR_READY tasks;
 - cleanup only safe generated artifacts;
-- never delete source changes for PR_READY tasks.
+- never delete source changes for PR_READY tasks;
+- record release promotion, merge commit, and post-merge agent evidence.
 
 ---
 
@@ -1199,7 +1206,7 @@ Inside task worktree only:
 - reading secrets;
 - printing secrets in logs;
 - `git push --force`;
-- merging to main;
+- merging to main outside the server-owned release promotion lane;
 - production deploy;
 - destructive database commands;
 - changing global system config;
@@ -1274,9 +1281,18 @@ Every PR must link to local artifacts:
 
 ### 15.5 Merge Policy
 
-LocalForge must not merge PRs automatically in MVP.
+ForgeOS supports two explicit release promotion modes:
 
-Human must review and merge.
+1. `human_approval` (default): pause after PR_READY and require a durable
+   human approval before merging the local task branches.
+2. `full_access`: merge the `PR_READY` local task branches automatically only
+   when the configured target branch is clean and the release policy is
+   explicitly set. The post-merge Tester and SafetyAuditor agents then run on
+   the target branch.
+
+The Safety Kernel remains authoritative in both modes. ForgeOS never performs
+an external production deployment automatically, and human product acceptance
+remains separate from technical release validation.
 
 ---
 

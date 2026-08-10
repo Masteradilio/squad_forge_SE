@@ -6,15 +6,16 @@ import sqlite3
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import typer
-from localforge.core.config import LocalForgeConfig, load_config
 from localforge.control_plane import (
     ControlPlaneKernel,
     ControlPlaneStore,
     goal_id_for_project,
     state_path_for_goal,
 )
+from localforge.core.config import LocalForgeConfig, load_config
 from localforge.llm.base import LLMConnectionError, LLMHTTPError, LLMTimeoutError
 from localforge.llm.factory import build_chief_engineer_provider
 from localforge.models import domain
@@ -600,19 +601,32 @@ def run_cmd(
         raise typer.Exit(code=1) from e
 
 
-def _run_resource_limits() -> dict[str, float | int]:
+def _run_resource_limits() -> dict[str, Any]:
     try:
-        budgets = load_config().budgets
+        config = load_config()
+        budgets = config.budgets
     except Exception:
         return {}
     return {
+        "max_run_time": budgets.max_run_time,
         "max_task_duration": budgets.max_task_duration,
         "max_repair_attempts": budgets.max_repair_attempts,
         "max_file_count": budgets.max_file_count,
         "max_diff_growth": budgets.max_diff_growth,
+        "max_visual_diff_growth": budgets.max_visual_diff_growth,
         "max_active_model_calls": budgets.max_active_model_calls,
+        "max_gateway_calls": budgets.max_gateway_calls,
         "max_paid_calls": budgets.max_paid_calls,
         "max_paid_input_tokens": budgets.max_paid_input_tokens,
         "max_paid_output_tokens": budgets.max_paid_output_tokens,
         "max_paid_usd": budgets.max_paid_usd,
+        "release": {
+            "promotion_mode": config.release.promotion_mode.value,
+            "target_branch": config.release.target_branch or config.git.default_branch,
+            "post_merge_agents": list(config.release.post_merge_agents),
+            "tester_command": config.release.tester_command,
+            "security_command": config.release.security_command,
+            "post_merge_timeout": config.release.post_merge_timeout,
+            "require_clean_target": config.release.require_clean_target,
+        },
     }

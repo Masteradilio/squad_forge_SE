@@ -5,6 +5,7 @@ import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Any
+from urllib.parse import quote
 
 logger = logging.getLogger(__name__)
 
@@ -20,12 +21,14 @@ class RedisManager:
     """Manages Redis connections for caching, Pub/Sub, and distributed locks."""
 
     def __init__(self, redis_url: str | None = None):
-        self.redis_url = (
-            redis_url
-            or os.getenv("LOCALFORGE_REDIS_URL")
-            or os.getenv("REDIS_URL")
-            or "redis://redis:6379/0"
-        )
+        self.redis_url = redis_url or os.getenv("LOCALFORGE_REDIS_URL") or os.getenv("REDIS_URL")
+        if not self.redis_url:
+            host = os.getenv("REDIS_HOST", "redis")
+            port = os.getenv("REDIS_PORT", "6379")
+            database = os.getenv("REDIS_DB", "0")
+            password = quote(os.getenv("REDIS_PASSWORD", ""), safe="")
+            credentials = f":{password}@" if password else ""
+            self.redis_url = f"redis://{credentials}{host}:{port}/{database}"
         self._client: Any | None = None
         self._available: bool = False
 

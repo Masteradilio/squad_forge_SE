@@ -33,7 +33,8 @@ from localforge.services.memory_retrieval import (
     calculate_retrieval_metrics,
     filter_and_score_facts,
 )
-from localforge.storage.orm import MemoryFactORM
+from localforge.services.tenant_context import session_tenant
+from localforge.storage.orm import MemoryFactORM, ProjectORM
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +46,18 @@ class MemoryService:
         self.session = session
         self.relations = MemoryRelationService(session)
 
+    def _tenant_id(self) -> str:
+        return session_tenant(self.session)
+
+    async def _project_is_visible(self, project_id: int) -> bool:
+        result = await self.session.execute(
+            select(ProjectORM.id).where(
+                ProjectORM.id == project_id,
+                ProjectORM.tenant_id == self._tenant_id(),
+            )
+        )
+        return result.scalar_one_or_none() is not None
+
     # ------------------------------------------------------------------ #
     # V6-1000: Provenance Fact Operations
     # ------------------------------------------------------------------ #
@@ -55,7 +68,14 @@ class MemoryService:
         category: MemoryFactCategory | None = None,
         validity: MemoryValidityStatus | None = None,
     ) -> list[domain.MemoryFact]:
-        stmt = select(MemoryFactORM).where(MemoryFactORM.project_id == project_id)
+        stmt = (
+            select(MemoryFactORM)
+            .join(ProjectORM, ProjectORM.id == MemoryFactORM.project_id)
+            .where(
+                MemoryFactORM.project_id == project_id,
+                ProjectORM.tenant_id == self._tenant_id(),
+            )
+        )
         if category:
             stmt = stmt.where(MemoryFactORM.category == category.value)
         if validity:
@@ -67,6 +87,8 @@ class MemoryService:
 
     async def create_fact(self, fact: domain.MemoryFact) -> domain.MemoryFact:
         """Create or update existing fact with provenance fields."""
+        if not await self._project_is_visible(fact.project_id):
+            raise ValueError("Memory project is not accessible in the current tenant")
         existing = await self._find_existing(fact.project_id, fact.fact)
         if existing:
             return existing.to_domain()
@@ -85,7 +107,12 @@ class MemoryService:
         validity: MemoryValidityStatus | None = None,
         tags: list[str] | None = None,
     ) -> domain.MemoryFact:
-        orm_obj = await self.session.get(MemoryFactORM, fact_id)
+        result = await self.session.execute(
+            select(MemoryFactORM)
+            .join(ProjectORM, ProjectORM.id == MemoryFactORM.project_id)
+            .where(MemoryFactORM.id == fact_id, ProjectORM.tenant_id == self._tenant_id())
+        )
+        orm_obj = result.scalar_one_or_none()
         if not orm_obj:
             raise ValueError(f"Memory fact with ID {fact_id} not found")
         if fact is not None:
@@ -105,7 +132,12 @@ class MemoryService:
         return orm_obj.to_domain()
 
     async def delete_fact(self, fact_id: int) -> None:
-        orm_obj = await self.session.get(MemoryFactORM, fact_id)
+        result = await self.session.execute(
+            select(MemoryFactORM)
+            .join(ProjectORM, ProjectORM.id == MemoryFactORM.project_id)
+            .where(MemoryFactORM.id == fact_id, ProjectORM.tenant_id == self._tenant_id())
+        )
+        orm_obj = result.scalar_one_or_none()
         if not orm_obj:
             raise ValueError(f"Memory fact with ID {fact_id} not found")
         await self.session.delete(orm_obj)
@@ -187,6 +219,18 @@ class MemoryService:
         relation_type: MemoryRelationType,
         provenance: dict[str, Any] | None = None,
     ) -> domain.MemoryRelation:
+        source = await self.session.execute(
+            select(MemoryFactORM.id)
+            .join(ProjectORM, ProjectORM.id == MemoryFactORM.project_id)
+            .where(MemoryFactORM.id == source_fact_id, ProjectORM.tenant_id == self._tenant_id())
+        )
+        target = await self.session.execute(
+            select(MemoryFactORM.id)
+            .join(ProjectORM, ProjectORM.id == MemoryFactORM.project_id)
+            .where(MemoryFactORM.id == target_fact_id, ProjectORM.tenant_id == self._tenant_id())
+        )
+        if source.scalar_one_or_none() is None or target.scalar_one_or_none() is None:
+            raise ValueError("Memory relation crosses the current tenant boundary")
         return await self.relations.add_relation(
             source_fact_id, target_fact_id, relation_type, provenance
         )
@@ -378,9 +422,12 @@ class MemoryService:
 
     async def _find_existing(self, project_id: int, fact: str) -> MemoryFactORM | None:
         result = await self.session.execute(
-            select(MemoryFactORM).where(
+            select(MemoryFactORM)
+            .join(ProjectORM, ProjectORM.id == MemoryFactORM.project_id)
+            .where(
                 MemoryFactORM.project_id == project_id,
                 MemoryFactORM.fact == fact,
+                ProjectORM.tenant_id == self._tenant_id(),
             )
         )
         return result.scalar_one_or_none()

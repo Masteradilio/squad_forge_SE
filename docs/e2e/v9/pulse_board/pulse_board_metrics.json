@@ -1,8 +1,8 @@
 {
   "benchmark_name": "ForgeOS V9 LoopX-like PulseBoard Real PRD Benchmark",
-  "generated_at": "2026-08-05T06:56:40.859905+00:00",
+  "generated_at": "2026-08-07T04:43:05.238421+00:00",
   "prd_file": "docs/PRD_V9_PULSE_BOARD.md",
-  "workspace": "benchmarks/workspaces/v9-pulse-board-20260805T065013890569Z",
+  "workspace": "benchmarks/workspaces/v9-pulse-board-20260807T043833968786Z",
   "status": "ACCEPTED",
   "blockers": [],
   "gateway": {
@@ -11,24 +11,11 @@
     "structured_probe_passed": true,
     "structured_probe_advisory": false,
     "detail": "OmniRoute catalog reachable at http://127.0.0.1:20128/v1/models; routes advertised: ['auto/best-coding', 'auto/best-reasoning', 'auto/best-fast', 'auto/best-vision', 'auto/best-chat', 'auto/best-coding-fast', 'auto/pro-coding', 'auto/pro-reasoning', 'auto/pro-vision', 'auto/pro-chat', 'auto/pro-fast', 'auto/coding']",
-    "selected_route": "openrouter/cohere/north-mini-code:free",
+    "selected_route": "nvidia/minimaxai/minimax-m3",
     "free_routes_seen": [
       "oc/deepseek-v4-flash-free",
       "oc/north-mini-code-free",
-      "openrouter/cohere/north-mini-code:free",
-      "openrouter/openai/gpt-oss-20b:free",
-      "openrouter/nvidia/nemotron-3-super-120b-a12b:free",
-      "openrouter/inclusionai/ling-3.0-flash:free",
-      "openrouter/poolside/laguna-s-2.1:free",
-      "openrouter/poolside/laguna-xs-2.1:free",
-      "openrouter/nvidia/nemotron-3.5-content-safety:free",
-      "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free",
-      "openrouter/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
-      "openrouter/google/gemma-4-26b-a4b-it:free",
-      "openrouter/google/gemma-4-31b-it:free",
-      "openrouter/nvidia/nemotron-3-nano-30b-a3b:free",
-      "openrouter/nvidia/nemotron-nano-12b-v2-vl:free",
-      "openrouter/nvidia/nemotron-nano-9b-v2:free",
+      "nvidia/minimaxai/minimax-m3",
       "auto/best-free",
       "auto/coding:free",
       "oc/mimo-v2.5-free",
@@ -49,20 +36,20 @@
     "runs": {
       "COMPLETED": 1
     },
-    "task_runs_executed": 5,
-    "artifacts_generated": 75,
-    "model_calls_logged": 17,
+    "task_runs_executed": 4,
+    "artifacts_generated": 67,
+    "model_calls_logged": 6,
     "calls_by_provider": {
-      "omniroute": 17
+      "omniroute": 6
     },
-    "estimated_cost_usd": 0.017655599999999997
+    "estimated_cost_usd": 0.0027318
   },
   "control_plane": {
     "present": true,
     "completed": true,
-    "revision": 12,
-    "receipts": 5,
-    "events": 6
+    "revision": 8,
+    "receipts": 4,
+    "events": 4
   },
   "commands": [
     {
@@ -70,12 +57,12 @@
         "init"
       ],
       "exit_code": 0,
-      "stderr_tail": "2026-08-05 03:50:14,964 INFO localforge.storage.bootstrap Current database schema version: 0\r\n2026-08-05 03:50:14,964 INFO localforge.storage.bootstrap Initializing new database schema (Version 20)...\r\n2026-08-05 03:50:15,072 INFO localforge.storage.bootstrap Pricing snapshots seeded successfully.\r\n2026-08-05 03:50:15,072 INFO localforge.storage.bootstrap Database schema initialized successfully."
+      "stderr_tail": "2026-08-07 01:38:35,660 INFO localforge.storage.bootstrap Current database schema version: 0\r\n2026-08-07 01:38:35,660 INFO localforge.storage.bootstrap Initializing new database schema (Version 20)...\r\n2026-08-07 01:38:35,790 INFO localforge.storage.bootstrap Pricing snapshots seeded successfully.\r\n2026-08-07 01:38:35,790 INFO localforge.storage.bootstrap Database schema initialized successfully."
     },
     {
       "args": [
         "import-prd",
-        "E:\\Projetos\\local_forge_os\\docs\\PRD_V9_PULSE_BOARD.md"
+        "C:\\Users\\adili\\projetos_offline\\local_forge_os\\docs\\PRD_V9_PULSE_BOARD.md"
       ],
       "exit_code": 0,
       "stderr_tail": ""
@@ -94,7 +81,7 @@
         "--unattended"
       ],
       "exit_code": 0,
-      "stderr_tail": "cheduler Task LF-PRD-003 claim persisted; starting governed dispatch\r\n2026-08-05 03:55:01,200 INFO localforge.pipeline Local delegation contract rejected task LF-PRD-003: Task contract requires Chief Engineer execution.\r\n2026-08-05 03:55:01,209 INFO localforge.chief_engineer.bundler API call budget preview: reason=SEMANTIC_REPAIR_PLAN, estimated_input_tokens=1212\r\n2026-08-05 03:55:02,438 INFO httpx HTTP Request: POST http://127.0.0.1:20128/v1/chat/completions \"HTTP/1.1 200 OK\"\r\n2026-08-05 03:55:48,769 INFO localforge.scheduler Task LF-PRD-004 claim persisted; starting governed dispatch\r\n2026-08-05 03:55:50,496 INFO localforge.pipeline Local delegation contract rejected task LF-PRD-004: Task contract requires Chief Engineer execution.\r\n2026-08-05 03:55:50,504 INFO localforge.chief_engineer.bundler API call budget preview: reason=SEMANTIC_REPAIR_PLAN, estimated_input_tokens=1217\r\n2026-08-05 03:55:52,720 INFO httpx HTTP Request: POST http://127.0.0.1:20128/v1/chat/completions \"HTTP/1.1 200 OK\"\r\n2026-08-05 03:56:34,868 INFO httpx HTTP Request: POST http://127.0.0.1:20128/v1/chat/completions \"HTTP/1.1 200 OK\"\r\n2026-08-05 03:56:40,720 INFO localforge.scheduler Scheduler stopped for run 1"
+      "stderr_tail": "epair\r\n    raise LLMError(f\"Chief Engineer semantic repair failed: {error_summary}\") from exc\r\nlocalforge.llm.base.LLMError: Chief Engineer semantic repair failed: Structured stream completion call timed out after 60.0s\r\n2026-08-07 01:41:33,704 INFO localforge.chief_engineer.bundler API call budget preview: reason=SEMANTIC_REPAIR_PLAN, estimated_input_tokens=1209\r\n2026-08-07 01:41:34,964 INFO httpx HTTP Request: POST http://127.0.0.1:20128/v1/chat/completions \"HTTP/1.1 200 OK\"\r\n2026-08-07 01:41:50,058 INFO localforge.scheduler Task LF-PRD-004 claim persisted; starting governed dispatch\r\n2026-08-07 01:41:51,368 INFO localforge.pipeline Local delegation contract rejected task LF-PRD-004: Task contract requires Chief Engineer execution.\r\n2026-08-07 01:41:51,387 INFO localforge.chief_engineer.bundler API call budget preview: reason=SEMANTIC_REPAIR_PLAN, estimated_input_tokens=1440\r\n2026-08-07 01:41:52,725 INFO httpx HTTP Request: POST http://127.0.0.1:20128/v1/chat/completions \"HTTP/1.1 200 OK\"\r\n2026-08-07 01:42:44,185 INFO httpx HTTP Request: POST http://127.0.0.1:20128/v1/chat/completions \"HTTP/1.1 200 OK\"\r\n2026-08-07 01:43:05,047 INFO localforge.scheduler Scheduler stopped for run 1"
     }
   ],
   "limitations": [
@@ -112,19 +99,19 @@
           "-q"
         ],
         "exit_code": 0,
-        "stdout_tail": "...                                                                      [100%]\n3 passed in 0.08s\n",
+        "stdout_tail": "...                                                                      [100%]Running teardown with pytest sessionfinish...\n\n3 passed in 0.18s\n",
         "stderr_tail": ""
       },
       {
         "command": [
           "pytest",
-          "E:\\Projetos\\local_forge_os\\scripts\\fixtures\\v9_pulse_board_create_acceptance.py",
-          "E:\\Projetos\\local_forge_os\\scripts\\fixtures\\v9_pulse_board_validation_acceptance.py",
-          "E:\\Projetos\\local_forge_os\\scripts\\fixtures\\v9_pulse_board_summary_acceptance.py",
+          "C:\\Users\\adili\\projetos_offline\\local_forge_os\\scripts\\fixtures\\v9_pulse_board_create_acceptance.py",
+          "C:\\Users\\adili\\projetos_offline\\local_forge_os\\scripts\\fixtures\\v9_pulse_board_validation_acceptance.py",
+          "C:\\Users\\adili\\projetos_offline\\local_forge_os\\scripts\\fixtures\\v9_pulse_board_summary_acceptance.py",
           "-q"
         ],
         "exit_code": 0,
-        "stdout_tail": "...                                                                      [100%]\n3 passed in 0.11s\n",
+        "stdout_tail": "...                                                                      [100%]Running teardown with pytest sessionfinish...\n\n3 passed in 0.25s\n",
         "stderr_tail": ""
       }
     ]

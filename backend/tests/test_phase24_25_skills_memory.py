@@ -57,6 +57,12 @@ def test_skill_registry_loads_builtins_and_local_skills(tmp_path):
     assert [skill.name for skill in selected] == ["sqlite-migration"]
 
 
+def test_reference_engineering_skills_are_builtin():
+    registry = SkillRegistry(project_root=".")
+    names = {skill.name for skill in registry.load_all()}
+    assert {"grill-with-docs", "to-tickets", "tdd"}.issubset(names)
+
+
 def test_task_context_includes_selected_skills_and_relevant_memory(tmp_path):
     manager = make_db_manager(tmp_path)
     try:
@@ -190,18 +196,28 @@ def test_skills_api_registers_local_skill(tmp_path):
             json={
                 "name": "sqlite-migration",
                 "purpose": "Plan SQLite migrations safely.",
+                "system_prompt": "Use additive migrations and report evidence.",
                 "triggers": ["sqlite"],
                 "allowed_actions": ["read schema"],
                 "expected_artifacts": ["risk.md"],
                 "failure_modes": ["missing migration"],
                 "examples": ["Prefer additive migration."],
+                "strategy": "predict",
+                "max_retries": 2,
+                "context_budget": 9000,
             },
         )
         listed = client.get(f"/projects/{ids['project_id']}/skills")
 
         assert created.status_code == 200
         assert created.json()["source"] == "local"
+        assert created.json()["strategy"] == "predict"
+        assert created.json()["max_retries"] == 2
+        assert created.json()["context_budget"] == 9000
+        assert created.json()["system_prompt"]
         assert any(skill["name"] == "sqlite-migration" for skill in listed.json())
+        deleted = client.delete(f"/projects/{ids['project_id']}/skills/sqlite-migration")
+        assert deleted.status_code == 200
     finally:
         close_manager(manager)
 

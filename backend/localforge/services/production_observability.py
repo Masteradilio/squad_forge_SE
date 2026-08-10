@@ -9,7 +9,7 @@ import logging
 from datetime import UTC, datetime
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from localforge.storage.transactions import UnitOfWork
 
@@ -26,7 +26,7 @@ class StructuredLogRecord(BaseModel):
     project_id: int | None = None
     task_run_id: int | None = None
     attempt_id: int | None = None
-    context: dict[str, Any] = {}
+    context: dict[str, Any] = Field(default_factory=dict)
 
 
 class OperatorStatusReport(BaseModel):
@@ -105,18 +105,46 @@ class ProductionObservabilityService:
             except Exception as exc:
                 logger.warning("Could not list circuit breakers for operator view: %s", exc)
 
+        queue_depth = 0
+        if uow.tasks is not None:
+            try:
+                from localforge.models.enums import TaskStatus
+
+                tasks = await uow.tasks.list_tasks_for_project(project_id)
+                queue_depth = sum(
+                    1
+                    for task in tasks
+                    if task.status in {TaskStatus.BACKLOG, TaskStatus.READY}
+                )
+            except Exception as exc:
+                logger.warning("Could not calculate queue depth for operator view: %s", exc)
+
+        total_cost_usd = 0.0
+        if uow.model_calls is not None:
+            try:
+                calls = await uow.model_calls.list_calls(project_id=project_id)
+                total_cost_usd = round(
+                    sum(float(call.estimated_cost_usd or 0.0) for call in calls),
+                    8,
+                )
+            except Exception as exc:
+                logger.warning("Could not calculate model cost for operator view: %s", exc)
+
         status = "HEALTHY" if breakers_open == 0 else "DEGRADED"
+        if breakers_open and queue_depth > 0:
+            status = "CRITICAL"
 
         return OperatorStatusReport(
             timestamp=datetime.now(UTC).isoformat(),
             status=status,
             active_workers_count=active_workers,
             active_leases_count=active_leases,
-            queue_depth=0,
+            queue_depth=queue_depth,
             open_circuit_breakers_count=breakers_open,
-            total_cost_usd=0.0,
+            total_cost_usd=total_cost_usd,
             summary=(
                 f"Operator status: {status}. Active workers: {active_workers}, "
-                f"active leases: {active_leases}, open circuit breakers: {breakers_open}."
+                f"active leases: {active_leases}, queue depth: {queue_depth}, "
+                f"open circuit breakers: {breakers_open}, cost: ${total_cost_usd:.4f}."
             ),
         )

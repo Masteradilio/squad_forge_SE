@@ -8,6 +8,7 @@ from localforge.api.app import create_app
 from localforge.chief_engineer.service import (
     ChiefEngineerRepairPlan,
     ChiefEngineerService,
+    _deterministic_visual_css_section,
     _extract_visual_document,
     _is_transient_gateway_error,
     _normalize_visual_section_content,
@@ -109,6 +110,25 @@ def test_visual_sections_reject_wrappers_and_omissions() -> None:
 def test_visual_section_normalizer_removes_safe_model_wrappers() -> None:
     assert _normalize_visual_section_content("script_core", "<script>run()</script>") == "run()"
     assert _normalize_visual_section_content("css_layout", "<style>body{}</style>") == "body{}"
+
+
+@pytest.mark.parametrize(
+    "section_name,minimum_length",
+    [
+        ("css_reset", 300),
+        ("css_frame_container", 400),
+        ("css_frame_surface", 300),
+        ("css_frame_inner", 400),
+        ("css_display", 300),
+        ("css_controls_grid", 400),
+        ("css_controls_labels", 400),
+    ],
+)
+def test_deterministic_visual_css_fallback_is_contract_sized(
+    section_name: str, minimum_length: int
+) -> None:
+    content = _deterministic_visual_css_section(section_name)
+    _validate_visual_section(section_name, content, minimum_length, 6000)
 
 
 def test_visual_section_normalizer_extracts_full_document_body_fragments() -> None:
@@ -395,6 +415,20 @@ def test_nvidia_chief_does_not_send_provider_aliases_to_primary():
     ) == ["minimaxai/minimax-m3"]
 
 
+def test_omniroute_chief_keeps_gateway_aliases_even_with_nvidia_primary_metadata():
+    provider = MagicMock(primary_provider_name="nvidia", provider_name="omniroute")
+
+    assert _chief_model_sequence(
+        provider,
+        "nvidia/minimaxai/minimax-m3",
+        ["auto/best-coding", "nvidia/nvidia/nemotron-3-nano-30b-a3b"],
+    ) == [
+        "nvidia/minimaxai/minimax-m3",
+        "auto/best-coding",
+        "nvidia/nvidia/nemotron-3-nano-30b-a3b",
+    ]
+
+
 @pytest.mark.anyio
 async def test_chief_engineer_keeps_multimodal_failure_on_primary_route():
     primary = MagicMock(provider_name="nvidia", default_model="primary-model")
@@ -438,6 +472,29 @@ def test_chief_engineer_repair_plan_normalizes_singular_action():
     assert len(plan.actions) == 1
     assert plan.actions[0].kind == "write_file"
     assert plan.actions[0].path == "app/index.html"
+
+
+def test_chief_engineer_repair_plan_normalizes_nested_operation_action():
+    plan = ChiefEngineerRepairPlan.model_validate(
+        {
+            "summary": "nested action response",
+            "actions": [
+                {
+                    "write_file": {
+                        "path": "app/forge_ledger.py",
+                        "content": "def add_entry():\n    return True\n",
+                    }
+                }
+            ],
+            "risk_notes": "The action is bounded to the contracted product file.",
+        }
+    )
+
+    assert len(plan.actions) == 1
+    assert plan.actions[0].kind == "write_file"
+    assert plan.actions[0].path == "app/forge_ledger.py"
+    assert "add_entry" in plan.actions[0].content
+    assert plan.risk_notes == ["The action is bounded to the contracted product file."]
 
 
 @pytest.mark.anyio
@@ -551,6 +608,132 @@ def test_paid_model_ledger_records_and_enforces_run_budget(tmp_path):
     assert data["call_id"] is not None
     assert data["count"] == 1
     assert "max_paid_calls" in str(data["blocked"])
+
+
+def test_omniroute_gateway_budget_is_separate_from_paid_budget(tmp_path):
+    manager = DatabaseManager(f"sqlite+aiosqlite:///{(tmp_path / 'gateway-budget.db').as_posix()}")
+    asyncio.run(bootstrap_database(manager))
+
+    async def exercise() -> str:
+        async with UnitOfWork(manager) as uow:
+            assert uow.projects is not None
+            assert uow.executions is not None
+            assert uow.model_calls is not None
+            project = await uow.projects.create_project(
+                domain.Project(
+                    name="Gateway budget",
+                    root_path=str(tmp_path),
+                    default_branch="main",
+                )
+            )
+            assert project.id is not None
+            run = await uow.executions.create_run(
+                domain.Run(
+                    project_id=project.id,
+                    mode=RunMode.UNATTENDED,
+                    status=RunStatus.RUNNING,
+                    initiated_by="test",
+                    resource_limits={
+                        "max_gateway_calls": 2,
+                        "max_paid_calls": 1,
+                        "max_paid_input_tokens": 1,
+                        "max_paid_output_tokens": 1,
+                        "max_paid_usd": 0.01,
+                    },
+                )
+            )
+            assert run.id is not None
+
+            for _ in range(2):
+                await uow.model_calls.ensure_budget(
+                    project_id=project.id,
+                    run_id=run.id,
+                    estimated_input_tokens=20,
+                    estimated_output_tokens=10,
+                    provider="omniroute",
+                    model="nvidia/minimaxai/minimax-m3",
+                )
+                await uow.model_calls.record_call(
+                    domain.ModelCallLedger(
+                        project_id=project.id,
+                        run_id=run.id,
+                        provider="omniroute",
+                        model="nvidia/minimaxai/minimax-m3",
+                        reason=ChiefEngineerCallReason.ARCHITECTURE_PLAN,
+                        input_tokens=20,
+                        output_tokens=10,
+                        estimated_cost_usd=0.0,
+                        status="success",
+                    )
+                )
+
+            with pytest.raises(ValueError, match="gateway budget.*max_gateway_calls"):
+                await uow.model_calls.ensure_budget(
+                    project_id=project.id,
+                    run_id=run.id,
+                    estimated_input_tokens=20,
+                    estimated_output_tokens=10,
+                    provider="omniroute",
+                    model="nvidia/minimaxai/minimax-m3",
+                )
+            return "ok"
+
+    assert asyncio.run(exercise()) == "ok"
+    asyncio.run(manager.close())
+
+
+def test_omniroute_reported_cost_uses_shared_usd_budget(tmp_path):
+    manager = DatabaseManager(f"sqlite+aiosqlite:///{(tmp_path / 'gateway-cost.db').as_posix()}")
+    asyncio.run(bootstrap_database(manager))
+
+    async def exercise() -> str:
+        async with UnitOfWork(manager) as uow:
+            assert uow.projects is not None
+            assert uow.executions is not None
+            assert uow.model_calls is not None
+            project = await uow.projects.create_project(
+                domain.Project(name="Gateway cost", root_path=str(tmp_path), default_branch="main")
+            )
+            assert project.id is not None
+            run = await uow.executions.create_run(
+                domain.Run(
+                    project_id=project.id,
+                    mode=RunMode.UNATTENDED,
+                    status=RunStatus.RUNNING,
+                    initiated_by="test",
+                    resource_limits={"max_gateway_calls": 4, "max_paid_usd": 0.01},
+                )
+            )
+            assert run.id is not None
+            call = await uow.model_calls.record_call(
+                domain.ModelCallLedger(
+                    project_id=project.id,
+                    run_id=run.id,
+                    provider="omniroute",
+                    model="nvidia/minimaxai/minimax-m3",
+                    reason=ChiefEngineerCallReason.ARCHITECTURE_PLAN,
+                    input_tokens=20,
+                    output_tokens=10,
+                    estimated_cost_usd=0.02,
+                    status="success",
+                )
+            )
+            assert call.estimated_cost_usd == 0.02
+            with pytest.raises(ValueError, match="gateway budget.*max_paid_usd") as exc:
+                await uow.model_calls.ensure_budget(
+                    project_id=project.id,
+                    run_id=run.id,
+                    estimated_input_tokens=20,
+                    estimated_output_tokens=10,
+                    provider="omniroute",
+                    model="nvidia/minimaxai/minimax-m3",
+                )
+            return str(exc.value)
+
+    message = asyncio.run(exercise())
+    asyncio.run(manager.close())
+
+    assert "max_paid_usd" in message
 
 
 def test_api_exposes_chief_engineer_call_ledger_without_secret(tmp_path, monkeypatch):

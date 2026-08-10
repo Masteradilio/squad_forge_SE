@@ -1,6 +1,7 @@
 import os
 from collections.abc import AsyncGenerator
 from typing import Any
+from urllib.parse import quote
 
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -11,7 +12,27 @@ from sqlalchemy.ext.asyncio import (
 
 # Default to a local SQLite database file in .localforge directory
 DEFAULT_DB_URL = "sqlite+aiosqlite:///.localforge/localforge.db"
-DATABASE_URL = os.getenv("LOCALFORGE_DATABASE_URL", DEFAULT_DB_URL)
+
+
+def resolve_database_url() -> str:
+    """Resolve an explicit URL or safely assemble one from DB components."""
+    configured = os.getenv("LOCALFORGE_DATABASE_URL") or os.getenv("DATABASE_URL")
+    if configured:
+        return configured
+
+    host = os.getenv("POSTGRES_HOST")
+    if not host:
+        return DEFAULT_DB_URL
+
+    username = quote(os.getenv("POSTGRES_USER", "forgeos"), safe="")
+    password = quote(os.getenv("POSTGRES_PASSWORD", ""), safe="")
+    database = quote(os.getenv("POSTGRES_DB", "forgeos"), safe="")
+    port = os.getenv("POSTGRES_PORT", "5432")
+    credentials = f"{username}:{password}@" if password else f"{username}@"
+    return f"postgresql+asyncpg://{credentials}{host}:{port}/{database}"
+
+
+DATABASE_URL = resolve_database_url()
 
 
 class DatabaseManager:

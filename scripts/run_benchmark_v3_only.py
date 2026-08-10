@@ -148,7 +148,11 @@ async def probe_omniroute_completion(
                     },
                     {"role": "user", "content": "Return the structured probe now."},
                 ],
-                "stream": False,
+                # The real ForgeOS structured path consumes OmniRoute as an
+                # SSE stream. A non-streaming catalog probe can pass while the
+                # runtime transport is slow, incompatible, or cooling down.
+                # Probe the same wire contract used by chat_completion_validated.
+                "stream": True,
                 "max_tokens": 128,
                 "temperature": 0,
                 "reasoning_effort": "none",
@@ -165,8 +169,8 @@ async def probe_omniroute_completion(
             request.add_header("Authorization", f"Bearer {api_key}")
         try:
             with urllib.request.urlopen(request, timeout=timeout) as response:
-                body = json.loads(response.read().decode("utf-8"))
-            content = body.get("choices", [{}])[0].get("message", {}).get("content", "")
+                body_text = response.read().decode("utf-8", errors="replace")
+            content = _decode_completion_text(body_text)
             parsed = json.loads(content.strip()) if isinstance(content, str) else None
             if isinstance(parsed, dict) and isinstance(parsed.get("actions"), list) and parsed["actions"]:
                 return True, "structured probe passed"
@@ -183,6 +187,52 @@ async def probe_omniroute_completion(
             return True, route, failures
         failures.append(f"{route}: {detail}")
     return False, None, failures
+
+
+def _decode_completion_text(body_text: str) -> str:
+    """Normalize an OpenAI JSON or SSE completion body for route preflight."""
+
+    try:
+        body = json.loads(body_text)
+    except json.JSONDecodeError:
+        parts: list[str] = []
+        for line in body_text.splitlines():
+            if not line.startswith("data:"):
+                continue
+            data_text = line.removeprefix("data:").strip()
+            if not data_text or data_text == "[DONE]":
+                continue
+            try:
+                chunk = json.loads(data_text)
+            except json.JSONDecodeError:
+                continue
+            error = chunk.get("error") if isinstance(chunk, dict) else None
+            if isinstance(error, dict):
+                raise ValueError(str(error.get("message") or error)) from None
+            choices = chunk.get("choices", []) if isinstance(chunk, dict) else []
+            if not choices:
+                continue
+            choice = choices[0]
+            delta = choice.get("delta", {}) if isinstance(choice, dict) else {}
+            content = delta.get("content") if isinstance(delta, dict) else None
+            if content is None and isinstance(choice, dict):
+                message = choice.get("message", {})
+                content = message.get("content") if isinstance(message, dict) else None
+            if content:
+                parts.append(str(content))
+        return "".join(parts)
+
+    choices = body.get("choices", []) if isinstance(body, dict) else []
+    if not choices:
+        return ""
+    choice = choices[0]
+    if not isinstance(choice, dict):
+        return ""
+    message = choice.get("message", {})
+    if isinstance(message, dict) and message.get("content") is not None:
+        return str(message["content"])
+    delta = choice.get("delta", {})
+    return str(delta.get("content", "")) if isinstance(delta, dict) else ""
 
 async def run_cli_command(cwd: str, args: list[str]) -> tuple[int, str, str]:
     """Run one CLI command with a hard timeout and no orphaned child process."""

@@ -1,0 +1,29 @@
+{
+  "schema": "forgeos.recovery_evidence.v1",
+  "collected_at": "2026-08-07T18:40:41.202853+00:00",
+  "execution_scope": "local-fixture",
+  "kubernetes_real": false,
+  "status": "PASS",
+  "checks": {
+    "lease_expiry": {
+      "status": "PASS",
+      "reason": "expired claimed turn was returned to the frontier"
+    },
+    "restart_reconciliation": {
+      "status": "PASS",
+      "reason": "new kernel instance resumed the same persisted goal and journal"
+    },
+    "idempotent_writeback": {
+      "status": "PASS",
+      "reason": "duplicate result did not create an additional receipt"
+    },
+    "fail_closed": {
+      "status": "PASS",
+      "reason": "unavailable Redis endpoint did not grant a write or lease"
+    }
+  },
+  "limitations": [
+    "This temporary control-plane fixture is not a Kubernetes Pod restart.",
+    "Run the capture/reconcile modes with Kubernetes evidence before making a cluster recovery claim."
+  ]
+}

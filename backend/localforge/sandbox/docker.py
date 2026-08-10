@@ -89,7 +89,19 @@ class DockerSandbox(BaseSandbox):
                 "mode": "rw",
             }
         }
-        container_environment: dict[str, str] = {}
+        # Docker Desktop mounts the host worktree with ownership metadata
+        # that can differ from the container user. Scope Git's ownership
+        # exception to the mounted worktree for every repository shape.
+        container_environment: dict[str, str] = {
+            "GIT_CONFIG_COUNT": "2",
+            "GIT_CONFIG_KEY_0": "safe.directory",
+            "GIT_CONFIG_VALUE_0": "/workspace",
+            # Windows-mounted worktrees commonly use CRLF. Git's default
+            # diff check treats the carriage return as trailing whitespace,
+            # producing a false validation failure inside the Linux sandbox.
+            "GIT_CONFIG_KEY_1": "core.whitespace",
+            "GIT_CONFIG_VALUE_1": "cr-at-eol",
+        }
         git_metadata = self._linked_worktree_mount(abs_worktree)
         if git_metadata is not None:
             repo_root, container_git_dir = git_metadata
@@ -97,10 +109,10 @@ class DockerSandbox(BaseSandbox):
                 "bind": "/forgeos-repo",
                 "mode": "rw",
             }
-            container_environment = {
+            container_environment.update({
                 "GIT_DIR": container_git_dir,
                 "GIT_WORK_TREE": "/workspace",
-            }
+            })
 
         network_mode = "bridge" if self.network_enabled else "none"
 
@@ -151,7 +163,7 @@ class DockerSandbox(BaseSandbox):
                 loop.run_in_executor(None, operation_fn),
                 timeout=self.operation_timeout_seconds,
             )
-        except asyncio.TimeoutError as exc:
+        except TimeoutError as exc:
             raise TimeoutError(
                 f"Docker operation '{operation}' timed out after "
                 f"{self.operation_timeout_seconds:g} seconds."

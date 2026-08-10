@@ -35,7 +35,7 @@ async def test_local_sandbox_lifecycle(tmp_path):
     assert exit_code == 0
     assert "hello" in stdout
 
-    (worktree / "utf8.txt").write_bytes("ΔDYS".encode("utf-8"))
+    (worktree / "utf8.txt").write_bytes("ΔDYS".encode())
     exit_code, stdout, stderr = await sandbox.execute(
         f'{sys.executable} -c "from pathlib import Path; print(Path(\'utf8.txt\').read_text())"'
     )
@@ -201,6 +201,11 @@ async def test_docker_sandbox_mounts_common_git_for_linked_worktree(tmp_path):
     assert kwargs["environment"] == {
         "GIT_DIR": "/forgeos-repo/.git/worktrees/task-1",
         "GIT_WORK_TREE": "/workspace",
+        "GIT_CONFIG_COUNT": "2",
+        "GIT_CONFIG_KEY_0": "safe.directory",
+        "GIT_CONFIG_VALUE_0": "/workspace",
+        "GIT_CONFIG_KEY_1": "core.whitespace",
+        "GIT_CONFIG_VALUE_1": "cr-at-eol",
     }
 
 

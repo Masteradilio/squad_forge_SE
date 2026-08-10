@@ -322,6 +322,7 @@ async def test_scheduler_watchdog_cleanup(tmp_path, db_session, db_manager):
     )
     # Set started_at back in time to trigger watchdog
     task_run_data.started_at = datetime.now(UTC) - timedelta(hours=2)
+    task_run_data.heartbeat_at = task_run_data.started_at
     await uow.tasks.create_task_run(task_run_data)
     await uow.session.commit()
 

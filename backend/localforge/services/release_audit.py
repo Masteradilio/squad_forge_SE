@@ -10,7 +10,16 @@ from pydantic import BaseModel, Field
 from localforge.services.file_hashes import stable_file_sha256
 
 SECRET_TEXT_PATTERNS = (
-    re.compile(r"(?i)(api[_-]?key|secret|password|token)\s*[:=]\s*['\"]?[A-Za-z0-9_\-./:=+]{12,}"),
+    re.compile(
+        r"(?ix)"
+        r"\b(?:api[_-]?key|secret|password|token)\b\s*[:=]\s*"
+        r"(?:"
+        r"\"(?:[^\"\\]|\\.){12,}\"|"
+        r"'(?:[^'\\]|\\.){12,}'|"
+        r"sk-[A-Za-z0-9]{16,}|"
+        r"[A-Za-z0-9_-]{20,}(?=$|[\s,;])"
+        r")"
+    ),
     re.compile(r"sk-[A-Za-z0-9]{16,}"),
 )
 PERSONAL_PATH_PATTERNS = (

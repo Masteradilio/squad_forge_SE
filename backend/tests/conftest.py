@@ -22,6 +22,22 @@ _debug_thread: threading.Thread | None = None
 _debug_current_test = "<session>"
 
 
+@pytest.fixture(autouse=True)
+def _isolate_runtime_environment(monkeypatch: pytest.MonkeyPatch) -> Generator[None, None, None]:
+    """Keep the developer's local .env and runtime secrets out of tests.
+
+    Tests that exercise configuration or authentication explicitly set their
+    own variables. Clearing ambient ForgeOS/provider variables here prevents a
+    local Docker/OmniRoute session from changing unrelated test expectations
+    and prevents real credentials from entering test-created app instances.
+    """
+    prefixes = ("LOCALFORGE_", "FORGEOS_", "OMNIROUTE_", "OPENROUTER_", "NVIDIA_", "CONTEXT7_")
+    for name in list(os.environ):
+        if name.startswith(prefixes) and not name.startswith("LOCALFORGE_TEST_"):
+            monkeypatch.delenv(name, raising=False)
+    yield
+
+
 def _debug_log_path() -> str | None:
     value = os.getenv(_DEBUG_LOG_ENV)
     if not value:

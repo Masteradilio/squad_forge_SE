@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Card } from './Card';
 import { Table, type Column } from './Table';
 import { Badge } from './Badge';
@@ -48,7 +48,7 @@ export function V3Dashboard({ projectId }: V3DashboardProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -62,16 +62,18 @@ export function V3Dashboard({ projectId }: V3DashboardProps) {
       if (!costRes.ok) throw new Error('Failed to load cost report');
       const costData = await costRes.json();
       setCosts(costData);
-    } catch (err: any) {
-      setError(err.message || 'Error loading dashboard data');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Error loading dashboard data');
     } finally {
       setLoading(false);
     }
-  };
+  }, [projectId]);
 
   useEffect(() => {
-    loadData();
-  }, [projectId]);
+    // This effect synchronizes dashboard state with two external API calls.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadData();
+  }, [loadData]);
 
   if (loading) {
     return (

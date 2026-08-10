@@ -25,18 +25,29 @@ async def test_artifact_store_atomic_writes(tmp_path, db_session: AsyncSession):
     """Test physical atomic write constraints, directories layout and SHA-256 calculation."""
     uow = UnitOfWork()
     uow.session = db_session
+    uow.projects = ProjectService(db_session)
+    uow.tasks = TaskService(db_session)
     uow.audits = AuditService(db_session)
 
     store = ArtifactStore(uow)
 
     project_root = str(tmp_path / "project")
     os.makedirs(project_root)
+    project = await uow.projects.create_project(
+        domain.Project(name="Artifact project", root_path=project_root, default_branch="main")
+    )
+    task = await uow.tasks.create_task(
+        domain.Task(project_id=project.id, key="LF-01", title="Plan", description="")
+    )
+    task_run = await uow.tasks.create_task_run(
+        domain.TaskRun(run_id=10, task_id=task.id, attempt_count=1)
+    )
 
     # 1. Write an allowed artifact
     content = "my plan details"
     saved = await store.write_artifact(
         project_root=project_root,
-        task_run_id=1,
+        task_run_id=task_run.id,
         task_key="LF-01",
         run_id=10,
         filename="plan.md",
@@ -69,7 +80,7 @@ async def test_artifact_store_atomic_writes(tmp_path, db_session: AsyncSession):
     with pytest.raises(ArtifactStoreError) as exc:
         await store.write_artifact(
             project_root=project_root,
-            task_run_id=1,
+            task_run_id=task_run.id,
             task_key="LF-01",
             run_id=10,
             filename="unsupported.txt",

@@ -5,7 +5,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from localforge.models import domain
 from localforge.services.security_controls import redact_secrets_recursive
-from localforge.storage.orm import ArtifactORM, AuditEventORM, PolicyORM
+from localforge.services.tenant_context import session_tenant
+from localforge.storage.orm import (
+    ArtifactORM,
+    AuditEventORM,
+    PolicyORM,
+    ProjectORM,
+    RunORM,
+    TaskORM,
+    TaskRunORM,
+)
 
 
 class AuditService:
@@ -14,12 +23,35 @@ class AuditService:
     def __init__(self, session: AsyncSession):
         self.session = session
 
+    def _tenant_id(self) -> str:
+        return session_tenant(self.session)
+
+    async def _project_is_visible(self, project_id: int) -> bool:
+        result = await self.session.execute(
+            select(ProjectORM.id).where(
+                ProjectORM.id == project_id,
+                ProjectORM.tenant_id == self._tenant_id(),
+            )
+        )
+        return result.scalar_one_or_none() is not None
+
+    async def _task_run_is_visible(self, task_run_id: int) -> bool:
+        result = await self.session.execute(
+            select(TaskRunORM.id)
+            .join(TaskORM, TaskORM.id == TaskRunORM.task_id)
+            .join(ProjectORM, ProjectORM.id == TaskORM.project_id)
+            .where(TaskRunORM.id == task_run_id, ProjectORM.tenant_id == self._tenant_id())
+        )
+        return result.scalar_one_or_none() is not None
+
     # Audit Event Operations (Append-only)
     async def append_audit_event(self, event: domain.AuditEvent) -> domain.AuditEvent:
         """Append a new audit event.
 
         This service enforces that audit events are append-only.
         """
+        if not await self._project_is_visible(event.project_id):
+            raise ValueError("Audit event project is not accessible in the current tenant")
         event.payload_redacted = cast(
             dict[str, Any],
             redact_secrets_recursive(event.payload_redacted),
@@ -32,7 +64,9 @@ class AuditService:
     async def get_audit_event(self, event_id: int) -> domain.AuditEvent | None:
         """Retrieve an audit event by ID."""
         result = await self.session.execute(
-            select(AuditEventORM).where(AuditEventORM.id == event_id)
+            select(AuditEventORM)
+            .join(ProjectORM, ProjectORM.id == AuditEventORM.project_id)
+            .where(AuditEventORM.id == event_id, ProjectORM.tenant_id == self._tenant_id())
         )
         orm_obj = result.scalar_one_or_none()
         return orm_obj.to_domain() if orm_obj else None
@@ -41,7 +75,8 @@ class AuditService:
         """Retrieve all audit events for a project."""
         result = await self.session.execute(
             select(AuditEventORM)
-            .where(AuditEventORM.project_id == project_id)
+            .join(ProjectORM, ProjectORM.id == AuditEventORM.project_id)
+            .where(AuditEventORM.project_id == project_id, ProjectORM.tenant_id == self._tenant_id())
             .order_by(AuditEventORM.created_at.desc())
         )
         return [orm_obj.to_domain() for orm_obj in result.scalars().all()]
@@ -49,6 +84,8 @@ class AuditService:
     # Artifact Operations
     async def create_artifact(self, artifact: domain.Artifact) -> domain.Artifact:
         """Create a new artifact record."""
+        if not await self._task_run_is_visible(artifact.task_run_id):
+            raise ValueError("Artifact task run is not accessible in the current tenant")
         orm_obj = ArtifactORM.from_domain(artifact)
         self.session.add(orm_obj)
         await self.session.flush()
@@ -57,7 +94,11 @@ class AuditService:
     async def get_artifact(self, artifact_id: int) -> domain.Artifact | None:
         """Retrieve an artifact by ID."""
         result = await self.session.execute(
-            select(ArtifactORM).where(ArtifactORM.id == artifact_id)
+            select(ArtifactORM)
+            .join(TaskRunORM, TaskRunORM.id == ArtifactORM.task_run_id)
+            .join(TaskORM, TaskORM.id == TaskRunORM.task_id)
+            .join(ProjectORM, ProjectORM.id == TaskORM.project_id)
+            .where(ArtifactORM.id == artifact_id, ProjectORM.tenant_id == self._tenant_id())
         )
         orm_obj = result.scalar_one_or_none()
         return orm_obj.to_domain() if orm_obj else None
@@ -66,7 +107,10 @@ class AuditService:
         """List all artifacts generated during a specific task run."""
         result = await self.session.execute(
             select(ArtifactORM)
-            .where(ArtifactORM.task_run_id == task_run_id)
+            .join(TaskRunORM, TaskRunORM.id == ArtifactORM.task_run_id)
+            .join(TaskORM, TaskORM.id == TaskRunORM.task_id)
+            .join(ProjectORM, ProjectORM.id == TaskORM.project_id)
+            .where(ArtifactORM.task_run_id == task_run_id, ProjectORM.tenant_id == self._tenant_id())
             .order_by(ArtifactORM.created_at.desc())
         )
         return [orm_obj.to_domain() for orm_obj in result.scalars().all()]
@@ -79,7 +123,10 @@ class AuditService:
             return {}
         result = await self.session.execute(
             select(ArtifactORM)
-            .where(ArtifactORM.task_run_id.in_(task_run_ids))
+            .join(TaskRunORM, TaskRunORM.id == ArtifactORM.task_run_id)
+            .join(TaskORM, TaskORM.id == TaskRunORM.task_id)
+            .join(ProjectORM, ProjectORM.id == TaskORM.project_id)
+            .where(ArtifactORM.task_run_id.in_(task_run_ids), ProjectORM.tenant_id == self._tenant_id())
             .order_by(ArtifactORM.task_run_id, ArtifactORM.created_at.desc())
         )
         artifacts_by_task_run: dict[int, list[domain.Artifact]] = {}
@@ -90,6 +137,8 @@ class AuditService:
     # Policy Operations
     async def create_policy(self, policy: domain.Policy) -> domain.Policy:
         """Create a new policy."""
+        if not await self._project_is_visible(policy.project_id):
+            raise ValueError("Policy project is not accessible in the current tenant")
         orm_obj = PolicyORM.from_domain(policy)
         self.session.add(orm_obj)
         await self.session.flush()
@@ -97,14 +146,24 @@ class AuditService:
 
     async def get_policy(self, policy_id: int) -> domain.Policy | None:
         """Retrieve a policy by ID."""
-        result = await self.session.execute(select(PolicyORM).where(PolicyORM.id == policy_id))
+        result = await self.session.execute(
+            select(PolicyORM)
+            .join(ProjectORM, ProjectORM.id == PolicyORM.project_id)
+            .where(PolicyORM.id == policy_id, ProjectORM.tenant_id == self._tenant_id())
+        )
         orm_obj = result.scalar_one_or_none()
         return orm_obj.to_domain() if orm_obj else None
 
     async def get_project_policy(self, project_id: int, name: str) -> domain.Policy | None:
         """Retrieve a policy by name for a specific project."""
         result = await self.session.execute(
-            select(PolicyORM).where(PolicyORM.project_id == project_id, PolicyORM.name == name)
+            select(PolicyORM)
+            .join(ProjectORM, ProjectORM.id == PolicyORM.project_id)
+            .where(
+                PolicyORM.project_id == project_id,
+                PolicyORM.name == name,
+                ProjectORM.tenant_id == self._tenant_id(),
+            )
         )
         orm_obj = result.scalar_one_or_none()
         return orm_obj.to_domain() if orm_obj else None
@@ -114,7 +173,11 @@ class AuditService:
         if not policy.id:
             raise ValueError("Cannot update a policy without an ID")
 
-        result = await self.session.execute(select(PolicyORM).where(PolicyORM.id == policy.id))
+        result = await self.session.execute(
+            select(PolicyORM)
+            .join(ProjectORM, ProjectORM.id == PolicyORM.project_id)
+            .where(PolicyORM.id == policy.id, ProjectORM.tenant_id == self._tenant_id())
+        )
         orm_obj = result.scalar_one_or_none()
         if not orm_obj:
             raise ValueError(f"Policy with ID {policy.id} not found")
@@ -140,9 +203,11 @@ class AuditService:
         # 1. Fetch all audit events sorted chronologically with pagination
         events_result = await self.session.execute(
             select(AuditEventORM)
+            .join(ProjectORM, ProjectORM.id == AuditEventORM.project_id)
             .where(
                 AuditEventORM.project_id == project_id,
                 AuditEventORM.run_id == run_id,
+                ProjectORM.tenant_id == self._tenant_id(),
             )
             .order_by(AuditEventORM.created_at.asc())
             .limit(limit)
@@ -154,7 +219,10 @@ class AuditService:
         from localforge.storage.orm import TaskRunORM
 
         task_runs_result = await self.session.execute(
-            select(TaskRunORM.id).where(TaskRunORM.run_id == run_id)
+            select(TaskRunORM.id)
+            .join(TaskORM, TaskORM.id == TaskRunORM.task_id)
+            .join(ProjectORM, ProjectORM.id == TaskORM.project_id)
+            .where(TaskRunORM.run_id == run_id, ProjectORM.tenant_id == self._tenant_id())
         )
         task_run_ids = [r[0] for r in task_runs_result.all()]
 
@@ -162,7 +230,10 @@ class AuditService:
         task_run_ids_by_task: dict[int, list[int]] = {}
         if task_run_ids:
             task_runs_for_map = await self.session.execute(
-                select(TaskRunORM.id, TaskRunORM.task_id).where(TaskRunORM.run_id == run_id)
+                select(TaskRunORM.id, TaskRunORM.task_id)
+                .join(TaskORM, TaskORM.id == TaskRunORM.task_id)
+                .join(ProjectORM, ProjectORM.id == TaskORM.project_id)
+                .where(TaskRunORM.run_id == run_id, ProjectORM.tenant_id == self._tenant_id())
             )
             for tr_id, task_id in task_runs_for_map.all():
                 task_run_ids_by_task.setdefault(task_id, []).append(tr_id)

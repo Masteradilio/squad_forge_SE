@@ -24,6 +24,6 @@ describe('App 5-Menu Navigation Router', () => {
 
     // Menu 5: Modelos (OmniRoute), BYOK & Live Preview
     fireEvent.click(screen.getByText(/5. Modelos \(OmniRoute\)/i));
-    expect(screen.getByText(/Configurações de Modelos & Ambiente/i)).toBeTruthy();
+    expect(screen.getByText(/OmniRoute routing/i)).toBeTruthy();
   });
 });

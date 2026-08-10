@@ -7,6 +7,7 @@ import json
 import os
 import shutil
 import sqlite3
+import subprocess
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -35,6 +36,43 @@ from scripts import run_benchmark_v3_only as cloud  # noqa: E402
 
 def _db_path() -> Path:
     return WORKSPACE / ".localforge" / "localforge.db"
+
+
+def _prepare_isolated_git_workspace() -> None:
+    """Seed a disposable benchmark repository from the current checkout."""
+
+    def _ignore(path: str, names: list[str]) -> set[str]:
+        ignored = {
+            ".git",
+            ".localforge",
+            ".deepeval",
+            ".benchmarks",
+            ".env",
+            "__pycache__",
+            ".pytest_cache",
+            "node_modules",
+            "dist",
+            "build",
+            "benchmarks",
+            "artifacts",
+        }
+        return {name for name in names if name in ignored}
+
+    shutil.copytree(ROOT, WORKSPACE, ignore=_ignore)
+    for args in (
+        ["git", "init", "-b", "main"],
+        ["git", "config", "user.name", "ForgeOS Benchmark"],
+        ["git", "config", "user.email", "benchmark@localforge.invalid"],
+        ["git", "add", "-A"],
+        ["git", "commit", "-m", "ForgeOS benchmark baseline"],
+    ):
+        subprocess.run(
+            args,
+            cwd=WORKSPACE,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
 
 
 def _apply_contracts(database: Path) -> dict[str, int]:
@@ -156,6 +194,9 @@ def _patch_v7_config(workspace: Path, route: str, free_routes: list[str]) -> Non
         # Free OmniRoute routes can require a bounded fallback ladder plus a
         # release-evidence repair. Keep the ceiling finite, but do not turn a
         # recoverable validation failure into an artificial budget blocker.
+        # Gateway calls are bounded separately because the selected upstream
+        # route may report zero cost without a ``:free`` model suffix.
+        "max_gateway_calls": 48,
         "max_paid_calls": 24,
         "max_paid_input_tokens": 200_000,
         "max_paid_output_tokens": 60_000,
@@ -169,6 +210,12 @@ def _patch_v7_config(workspace: Path, route: str, free_routes: list[str]) -> Non
         # harness is still a bounded change, but commonly exceeds 2 KiB.
         "max_diff_growth": 24_000,
     }
+    tester_command = os.environ.get("LOCALFORGE_BENCHMARK_TESTER_COMMAND")
+    if tester_command:
+        config["release"] = {
+            **config.get("release", {}),
+            "tester_command": tester_command,
+        }
     path.write_text(yaml.safe_dump(config, sort_keys=True), encoding="utf-8", newline="\n")
 
 
@@ -204,7 +251,11 @@ def _query(database: Path) -> dict[str, Any]:
 
 
 def _control_plane_projection() -> dict[str, Any] | None:
-    candidates = sorted((WORKSPACE / ".localforge" / "control_plane").glob("run-*.json"))
+    control_plane_dir = WORKSPACE / ".localforge" / "control_plane"
+    candidates = sorted(
+        [*control_plane_dir.glob("run-*.json"), *control_plane_dir.glob("goal-*.json")],
+        key=lambda path: path.stat().st_mtime,
+    )
     if not candidates:
         return None
     return json.loads(candidates[-1].read_text(encoding="utf-8"))
@@ -216,7 +267,10 @@ async def main() -> int:
         raise FileNotFoundError(PRD)
     if WORKSPACE.exists():
         shutil.rmtree(WORKSPACE)
-    WORKSPACE.mkdir(parents=True, exist_ok=True)
+    if os.environ.get("LOCALFORGE_BENCHMARK_ISOLATED_REPO") == "1":
+        _prepare_isolated_git_workspace()
+    else:
+        WORKSPACE.mkdir(parents=True, exist_ok=True)
     await cloud.prune_git_worktrees()
 
     commands: list[dict[str, Any]] = []

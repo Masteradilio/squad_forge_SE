@@ -17,7 +17,10 @@ async def generate_model_assisted_plan(
                 "Return only structured JSON matching the schema. For each task, preserve "
                 "explicit file paths in expected_files. Put explicitly stated contract facts "
                 "in metadata keys depends_on, required_public_apis, forbidden_dependencies, "
-                "and implementation_notes. Use lists of strings and leave a field empty when "
+                "and implementation_notes. For visual products, preserve a JSON-safe "
+                "visual_acceptance_matrix list with row/column, labels, colors, locators, "
+                "states, and actions; do not summarize away visual acceptance facts. Use lists "
+                "of strings and leave a field empty when "
                 "the PRD does not support it; do not invent benchmark- or domain-specific APIs."
             ),
         },

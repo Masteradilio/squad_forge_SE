@@ -3,6 +3,7 @@ import os
 from localforge.models import domain
 from localforge.models.enums import AgentRole, HandoffKind, TaskStatus
 from localforge.runtime.actions import normalize_runtime_command, parse_action_proposals
+from localforge.runtime.agent_harness import AgentHarness, ContextBlock, compact_context
 from localforge.runtime.compression import compress_tool_output
 from localforge.runtime.context import TaskContextBuilder
 from localforge.runtime.file_tools import SafeFileEditor
@@ -16,6 +17,7 @@ class LeadAgentRuntime:
         self.uow = uow
         self.project_id = project_id
         self.run_id = run_id
+        self.harness = AgentHarness()
 
     async def run_task(self, task_id: int, task_run_id: int) -> str:
         assert self.uow.tasks is not None
@@ -23,15 +25,25 @@ class LeadAgentRuntime:
         task_run = await self.uow.tasks.get_task_run(task_run_id)
         if not task or not task_run or not task_run.worktree_path:
             raise ValueError("Task and task run with worktree are required.")
+        self.harness.attach_harness_state(task_run.worktree_path)
 
         context = await TaskContextBuilder(self.uow).build(task_id, task_run.worktree_path)
+        execution_span = self.harness.tracer.start_span(
+            "Developer",
+            "legacy_runtime_actions",
+            metadata={"strategy": "code_act", "task_id": task_id, "run_id": self.run_id},
+        )
+        bounded_context, _ = compact_context(
+            [ContextBlock(name="task_context", content=context.rendered, required=True)],
+            budget=12000,
+        )
         plan_artifact = await ArtifactStore(self.uow).write_artifact(
             project_root=task_run.worktree_path,
             task_run_id=task_run_id,
             task_key=task.key,
             run_id=self.run_id,
             filename="plan.md",
-            content=f"# Plan\n\nUse runtime actions for {task.key}.\n\n{context.rendered}",
+            content=f"# Plan\n\nUse runtime actions for {task.key}.\n\n{bounded_context}",
             summary="Lead agent plan",
         )
 
@@ -137,4 +149,5 @@ class LeadAgentRuntime:
             content="\n".join([summary, *command_summaries]),
             summary="Lead agent summary",
         )
+        self.harness.tracer.end_span(execution_span.span_id, status="SUCCESS")
         return summary

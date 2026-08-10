@@ -1,7 +1,5 @@
 import os
 
-import os
-
 from localforge.models.enums import RunMode
 from localforge.safety.runner import run_safe_command
 from localforge.storage import UnitOfWork
@@ -200,6 +198,21 @@ class GitAdapter:
         """Get the hash of the current commit (HEAD)."""
         out = await self._execute_git(["rev-parse", "HEAD"])
         return out.strip()
+
+    async def status_porcelain(self) -> str:
+        """Return machine-readable changes for clean-target release checks."""
+        return await self._execute_git(["status", "--porcelain"], use_task_context=False)
+
+    async def merge_branch(self, branch_name: str) -> None:
+        """Merge one already-reviewed task branch into the current target branch."""
+        await self._execute_git(
+            ["merge", "--no-ff", "--no-edit", branch_name],
+            use_task_context=False,
+        )
+
+    async def merge_abort(self) -> None:
+        """Abort an in-progress merge after a conflict or command failure."""
+        await self._execute_git(["merge", "--abort"], use_task_context=False)
 
     async def resolve_ref(self, ref: str, *, use_task_context: bool = True) -> str:
         """Resolve a Git ref to an immutable commit hash."""

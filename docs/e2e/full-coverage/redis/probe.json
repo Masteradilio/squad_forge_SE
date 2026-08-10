@@ -1,0 +1,11 @@
+{
+  "redis_url": "redis://:***@127.0.0.1:6379/0",
+  "checks": {
+    "cache_round_trip": true,
+    "pubsub_round_trip": true,
+    "sequential_lock_exclusive": true,
+    "concurrent_lock_exclusive": true
+  },
+  "status": "PASS",
+  "reason": "Redis cache, pub/sub, and exclusive lock passed"
+}

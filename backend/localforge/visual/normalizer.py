@@ -26,8 +26,8 @@ def apply_visual_contract_normalization(
             ".lcd-container, .lcd-area, .lcd-wrap {"
             "justify-content: flex-start !important; margin-left: 1% !important; }"
         )
-    if "rectangular_hp_badge" in structure_rules:
-        overrides.append(".hp-badge { border-radius: 6px !important; }")
+    if "rectangular_brand_badge" in structure_rules:
+        overrides.append(".brand-badge { border-radius: 6px !important; }")
     if not overrides:
         return False
     try:

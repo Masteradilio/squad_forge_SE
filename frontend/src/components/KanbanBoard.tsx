@@ -4,13 +4,15 @@ import { StatusBadge } from './Badge';
 import { Card } from './Card';
 import { Button } from './Button';
 import { apiClient } from '../api/client';
+import { ResourceState } from './ResourceState';
 
 interface KanbanBoardProps {
   tasks: Task[];
   activeProjectId?: number;
+  loading?: boolean;
+  error?: string | null;
   onTaskClick?: (task: Task) => void;
   onRefresh?: () => void;
-  onStartSquad?: () => void;
   onResetAll?: () => void;
 }
 
@@ -22,6 +24,15 @@ export interface KanbanColumnConfig {
   wipLimit: number;
 }
 
+interface TaskWithAgentAction extends Task {
+  agent_action?: {
+    agent_role: string;
+    action_summary: string;
+  };
+}
+
+// These exports are also consumed by the focused Kanban unit tests.
+// eslint-disable-next-line react-refresh/only-export-components
 export const KANBAN_COLUMNS: KanbanColumnConfig[] = [
   { id: 'BACKLOG', title: '1. Backlog de Tarefas', statuses: ['BACKLOG', 'PLANNING'], color: '#6b7280', wipLimit: 10 },
   { id: 'IN_PROGRESS', title: '2. Em Andamento (WIP)', statuses: ['READY', 'CLAIMED', 'IMPLEMENTING', 'TESTING', 'REPAIRING', 'REVIEWING'], color: '#3b82f6', wipLimit: 5 },
@@ -29,11 +40,20 @@ export const KANBAN_COLUMNS: KanbanColumnConfig[] = [
   { id: 'DONE', title: '4. Finalizado (PR_READY)', statuses: ['PR_READY', 'DONE'], color: '#10b981', wipLimit: 20 },
 ];
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function tasksForColumn(tasks: Task[], statuses: readonly string[]): Task[] {
   return tasks.filter((task) => statuses.includes(task.status));
 }
 
-export function KanbanBoard({ tasks, activeProjectId, onTaskClick, onRefresh, onStartSquad, onResetAll }: KanbanBoardProps) {
+export function KanbanBoard({
+  tasks,
+  activeProjectId,
+  loading = false,
+  error = null,
+  onTaskClick,
+  onRefresh,
+  onResetAll,
+}: KanbanBoardProps) {
   const [rejectModalTask, setRejectModalTask] = useState<Task | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
   const [processingPR, setProcessingPR] = useState(false);
@@ -57,8 +77,9 @@ export function KanbanBoard({ tasks, activeProjectId, onTaskClick, onRefresh, on
       setStartingSquad(true);
       await apiClient.startSquad(activeProjectId);
       onRefresh?.();
-    } catch (err: any) {
-      alert(`Falha ao iniciar Squad: ${err.message || err}`);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      alert(`Falha ao iniciar Squad: ${message}`);
     } finally {
       setStartingSquad(false);
     }
@@ -71,8 +92,9 @@ export function KanbanBoard({ tasks, activeProjectId, onTaskClick, onRefresh, on
       await apiClient.resetAll();
       alert('🧹 Ambiente e banco de dados zerados com sucesso!');
       onResetAll?.();
-    } catch (err: any) {
-      alert(`Falha ao resetar ambiente: ${err.message || err}`);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      alert(`Falha ao resetar ambiente: ${message}`);
     } finally {
       setResetting(false);
     }
@@ -82,7 +104,7 @@ export function KanbanBoard({ tasks, activeProjectId, onTaskClick, onRefresh, on
     try {
       setProcessingPR(true);
       await apiClient.approvePR(taskId);
-      alert('PR aprovado pelo PO e mergeado na main com sucesso! 🚀');
+      alert('PR aprovado pelo PO e preparado para merge. O merge na main continua sendo uma ação humana explícita.');
       onRefresh?.();
     } catch (err) {
       alert(`Falha ao aprovar PR: ${err}`);
@@ -108,7 +130,7 @@ export function KanbanBoard({ tasks, activeProjectId, onTaskClick, onRefresh, on
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+    <div data-testid="tasks-view" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       {/* Header & Filter Bar (Cline Kanban Style) */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--bg-secondary)', padding: '16px 20px', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
         <div>
@@ -156,6 +178,39 @@ export function KanbanBoard({ tasks, activeProjectId, onTaskClick, onRefresh, on
         </div>
       </div>
 
+      {loading && (
+        <ResourceState
+          status="loading"
+          title="Carregando tarefas reais"
+          message="Consultando tarefas e telemetria do projeto no backend."
+          testId="tasks-state-loading"
+        />
+      )}
+      {!loading && error && (
+        <ResourceState
+          status="error"
+          title="Tarefas indisponíveis"
+          message={error}
+          testId="tasks-state-error"
+        />
+      )}
+      {!loading && !error && !activeProjectId && tasks.length === 0 && (
+        <ResourceState
+          status="blocked"
+          title="Tarefas bloqueadas"
+          message="Selecione um projeto ativo para consultar tarefas reais."
+          testId="tasks-state-blocked"
+        />
+      )}
+      {!loading && !error && activeProjectId && tasks.length === 0 && (
+        <ResourceState
+          status="empty"
+          title="Nenhuma tarefa retornada"
+          message="A API respondeu sem tarefas para o projeto ativo."
+          testId="tasks-state-empty"
+        />
+      )}
+
       {/* Top 4-Column Board */}
       <div style={{ display: 'flex', gap: '16px', overflowX: 'auto', paddingBottom: '16px', minHeight: '520px' }}>
         {KANBAN_COLUMNS.map((column) => {
@@ -165,6 +220,7 @@ export function KanbanBoard({ tasks, activeProjectId, onTaskClick, onRefresh, on
           return (
             <div
               key={column.id}
+              data-testid={`tasks-column-${column.id.toLowerCase()}`}
               style={{
                 flex: '1 1 280px',
                 backgroundColor: 'var(--bg-secondary)',
@@ -232,7 +288,7 @@ export function KanbanBoard({ tasks, activeProjectId, onTaskClick, onRefresh, on
                     </div>
 
                     {/* Real-time Agent Action Tracing Box inside Task Card */}
-                    {(task as any).agent_action && (
+                    {(task as TaskWithAgentAction).agent_action && (
                       <div
                         style={{
                           marginTop: '6px',
@@ -256,10 +312,10 @@ export function KanbanBoard({ tasks, activeProjectId, onTaskClick, onRefresh, on
                               boxShadow: '0 0 8px #3b82f6',
                             }}
                           />
-                          {(task as any).agent_action.agent_role}
+                          {(task as TaskWithAgentAction).agent_action?.agent_role}
                         </div>
                         <div style={{ marginTop: '4px', color: '#e2e8f0', fontFamily: 'monospace', fontSize: '10px' }}>
-                          {(task as any).agent_action.action_summary}
+                          {(task as TaskWithAgentAction).agent_action?.action_summary}
                         </div>
                       </div>
                     )}
@@ -285,7 +341,7 @@ export function KanbanBoard({ tasks, activeProjectId, onTaskClick, onRefresh, on
       </div>
 
       {/* Bottom PR Review Section */}
-      <Card style={{ padding: '20px', borderTop: '4px solid #10b981' }}>
+      <Card testId="review-panel" style={{ padding: '20px', borderTop: '4px solid #10b981' }}>
         <h2 style={{ fontSize: '18px', fontWeight: 700, margin: '0 0 16px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
           🔍 Painel de Revisão & Aprovação de PRs pelo Product Owner
         </h2>

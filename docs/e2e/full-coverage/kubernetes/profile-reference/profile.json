@@ -1,0 +1,23 @@
+{
+  "schema": "forgeos.kubernetes_benchmark_profile.v1",
+  "run_id": "reference-profile",
+  "namespace": "forgeos-benchmark-reference-profile",
+  "secret_values_versioned": false,
+  "resource_bounds": {
+    "active_deadline_seconds": 5400,
+    "task_deadline_seconds": 900,
+    "parallel_tasks": 2,
+    "max_active_model_calls": 4,
+    "pids_limit": 256,
+    "egress": [
+      "namespace services",
+      "cluster DNS",
+      "declared HTTPS connectors"
+    ]
+  },
+  "cleanup": {
+    "policy": "ttl-after-finished then explicit namespace deletion",
+    "command": "kubectl delete namespace forgeos-benchmark-reference-profile --wait=true"
+  },
+  "manifest": "manifest.yaml"
+}

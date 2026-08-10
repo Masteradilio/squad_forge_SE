@@ -1,4 +1,4 @@
-import json
+import asyncio
 import json
 import os
 from collections.abc import AsyncIterator
@@ -279,7 +279,14 @@ class OpenAICompatibleProvider(BaseLLMProvider):
 
         try:
             async with httpx.AsyncClient(timeout=timeout) as client:
-                resp = await client.post(url, headers=headers, json=payload)
+                # httpx read timeouts are idle-time limits and can be reset by
+                # a slow upstream response body. Keep a wall-clock deadline
+                # around the complete non-streaming request as well, so a
+                # stalled OmniRoute route cannot hold an unattended task.
+                resp = await asyncio.wait_for(
+                    client.post(url, headers=headers, json=payload),
+                    timeout=max(1.0, float(timeout)),
+                )
                 if resp.status_code != 200:
                     raise LLMHTTPError(
                         f"Completion API failed ({resp.status_code}): {resp.text}",

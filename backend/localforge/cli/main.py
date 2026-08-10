@@ -30,6 +30,7 @@ except ModuleNotFoundError:
 
 from localforge.cli.autonomy import autonomy_app
 from localforge.cli.benchmark import benchmark_app
+from localforge.cli.capabilities import capabilities_app
 from localforge.cli.circuit_breakers import breakers_app
 from localforge.cli.control import (
     chief_engineer_app,
@@ -48,6 +49,7 @@ from localforge.cli.control_plane import control_plane_app
 from localforge.cli.costs import costs_app
 from localforge.cli.demo import demo_cmd
 from localforge.cli.doctor import doctor_cmd
+from localforge.cli.engineering import engineering_app
 from localforge.cli.import_prd import import_prd_cmd
 from localforge.cli.init import init_cmd
 from localforge.cli.light_swarm import swarm_app
@@ -56,6 +58,8 @@ from localforge.cli.memory import memory_app
 from localforge.cli.operational_loops import ops_loops_app
 from localforge.cli.plan import plan_cmd
 from localforge.cli.prs import prs_cmd
+from localforge.cli.references import references_app
+from localforge.cli.release import release_app
 from localforge.cli.run import run_cmd
 from localforge.cli.runners import runners_app
 from localforge.cli.squad import squad_app
@@ -134,6 +138,10 @@ app.add_typer(graph_app, name="graph")
 app.add_typer(memory_app, name="memory")
 app.add_typer(ops_loops_app, name="loops-eval")
 app.add_typer(control_plane_app, name="control-plane")
+app.add_typer(capabilities_app, name="deepcode")
+app.add_typer(references_app, name="references")
+app.add_typer(engineering_app, name="engineering")
+app.add_typer(release_app, name="release")
 
 
 if __name__ == "__main__":

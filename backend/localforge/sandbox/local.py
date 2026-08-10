@@ -1,9 +1,10 @@
 import asyncio
 import os
 import shutil
-import signal
 import subprocess
+from typing import Any
 
+from localforge.runtime.process_tree import ProcessTreeController
 from localforge.safety.command_validator import command_to_argv
 from localforge.sandbox.base import BaseSandbox
 
@@ -14,6 +15,7 @@ class LocalSandbox(BaseSandbox):
     def __init__(self, worktree_path: str):
         self.worktree_path = worktree_path
         self._status = "stopped"
+        self.process_tree = ProcessTreeController()
 
     async def create(self) -> None:
         """Provision local worktree directory checks."""
@@ -43,6 +45,7 @@ class LocalSandbox(BaseSandbox):
             start_new_session=os.name != "nt",
             creationflags=creationflags,
         )
+        self.process_tree.attach(proc)
 
         try:
             stdout_bytes, stderr_bytes = await asyncio.wait_for(proc.communicate(), timeout=timeout)
@@ -59,29 +62,15 @@ class LocalSandbox(BaseSandbox):
         return exit_code, stdout_str, stderr_str
 
     async def _terminate_process(self, proc: asyncio.subprocess.Process) -> None:
-        if proc.returncode is None:
-            try:
-                if os.name == "nt":
-                    proc.send_signal(signal.CTRL_BREAK_EVENT)
-                else:
-                    killpg = getattr(os, "killpg", None)
-                    sigkill = getattr(signal, "SIGKILL", 9)
-                    if callable(killpg):
-                        killpg(proc.pid, sigkill)
-                    else:
-                        proc.kill()
-            except ProcessLookupError:
-                pass
-            except OSError:
-                proc.kill()
-        try:
-            await asyncio.wait_for(asyncio.shield(proc.wait()), timeout=5.0)
-        except (TimeoutError, ProcessLookupError):
-            pass
+        await self.process_tree.terminate(proc, "timeout_or_cancel")
         try:
             await asyncio.wait_for(asyncio.shield(proc.communicate()), timeout=5.0)
         except (TimeoutError, ProcessLookupError, ValueError):
             pass
+
+    def process_tree_evidence(self) -> dict[str, Any] | None:
+        evidence = self.process_tree.evidence
+        return evidence.as_dict() if evidence else None
 
     async def copy_to(self, host_path: str, container_path: str) -> None:
         """Copy files locally if paths differ."""

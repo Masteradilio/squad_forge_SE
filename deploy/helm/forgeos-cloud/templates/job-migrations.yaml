@@ -1,0 +1,63 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "forgeos-cloud.fullname" . }}-migrations
+  labels:
+    {{- include "forgeos-cloud.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 1
+  activeDeadlineSeconds: 300
+  template:
+    metadata:
+      labels:
+        {{- include "forgeos-cloud.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: migrations
+    spec:
+      restartPolicy: Never
+      # This is a pre-install hook, so normal chart ServiceAccounts do not
+      # exist yet. The migration only needs database access; use the namespace
+      # default identity without mounting a Kubernetes token.
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: migrations
+          image: "{{ .Values.backend.image.repository }}:{{ .Values.backend.image.tag }}"
+          imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
+          command: ["localforge", "init"]
+          envFrom:
+            - configMapRef:
+                name: {{ include "forgeos-cloud.fullname" . }}-config
+            - secretRef:
+                name: {{ .Values.secrets.existingSecret }}
+                optional: false
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          volumeMounts:
+            - name: forgeos-runtime
+              mountPath: /app/.localforge
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: forgeos-runtime
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}

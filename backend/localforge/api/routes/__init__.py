@@ -1,6 +1,7 @@
 from localforge.api.routes.autonomy import router as autonomy_router
 from localforge.api.routes.circuit_breakers import router as circuit_breakers_router
 from localforge.api.routes.light_swarm import router as light_swarm_router
+from localforge.api.routes.harness import router as harness_router
 from localforge.api.routes.loops import router as loops_router
 from localforge.api.routes.memory import router as memory_router
 from localforge.api.routes.operational_loops import router as operational_loops_router
@@ -13,6 +14,7 @@ __all__ = [
     "autonomy_router",
     "circuit_breakers_router",
     "light_swarm_router",
+    "harness_router",
     "loops_router",
     "memory_router",
     "operational_loops_router",

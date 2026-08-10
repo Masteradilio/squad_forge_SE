@@ -205,8 +205,8 @@ class WorktreeManager:
     ) -> tuple[bool, str | None]:
         """Resolve an opt-in product chain for PRDs without explicit dependencies.
 
-        The HP12C acceptance run is intentionally sequential: each task must
-        start from the latest PR-ready branch produced by the previous task.
+        Some product PRDs intentionally require a sequential chain: each task
+        starts from the latest PR-ready branch produced by the previous task.
         Normal projects retain the existing dependency-only behavior.
         """
         if not await self._sequential_task_chain_enabled():

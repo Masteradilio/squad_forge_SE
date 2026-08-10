@@ -20,7 +20,7 @@ export function OperationsStream({ events }: { events: LifecycleEventPayload[] }
   });
 
   return (
-    <aside style={{
+    <aside className="operations-stream" data-testid="operations-stream" style={{
       width: '320px',
       backgroundColor: 'var(--bg-sidebar)',
       borderLeft: '1px solid var(--border-color)',

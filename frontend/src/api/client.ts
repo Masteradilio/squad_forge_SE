@@ -106,7 +106,7 @@ export interface Handoff {
   from_role: string;
   to_role: string;
   kind: string;
-  payload_json: Record<string, any>;
+  payload_json: Record<string, unknown>;
   priority: number;
   status: string;
   created_at: string;
@@ -139,7 +139,7 @@ export interface AuditEvent {
   actor_type: string;
   actor_id: string;
   event_type: string;
-  payload_redacted: Record<string, any>;
+  payload_redacted: Record<string, unknown>;
   created_at: string;
 }
 
@@ -147,7 +147,7 @@ export interface Policy {
   id: number;
   project_id: number;
   name: string;
-  rules: Record<string, any>;
+  rules: Record<string, unknown>;
 }
 
 export interface ActionApproval {
@@ -156,7 +156,7 @@ export interface ActionApproval {
   run_id?: number;
   task_id?: number;
   kind: string;
-  payload: Record<string, any>;
+  payload: Record<string, unknown>;
   status: string;
   created_at: string;
   decided_at?: string;
@@ -195,15 +195,61 @@ export interface MemoryFact {
 export interface SkillDefinition {
   name: string;
   purpose: string;
+  system_prompt?: string;
   triggers: string[];
   allowed_actions: string[];
   expected_artifacts: string[];
   failure_modes: string[];
   examples: string[];
+  strategy?: 'auto' | 'predict' | 'code_act';
+  max_retries?: number;
+  context_budget?: number;
+  runtime?: 'instruction' | 'python';
+  entrypoint?: string;
+  permissions?: string[];
+  dependencies?: string[];
+  manifest_version?: number;
   source: string;
   enabled?: boolean;
   last_used_at?: string;
   success_rate?: number;
+}
+
+export interface EngineeringSession {
+  id: string;
+  project_id: number;
+  title: string;
+  status: string;
+  current_goal_id?: string | null;
+  revision: number;
+}
+
+export interface ReferenceSource {
+  id: string;
+  name: string;
+  source_type: string;
+  content_hash: string;
+  injection_status: string;
+  redaction_status: string;
+}
+
+export interface ReferenceHit {
+  chunk_id: string;
+  source_id: string;
+  score: number;
+  text: string;
+  section?: string;
+  line_start: number;
+  line_end: number;
+  citation: string;
+}
+
+export interface Automation {
+  id: string;
+  name: string;
+  status: string;
+  trigger_kind: string;
+  next_run_at?: string | null;
 }
 
 export interface WorktreeInfo {
@@ -240,7 +286,7 @@ export interface ChiefEngineerCall {
   status: string;
   error_summary?: string;
   duration_ms: number;
-  metadata: Record<string, any>;
+  metadata: Record<string, unknown>;
   created_at: string;
 }
 
@@ -249,7 +295,7 @@ export interface ChiefEngineerUsage {
   model: string;
   enabled: boolean;
   api_key_configured: boolean;
-  budget: Record<string, any>;
+  budget: Record<string, unknown>;
   calls: ChiefEngineerCall[];
 }
 
@@ -261,8 +307,8 @@ export interface ProjectSettings {
   remote_url?: string;
   model_endpoint: string;
   sandbox_mode: string;
-  resource_limits: Record<string, any>;
-  ui_preferences: Record<string, any>;
+  resource_limits: Record<string, unknown>;
+  ui_preferences: Record<string, unknown>;
 }
 
 export interface ArtifactContent {
@@ -303,7 +349,12 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
       typeof errorData.detail === 'string'
         ? errorData.detail
         : Array.isArray(errorData.detail)
-        ? errorData.detail.map((d: any) => d.msg || JSON.stringify(d)).join(', ')
+        ? errorData.detail.map((d: unknown) => {
+            if (typeof d === 'object' && d !== null && 'msg' in d) {
+              return String(d.msg);
+            }
+            return JSON.stringify(d);
+          }).join(', ')
         : `Request failed with status ${response.status}`;
     throw new Error(detailMsg);
   }
@@ -367,8 +418,12 @@ export const apiClient = {
     });
   },
 
-  fetchTelemetrySpans(projectId: number): Promise<any[]> {
-    return request<any[]>(`/api/projects/${projectId}/telemetry-spans`);
+  fetchTelemetrySpans(projectId: number): Promise<unknown[]> {
+    return request<unknown[]>(`/api/projects/${projectId}/telemetry-spans`);
+  },
+
+  fetchTelemetryEvents(projectId: number): Promise<unknown[]> {
+    return request<unknown[]>(`/api/projects/${projectId}/telemetry-events`);
   },
 
   fetchTasks(projectId: number): Promise<Task[]> {
@@ -413,14 +468,14 @@ export const apiClient = {
     return request<Artifact[]>(`/api/tasks/${task_id}/artifacts`);
   },
 
-  fetchPolicy(projectId: number, name: string): Promise<Policy> {
-    return request<Policy>(`/api/projects/${projectId}/policies/${name}`).catch(() => null as any);
+  fetchPolicy(projectId: number, name: string): Promise<Policy | null> {
+    return request<Policy>(`/api/projects/${projectId}/policies/${name}`).catch(() => null);
   },
 
   updatePolicy(
     projectId: number,
     name: string,
-    rules: Record<string, any>
+    rules: Record<string, unknown>
   ): Promise<Policy> {
     return request<Policy>(`/api/projects/${projectId}/policies/${name}`, {
       method: 'PUT',
@@ -454,6 +509,39 @@ export const apiClient = {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
+    });
+  },
+
+  fetchEngineeringSessions(projectId: number): Promise<EngineeringSession[]> {
+    return request<EngineeringSession[]>(`/api/projects/${projectId}/engineering/sessions`);
+  },
+
+  fetchReferences(projectId: number): Promise<ReferenceSource[]> {
+    return request<ReferenceSource[]>(`/api/projects/${projectId}/references`);
+  },
+
+  searchReferences(projectId: number, query: string): Promise<ReferenceHit[]> {
+    return request<ReferenceHit[]>(`/api/projects/${projectId}/references/search`, {
+      method: 'POST',
+      body: JSON.stringify({ query, limit: 8 }),
+    });
+  },
+
+  fetchAutomations(projectId: number): Promise<Automation[]> {
+    return request<Automation[]>(`/api/projects/${projectId}/automations`);
+  },
+
+  discoverModelCatalog(projectId: number): Promise<Record<string, unknown>[]> {
+    return request<Record<string, unknown>[]>(`/api/projects/${projectId}/models/catalog/discover`, { method: 'POST' });
+  },
+
+  fetchSkillManifest(projectId: number, name: string): Promise<Record<string, unknown>> {
+    return request<Record<string, unknown>>(`/api/projects/${projectId}/skills/${name}/manifest`);
+  },
+
+  deleteSkill(projectId: number, name: string): Promise<{ status: string; name: string }> {
+    return request<{ status: string; name: string }>(`/api/projects/${projectId}/skills/${name}`, {
+      method: 'DELETE',
     });
   },
 

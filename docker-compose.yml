@@ -6,7 +6,9 @@ services:
     image: diegosouzapw/omniroute:latest
     container_name: forgeos-omniroute
     ports:
-      - "127.0.0.1:20128:20128"
+      # The host port is configurable because another local OmniRoute may
+      # already occupy 20128. Container-to-container traffic remains 20128.
+      - "127.0.0.1:${OMNIROUTE_HOST_PORT:-20128}:20128"
     environment:
       - PORT=20128
       - HOST=0.0.0.0
@@ -48,6 +50,10 @@ services:
   redis:
     image: redis:7-alpine
     container_name: forgeos-redis
+    ports:
+      # Host access is intentional for local probes and diagnostics. The
+      # backend still uses the internal Docker DNS name (redis:6379).
+      - "127.0.0.1:${REDIS_HOST_PORT:-6379}:6379"
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD must be set}
     command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD must be set}"]
@@ -67,10 +73,17 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql+asyncpg://forgeos:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@postgres:5432/forgeos
-      - LOCALFORGE_DATABASE_URL=postgresql+asyncpg://forgeos:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@postgres:5432/forgeos
-      - LOCALFORGE_REDIS_URL=redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set}@redis:6379/0
-      - REDIS_URL=redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set}@redis:6379/0
+      # URLs are assembled by the backend with URL-encoded credentials.
+      # Keeping credentials as components avoids breaking on @, :, %, or #.
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=forgeos
+      - POSTGRES_USER=forgeos
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_DB=0
+      - REDIS_PASSWORD=${REDIS_PASSWORD:?REDIS_PASSWORD must be set}
       - LOCALFORGE_MODEL_BASE_URL=http://omniroute:20128/v1
       - LOCALFORGE_MODEL_PROVIDER=omniroute
       - LOCALFORGE_DEFAULT_MODEL=${LOCALFORGE_DEFAULT_MODEL:-auto/best-free}
@@ -119,9 +132,10 @@ services:
       dockerfile: Dockerfile.frontend
     container_name: forgeos-frontend
     ports:
-      - "80:80"
-      - "5173:80"
+      - "80:8080"
+      - "5173:8080"
     environment:
+      - NGINX_PORT=8080
       - LOCALFORGE_API_TOKEN=${LOCALFORGE_API_TOKEN:?LOCALFORGE_API_TOKEN must be set}
     depends_on:
       - backend

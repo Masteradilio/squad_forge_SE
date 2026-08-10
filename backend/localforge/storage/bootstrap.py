@@ -6,14 +6,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession
 
 from localforge.storage.database import DatabaseManager
 from localforge.storage.orm import Base, SchemaVersionORM
 
 logger = logging.getLogger(__name__)
 
-CURRENT_VERSION = 20
+CURRENT_VERSION = 26
 
 
 class UnsupportedSchemaVersionError(RuntimeError):
@@ -88,6 +88,7 @@ async def get_current_schema_version(session: AsyncSession) -> int:
         if row:
             return int(row[0])
         return 0
+
     except Exception:
         # Table likely does not exist (SQLite raises OperationalError, PostgreSQL raises ProgrammingError/UndefinedTableError)
         try:
@@ -95,6 +96,31 @@ async def get_current_schema_version(session: AsyncSession) -> int:
         except Exception:
             pass
         return 0
+
+
+async def get_table_columns(connection: AsyncConnection, table_name: str) -> set[str]:
+    """Return table column names without issuing SQLite-only SQL to PostgreSQL."""
+    if not table_name.isidentifier():
+        raise ValueError(f"invalid table name: {table_name}")
+
+    if connection.dialect.name == "sqlite":
+        result = await connection.execute(text(f"PRAGMA table_info({table_name})"))
+        return {str(row[1]) for row in result.fetchall()}
+
+    if connection.dialect.name == "postgresql":
+        result = await connection.execute(
+            text(
+                "SELECT column_name "
+                "FROM information_schema.columns "
+                "WHERE table_schema = current_schema() "
+                "AND table_name = :table_name "
+                "ORDER BY ordinal_position"
+            ),
+            {"table_name": table_name},
+        )
+        return {str(row[0]) for row in result.fetchall()}
+
+    raise ValueError(f"unsupported database dialect for table introspection: {connection.dialect.name}")
 
 
 async def bootstrap_database(db_manager: DatabaseManager) -> int:
@@ -409,6 +435,58 @@ async def bootstrap_database(db_manager: DatabaseManager) -> int:
                         await conn.execute(
                             text("ALTER TABLE path_lease_waits ADD COLUMN escalated_at DATETIME")
                         )
+
+                if current_version < 21:
+                    approval_column_names = await get_table_columns(conn, "action_approvals")
+                    additions = {
+                        "expires_at": "TIMESTAMP",
+                        "decision_nonce": "VARCHAR(255)",
+                        "decision_reason": "TEXT",
+                        "idempotency_key": "VARCHAR(255)",
+                    }
+                    for name, definition in additions.items():
+                        if name not in approval_column_names:
+                            await conn.execute(text(f"ALTER TABLE action_approvals ADD COLUMN {name} {definition}"))
+                    await conn.execute(
+                        text(
+                            "CREATE UNIQUE INDEX IF NOT EXISTS uq_action_approval_idempotency "
+                            "ON action_approvals(project_id, idempotency_key) WHERE idempotency_key IS NOT NULL"
+                        )
+                    )
+
+                if current_version < 22:
+                    project_column_names = await get_table_columns(conn, "projects")
+                    if "tenant_id" not in project_column_names:
+                        await conn.execute(
+                            text(
+                                "ALTER TABLE projects ADD COLUMN tenant_id "
+                                "VARCHAR(64) NOT NULL DEFAULT 'local'"
+                            )
+                        )
+                    await conn.execute(
+                        text("CREATE INDEX IF NOT EXISTS ix_projects_tenant_id ON projects(tenant_id)")
+                    )
+
+                if current_version < 26:
+                    task_run_columns = await get_table_columns(conn, "task_runs")
+                    if "heartbeat_at" not in task_run_columns:
+                        await conn.execute(
+                            text(
+                                "ALTER TABLE task_runs "
+                                "ADD COLUMN heartbeat_at TIMESTAMP"
+                            )
+                        )
+                        await conn.execute(
+                            text(
+                                "UPDATE task_runs SET heartbeat_at = started_at "
+                                "WHERE heartbeat_at IS NULL"
+                            )
+                        )
+
+                # DPC-001..006 are additive tables. ``create_all`` above is
+                # intentionally the complete migration step: it emits SQL
+                # through SQLAlchemy for both SQLite and PostgreSQL, so no
+                # dialect-specific DDL is needed here.
 
             # Phase 10 / Schema v15 Migration: Memory provenance columns and memory_relations table
             if current_version < 15:

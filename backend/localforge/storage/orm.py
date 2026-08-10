@@ -4,15 +4,19 @@ from typing import Any
 from sqlalchemy import (
     JSON,
     Boolean,
-    DateTime,
     Float,
     ForeignKey,
     Integer,
     String,
     Text,
     UniqueConstraint,
+    event,
+)
+from sqlalchemy import (
+    DateTime as SQLAlchemyDateTime,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.types import TypeDecorator
 
 from localforge.models import domain, enums
 
@@ -25,6 +29,29 @@ def _naive_dt(dt: datetime | None) -> datetime | None:
     if dt is None:
         return None
     return dt.replace(tzinfo=None) if dt.tzinfo else dt
+
+
+class UTCNaiveDateTime(TypeDecorator[datetime]):
+    """Persist UTC-aware application timestamps in naive SQL timestamp columns.
+
+    SQLite accepts aware ``datetime`` values by stringifying them, while
+    PostgreSQL's ``TIMESTAMP WITHOUT TIME ZONE`` driver rejects them.  The
+    ORM schema intentionally stores UTC wall-clock values without a timezone
+    marker, so normalize every bind value at the type boundary instead of
+    relying on each repository mapper to remember this conversion.
+    """
+
+    impl = SQLAlchemyDateTime
+    cache_ok = True
+
+    def process_bind_param(self, value: datetime | None, dialect: Any) -> datetime | None:
+        del dialect
+        return _naive_dt(value)
+
+
+# Keep the existing model declarations concise while applying the conversion
+# consistently to every DateTime column in this module.
+DateTime = UTCNaiveDateTime
 
 
 def _now_naive() -> datetime:
@@ -42,6 +69,7 @@ class ProjectORM(Base):
     __tablename__ = "projects"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False, default="local", index=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     root_path: Mapped[str] = mapped_column(String(1024), nullable=False)
     default_branch: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -61,6 +89,7 @@ class ProjectORM(Base):
         updated = d.updated_at.replace(tzinfo=None) if (d.updated_at and d.updated_at.tzinfo) else d.updated_at
         return cls(
             id=d.id,
+            tenant_id=d.tenant_id,
             name=d.name,
             root_path=d.root_path,
             default_branch=d.default_branch,
@@ -366,6 +395,7 @@ class TaskRunORM(Base):
     sandbox_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     attempt_count: Mapped[int] = mapped_column(Integer, default=1)
     started_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive)
+    heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     ended_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     final_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -375,6 +405,7 @@ class TaskRunORM(Base):
     @classmethod
     def from_domain(cls, d: domain.TaskRun) -> "TaskRunORM":
         started = d.started_at.replace(tzinfo=None) if (d.started_at and d.started_at.tzinfo) else d.started_at
+        heartbeat = d.heartbeat_at.replace(tzinfo=None) if (d.heartbeat_at and d.heartbeat_at.tzinfo) else d.heartbeat_at
         ended = d.ended_at.replace(tzinfo=None) if (d.ended_at and d.ended_at.tzinfo) else d.ended_at
         return cls(
             id=d.id,
@@ -386,6 +417,7 @@ class TaskRunORM(Base):
             sandbox_id=d.sandbox_id,
             attempt_count=d.attempt_count,
             started_at=started,
+            heartbeat_at=heartbeat,
             ended_at=ended,
             final_summary=d.final_summary,
         )
@@ -774,8 +806,12 @@ class ActionApprovalORM(Base):
     risk_level: Mapped[str] = mapped_column(String(20), nullable=False)
     status: Mapped[str] = mapped_column(String(50), default="PENDING", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     decided_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     decided_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    decision_nonce: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    decision_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    idempotency_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     def to_domain(self) -> domain.ActionApproval:
         return domain.ActionApproval(
@@ -789,8 +825,12 @@ class ActionApprovalORM(Base):
             risk_level=self.risk_level,
             status=domain.ActionApprovalStatus(self.status),
             created_at=self.created_at,
+            expires_at=self.expires_at,
             decided_at=self.decided_at,
             decided_by=self.decided_by,
+            decision_nonce=self.decision_nonce,
+            decision_reason=self.decision_reason,
+            idempotency_key=self.idempotency_key,
         )
 
     @classmethod
@@ -806,8 +846,12 @@ class ActionApprovalORM(Base):
             risk_level=d.risk_level,
             status=d.status.value,
             created_at=_naive_dt(d.created_at),
+            expires_at=_naive_dt(d.expires_at),
             decided_at=_naive_dt(d.decided_at),
             decided_by=d.decided_by,
+            decision_nonce=d.decision_nonce,
+            decision_reason=d.decision_reason,
+            idempotency_key=d.idempotency_key,
         )
 
 
@@ -2130,4 +2174,691 @@ class DeepSwarmRunORM(Base):
             started_at=d.started_at,
             finished_at=d.finished_at,
             created_at=d.created_at,
+        )
+
+
+class EngineeringSessionORM(Base):
+    """Relational source of truth for DPC-001/DPC-002 continuity."""
+
+    __tablename__ = "engineering_sessions"
+    __table_args__ = (
+        UniqueConstraint("project_id", "tenant_id", "id", name="uq_engineering_session_tenant_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="DRAFT", index=True)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    default_model: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    current_goal_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    max_turns: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    max_wall_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
+    max_retries: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    quality_gate_names_json: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    result: Mapped[str | None] = mapped_column(Text, nullable=True)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive, onupdate=_now_naive)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    def to_domain(self) -> domain.EngineeringSession:
+        return domain.EngineeringSession(
+            id=self.id,
+            project_id=self.project_id,
+            tenant_id=self.tenant_id,
+            title=self.title,
+            status=enums.EngineeringSessionStatus(self.status),
+            revision=self.revision,
+            default_model=self.default_model,
+            current_goal_id=self.current_goal_id,
+            max_turns=self.max_turns,
+            max_wall_seconds=self.max_wall_seconds,
+            max_retries=self.max_retries,
+            quality_gate_names=list(self.quality_gate_names_json or []),
+            result=self.result,
+            metadata=dict(self.metadata_json or {}),
+            created_at=self.created_at,
+            updated_at=self.updated_at,
+            closed_at=self.closed_at,
+        )
+
+    @classmethod
+    def from_domain(cls, d: domain.EngineeringSession) -> "EngineeringSessionORM":
+        return cls(
+            id=d.id,
+            project_id=d.project_id,
+            tenant_id=d.tenant_id,
+            title=d.title,
+            status=d.status.value,
+            revision=d.revision,
+            default_model=d.default_model,
+            current_goal_id=d.current_goal_id,
+            max_turns=d.max_turns,
+            max_wall_seconds=d.max_wall_seconds,
+            max_retries=d.max_retries,
+            quality_gate_names_json=list(d.quality_gate_names),
+            result=d.result,
+            metadata_json=dict(d.metadata),
+            created_at=_naive_dt(d.created_at),
+            updated_at=_naive_dt(d.updated_at),
+            closed_at=_naive_dt(d.closed_at),
+        )
+
+
+class EngineeringGoalORM(Base):
+    """Current goal row; revision history is append-only JSON snapshots."""
+
+    __tablename__ = "engineering_goals"
+    __table_args__ = (
+        UniqueConstraint("session_id", "id", name="uq_engineering_goal_session_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    session_id: Mapped[str] = mapped_column(
+        ForeignKey("engineering_sessions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    objective: Mapped[str] = mapped_column(Text, nullable=False)
+    acceptance_criteria_json: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="DRAFT")
+    revision_history_json: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSON, nullable=False, default=list
+    )
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive, onupdate=_now_naive)
+
+    def to_domain(self) -> domain.EngineeringGoal:
+        return domain.EngineeringGoal(
+            id=self.id,
+            session_id=self.session_id,
+            project_id=self.project_id,
+            tenant_id=self.tenant_id,
+            objective=self.objective,
+            acceptance_criteria=list(self.acceptance_criteria_json or []),
+            revision=self.revision,
+            status=enums.EngineeringSessionStatus(self.status),
+            revision_history=list(self.revision_history_json or []),
+            metadata=dict(self.metadata_json or {}),
+            created_at=self.created_at,
+            updated_at=self.updated_at,
+        )
+
+    @classmethod
+    def from_domain(cls, d: domain.EngineeringGoal) -> "EngineeringGoalORM":
+        return cls(
+            id=d.id,
+            session_id=d.session_id,
+            project_id=d.project_id,
+            tenant_id=d.tenant_id,
+            objective=d.objective,
+            acceptance_criteria_json=list(d.acceptance_criteria),
+            revision=d.revision,
+            status=d.status.value,
+            revision_history_json=list(d.revision_history),
+            metadata_json=dict(d.metadata),
+            created_at=_naive_dt(d.created_at),
+            updated_at=_naive_dt(d.updated_at),
+        )
+
+
+class EngineeringTurnORM(Base):
+    """Append-only admitted turn with relational sequence/idempotency guards."""
+
+    __tablename__ = "engineering_turns"
+    __table_args__ = (
+        UniqueConstraint("session_id", "sequence", name="uq_engineering_turn_session_sequence"),
+        UniqueConstraint("session_id", "idempotency_key", name="uq_engineering_turn_idempotency"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    session_id: Mapped[str] = mapped_column(
+        ForeignKey("engineering_sessions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    goal_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    goal_revision_snapshot: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False, default="USER")
+    input_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    result: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="ADMITTED")
+    idempotency_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    model_snapshot: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    profile_id_snapshot: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    profile_revision_snapshot: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    profile_snapshot_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    admitted_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    def to_domain(self) -> domain.EngineeringTurn:
+        return domain.EngineeringTurn(
+            id=self.id,
+            session_id=self.session_id,
+            project_id=self.project_id,
+            tenant_id=self.tenant_id,
+            goal_id=self.goal_id,
+            goal_revision_snapshot=self.goal_revision_snapshot,
+            sequence=self.sequence,
+            kind=enums.EngineeringTurnKind(self.kind),
+            input_text=self.input_text,
+            result=self.result,
+            status=self.status,
+            idempotency_key=self.idempotency_key,
+            model_snapshot=self.model_snapshot,
+            profile_id_snapshot=self.profile_id_snapshot,
+            profile_revision_snapshot=self.profile_revision_snapshot,
+            profile_snapshot=dict(self.profile_snapshot_json or {}),
+            retry_count=self.retry_count,
+            metadata=dict(self.metadata_json or {}),
+            admitted_at=self.admitted_at,
+            completed_at=self.completed_at,
+        )
+
+    @classmethod
+    def from_domain(cls, d: domain.EngineeringTurn) -> "EngineeringTurnORM":
+        return cls(
+            id=d.id,
+            session_id=d.session_id,
+            project_id=d.project_id,
+            tenant_id=d.tenant_id,
+            goal_id=d.goal_id,
+            goal_revision_snapshot=d.goal_revision_snapshot,
+            sequence=d.sequence,
+            kind=d.kind.value,
+            input_text=d.input_text,
+            result=d.result,
+            status=d.status,
+            idempotency_key=d.idempotency_key,
+            model_snapshot=d.model_snapshot,
+            profile_id_snapshot=d.profile_id_snapshot,
+            profile_revision_snapshot=d.profile_revision_snapshot,
+            profile_snapshot_json=dict(d.profile_snapshot),
+            retry_count=d.retry_count,
+            metadata_json=dict(d.metadata),
+            admitted_at=_naive_dt(d.admitted_at),
+            completed_at=_naive_dt(d.completed_at),
+        )
+
+
+@event.listens_for(EngineeringTurnORM, "before_update")
+def _reject_engineering_turn_update(*_: Any) -> None:
+    raise ValueError("Admitted engineering turns are immutable")
+
+
+@event.listens_for(EngineeringTurnORM, "before_delete")
+def _reject_engineering_turn_delete(*_: Any) -> None:
+    raise ValueError("Admitted engineering turns cannot be deleted")
+
+
+class ExecutionProfileORM(Base):
+    """Project or session policy definition; turns store their own snapshot."""
+
+    __tablename__ = "execution_profiles"
+    __table_args__ = (
+        UniqueConstraint(
+            "project_id", "tenant_id", "session_id", "name", name="uq_execution_profile_scope_name"
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    session_id: Mapped[str | None] = mapped_column(
+        ForeignKey("engineering_sessions.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    name: Mapped[str] = mapped_column(String(100), nullable=False, default="default")
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    trust: Mapped[str] = mapped_column(String(32), nullable=False, default="standard")
+    mode: Mapped[str] = mapped_column(String(32), nullable=False, default="ASK")
+    tool_policies_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive, onupdate=_now_naive)
+
+    def to_domain(self) -> domain.ExecutionProfile:
+        policies = {
+            str(key): enums.ProfileDecision(str(value).lower())
+            for key, value in (self.tool_policies_json or {}).items()
+        }
+        return domain.ExecutionProfile(
+            id=self.id,
+            project_id=self.project_id,
+            tenant_id=self.tenant_id,
+            session_id=self.session_id,
+            name=self.name,
+            revision=self.revision,
+            trust=self.trust,
+            mode=enums.ExecutionMode(self.mode),
+            tool_policies=policies,
+            metadata=dict(self.metadata_json or {}),
+            created_at=self.created_at,
+            updated_at=self.updated_at,
+        )
+
+    @classmethod
+    def from_domain(cls, d: domain.ExecutionProfile) -> "ExecutionProfileORM":
+        return cls(
+            id=d.id,
+            project_id=d.project_id,
+            tenant_id=d.tenant_id,
+            session_id=d.session_id,
+            name=d.name,
+            revision=d.revision,
+            trust=d.trust,
+            mode=d.mode.value,
+            tool_policies_json={
+                str(key): (value.value if isinstance(value, enums.ProfileDecision) else str(value).lower())
+                for key, value in d.tool_policies.items()
+            },
+            metadata_json=dict(d.metadata),
+            created_at=_naive_dt(d.created_at),
+            updated_at=_naive_dt(d.updated_at),
+        )
+
+
+class ModelConnectionORM(Base):
+    """Durable, secret-free reference to the OmniRoute gateway."""
+
+    __tablename__ = "model_connections"
+    __table_args__ = (
+        UniqueConstraint("project_id", "tenant_id", "provider", name="uq_model_connection_scope"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    provider: Mapped[str] = mapped_column(String(64), nullable=False, default="omniroute")
+    endpoint_ref: Mapped[str] = mapped_column(String(255), nullable=False)
+    credential_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="PENDING")
+    capabilities_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    sanitized_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive, onupdate=_now_naive)
+
+    def to_domain(self) -> domain.ModelConnection:
+        return domain.ModelConnection(
+            id=self.id, project_id=self.project_id, tenant_id=self.tenant_id,
+            provider=self.provider, endpoint_ref=self.endpoint_ref,
+            credential_ref=self.credential_ref, status=enums.ModelVerificationStatus(self.status),
+            capabilities=dict(self.capabilities_json or {}), verified_at=self.verified_at,
+            sanitized_error=self.sanitized_error, created_at=self.created_at, updated_at=self.updated_at,
+        )
+
+    @classmethod
+    def from_domain(cls, d: domain.ModelConnection) -> "ModelConnectionORM":
+        return cls(
+            id=d.id, project_id=d.project_id, tenant_id=d.tenant_id, provider=d.provider,
+            endpoint_ref=d.endpoint_ref, credential_ref=d.credential_ref, status=d.status.value,
+            capabilities_json=dict(d.capabilities), verified_at=_naive_dt(d.verified_at),
+            sanitized_error=d.sanitized_error, created_at=_naive_dt(d.created_at), updated_at=_naive_dt(d.updated_at),
+        )
+
+
+class ModelCatalogEntryORM(Base):
+    __tablename__ = "model_catalog_entries"
+    __table_args__ = (
+        UniqueConstraint("connection_id", "model_name", name="uq_model_catalog_connection_model"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    connection_id: Mapped[str] = mapped_column(ForeignKey("model_connections.id", ondelete="CASCADE"), nullable=False, index=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    provider: Mapped[str] = mapped_column(String(64), nullable=False, default="omniroute")
+    model_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="DISCOVERED")
+    capabilities_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    sanitized_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    endpoint_ref: Mapped[str] = mapped_column(String(255), nullable=False)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive, onupdate=_now_naive)
+
+    def to_domain(self) -> domain.ModelCatalogEntry:
+        return domain.ModelCatalogEntry(
+            id=self.id, connection_id=self.connection_id, project_id=self.project_id, tenant_id=self.tenant_id,
+            provider=self.provider, model_name=self.model_name, status=enums.ModelVerificationStatus(self.status),
+            capabilities=dict(self.capabilities_json or {}), verified_at=self.verified_at,
+            sanitized_error=self.sanitized_error, endpoint_ref=self.endpoint_ref,
+            metadata=dict(self.metadata_json or {}), created_at=self.created_at, updated_at=self.updated_at,
+        )
+
+    @classmethod
+    def from_domain(cls, d: domain.ModelCatalogEntry) -> "ModelCatalogEntryORM":
+        return cls(
+            id=d.id, connection_id=d.connection_id, project_id=d.project_id, tenant_id=d.tenant_id,
+            provider=d.provider, model_name=d.model_name, status=d.status.value,
+            capabilities_json=dict(d.capabilities), verified_at=_naive_dt(d.verified_at),
+            sanitized_error=d.sanitized_error, endpoint_ref=d.endpoint_ref,
+            metadata_json=dict(d.metadata), created_at=_naive_dt(d.created_at), updated_at=_naive_dt(d.updated_at),
+        )
+
+
+class ModelVerificationORM(Base):
+    __tablename__ = "model_verifications"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    connection_id: Mapped[str] = mapped_column(ForeignKey("model_connections.id", ondelete="CASCADE"), nullable=False, index=True)
+    catalog_entry_id: Mapped[str | None] = mapped_column(ForeignKey("model_catalog_entries.id", ondelete="SET NULL"), nullable=True, index=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    provider: Mapped[str] = mapped_column(String(64), nullable=False, default="omniroute")
+    model_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="PENDING")
+    capabilities_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    sanitized_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    endpoint_ref: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive)
+
+    def to_domain(self) -> domain.ModelVerification:
+        return domain.ModelVerification(
+            id=self.id, connection_id=self.connection_id, catalog_entry_id=self.catalog_entry_id,
+            project_id=self.project_id, tenant_id=self.tenant_id, provider=self.provider,
+            model_name=self.model_name, status=enums.ModelVerificationStatus(self.status),
+            capabilities=dict(self.capabilities_json or {}), verified_at=self.verified_at,
+            sanitized_error=self.sanitized_error, endpoint_ref=self.endpoint_ref, created_at=self.created_at,
+        )
+
+    @classmethod
+    def from_domain(cls, d: domain.ModelVerification) -> "ModelVerificationORM":
+        return cls(
+            id=d.id, connection_id=d.connection_id, catalog_entry_id=d.catalog_entry_id,
+            project_id=d.project_id, tenant_id=d.tenant_id, provider=d.provider,
+            model_name=d.model_name, status=d.status.value, capabilities_json=dict(d.capabilities),
+            verified_at=_naive_dt(d.verified_at), sanitized_error=d.sanitized_error,
+            endpoint_ref=d.endpoint_ref, created_at=_naive_dt(d.created_at),
+        )
+
+
+class SkillBindingORM(Base):
+    __tablename__ = "skill_bindings"
+    __table_args__ = (
+        UniqueConstraint("turn_id", "name", name="uq_skill_binding_turn_name"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    session_id: Mapped[str] = mapped_column(ForeignKey("engineering_sessions.id", ondelete="CASCADE"), nullable=False, index=True)
+    turn_id: Mapped[str] = mapped_column(ForeignKey("engineering_turns.id", ondelete="CASCADE"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    origin: Mapped[str] = mapped_column(String(64), nullable=False, default="builtin")
+    manifest_snapshot_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive)
+
+    def to_domain(self) -> domain.SkillBinding:
+        return domain.SkillBinding(
+            id=self.id, project_id=self.project_id, tenant_id=self.tenant_id, session_id=self.session_id,
+            turn_id=self.turn_id, name=self.name, version=self.version, digest=self.digest,
+            origin=self.origin, manifest_snapshot=dict(self.manifest_snapshot_json or {}), created_at=self.created_at,
+        )
+
+    @classmethod
+    def from_domain(cls, d: domain.SkillBinding) -> "SkillBindingORM":
+        return cls(
+            id=d.id, project_id=d.project_id, tenant_id=d.tenant_id, session_id=d.session_id,
+            turn_id=d.turn_id, name=d.name, version=d.version, digest=d.digest, origin=d.origin,
+            manifest_snapshot_json=dict(d.manifest_snapshot), created_at=_naive_dt(d.created_at),
+        )
+
+
+class AutomationORM(Base):
+    __tablename__ = "automations"
+    __table_args__ = (UniqueConstraint("project_id", "tenant_id", "name", name="uq_automation_scope_name"),)
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="ACTIVE", index=True)
+    trigger_kind: Mapped[str] = mapped_column(String(32), nullable=False, default="MANUAL")
+    interval_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    goal_template_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    profile_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    profile_snapshot_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    budgets_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    session_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    loop_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    active_run_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    next_run_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive, onupdate=_now_naive)
+
+    def to_domain(self) -> domain.Automation:
+        return domain.Automation(
+            id=self.id, project_id=self.project_id, tenant_id=self.tenant_id, name=self.name,
+            status=enums.AutomationStatus(self.status), trigger_kind=self.trigger_kind,
+            interval_seconds=self.interval_seconds, goal_template=dict(self.goal_template_json or {}),
+            profile_id=self.profile_id, profile_snapshot=dict(self.profile_snapshot_json or {}),
+            budgets=dict(self.budgets_json or {}), session_id=self.session_id, loop_id=self.loop_id,
+            active_run_id=self.active_run_id, next_run_at=self.next_run_at, metadata=dict(self.metadata_json or {}),
+            created_at=self.created_at, updated_at=self.updated_at,
+        )
+
+    @classmethod
+    def from_domain(cls, d: domain.Automation) -> "AutomationORM":
+        return cls(
+            id=d.id, project_id=d.project_id, tenant_id=d.tenant_id, name=d.name, status=d.status.value,
+            trigger_kind=d.trigger_kind, interval_seconds=d.interval_seconds,
+            goal_template_json=dict(d.goal_template), profile_id=d.profile_id,
+            profile_snapshot_json=dict(d.profile_snapshot), budgets_json=dict(d.budgets), session_id=d.session_id,
+            loop_id=d.loop_id, active_run_id=d.active_run_id, next_run_at=_naive_dt(d.next_run_at),
+            metadata_json=dict(d.metadata), created_at=_naive_dt(d.created_at), updated_at=_naive_dt(d.updated_at),
+        )
+
+
+class AutomationRunORM(Base):
+    __tablename__ = "automation_runs"
+    __table_args__ = (
+        UniqueConstraint("automation_id", "idempotency_key", name="uq_automation_run_idempotency"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    automation_id: Mapped[str] = mapped_column(ForeignKey("automations.id", ondelete="CASCADE"), nullable=False, index=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="PENDING", index=True)
+    trigger_kind: Mapped[str] = mapped_column(String(32), nullable=False, default="MANUAL")
+    idempotency_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    session_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    turn_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    loop_run_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    scheduler_run_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    goal_snapshot_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    profile_snapshot_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    budget_snapshot_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    approval_ids_json: Mapped[list[int]] = mapped_column(JSON, nullable=False, default=list)
+    evidence_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive)
+
+    def to_domain(self) -> domain.AutomationRun:
+        return domain.AutomationRun(
+            id=self.id, automation_id=self.automation_id, project_id=self.project_id, tenant_id=self.tenant_id,
+            status=enums.AutomationRunStatus(self.status), trigger_kind=self.trigger_kind,
+            idempotency_key=self.idempotency_key, session_id=self.session_id, turn_id=self.turn_id,
+            loop_run_id=self.loop_run_id, scheduler_run_id=self.scheduler_run_id,
+            goal_snapshot=dict(self.goal_snapshot_json or {}), profile_snapshot=dict(self.profile_snapshot_json or {}),
+            budget_snapshot=dict(self.budget_snapshot_json or {}), approval_ids=list(self.approval_ids_json or []),
+            evidence=dict(self.evidence_json or {}), error_message=self.error_message, started_at=self.started_at,
+            completed_at=self.completed_at, created_at=self.created_at,
+        )
+
+    @classmethod
+    def from_domain(cls, d: domain.AutomationRun) -> "AutomationRunORM":
+        return cls(
+            id=d.id, automation_id=d.automation_id, project_id=d.project_id, tenant_id=d.tenant_id,
+            status=d.status.value, trigger_kind=d.trigger_kind, idempotency_key=d.idempotency_key,
+            session_id=d.session_id, turn_id=d.turn_id, loop_run_id=d.loop_run_id, scheduler_run_id=d.scheduler_run_id,
+            goal_snapshot_json=dict(d.goal_snapshot), profile_snapshot_json=dict(d.profile_snapshot),
+            budget_snapshot_json=dict(d.budget_snapshot), approval_ids_json=list(d.approval_ids),
+            evidence_json=dict(d.evidence), error_message=d.error_message, started_at=_naive_dt(d.started_at),
+            completed_at=_naive_dt(d.completed_at), created_at=_naive_dt(d.created_at),
+        )
+
+
+class ReferenceSourceORM(Base):
+    __tablename__ = "reference_sources"
+    __table_args__ = (UniqueConstraint("project_id", "tenant_id", "content_hash", name="uq_reference_source_hash"),)
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    source_type: Mapped[str] = mapped_column(String(64), nullable=False, default="markdown")
+    path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    normalized_text: Mapped[str] = mapped_column(Text, nullable=False)
+    injection_status: Mapped[str] = mapped_column(String(32), nullable=False, default="CLEAN")
+    redaction_status: Mapped[str] = mapped_column(String(32), nullable=False, default="NOT_REQUIRED")
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive)
+
+    def to_domain(self) -> domain.ReferenceSource:
+        return domain.ReferenceSource(
+            id=self.id, project_id=self.project_id, tenant_id=self.tenant_id, name=self.name,
+            source_type=self.source_type, path=self.path, content_hash=self.content_hash,
+            normalized_text=self.normalized_text, injection_status=self.injection_status,
+            redaction_status=self.redaction_status, metadata=dict(self.metadata_json or {}), created_at=self.created_at,
+        )
+
+    @classmethod
+    def from_domain(cls, d: domain.ReferenceSource) -> "ReferenceSourceORM":
+        return cls(
+            id=d.id, project_id=d.project_id, tenant_id=d.tenant_id, name=d.name, source_type=d.source_type,
+            path=d.path, content_hash=d.content_hash, normalized_text=d.normalized_text,
+            injection_status=d.injection_status, redaction_status=d.redaction_status,
+            metadata_json=dict(d.metadata), created_at=_naive_dt(d.created_at),
+        )
+
+
+class DocumentChunkORM(Base):
+    __tablename__ = "document_chunks"
+    __table_args__ = (UniqueConstraint("source_id", "ordinal", name="uq_document_chunk_ordinal"),)
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    source_id: Mapped[str] = mapped_column(ForeignKey("reference_sources.id", ondelete="CASCADE"), nullable=False, index=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    section: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    line_start: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    line_end: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+
+    def to_domain(self) -> domain.DocumentChunk:
+        return domain.DocumentChunk(
+            id=self.id, source_id=self.source_id, project_id=self.project_id, tenant_id=self.tenant_id,
+            ordinal=self.ordinal, text=self.text, section=self.section, line_start=self.line_start,
+            line_end=self.line_end, content_hash=self.content_hash, metadata=dict(self.metadata_json or {}),
+        )
+
+    @classmethod
+    def from_domain(cls, d: domain.DocumentChunk) -> "DocumentChunkORM":
+        return cls(
+            id=d.id, source_id=d.source_id, project_id=d.project_id, tenant_id=d.tenant_id,
+            ordinal=d.ordinal, text=d.text, section=d.section, line_start=d.line_start, line_end=d.line_end,
+            content_hash=d.content_hash, metadata_json=dict(d.metadata),
+        )
+
+
+class ReferenceDecisionORM(Base):
+    __tablename__ = "reference_decisions"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    query: Mapped[str] = mapped_column(Text, nullable=False)
+    selected_chunk_ids_json: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    citations_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False, default=list)
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    decision: Mapped[str] = mapped_column(String(32), nullable=False, default="APPROVED")
+    turn_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    artifact_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive)
+
+    def to_domain(self) -> domain.ReferenceDecision:
+        return domain.ReferenceDecision(
+            id=self.id, project_id=self.project_id, tenant_id=self.tenant_id, query=self.query,
+            selected_chunk_ids=list(self.selected_chunk_ids_json or []), citations=list(self.citations_json or []),
+            summary=self.summary, decision=self.decision, turn_id=self.turn_id, artifact_id=self.artifact_id,
+            content_hash=self.content_hash, created_at=self.created_at,
+        )
+
+    @classmethod
+    def from_domain(cls, d: domain.ReferenceDecision) -> "ReferenceDecisionORM":
+        return cls(
+            id=d.id, project_id=d.project_id, tenant_id=d.tenant_id, query=d.query,
+            selected_chunk_ids_json=list(d.selected_chunk_ids), citations_json=list(d.citations), summary=d.summary,
+            decision=d.decision, turn_id=d.turn_id, artifact_id=d.artifact_id, content_hash=d.content_hash,
+            created_at=_naive_dt(d.created_at),
+        )
+
+
+class ProductBlueprintORM(Base):
+    __tablename__ = "product_blueprints"
+    __table_args__ = (UniqueConstraint("project_id", "tenant_id", "content_hash", name="uq_product_blueprint_hash"),)
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    modules_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False, default=list)
+    entities_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False, default=list)
+    routes_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False, default=list)
+    screens_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False, default=list)
+    acceptance_criteria_json: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    citation_ids_json: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    source_hashes_json: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="DRAFT", index=True)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now_naive)
+    frozen_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    def to_domain(self) -> domain.ProductBlueprint:
+        return domain.ProductBlueprint(
+            id=self.id, project_id=self.project_id, tenant_id=self.tenant_id, name=self.name, summary=self.summary,
+            modules=list(self.modules_json or []), entities=list(self.entities_json or []), routes=list(self.routes_json or []),
+            screens=list(self.screens_json or []), acceptance_criteria=list(self.acceptance_criteria_json or []),
+            citation_ids=list(self.citation_ids_json or []), source_hashes=list(self.source_hashes_json or []),
+            status=self.status, content_hash=self.content_hash, created_at=self.created_at, frozen_at=self.frozen_at,
+        )
+
+    @classmethod
+    def from_domain(cls, d: domain.ProductBlueprint) -> "ProductBlueprintORM":
+        return cls(
+            id=d.id, project_id=d.project_id, tenant_id=d.tenant_id, name=d.name, summary=d.summary,
+            modules_json=list(d.modules), entities_json=list(d.entities), routes_json=list(d.routes), screens_json=list(d.screens),
+            acceptance_criteria_json=list(d.acceptance_criteria), citation_ids_json=list(d.citation_ids),
+            source_hashes_json=list(d.source_hashes), status=d.status, content_hash=d.content_hash,
+            created_at=_naive_dt(d.created_at), frozen_at=_naive_dt(d.frozen_at),
         )

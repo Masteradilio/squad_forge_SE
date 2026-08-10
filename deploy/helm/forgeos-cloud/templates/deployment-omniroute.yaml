@@ -14,11 +14,33 @@ spec:
       labels:
         app.kubernetes.io/component: omniroute
     spec:
+      securityContext:
+        fsGroup: 1000
+        runAsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: omniroute
           image: "{{ .Values.omniroute.image.repository }}:{{ .Values.omniroute.image.tag }}"
           imagePullPolicy: {{ .Values.omniroute.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
           ports:
             - containerPort: {{ .Values.omniroute.port }}
+          readinessProbe:
+            tcpSocket:
+              port: {{ .Values.omniroute.port }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: {{ .Values.omniroute.port }}
+            initialDelaySeconds: 15
+            periodSeconds: 20
           resources:
             {{- toYaml .Values.omniroute.resources | nindent 12 }}

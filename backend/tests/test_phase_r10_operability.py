@@ -23,7 +23,10 @@ def test_api_auth_is_required_when_token_is_configured(
         assert client.get("/projects").status_code == 401
         assert client.get(
             "/projects",
-            headers={"Authorization": "Bearer test-token-123"},
+            headers={
+                "Authorization": "Bearer test-token-123",
+                "X-Tenant-ID": "local",
+            },
         ).status_code == 200
     finally:
         asyncio.run(manager.close())

@@ -38,6 +38,7 @@ from localforge.services.governed_execution import (
 )
 from localforge.services.release_promotion import ReleasePromotionService, ReleasePromotionState
 from localforge.services.runners import LocalWorktreeTaskRunner, TaskRunnerPool
+from localforge.storage.database import retry_sqlite_operation
 from localforge.storage.transactions import UnitOfWork
 
 logger = logging.getLogger("localforge.scheduler")
@@ -54,22 +55,51 @@ def _is_permanent_provider_blocker(message: str) -> bool:
 
 
 def _is_exhausted_chief_blocker(message: str) -> bool:
-    """Recognize a Chief lane that already exhausted its finite OmniRoute plan.
+    """Recognize only irreversible provider or absolute-budget blockers.
 
-    Reopening this exact failure without changing the request only repeats the
-    same free-route timeouts and can keep an unattended run alive for hours.
-    The next Scrum Master pass must preserve the evidence and escalate it
-    instead of issuing another identical paid/gateway cycle.
+    A failed visual similarity gate is product evidence for another bounded
+    repair, not proof that the Chief lane is exhausted. Likewise, a model
+    ladder or visual section failure may still recover through a different
+    bounded strategy.
     """
     lowered = message.lower()
-    return any(
+    if any(
         marker in lowered
         for marker in (
-            "single-document visual repair exhausted",
-            "visual section '",
+            "visual recovery global model-call budget exhausted",
+            "visual repair global budget exhausted",
+            "visual recovery budget exhausted",
+        )
+    ):
+        return True
+    if any(
+        marker in lowered
+        for marker in (
+            "visual validation failed",
+            "visual similarity",
+            "similarity below",
+            "visual fidelity gate",
+        )
+    ):
+        return False
+    provider_unavailable = any(
+        marker in lowered
+        for marker in (
             "chief engineer provider is unavailable",
+            "provider unavailable and requires operator action",
         )
     )
+    absolute_budget_exhausted = any(
+        marker in lowered
+        for marker in (
+            "max_repair_attempts_absolute",
+            "max_gateway_calls",
+            "max_paid_usd_absolute",
+            "absolute recovery budget",
+            "absolute model-call budget",
+        )
+    )
+    return provider_unavailable or absolute_budget_exhausted
 
 
 def _clean_error_message(error: str) -> str:
@@ -523,13 +553,21 @@ class Scheduler:
         while True:
             await asyncio.sleep(interval)
             heartbeat_at = datetime.now(UTC)
-            async with UnitOfWork(self.db_manager) as heartbeat_uow:
-                assert heartbeat_uow.tasks is not None
-                live_run = await heartbeat_uow.tasks.get_task_run(task_run_id)
-                if live_run is None or live_run.status != TaskRunStatus.RUNNING:
-                    return
-                live_run.heartbeat_at = heartbeat_at
-                await heartbeat_uow.tasks.update_task_run(live_run)
+            async def write_heartbeat() -> bool:
+                async with UnitOfWork(self.db_manager) as heartbeat_uow:
+                    assert heartbeat_uow.tasks is not None
+                    live_run = await heartbeat_uow.tasks.get_task_run(task_run_id)
+                    if live_run is None or live_run.status != TaskRunStatus.RUNNING:
+                        return False
+                    live_run.heartbeat_at = heartbeat_at
+                    await heartbeat_uow.tasks.update_task_run(live_run)
+                    return True
+
+            if not await retry_sqlite_operation(
+                write_heartbeat,
+                db_url=getattr(self.db_manager, "db_url", None),
+            ):
+                return
 
             if self._control_plane is not None and turn_id and lease_token:
                 try:
@@ -1127,7 +1165,12 @@ class Scheduler:
                 # paid recovery cycle. The provider must become available
                 # before a new run can make progress.
                 continue
-            if attempts >= 1 and _is_exhausted_chief_blocker(blocker):
+            visual_budget_exhausted = (
+                "visual recovery global model-call budget exhausted" in blocker.lower()
+            )
+            if (attempts >= 1 or visual_budget_exhausted) and _is_exhausted_chief_blocker(
+                blocker
+            ):
                 metadata["scrum_master_recovery_exhausted"] = True
                 metadata["scrum_master_last_blocker"] = blocker[:1200]
                 task.metadata = metadata

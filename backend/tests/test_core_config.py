@@ -28,6 +28,50 @@ def test_gateway_call_budget_is_configurable(monkeypatch):
     assert config.budgets.max_gateway_calls == 7
 
 
+def test_run_time_budget_is_configurable_from_environment(monkeypatch):
+    monkeypatch.setenv("LOCALFORGE_MAX_RUN_TIME", "14400")
+
+    config = load_config()
+
+    assert config.budgets.max_run_time == 14400.0
+
+
+def test_openrouter_dotenv_becomes_paid_fallback_when_omniroute_is_explicit(
+    tmp_path, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".env").write_text(
+        "LOCALFORGE_CHIEF_PROVIDER=omniroute\n"
+        "LOCALFORGE_CHIEF_BASE_URL=http://127.0.0.1:20128/v1\n"
+        "LOCALFORGE_CHIEF_MODEL=auto/best-free\n"
+        "OPENROUTER_MODEL=provider/paid-model\n"
+        "OPENROUTER_API_KEY=sk-or-test\n",
+        encoding="utf-8",
+    )
+
+    config = load_config()
+
+    assert config.chief_engineer.provider == "omniroute"
+    assert config.chief_engineer.fallback_provider == "openrouter"
+    assert config.chief_engineer.fallback_model == "provider/paid-model"
+    assert config.chief_engineer.fallback_api_key == "sk-or-test"
+
+
+def test_explicit_empty_fallback_disables_openrouter_auto_lane(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".env").write_text(
+        "LOCALFORGE_CHIEF_PROVIDER=omniroute\n"
+        "LOCALFORGE_CHIEF_FALLBACK_PROVIDER=\n"
+        "OPENROUTER_MODEL=provider/paid-model\n"
+        "OPENROUTER_API_KEY=sk-or-test\n",
+        encoding="utf-8",
+    )
+
+    config = load_config()
+
+    assert config.chief_engineer.fallback_provider is None
+
+
 def test_load_config_precedence(tmp_path, monkeypatch):
     """Test loading configuration with priority: CLI > Env > Config File > Defaults."""
     monkeypatch.chdir(tmp_path)
@@ -89,7 +133,7 @@ def test_load_config_rejects_direct_inference_provider(tmp_path, monkeypatch):
         encoding="utf-8",
     )
 
-    with pytest.raises(ValueError, match="OmniRoute-only"):
+    with pytest.raises(ValueError, match="provider must be one of"):
         load_config()
 
 
@@ -167,7 +211,7 @@ def test_omniroute_client_rejects_direct_provider_endpoint(monkeypatch):
         OmniRouteClient(base_url="https://api.openrouter.ai/v1")
 
 
-def test_load_config_rejects_direct_fallback_provider(tmp_path, monkeypatch):
+def test_load_config_accepts_openrouter_fallback_provider(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     lf_dir = tmp_path / ".localforge"
     lf_dir.mkdir()
@@ -176,8 +220,9 @@ def test_load_config_rejects_direct_fallback_provider(tmp_path, monkeypatch):
         encoding="utf-8",
     )
 
-    with pytest.raises(ValueError, match="fallback_provider"):
-        load_config()
+    config = load_config()
+
+    assert config.chief_engineer.fallback_provider == "openrouter"
 
 
 def test_load_policy_validation(tmp_path):

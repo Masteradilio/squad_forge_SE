@@ -42,16 +42,29 @@ class ModelCallLedgerService:
             )
             snapshot = result.scalar_one_or_none()
             if snapshot is None:
-                raise ValueError(
-                    f"Missing persisted pricing snapshot for paid model {call.model!r}."
-                )
-            observed_cost = (
-                max(call.input_tokens, 0) * float(snapshot.input_price_per_million)
-                + max(call.output_tokens, 0) * float(snapshot.output_price_per_million)
-            ) / 1_000_000
-            metadata = dict(call.metadata or {})
-            metadata["pricing_snapshot_id"] = snapshot.id
-            metadata["pricing_measurement_source"] = "MODEL_PRICING_SNAPSHOT"
+                metadata = dict(call.metadata or {})
+                try:
+                    input_price = float(metadata["pricing_input_per_million"])
+                    output_price = float(metadata["pricing_output_per_million"])
+                except (KeyError, TypeError, ValueError) as exc:
+                    raise ValueError(
+                        f"Missing persisted or provider-catalog pricing for paid model {call.model!r}."
+                    ) from exc
+                if input_price < 0 or output_price < 0:
+                    raise ValueError(f"Provider-catalog pricing is invalid for paid model {call.model!r}.")
+                observed_cost = (
+                    max(call.input_tokens, 0) * input_price
+                    + max(call.output_tokens, 0) * output_price
+                ) / 1_000_000
+                metadata["pricing_measurement_source"] = "PROVIDER_CATALOG"
+            else:
+                observed_cost = (
+                    max(call.input_tokens, 0) * float(snapshot.input_price_per_million)
+                    + max(call.output_tokens, 0) * float(snapshot.output_price_per_million)
+                ) / 1_000_000
+                metadata = dict(call.metadata or {})
+                metadata["pricing_snapshot_id"] = snapshot.id
+                metadata["pricing_measurement_source"] = "MODEL_PRICING_SNAPSHOT"
             call = call.model_copy(
                 update={"estimated_cost_usd": observed_cost, "metadata": metadata}
             )

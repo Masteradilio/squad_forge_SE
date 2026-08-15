@@ -1,5 +1,6 @@
 import asyncio
 import json
+import re
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -12,6 +13,7 @@ from localforge.chief_engineer.service import (
     _extract_visual_document,
     _is_transient_gateway_error,
     _normalize_visual_section_content,
+    _visual_control_partition,
     _validate_visual_repair_plan,
     _validate_visual_section,
     _visual_section_models,
@@ -20,6 +22,7 @@ from localforge.core.config import LocalForgeConfig, load_config
 from localforge.llm import LLMError
 from localforge.llm.base import LLMHTTPError, LLMTimeoutError
 from localforge.llm.fallback import FallbackLLMProvider
+from localforge.llm.factory import build_chief_engineer_provider
 from localforge.llm.openrouter import OpenRouterProvider
 from localforge.models import domain
 from localforge.models.enums import ChiefEngineerCallReason, RunMode, RunStatus
@@ -29,7 +32,7 @@ from localforge.storage.bootstrap import bootstrap_database
 from localforge.storage.database import DatabaseManager
 
 
-def test_legacy_vendor_keys_do_not_bypass_cloud_gateway(tmp_path, monkeypatch):
+def test_openrouter_dotenv_selects_paid_chief_route_when_no_route_is_explicit(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     (tmp_path / ".env").write_text(
         "OPENROUTER_MODEL=minimax/minimax-m3\nOPENROUTER_API_KEY=test-secret-key\n",
@@ -38,14 +41,91 @@ def test_legacy_vendor_keys_do_not_bypass_cloud_gateway(tmp_path, monkeypatch):
 
     config = load_config()
 
-    assert config.chief_engineer.provider == "omniroute"
-    assert config.chief_engineer.model == "auto/best-free"
-    assert config.chief_engineer.api_key is None
-    assert config.chief_engineer.base_url == "http://localhost:20128/v1"
+    assert config.chief_engineer.provider == "openrouter"
+    assert config.chief_engineer.model == "minimax/minimax-m3"
+    assert config.chief_engineer.api_key == "test-secret-key"
+    assert config.chief_engineer.base_url == "https://openrouter.ai/api/v1"
     assert config.budgets.max_paid_calls == 30
 
 
-def test_legacy_nvidia_keys_do_not_bypass_cloud_gateway(tmp_path, monkeypatch):
+def test_new_openrouter_paid_and_free_lanes_are_normalized_and_prioritized(
+    tmp_path, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+    for name in (
+        "OPENROUTER_PAID_MODEL",
+        "OPENROUTER_FREE_MODEL",
+        "OPENROUTER_MODEL",
+        "OPENROUTER_API_KEY",
+        "LOCALFORGE_CHIEF_PROVIDER",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    (tmp_path / ".env").write_text(
+        "LOCALFORGE_CHIEF_BASE_URL=http://127.0.0.1:20128/v1\n"
+        "LOCALFORGE_CHIEF_MODEL=legacy/free-model\n"
+        "OPENROUTER_PAID_MODEL= ~deepseek/deepseek-v4-flash-latest \n"
+        "OPENROUTER_FREE_MODEL=nvidia/nemotron-3.5-lightning:free\n"
+        "OPENROUTER_API_KEY=test-secret-key\n"
+        "NVIDIA_LLM_MODEL=minimaxai/minimax-m3\n"
+        "NVIDIA_API_KEY=test-nvidia-key\n",
+        encoding="utf-8",
+    )
+
+    config = load_config()
+
+    assert config.chief_engineer.provider == "openrouter"
+    assert config.chief_engineer.model == "~deepseek/deepseek-v4-flash-latest"
+    assert [route.provider for route in config.chief_engineer.fallback_routes] == [
+        "openrouter",
+        "nvidia",
+    ]
+    assert [route.model for route in config.chief_engineer.fallback_routes] == [
+        "nvidia/nemotron-3.5-lightning:free",
+        "minimaxai/minimax-m3",
+    ]
+
+
+def test_legacy_openrouter_model_remains_paid_alias(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".env").write_text(
+        "OPENROUTER_MODEL=deepseek/deepseek-v4-flash-0731\n"
+        "OPENROUTER_API_KEY=test-secret-key\n",
+        encoding="utf-8",
+    )
+
+    config = load_config()
+
+    assert config.chief_engineer.provider == "openrouter"
+    assert config.chief_engineer.model == "deepseek/deepseek-v4-flash-0731"
+
+
+def test_explicit_omniroute_keeps_paid_fallback_before_free_routes(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".env").write_text(
+        "LOCALFORGE_CHIEF_PROVIDER=omniroute\n"
+        "LOCALFORGE_CHIEF_BASE_URL=http://127.0.0.1:20128/v1\n"
+        "LOCALFORGE_CHIEF_MODEL=auto/best-free\n"
+        "OPENROUTER_PAID_MODEL=~deepseek/deepseek-v4-flash-latest\n"
+        "OPENROUTER_FREE_MODEL=nvidia/nemotron-3.5-lightning:free\n"
+        "OPENROUTER_API_KEY=test-secret-key\n"
+        "NVIDIA_LLM_MODEL=minimaxai/minimax-m3\n"
+        "NVIDIA_API_KEY=test-nvidia-key\n",
+        encoding="utf-8",
+    )
+
+    config = load_config()
+    provider = build_chief_engineer_provider(config)
+
+    assert config.chief_engineer.provider == "omniroute"
+    assert config.chief_engineer.fallback_provider == "openrouter"
+    assert config.chief_engineer.fallback_model == "~deepseek/deepseek-v4-flash-latest"
+    assert isinstance(provider, FallbackLLMProvider)
+    assert provider.fallback_provider_name == "nvidia"
+    assert isinstance(provider.primary, FallbackLLMProvider)
+    assert provider.primary.fallback_provider_name == "openrouter"
+
+
+def test_openrouter_route_wins_over_unrelated_legacy_nvidia_keys(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     (tmp_path / ".env").write_text(
         "NVIDIA_LLM_MODEL=minimax/minimax-m3\n"
@@ -57,9 +137,9 @@ def test_legacy_nvidia_keys_do_not_bypass_cloud_gateway(tmp_path, monkeypatch):
 
     config = load_config()
 
-    assert config.chief_engineer.provider == "omniroute"
-    assert config.chief_engineer.model == "auto/best-free"
-    assert config.chief_engineer.api_key is None
+    assert config.chief_engineer.provider == "openrouter"
+    assert config.chief_engineer.model == "minimax/minimax-m3"
+    assert config.chief_engineer.api_key == "sk-or-fallback"
     assert config.chief_engineer.fallback_provider is None
 
 
@@ -143,6 +223,37 @@ def test_visual_section_normalizer_extracts_full_document_body_fragments() -> No
     assert "data-key='k0'" not in controls
 
 
+def test_visual_control_sections_follow_declared_matrix_without_duplicates() -> None:
+    matrix = [
+        {"locator": f"[data-row='{index // 8}'][data-column='{index % 8}']"}
+        for index in range(40)
+    ]
+    buttons = "".join(f"<button data-key='k{index}'>K{index}</button>" for index in range(40))
+
+    sections = []
+    for section_index in range(1, 7):
+        partition = _visual_control_partition(
+            f"body_controls_{section_index}", matrix
+        )
+        sections.append(
+            _normalize_visual_section_content(
+                f"body_controls_{section_index}",
+                buttons,
+                control_partition=partition,
+            )
+        )
+
+    rendered_keys = re.findall(r"data-key='(k\d+)'", "\n".join(sections))
+    assert rendered_keys == [f"k{index}" for index in range(40)]
+    assert len(rendered_keys) == len(set(rendered_keys))
+
+
+def test_body_control_section_accepts_legitimate_finite_size() -> None:
+    content = "<button data-key='control'>control</button>" + ("<!--x-->" * 419)
+    assert len(content) == 3395
+    _validate_visual_section("body_controls_3", content + "!", 120, 4800)
+
+
 def test_omniroute_visual_sections_use_equivalent_coding_alias(monkeypatch) -> None:
     monkeypatch.setenv("LOCALFORGE_FALLBACK_MODELS", "auto/coding:free,auto/best-free")
     monkeypatch.setenv("LOCALFORGE_CHIEF_FALLBACK_MODELS", "auto/coding:free,auto/best-free")
@@ -172,6 +283,24 @@ def test_omniroute_visual_sections_follow_configured_free_ladder(monkeypatch) ->
         "oc/catalog-visual-free",
         "oc/catalog-b-free",
     ]
+
+
+def test_omniroute_visual_sections_prefer_verified_routes_to_stale_aliases(monkeypatch) -> None:
+    monkeypatch.setenv(
+        "LOCALFORGE_CLOUD_VERIFIED_ROUTES",
+        "nvidia/live-primary,nvidia/live-secondary,nvidia/live-primary",
+    )
+    monkeypatch.setenv("LOCALFORGE_FALLBACK_MODELS", "auto/best-free")
+    monkeypatch.setenv("LOCALFORGE_CHIEF_FALLBACK_MODELS", "auto/coding:free")
+    monkeypatch.setenv(
+        "LOCALFORGE_CHIEF_VISUAL_FALLBACK_MODELS", "auto/best-free"
+    )
+
+    models = _visual_section_models("omniroute", "nvidia/live-primary")
+
+    assert models[:2] == ["nvidia/live-primary", "nvidia/live-secondary"]
+    assert models.count("nvidia/live-primary") == 1
+    assert models.index("nvidia/live-secondary") < models.index("auto/best-free")
 
 
 def test_transient_gateway_error_classifier() -> None:
@@ -230,6 +359,66 @@ async def test_omniroute_transient_alias_failure_uses_next_alias_without_chief(
     assert response == '{"actions": []}'
     assert model == "auto/best-coding"
     assert local.models == ["auto/best-fast", "auto/best-coding"]
+
+
+@pytest.mark.anyio
+async def test_local_lane_uses_direct_free_provider_before_paid_chief(monkeypatch):
+    config = LocalForgeConfig.model_validate(
+        {
+            "models": {
+                "provider": "omniroute",
+                "fallback_routes": [
+                    {
+                        "provider": "nvidia",
+                        "base_url": "https://integrate.api.nvidia.com/v1",
+                        "model": "minimaxai/minimax-m3",
+                        "api_key": "test-nvidia-key",
+                    }
+                ],
+            },
+            "chief_engineer": {"provider": "openrouter", "model": "paid-model"},
+        }
+    )
+    monkeypatch.setattr("localforge.pipeline.engine.load_config", lambda: config)
+
+    class LocalGateway:
+        provider_name = "omniroute"
+
+        async def chat_completion(self, *args, **kwargs):
+            raise LLMHTTPError("gateway unavailable", status_code=502)
+
+    class DirectFreeGateway:
+        provider_name = "nvidia"
+        default_model = "minimaxai/minimax-m3"
+
+        async def chat_completion(self, *args, **kwargs):
+            return '{"actions": []}'
+
+    monkeypatch.setattr(
+        "localforge.pipeline.engine.OpenAICompatibleProvider",
+        lambda **kwargs: LocalGateway(),
+    )
+    monkeypatch.setattr(
+        "localforge.pipeline.engine.build_free_provider_ladder",
+        lambda config: [DirectFreeGateway()],
+    )
+    monkeypatch.setattr(
+        "localforge.pipeline.engine.build_chief_engineer_provider",
+        lambda config: (_ for _ in ()).throw(AssertionError("Paid Chief is not needed")),
+    )
+
+    engine = RolePipelineEngine.__new__(RolePipelineEngine)
+    engine.uow = MagicMock(model_calls=None)
+    engine._local_model_candidates = AsyncMock(return_value=["auto/best-fast"])
+
+    response, model = await engine._chat_completion_with_local_fallback(
+        prompt="return action JSON",
+        preferred_model="auto/best-fast",
+        timeout=180.0,
+    )
+
+    assert response == '{"actions": []}'
+    assert model == "minimaxai/minimax-m3"
 
 
 @pytest.mark.anyio
@@ -293,7 +482,23 @@ async def test_omniroute_local_lane_tries_chief_alias_after_transient_primary_fa
 
 
 @pytest.mark.anyio
-async def test_visual_repair_is_assembled_from_bounded_calls() -> None:
+@pytest.mark.parametrize("script_state_length", [4715, 9742])
+async def test_visual_repair_is_assembled_from_bounded_calls(
+    script_state_length: int,
+) -> None:
+    script_state_prefix = "const stack=[]; function renderDisplay(){return stack[0] ?? 0;}"
+    if script_state_length == 4715:
+        script_state = (
+            script_state_prefix
+            + ("/* state behavior */" * 232)
+            + "/*12345678*/"
+        )
+    else:
+        script_state = script_state_prefix + "/*" + (
+            "x" * (script_state_length - len(script_state_prefix) - 4)
+        ) + "*/"
+    assert len(script_state) == script_state_length
+
     chunks = [
         "*{box-sizing:border-box}body{margin:0}" + ("/*r*/" * 80),
         ".calculator-shell{display:grid;min-height:80vh}" + ("/*c*/" * 71),
@@ -310,8 +515,9 @@ async def test_visual_repair_is_assembled_from_bounded_calls() -> None:
         '<button class="key" data-key="4">4</button>' * 8,
         '<button class="key" data-key="5">5</button>' * 8,
         '<button class="key" data-key="6">6</button>' * 8,
-        "const stack=[]; function renderDisplay(){return stack[0] ?? 0;}"
-        + ("/* state behavior */" * 30),
+        # Both the historical 4,715-character regression and the benchmark's
+        # 9,742-character complete section must remain intact.
+        script_state,
         "function enter(){stack.push(renderDisplay());} function add(){return 0;}"
         + ("/* operation behavior */" * 30),
         "document.querySelectorAll('.key').forEach((key)=>key.onclick=()=>{});"
@@ -350,6 +556,46 @@ async def test_visual_repair_is_assembled_from_bounded_calls() -> None:
     assert all(chunk in plan.actions[0].content for chunk in chunks)
 
 
+@pytest.mark.anyio
+async def test_omniroute_visual_generation_uses_monolithic_recovery_after_segment_failure(
+    monkeypatch,
+) -> None:
+    service = ChiefEngineerService(MagicMock())
+    expected = ChiefEngineerRepairPlan(
+        summary="monolithic recovery",
+        actions=[
+            {
+                "kind": "write_file",
+                "path": "app/index.html",
+                "content": "<html><body><script>run()</script></body></html>",
+            }
+        ],
+    )
+    segmented = AsyncMock(side_effect=LLMError("script section unavailable"))
+    monolithic = AsyncMock(return_value=expected)
+    monkeypatch.setattr(service, "_plan_segmented_visual_repair", segmented)
+    monkeypatch.setattr(service, "_plan_single_visual_repair", monolithic)
+
+    plan = await service.plan_semantic_repair(
+        project_id=1,
+        run_id=2,
+        task_id=3,
+        task_contract={
+            "visual_required": True,
+            "visual_actual_output": "app/index.html",
+            "allowed_files": ["app/index.html"],
+        },
+        changed_files_context="app/index.html is missing",
+        validation_output="visual output is missing",
+        provider=MagicMock(provider_name="omniroute"),
+        model="nvidia/live-primary",
+    )
+
+    assert plan is expected
+    segmented.assert_awaited_once()
+    monolithic.assert_awaited_once()
+
+
 def test_chief_engineer_provider_metadata_records_fallback_use():
     from localforge.chief_engineer.service import _provider_metadata
 
@@ -385,7 +631,7 @@ async def test_chief_engineer_falls_back_on_primary_timeout():
 
 
 @pytest.mark.anyio
-async def test_chief_engineer_falls_back_on_primary_model_not_found():
+async def test_chief_engineer_does_not_fallback_on_missing_model_configuration():
     primary = MagicMock(provider_name="nvidia", default_model="primary-model")
     primary.chat_completion = AsyncMock(
         side_effect=LLMHTTPError("model not found", status_code=404)
@@ -398,11 +644,56 @@ async def test_chief_engineer_falls_back_on_primary_model_not_found():
         primary_timeout=30.0,
     )
 
-    result = await provider.chat_completion([{"role": "user", "content": "work"}])
+    with pytest.raises(LLMHTTPError, match="model not found"):
+        await provider.chat_completion([{"role": "user", "content": "work"}])
 
-    assert result == "ok"
+    assert provider.used_fallback is False
+    fallback.chat_completion.assert_not_awaited()
+
+
+@pytest.mark.anyio
+async def test_chief_engineer_falls_back_on_provider_server_failure():
+    primary = MagicMock(provider_name="omniroute", default_model="primary-model")
+    primary.chat_completion = AsyncMock(
+        side_effect=LLMHTTPError("upstream unavailable", status_code=503)
+    )
+    fallback = MagicMock(provider_name="openrouter", default_model="fallback-model")
+    fallback.chat_completion = AsyncMock(return_value="ok")
+    provider = FallbackLLMProvider(
+        primary=primary,
+        fallback=fallback,
+        primary_timeout=30.0,
+    )
+
+    assert await provider.chat_completion([{"role": "user", "content": "work"}]) == "ok"
     assert provider.used_fallback is True
     fallback.chat_completion.assert_awaited_once()
+
+
+@pytest.mark.anyio
+async def test_chief_engineer_circuit_skips_repeated_primary_outage():
+    primary = MagicMock(
+        provider_name="omniroute",
+        base_url="http://gateway.test/v1",
+        default_model="primary-model",
+    )
+    primary.chat_completion = AsyncMock(
+        side_effect=LLMHTTPError("upstream unavailable", status_code=503)
+    )
+    fallback = MagicMock(provider_name="openrouter", default_model="fallback-model")
+    fallback.chat_completion = AsyncMock(return_value="ok")
+    provider = FallbackLLMProvider(
+        primary=primary,
+        fallback=fallback,
+        primary_timeout=30.0,
+    )
+
+    await provider.chat_completion([{"role": "user", "content": "first"}])
+    await provider.chat_completion([{"role": "user", "content": "second"}])
+    await provider.chat_completion([{"role": "user", "content": "third"}])
+
+    assert primary.chat_completion.await_count == 2
+    assert fallback.chat_completion.await_count == 3
 
 
 def test_nvidia_chief_does_not_send_provider_aliases_to_primary():

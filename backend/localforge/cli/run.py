@@ -116,6 +116,13 @@ async def _run_chief_preflight(
         return "Chief Engineer is required by the ready task contracts but has no API key."
     try:
         provider = build_chief_engineer_provider(config)
+        fallback_provider = getattr(provider, "fallback", None)
+        if fallback_provider is not None:
+            return await _run_fallback_aware_chief_preflight(
+                config=config,
+                primary_provider=getattr(provider, "primary", provider),
+                fallback_provider=fallback_provider,
+            )
         # Readiness must prove the configured primary provider itself. Using
         # the paid fallback wrapper here can turn a slow-but-healthy primary
         # into a false OpenRouter credit failure before task execution starts.
@@ -274,6 +281,100 @@ async def _run_chief_preflight(
         return "Chief Engineer readiness probe exhausted provider ladder: " + "; ".join(errors)
     except Exception as exc:
         return f"Chief Engineer readiness probe failed: {exc}"
+
+
+async def _run_fallback_aware_chief_preflight(
+    *,
+    config: LocalForgeConfig,
+    primary_provider: object,
+    fallback_provider: object,
+) -> str | None:
+    """Probe a primary/fallback pair without blocking on a dead primary.
+
+    The primary is always attempted first. A fallback is eligible only when
+    the primary reports a transient availability failure; authentication,
+    billing, model-selection, and contract failures remain actionable rather
+    than being hidden by a different provider.
+    """
+    chief = config.chief_engineer
+    timeout = min(max(float(chief.timeout), 20.0), 120.0)
+    try:
+        max_attempts = max(1, min(2, int(os.getenv("LOCALFORGE_CHIEF_PREFLIGHT_MAX_ATTEMPTS", "2"))))
+    except ValueError:
+        max_attempts = 2
+
+    async def probe(candidate: object, models: list[str]) -> tuple[bool, bool, str]:
+        list_models = getattr(candidate, "list_models", None)
+        available: list[str] | None = None
+        errors: list[str] = []
+        if callable(list_models):
+            try:
+                listed = await asyncio.wait_for(list_models(), timeout=15.0)
+                available = [item for item in listed if isinstance(item, str)]
+                if not available:
+                    return False, True, "provider returned no available models"
+                models = [model for model in models if model in available]
+                if not models:
+                    return (
+                        False,
+                        False,
+                        f"no configured readiness model is available; available={available[:12]}",
+                    )
+            except Exception as exc:
+                return False, _is_transient_probe_error(exc), str(exc)
+
+        probe_messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You are a provider readiness probe. Return only valid JSON "
+                    'with one concrete action: {"actions":[{"kind":"write_file",'
+                    '"path":"probe.txt","content":"ok"}]}'
+                ),
+            },
+            {"role": "user", "content": "Return the structured probe now."},
+        ]
+        for _ in range(max_attempts):
+            for model in models:
+                try:
+                    response = await asyncio.wait_for(
+                        candidate.chat_completion(
+                            probe_messages,
+                            stream=False,
+                            response_schema={"type": "object"},
+                            timeout=timeout,
+                            model=model,
+                        ),
+                        timeout=timeout + 5.0,
+                    )
+                    payload = json.loads(response) if isinstance(response, str) else None
+                    if isinstance(payload, dict) and isinstance(payload.get("actions"), list) and payload["actions"]:
+                        return True, False, ""
+                    errors.append(f"{model}: expected a non-empty actions array")
+                except Exception as exc:
+                    errors.append(f"{model}: {exc}")
+                    if not _is_transient_probe_error(exc):
+                        return False, False, "; ".join(errors[-3:])
+        return False, True, "; ".join(errors[-3:])
+
+    primary_model = getattr(primary_provider, "default_model", None) or chief.model
+    primary_models = list(dict.fromkeys([str(primary_model), *chief.fallback_models]))
+    primary_ok, primary_transient, primary_error = await probe(primary_provider, primary_models)
+    if primary_ok:
+        return None
+    if not primary_transient:
+        return "Chief Engineer primary readiness failed: " + primary_error
+
+    fallback_model = getattr(fallback_provider, "default_model", None) or chief.fallback_model
+    if not fallback_model:
+        return "Chief Engineer primary provider is unavailable and no fallback model is configured."
+    fallback_ok, _, fallback_error = await probe(fallback_provider, [str(fallback_model)])
+    if fallback_ok:
+        return None
+    return (
+        "Chief Engineer readiness exhausted the configured provider fallback: "
+        f"primary={primary_error}; fallback={fallback_error}"
+    )
 
 
 def _is_transient_probe_error(error: Exception) -> bool:

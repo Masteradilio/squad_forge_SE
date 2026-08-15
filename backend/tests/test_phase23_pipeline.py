@@ -1,7 +1,11 @@
 import asyncio
 import json
+import time
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
 
+import pytest
 from fastapi.testclient import TestClient
 from localforge.api.app import create_app
 from localforge.models import domain
@@ -10,12 +14,28 @@ from localforge.models.enums import (
     HandoffKind,
     RunMode,
     RunStatus,
+    TaskRunStatus,
     TaskStatus,
 )
 from localforge.pipeline import PIPELINES, PipelineMode, RolePipelineEngine
+import localforge.pipeline.engine as pipeline_engine
+from localforge.pipeline.engine import (
+    _prepare_visual_recovery_budget,
+    _visual_global_model_call_limit,
+    _visual_model_call_limit,
+    _visual_validation_timeout_seconds,
+)
 from localforge.pipeline.context import RoleContextBuilder
 from localforge.runtime.handoffs import RuntimeHandoffService
 from localforge.runtime.actions import RuntimeActionProposal
+from localforge.llm.context import (
+    LLMCallBudgetExceeded,
+    check_and_increment_llm_calls,
+    get_llm_call_count,
+    get_llm_limit,
+    reset_llm_call_counter,
+    set_llm_limit,
+)
 from localforge.storage import UnitOfWork
 from localforge.storage.bootstrap import bootstrap_database
 from localforge.storage.database import DatabaseManager
@@ -32,6 +52,461 @@ def test_phase23_pipeline_modes_match_backlog_sequences():
     assert PIPELINES[PipelineMode.DEFAULT][-1] == AgentRole.PR_WRITER
     assert AgentRole.CLEANER in PIPELINES[PipelineMode.STRICT]
     assert AgentRole.QA in PIPELINES[PipelineMode.STRICT]
+
+
+def test_visual_model_call_limit_allows_long_runs_without_unbounded_budget(monkeypatch):
+    monkeypatch.setenv("LOCALFORGE_VISUAL_MAX_ACTIVE_MODEL_CALLS", "192")
+    assert _visual_model_call_limit() == 192
+
+    monkeypatch.setenv("LOCALFORGE_VISUAL_MAX_ACTIVE_MODEL_CALLS", "8")
+    assert _visual_model_call_limit() == 24
+
+    monkeypatch.setenv("LOCALFORGE_VISUAL_MAX_ACTIVE_MODEL_CALLS", "not-an-int")
+    assert _visual_model_call_limit() == 256
+
+    monkeypatch.setenv("LOCALFORGE_VISUAL_MAX_ACTIVE_MODEL_CALLS", "9999")
+    assert _visual_model_call_limit() == 512
+
+
+def test_visual_global_model_call_limit_is_derived_from_existing_budgets(monkeypatch):
+    monkeypatch.setenv("LOCALFORGE_VISUAL_MAX_ACTIVE_MODEL_CALLS", "192")
+    config = SimpleNamespace(
+        budgets=SimpleNamespace(
+            max_active_model_calls=4,
+            max_repair_attempts=5,
+            max_repair_attempts_absolute=10,
+            max_gateway_calls=48,
+        )
+    )
+
+    # One initial generation window plus one equally sized recovery window,
+    # funded by the existing gateway budget and capped at 48 calls.
+    assert _visual_global_model_call_limit(config) == 48
+
+    compact_config = SimpleNamespace(
+        budgets=SimpleNamespace(
+            max_active_model_calls=2,
+            max_repair_attempts=2,
+            max_repair_attempts_absolute=10,
+            max_gateway_calls=48,
+        )
+    )
+    assert _visual_global_model_call_limit(compact_config) == 12
+
+    gateway_limited_config = SimpleNamespace(
+        budgets=SimpleNamespace(
+            max_active_model_calls=4,
+            max_repair_attempts=5,
+            max_repair_attempts_absolute=10,
+            max_gateway_calls=28,
+        )
+    )
+    assert _visual_global_model_call_limit(gateway_limited_config) == 28
+    assert _visual_global_model_call_limit(config, gateway_calls=20) == 20
+
+
+def test_visual_validation_timeout_is_finite_and_configurable(monkeypatch):
+    monkeypatch.setenv("LOCALFORGE_VISUAL_VALIDATION_TIMEOUT", "45")
+    assert _visual_validation_timeout_seconds() == 45
+
+    monkeypatch.setenv("LOCALFORGE_VISUAL_VALIDATION_TIMEOUT", "2")
+    assert _visual_validation_timeout_seconds() == 15
+
+    monkeypatch.setenv("LOCALFORGE_VISUAL_VALIDATION_TIMEOUT", "999")
+    assert _visual_validation_timeout_seconds() == 180
+
+
+@pytest.mark.anyio
+async def test_pre_call_llm_budget_failure_is_typed_and_does_not_consume_a_slot():
+    task_run_id = 910001
+    reset_llm_call_counter(task_run_id)
+    set_llm_limit(task_run_id, 1)
+
+    await check_and_increment_llm_calls(task_run_id, 1)
+    with pytest.raises(LLMCallBudgetExceeded, match="exceeded maximum LLM call budget"):
+        await check_and_increment_llm_calls(task_run_id, 1)
+
+    assert get_llm_call_count(task_run_id) == 1
+    assert get_llm_limit(task_run_id) == 1
+
+
+@pytest.mark.anyio
+async def test_visual_recovery_reserves_finite_budget_after_segmented_exhaustion():
+    task_run_id = 910002
+    reset_llm_call_counter(task_run_id)
+    set_llm_limit(task_run_id, 256)
+    for _ in range(240):
+        await check_and_increment_llm_calls(task_run_id, 256)
+
+    summaries: list[str] = []
+    assert _prepare_visual_recovery_budget(task_run_id, summaries) is True
+
+    assert get_llm_call_count(task_run_id) == 240
+    assert get_llm_limit(task_run_id) == 288
+    assert "bounded model-call window" in summaries[-1]
+
+
+@pytest.mark.anyio
+async def test_visual_recovery_budget_does_not_expand_global_task_run_cap():
+    task_run_id = 910003
+    reset_llm_call_counter(task_run_id)
+    set_llm_limit(task_run_id, 24)
+    for _ in range(21):
+        await check_and_increment_llm_calls(task_run_id, 24)
+
+    summaries: list[str] = []
+    assert (
+        _prepare_visual_recovery_budget(
+            task_run_id,
+            summaries,
+            reserve=4,
+            max_limit=24,
+        )
+        is False
+    )
+    assert get_llm_limit(task_run_id) == 24
+    assert "global model-call budget exhausted" in summaries[-1]
+
+
+@pytest.mark.anyio
+async def test_visual_repair_stops_without_another_provider_call_at_global_cap(
+    monkeypatch, tmp_path
+):
+    engine = _repair_round_test_engine(monkeypatch, visual=True, repaired=True)
+    task_run_id = 910004
+    reset_llm_call_counter(task_run_id)
+    set_llm_limit(task_run_id, 24)
+    for _ in range(24):
+        await check_and_increment_llm_calls(task_run_id, 24)
+
+    task = SimpleNamespace(
+        id=1,
+        project_id=1,
+        key="LF-VISUAL-BUDGET",
+        metadata={"task_contract": {"visual_required": True}},
+    )
+    task_run = SimpleNamespace(id=task_run_id, worktree_path=str(tmp_path))
+    summaries: list[str] = []
+
+    code, stdout, stderr = await engine._run_chief_engineer_repair_rounds(
+        task=task,
+        task_run=task_run,
+        context=MagicMock(),
+        editor=MagicMock(),
+        changed_files=[],
+        command_summaries=summaries,
+        validation_output="Visual validation failed: similarity 0.784 < 0.90",
+    )
+
+    assert code == 1
+    assert stdout == ""
+    assert "global model-call budget exhausted" in stderr
+    engine._try_chief_engineer_repair.assert_not_awaited()
+
+
+@pytest.mark.anyio
+async def test_visual_recovery_uses_complete_document_planner_after_segmented_failure():
+    engine = RolePipelineEngine.__new__(RolePipelineEngine)
+    calls: list[str] = []
+
+    class FakeChiefService:
+        async def _plan_single_visual_repair(self, **kwargs):
+            calls.append("single")
+            return "complete-plan"
+
+        async def plan_semantic_repair(self, **kwargs):
+            calls.append("segmented")
+            return "segmented-plan"
+
+    plan = await engine._request_chief_repair_plan(
+        service=FakeChiefService(),
+        visual_recovery_mode=True,
+        task_contract={"visual_required": True},
+    )
+
+    assert plan == "complete-plan"
+    assert calls == ["single"]
+
+
+def test_visual_gate_failure_keeps_applied_chief_action_in_pipeline():
+    summaries = [
+        "Chief Engineer repair applied: Complete visual document generated by OmniRoute",
+        "Visual validation failed: similarity 0.784 < 0.90",
+    ]
+
+    assert RolePipelineEngine._chief_production_action_applied(summaries) is True
+    assert RolePipelineEngine._chief_production_action_applied(
+        ["Chief Engineer repair returned no production actions after the acceptance test immutability guard."]
+    ) is False
+
+
+@pytest.mark.anyio
+async def test_visual_sync_check_offloads_and_converts_timeout(monkeypatch):
+    engine = RolePipelineEngine.__new__(RolePipelineEngine)
+    monkeypatch.setattr(pipeline_engine, "_visual_validation_timeout_seconds", lambda: 0.01)
+
+    def slow_visual_check():
+        time.sleep(0.05)
+        return "late"
+
+    with pytest.raises(TimeoutError, match="HTML screenshot capture"):
+        await engine._run_visual_sync_check(
+            slow_visual_check,
+            label="HTML screenshot capture",
+        )
+
+
+@pytest.mark.anyio
+async def test_visual_sync_check_preserves_fast_gate_result(monkeypatch):
+    engine = RolePipelineEngine.__new__(RolePipelineEngine)
+    monkeypatch.setattr(pipeline_engine, "_visual_validation_timeout_seconds", lambda: 0.5)
+    gate_result = {"passed": True, "similarity": 0.97}
+
+    result = await engine._run_visual_sync_check(lambda: gate_result, label="visual fidelity gate")
+
+    assert result is gate_result
+
+
+@pytest.mark.anyio
+async def test_visual_repair_timeout_returns_control_with_explicit_error(monkeypatch):
+    engine = RolePipelineEngine.__new__(RolePipelineEngine)
+    monkeypatch.setattr(pipeline_engine, "_visual_repair_timeout_seconds", lambda: 0.01)
+
+    with pytest.raises(TimeoutError, match="initial Chief generation"):
+        await engine._run_visual_repair_with_timeout(
+            asyncio.sleep(0.05),
+            label="initial Chief generation",
+        )
+
+
+@pytest.mark.anyio
+async def test_task_heartbeat_keepalive_persists_during_long_wait(monkeypatch):
+    heartbeat_updates = []
+    live_run = SimpleNamespace(status=TaskRunStatus.RUNNING, heartbeat_at=None)
+
+    class FakeTasks:
+        async def get_task_run(self, task_run_id):
+            return live_run
+
+        async def update_task_run(self, task_run):
+            heartbeat_updates.append(task_run.heartbeat_at)
+            return task_run
+
+    class FakeUnitOfWork:
+        def __init__(self, manager):
+            self.tasks = FakeTasks()
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+    engine = RolePipelineEngine.__new__(RolePipelineEngine)
+    engine.uow = SimpleNamespace(db_manager=object())
+    monkeypatch.setattr(pipeline_engine, "UnitOfWork", FakeUnitOfWork)
+    monkeypatch.setattr(pipeline_engine, "_task_heartbeat_interval_seconds", lambda: 0.01)
+
+    keepalive = asyncio.create_task(engine._task_heartbeat_keepalive(7))
+    await asyncio.sleep(0.04)
+    keepalive.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await keepalive
+
+    assert heartbeat_updates
+
+
+def _repair_round_test_engine(monkeypatch, *, visual: bool, repaired: bool):
+    engine = RolePipelineEngine.__new__(RolePipelineEngine)
+    engine.uow = SimpleNamespace(tasks=object())
+    monkeypatch.setattr(engine, "_is_visual_task", lambda task: visual)
+    monkeypatch.setattr(engine, "_snapshot_required_product_files", lambda **_: {})
+    monkeypatch.setattr(engine, "_snapshot_visual_files", lambda *args: {})
+    monkeypatch.setattr(engine, "_current_visual_score", lambda *args: None)
+    monkeypatch.setattr(engine, "_refresh_visual_evidence", lambda *args: None)
+    monkeypatch.setattr(
+        engine, "_commit_checkpoint", AsyncMock()
+    )
+    engine._try_chief_engineer_repair = AsyncMock(return_value=repaired)
+    engine._restore_regressed_required_products = AsyncMock()
+    monkeypatch.setattr(
+        pipeline_engine,
+        "load_config",
+        lambda: SimpleNamespace(
+            budgets=SimpleNamespace(max_repair_attempts=3),
+            chief_engineer=SimpleNamespace(
+                model="visual-primary",
+                visual_model="visual-primary",
+                visual_fallback_models=[],
+                fallback_models=[],
+            ),
+        ),
+    )
+    return engine
+
+
+@pytest.mark.anyio
+async def test_visual_repair_false_advances_through_bounded_rounds(monkeypatch, tmp_path):
+    engine = _repair_round_test_engine(monkeypatch, visual=True, repaired=False)
+    task = SimpleNamespace(metadata={"task_contract": {"visual_required": True}})
+    task_run = SimpleNamespace(id=1, worktree_path=str(tmp_path))
+    summaries = []
+
+    code, stdout, stderr = await engine._run_chief_engineer_repair_rounds(
+        task=task,
+        task_run=task_run,
+        context=MagicMock(),
+        editor=MagicMock(),
+        changed_files=[],
+        command_summaries=summaries,
+        validation_output="initial failure",
+    )
+
+    assert code == 1
+    assert stdout == "initial failure"
+    assert stderr == ""
+    assert engine._try_chief_engineer_repair.await_count == 3
+    assert any("continuing to bounded round" in summary for summary in summaries)
+    assert any("exhausted its bounded rounds" in summary for summary in summaries)
+
+
+@pytest.mark.anyio
+async def test_non_visual_repair_false_keeps_immediate_break(monkeypatch, tmp_path):
+    engine = _repair_round_test_engine(monkeypatch, visual=False, repaired=False)
+    task = SimpleNamespace(metadata={"task_contract": {}})
+    task_run = SimpleNamespace(id=1, worktree_path=str(tmp_path))
+    summaries = []
+
+    await engine._run_chief_engineer_repair_rounds(
+        task=task,
+        task_run=task_run,
+        context=MagicMock(),
+        editor=MagicMock(),
+        changed_files=[],
+        command_summaries=summaries,
+        validation_output="initial failure",
+    )
+
+    assert engine._try_chief_engineer_repair.await_count == 1
+
+
+@pytest.mark.anyio
+async def test_initial_visual_chief_failure_reuses_bounded_recovery(monkeypatch, tmp_path):
+    engine = RolePipelineEngine.__new__(RolePipelineEngine)
+    bounded_recovery = AsyncMock(return_value=(0, "validated", ""))
+    engine._run_chief_engineer_repair_rounds = bounded_recovery
+    summaries = []
+
+    recovered = await engine._run_initial_visual_chief_recovery(
+        task=MagicMock(),
+        task_run=SimpleNamespace(id=1, worktree_path=str(tmp_path)),
+        context=MagicMock(),
+        editor=MagicMock(),
+        changed_files=["app/index.html"],
+        command_summaries=summaries,
+        validation_output="initial Chief action unavailable",
+    )
+
+    assert recovered is True
+    bounded_recovery.assert_awaited_once()
+    assert summaries == []
+
+
+@pytest.mark.anyio
+async def test_initial_visual_chief_failure_preserves_bounded_diagnostic(monkeypatch, tmp_path):
+    engine = RolePipelineEngine.__new__(RolePipelineEngine)
+    engine._run_chief_engineer_repair_rounds = AsyncMock(
+        return_value=(1, "last stdout", "last stderr")
+    )
+    summaries = []
+
+    recovered = await engine._run_initial_visual_chief_recovery(
+        task=MagicMock(),
+        task_run=SimpleNamespace(id=1, worktree_path=str(tmp_path)),
+        context=MagicMock(),
+        editor=MagicMock(),
+        changed_files=[],
+        command_summaries=summaries,
+        validation_output="initial Chief action unavailable",
+    )
+
+    assert recovered is False
+    assert summaries[-1].startswith(
+        "Initial visual Chief Engineer recovery failed after bounded rounds."
+    )
+    assert "last stdout" in summaries[-1]
+
+
+@pytest.mark.anyio
+async def test_visual_recovery_attempt_skips_missing_chief_action_guard(monkeypatch, tmp_path):
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+    task = SimpleNamespace(
+        id=1,
+        project_id=1,
+        key="LF-VISUAL-DIAGNOSTIC",
+        metadata={"task_contract": {"visual_required": True}},
+    )
+    task_run = SimpleNamespace(id=1, worktree_path=str(tmp_path))
+    tasks = SimpleNamespace(
+        get_task=AsyncMock(return_value=task),
+        update_task=AsyncMock(),
+    )
+    engine = RolePipelineEngine.__new__(RolePipelineEngine)
+    engine.project_id = 1
+    engine.run_id = 1
+    engine.uow = SimpleNamespace(
+        session=None,
+        tasks=tasks,
+        audits=SimpleNamespace(append_audit_event=AsyncMock()),
+    )
+    engine._materialize_acceptance_test_fixture = AsyncMock()
+    engine._snapshot_required_product_files = lambda **_: {}
+    engine._restore_regressed_required_products = AsyncMock()
+    engine._is_visual_task = lambda current_task: True
+    engine._has_task_contract = lambda current_task: True
+    engine._visual_actual_output_path = lambda current_task: "app/index.html"
+    engine._try_chief_engineer_repair = MagicMock(return_value=False)
+    engine._run_visual_repair_with_timeout = AsyncMock(return_value=False)
+
+    async def failed_visual_recovery(**kwargs):
+        kwargs["command_summaries"].append(
+            "Initial visual Chief Engineer recovery failed after bounded rounds. "
+            "Diagnostics: timeout/ladder exhausted."
+        )
+        return False
+
+    engine._run_initial_visual_chief_recovery = failed_visual_recovery
+    engine._request_model_actions = AsyncMock(
+        side_effect=AssertionError("visual recovery must not request a second initial action")
+    )
+    engine._sanitize_generated_python_files = AsyncMock()
+    engine._sanitize_generated_javascript_files = AsyncMock()
+    engine._validate_generated_python_syntax = lambda *args: None
+    engine._commit_checkpoint = AsyncMock()
+    engine._run_pytest_validation_resilient = AsyncMock(
+        return_value=(1, "", "Visual gate failed after timeout/ladder exhausted")
+    )
+    engine._write_command_summary = AsyncMock()
+    engine._write_validation_failure_artifact = AsyncMock()
+    monkeypatch.setattr(
+        pipeline_engine,
+        "load_config",
+        lambda: SimpleNamespace(models=SimpleNamespace(provider="local")),
+    )
+
+    with pytest.raises(ValueError) as failure:
+        await engine._execute_coder_actions(
+            project=SimpleNamespace(id=1, root_path=str(tmp_path)),
+            task=task,
+            task_run=task_run,
+            context=SimpleNamespace(model_profile_id="test-model"),
+            max_repair=0,
+        )
+
+    assert "no Chief Engineer action was applied" not in str(failure.value)
+    assert "timeout/ladder exhausted" in str(failure.value)
+    assert engine._request_model_actions.await_count == 0
+    assert tasks.update_task.await_count == 1
 
 
 def test_node_eval_html_harness_uses_detectable_argument_slot():
@@ -555,6 +1030,26 @@ def test_canonical_test_path_is_derived_from_task_contract():
     assert RolePipelineEngine._canonical_test_paths(task) == [
         "tests/test_tvm_solver.py"
     ]
+
+
+def test_visual_task_without_canonical_test_uses_visual_gate(tmp_path):
+    task = type(
+        "VisualContractTask",
+        (),
+        {
+            "metadata": {
+                "task_contract": {
+                    "visual_required": True,
+                    "canonical_test_command": (
+                        "python -m pytest tests/test_visual_surface.py -q"
+                    ),
+                }
+            }
+        },
+    )()
+    engine = RolePipelineEngine.__new__(RolePipelineEngine)
+
+    assert engine._visual_test_is_not_materialized(task, str(tmp_path)) is True
 
 
 def test_behavioral_html_acceptance_test_is_not_marked_as_static_only(tmp_path):

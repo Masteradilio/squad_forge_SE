@@ -32,16 +32,16 @@ test.beforeEach(async ({ request }) => {
   await requireBackend(request);
 });
 
-test('Mission Control visual journey exposes real operational areas', async ({ page }, testInfo) => {
+test('unified workspace visual journey exposes the full delivery pipeline', async ({ page }, testInfo) => {
   const response = await page.goto('/');
   expect(response?.ok(), 'compiled frontend must return a successful document response').toBeTruthy();
 
   await expect(page.getByRole('heading', { name: 'ForgeOS Cloud', exact: true })).toBeVisible();
   await expect(page.getByRole('navigation', { name: 'LocalForge sections' })).toBeVisible();
-  await expect(page.getByText(/Projetos & Conversas/).first()).toBeVisible();
-  await expect(page.getByRole('link', { name: /PO Chat & Mission Control/ })).toHaveAttribute('aria-current', 'page');
+  await expect(page.getByText(/Do documento ao software entregue/)).toBeVisible();
+  await expect(page.getByRole('link', { name: /Chat \+ Pipeline\/Kanban Workspace/ })).toHaveAttribute('aria-current', 'page');
 
-  await visitSection(page, /Kanban/, 'kanban', /Kanban|Pull Request|Tarefas/);
+  await visitSection(page, /Chat \+ Pipeline\/Kanban/, 'chat', /Backlog|Security Auditor|Tester final/);
   await visitSection(page, /Telemetria/, 'tests', /Telemetria|Conformidade|Security Auditor|E2E Release Tester/);
   await visitSection(page, /Skills/, 'skills', /Skills|Agentes/);
   await visitSection(page, /Modelos/, 'settings', /OmniRoute|Model|BYOK/);

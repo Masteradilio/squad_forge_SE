@@ -28,6 +28,6 @@ test('compiled frontend smoke requires the backend contract', async ({ page }, t
   expect(response?.ok(), 'compiled frontend must return a successful document response').toBeTruthy();
   await expect(page.getByRole('heading', { name: 'ForgeOS Cloud', exact: true })).toBeVisible();
   await expect(page.getByRole('navigation', { name: 'LocalForge sections' })).toBeVisible();
-  await expect(page.getByRole('link', { name: /PO Chat & Mission Control/ })).toHaveAttribute('aria-current', 'page');
+  await expect(page.getByRole('link', { name: /Chat \+ Pipeline\/Kanban Workspace/ })).toHaveAttribute('aria-current', 'page');
   await page.screenshot({ path: testInfo.outputPath('frontend-smoke.png'), fullPage: true });
 });

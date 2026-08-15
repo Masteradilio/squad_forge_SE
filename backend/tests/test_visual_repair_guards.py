@@ -148,6 +148,47 @@ def test_visual_matrix_contract_checks_locators_labels_positions_and_actions(tmp
     assert findings == []
 
 
+def test_visual_structure_accepts_stable_role_button_as_interactive(tmp_path):
+    html = tmp_path / "index.html"
+    html.write_text(
+        """
+        <main><div role='button' tabindex='0' aria-label='Save'>Save</div>
+        <script>document.querySelector('[aria-label="Save"]').addEventListener('click', save)</script></main>
+        """,
+        encoding="utf-8",
+    )
+
+    findings = validate_visual_html_structure(
+        str(html),
+        structure_rules=["stable_interactive_locators", "declared_visual_matrix"],
+        visual_matrix=[
+            {
+                "locator": "[aria-label='Save']",
+                "primary_label": "Save",
+                "action": "persist",
+            }
+        ],
+    )
+
+    assert findings == []
+
+
+def test_visual_structure_rejects_role_button_without_stable_locator(tmp_path):
+    html = tmp_path / "index.html"
+    html.write_text(
+        "<main><div role='button' tabindex='0'>Save</div></main>", encoding="utf-8"
+    )
+
+    findings = validate_visual_html_structure(
+        str(html),
+        structure_rules=["stable_interactive_locators", "declared_visual_matrix"],
+        visual_matrix=[{"contract": "rendered_product_surface"}],
+    )
+
+    assert any("stable" in finding for finding in findings)
+    assert any("real interactive element" in finding for finding in findings)
+
+
 def test_visual_matrix_contract_rejects_missing_declared_surface(tmp_path):
     html = tmp_path / "index.html"
     html.write_text("<main><button>Save</button></main>", encoding="utf-8")

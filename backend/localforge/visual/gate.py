@@ -14,6 +14,39 @@ class VisualGateResult:
     failure_class: FailureClass | None = None
 
 
+_NATIVE_INTERACTIVE_TAGS = frozenset({"button", "a", "input", "select", "textarea"})
+
+
+def _is_role_button(attributes: str) -> bool:
+    """Recognize only an explicit ARIA button role, not arbitrary HTML."""
+    return re.search(r"\brole\s*=\s*(?:['\"]button['\"]|button\b)", attributes) is not None
+
+
+def _has_stable_interactive_locator(attributes: str) -> bool:
+    return re.search(
+        r"\b(?:id|name|data-[a-z0-9_-]+|aria-label)\s*=\s*(?:['\"][^'\"]+['\"]|[^\s'\">]+)",
+        attributes,
+    ) is not None
+
+
+def _interactive_elements(normalized: str) -> list[tuple[str, str]]:
+    """Return native controls plus explicitly locatable ARIA buttons."""
+    elements: list[tuple[str, str]] = []
+    for tag, attributes in re.findall(r"<([a-z][a-z0-9:-]*)\b([^>]*)>", normalized):
+        if tag in _NATIVE_INTERACTIVE_TAGS or _is_role_button(attributes):
+            elements.append((tag, attributes))
+    return elements
+
+
+def _has_real_interactive_element(normalized: str) -> bool:
+    return any(
+        tag in _NATIVE_INTERACTIVE_TAGS
+        or _has_stable_interactive_locator(attributes)
+        for tag, attributes in _interactive_elements(normalized)
+        if tag in _NATIVE_INTERACTIVE_TAGS or _is_role_button(attributes)
+    )
+
+
 class VisualFidelityGate:
     """Evaluates visual fidelity of a rendered output against a reference image.
 
@@ -136,13 +169,11 @@ def validate_visual_html_structure(
     findings: list[str] = []
     normalized = re.sub(r"\s+", " ", content.lower())
     if "stable_interactive_locators" in structure_rules:
-        interactive_tags = re.findall(r"<(button|a|input|select|textarea)\b([^>]*)>", normalized)
+        interactive_tags = _interactive_elements(normalized)
         missing_locators = [
             tag
             for tag, attributes in interactive_tags
-            if not re.search(
-                r"\b(?:id|name|data-testid|data-key|data-action|aria-label)\s*=", attributes
-            )
+            if not _has_stable_interactive_locator(attributes)
         ]
         if missing_locators:
             findings.append(
@@ -161,7 +192,7 @@ def validate_visual_html_structure(
                         findings.append(
                             "Rendered product surface contract requires a main or body surface."
                         )
-                    if not re.search(r"<(?:button|a|input|select|textarea)\b", normalized):
+                    if not _has_real_interactive_element(normalized):
                         findings.append(
                             "Rendered product surface contract requires at least one real interactive element."
                         )
@@ -179,16 +210,17 @@ def validate_visual_html_structure(
                     continue
                 locator_token = locator.removeprefix("#").lower()
                 locator_present = locator_token in normalized
-                if locator.startswith("[data-row="):
+                selector_attributes = re.findall(
+                    r"\[([a-z][a-z0-9_-]*)\s*=\s*['\"]([^'\"]+)['\"]\]",
+                    locator.lower(),
+                )
+                if selector_attributes:
                     locator_present = all(
                         re.search(
-                            rf"{attribute}\s*=\s*['\"]{re.escape(value)}['\"]",
+                            rf"\b{re.escape(attribute)}\s*=\s*['\"]{re.escape(value)}['\"]",
                             normalized,
                         )
-                        for attribute, value in re.findall(
-                            r"\[(data-[a-z-]+)=['\"]([^'\"]+)['\"]\]",
-                            locator.lower(),
-                        )
+                        for attribute, value in selector_attributes
                     )
                 if not locator_present:
                     findings.append(

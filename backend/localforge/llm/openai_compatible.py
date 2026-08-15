@@ -140,6 +140,7 @@ class OpenAICompatibleProvider(BaseLLMProvider):
         )
         self.default_model = default_model
         self.provider_name = provider_name
+        self.model_pricing: dict[str, dict[str, float]] = {}
         # Honour ``LOCALFORGE_LLM_MAX_OUTPUT_TOKENS`` (and the
         # ``LOCALFORGE_LLM_MAX_INPUT_TOKENS`` companion). Operators with
         # free-tier NVIDIA / OpenRouter keys regularly hit ``max_tokens``
@@ -171,13 +172,34 @@ class OpenAICompatibleProvider(BaseLLMProvider):
                 resp = await client.get(url, headers=headers)
                 if resp.status_code != 200:
                     raise LLMHTTPError(
-                        f"HTTP Error {resp.status_code}: {resp.text}",
+                        f"HTTP Error {resp.status_code}: {self._redact(resp.text)}",
                         status_code=resp.status_code,
                     )
                 data = resp.json()
-                # Parse list format
+                # Parse list format and retain provider-reported catalog
+                # pricing. OpenRouter returns dollars-per-token strings; the
+                # ledger stores dollars-per-million for auditable estimates.
                 items = data.get("data", [])
-                return [item["id"] for item in items if "id" in item]
+                models: list[str] = []
+                for item in items:
+                    if not isinstance(item, dict) or "id" not in item:
+                        continue
+                    model_id = str(item["id"])
+                    models.append(model_id)
+                    pricing = item.get("pricing")
+                    if not isinstance(pricing, dict):
+                        continue
+                    try:
+                        input_price = float(pricing["prompt"]) * 1_000_000
+                        output_price = float(pricing["completion"]) * 1_000_000
+                    except (KeyError, TypeError, ValueError):
+                        continue
+                    if input_price >= 0 and output_price >= 0:
+                        self.model_pricing[model_id] = {
+                            "input_per_million": input_price,
+                            "output_per_million": output_price,
+                        }
+                return models
         except httpx.TimeoutException as e:
             raise LLMTimeoutError(f"Connection timeout to {url}") from e
         except httpx.RequestError as e:
@@ -289,7 +311,7 @@ class OpenAICompatibleProvider(BaseLLMProvider):
                 )
                 if resp.status_code != 200:
                     raise LLMHTTPError(
-                        f"Completion API failed ({resp.status_code}): {resp.text}",
+                        f"Completion API failed ({resp.status_code}): {self._redact(resp.text)}",
                         status_code=resp.status_code,
                     )
                 content = decode_chat_completion_response(resp)
@@ -308,11 +330,13 @@ class OpenAICompatibleProvider(BaseLLMProvider):
         except httpx.TimeoutException as e:
             raise LLMTimeoutError(f"Chat completion call timed out after {timeout}s") from e
         except httpx.RequestError as e:
-            raise LLMConnectionError(f"Chat completion call failed: {e}") from e
+            raise LLMConnectionError(f"Chat completion call failed: {self._redact(str(e))}") from e
         except Exception as e:
             if isinstance(e, LLMError):
                 raise e
-            raise LLMError(f"Unexpected error in chat completion: {e}") from e
+            raise LLMError(
+                f"Unexpected error in chat completion: {self._redact(str(e))}"
+            ) from e
 
     async def _stream_chat_completion(
         self,
@@ -328,7 +352,8 @@ class OpenAICompatibleProvider(BaseLLMProvider):
                     if response.status_code != 200:
                         body = await response.aread()
                         raise LLMHTTPError(
-                            f"Streaming request failed ({response.status_code}): {body.decode()}",
+                            f"Streaming request failed ({response.status_code}): "
+                            f"{self._redact(body.decode())}",
                             status_code=response.status_code,
                         )
 
@@ -367,8 +392,17 @@ class OpenAICompatibleProvider(BaseLLMProvider):
         except httpx.TimeoutException as e:
             raise LLMTimeoutError("Streaming connection timed out") from e
         except httpx.RequestError as e:
-            raise LLMConnectionError(f"Streaming network error: {e}") from e
+            raise LLMConnectionError(
+                f"Streaming network error: {self._redact(str(e))}"
+            ) from e
         except Exception as e:
             if isinstance(e, LLMError):
                 raise e
-            raise LLMError(f"Unexpected error in streaming: {e}") from e
+            raise LLMError(
+                f"Unexpected error in streaming: {self._redact(str(e))}"
+            ) from e
+
+    def _redact(self, text: str) -> str:
+        if not self.api_key or self.api_key == "no-key":
+            return text
+        return text.replace(self.api_key, "[redacted]")

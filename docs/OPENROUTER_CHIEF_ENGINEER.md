@@ -1,17 +1,23 @@
 # OpenRouter Chief Engineer Setup
 
-LocalForge V2 can use a paid OpenRouter model as a scarce Chief Engineer for
-architecture contracts, hard failures, contract changes, and final PR review.
-Local models still handle bounded low/medium-risk work.
+LocalForge V2 uses a paid OpenRouter model as the default Chief Engineer lane
+for architecture contracts, hard failures, contract changes, and final PR
+review. OmniRoute remains the economy-first lane for ordinary agent work.
 
 ## Environment
 
 Create a root `.env` with:
 
 ```env
-OPENROUTER_MODEL=minimax/minimax-m3
+OPENROUTER_PAID_MODEL=~deepseek/deepseek-v4-flash-latest
+OPENROUTER_FREE_MODEL=nvidia/nemotron-3.5-lightning:free
 OPENROUTER_API_KEY=sk-or-...
+NVIDIA_LLM_MODEL=minimaxai/minimax-m3
+NVIDIA_API_KEY=nvapi-...
 ```
+
+The leading `~` is part of the current OpenRouter alias model ID. The legacy
+`OPENROUTER_MODEL` name is still accepted as a paid-model alias.
 
 The API key is loaded only when Chief Engineer execution is needed. It is not
 returned by the API, written to artifacts, or copied into the model-call ledger.
@@ -31,13 +37,17 @@ instead of spending more credits.
 
 ## Chief Engineer Responsibilities
 
-Use OpenRouter for:
+Use the paid OpenRouter lane for:
 
 - architecture planning and contract freeze;
 - high-risk task classification;
 - contract change review;
 - hard failure triage and semantic repair planning;
 - final PR review after deterministic gates.
+
+If the paid route has a transient availability failure, ForgeOS tries the
+configured OpenRouter FREE route and then the direct NVIDIA FREE route. An
+explicit `LOCALFORGE_CHIEF_PROVIDER` still overrides this default.
 
 Do not use it for:
 

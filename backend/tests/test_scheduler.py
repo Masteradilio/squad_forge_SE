@@ -20,7 +20,7 @@ from localforge.services.audit import AuditService
 from localforge.services.execution import ExecutionService
 from localforge.services.project import ProjectService
 from localforge.services.runners import BaseTaskRunner, RunnerContext, TaskRunnerPool
-from localforge.services.scheduler import Scheduler
+from localforge.services.scheduler import Scheduler, _is_exhausted_chief_blocker
 from localforge.services.task import TaskService
 from localforge.services.worktree import WorktreeService
 from localforge.storage import UnitOfWork
@@ -49,6 +49,25 @@ class FakeRunner(BaseTaskRunner):
 
     async def cleanup(self, task_run: domain.TaskRun, *, uow) -> None:
         pass
+
+
+@pytest.mark.parametrize(
+    ("message", "expected"),
+    [
+        ("Visual validation failed: similarity 0.784 < 0.90", False),
+        ("Single-document visual repair exhausted its finite ladder", False),
+        ("Visual recovery global model-call budget exhausted: 24/24", True),
+        (
+            "Chief Engineer provider is unavailable and requires operator action",
+            True,
+        ),
+        ("max_paid_usd_absolute budget exhausted", True),
+    ],
+)
+def test_exhausted_chief_blocker_keeps_visual_gate_failures_recoverable(
+    message: str, expected: bool
+):
+    assert _is_exhausted_chief_blocker(message) is expected
 
 
 def test_scheduler_trigger_wakes_event_wait_without_polling_delay():

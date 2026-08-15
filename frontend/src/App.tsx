@@ -5,11 +5,8 @@ import { Alert } from './components/Alert';
 import { AppSidebar, type AppTab } from './components/AppSidebar';
 import { ComplianceTestsView } from './components/ComplianceTestsView';
 import { ForgeContinuityView } from './components/ForgeContinuityView';
-import { KanbanBoard } from './components/KanbanBoard';
+import { ForgeWorkspaceView } from './components/ForgeWorkspaceView';
 import { ModelSettingsView } from './components/ModelSettingsView';
-import { MissionControlView } from './components/MissionControlView';
-import { OperationsStream } from './components/OperationsStream';
-import { POChatView } from './components/POChatView';
 import { SkillsEditorView } from './components/SkillsEditorView';
 import { TracingTimelineView, type TraceSpanItem } from './components/TracingTimelineView';
 
@@ -35,6 +32,7 @@ export default function App() {
     if (!activeProject) {
       setTasks([]);
       setTelemetrySpans([]);
+      setEvents([]);
       setTasksLoading(false);
       setTasksError(null);
       return;
@@ -43,12 +41,23 @@ export default function App() {
     setTasksLoading(true);
     setTasksError(null);
     try {
-      const [projectTasks, spans] = await Promise.all([
+      const [projectTasks, spans, persistedEvents] = await Promise.all([
         apiClient.fetchTasks(activeProject.id),
         apiClient.fetchTelemetrySpans(activeProject.id),
+        apiClient.fetchTelemetryEvents(activeProject.id),
       ]);
       setTasks(projectTasks);
       setTelemetrySpans(spans as TraceSpanItem[]);
+      setEvents((previous) => {
+        const merged = [...(persistedEvents as LifecycleEventPayload[]), ...previous];
+        const seen = new Set<string>();
+        return merged.filter((item) => {
+          const key = String(item.id ?? '') + '|' + item.event_type + '|' + String(item.created_at ?? '');
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        }).slice(0, 200);
+      });
       setTasksLoading(false);
       setError(null);
     } catch (err) {
@@ -89,7 +98,7 @@ export default function App() {
     const handleHash = () => {
       const hashTab = window.location.hash.replace('#/', '');
       if (isAppTab(hashTab)) {
-        setCurrentTab(hashTab);
+        setCurrentTab(hashTab === 'kanban' ? 'chat' : hashTab);
       }
     };
 
@@ -137,7 +146,7 @@ export default function App() {
 
   const handleNavigateToTab = (tab: string) => {
     if (isAppTab(tab)) {
-      setCurrentTab(tab);
+      setCurrentTab(tab === 'kanban' ? 'chat' : tab);
     }
   };
 
@@ -157,35 +166,20 @@ export default function App() {
     }
   };
 
-  const handleResetAll = () => {
-    setProjects([]);
-    setActiveProject(null);
-    setTasks([]);
-    setEvents([]);
-  };
-
   const renderTabContent = () => {
     switch (currentTab) {
       case 'chat':
-        return (
-          <>
-            <MissionControlView projectId={activeProject?.id} liveEvents={events} />
-            <POChatView
-              activeProject={activeProject}
-              onNavigateToTab={handleNavigateToTab}
-              onSelectProject={handleSelectProject}
-            />
-          </>
-        );
       case 'kanban':
         return (
-          <KanbanBoard
+          <ForgeWorkspaceView
+            activeProject={activeProject}
             tasks={tasks}
-            activeProjectId={activeProject?.id}
+            events={events}
+            telemetrySpans={telemetrySpans}
             loading={tasksLoading}
             error={tasksError}
             onRefresh={() => void loadProjectData()}
-            onResetAll={handleResetAll}
+            onSelectProject={(projectId) => void handleSelectProject(projectId)}
           />
         );
       case 'tests':
@@ -230,7 +224,6 @@ export default function App() {
           {error && <Alert type="error">{error}</Alert>}
           {renderTabContent()}
         </main>
-        <OperationsStream events={events} />
       </div>
     </div>
   );

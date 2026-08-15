@@ -298,18 +298,49 @@ class ChiefEngineerService:
                 or os.getenv("LOCALFORGE_VISUAL_SECTION_FALLBACK", "true").lower()
                 == "true"
             ):
-                return await self._plan_segmented_visual_repair(
-                    project_id=project_id,
-                    run_id=run_id,
-                    task_id=task_id,
-                    task_contract=task_contract,
-                    changed_files_context=changed_files_context,
-                    validation_output=validation_output,
-                    provider=provider,
-                    model=model,
-                    visual_reference_image_path=visual_reference_image_path,
-                    visual_actual_image_path=visual_actual_image_path,
-                )
+                try:
+                    return await self._plan_segmented_visual_repair(
+                        project_id=project_id,
+                        run_id=run_id,
+                        task_id=task_id,
+                        task_contract=task_contract,
+                        changed_files_context=changed_files_context,
+                        validation_output=validation_output,
+                        provider=provider,
+                        model=model,
+                        visual_reference_image_path=visual_reference_image_path,
+                        visual_actual_image_path=visual_actual_image_path,
+                    )
+                except Exception as segmented_error:
+                    # A free route can fail on one section even when it can
+                    # still produce the complete document coherently. Give
+                    # the same finite OmniRoute ladder one monolithic recovery
+                    # opportunity before returning the blocker to Scrum Master.
+                    if provider_name != "omniroute":
+                        raise
+                    logger.warning(
+                        "Segmented visual generation exhausted its ladder; "
+                        "trying monolithic visual recovery: %s",
+                        segmented_error,
+                    )
+                    try:
+                        return await self._plan_single_visual_repair(
+                            project_id=project_id,
+                            run_id=run_id,
+                            task_id=task_id,
+                            task_contract=task_contract,
+                            changed_files_context=changed_files_context,
+                            validation_output=validation_output,
+                            provider=provider,
+                            model=model,
+                            visual_reference_image_path=visual_reference_image_path,
+                            visual_actual_image_path=visual_actual_image_path,
+                        )
+                    except Exception as monolithic_error:
+                        raise LLMError(
+                            "Segmented and monolithic visual generation both failed: "
+                            f"segmented={segmented_error}; monolithic={monolithic_error}"
+                        ) from monolithic_error
             return await self._plan_single_visual_repair(
                 project_id=project_id,
                 run_id=run_id,
@@ -970,6 +1001,9 @@ class ChiefEngineerService:
         section_models = _visual_section_models(provider_name, model)
         section_user_content = text_content if provider_name == "omniroute" else multimodal_content
 
+        # These are finite character ceilings for complete sections. The model
+        # output cap is token-based, so valid longer JavaScript must not be
+        # silently truncated to fit an older character ceiling.
         section_specs: tuple[tuple[str, int, int, str, str | list[dict[str, Any]]], ...] = (
             (
                 "css_reset",
@@ -1051,7 +1085,7 @@ class ChiefEngineerService:
             (
                 "body_controls_1",
                 120,
-                1800,
+                4800,
                 "Return only the first sixth of the contract controls in exact visual order. "
                 "Every control must be a direct button child; include legends and data-key "
                 "attributes. Do not include a grid/container wrapper or omit repeated keys.",
@@ -1060,7 +1094,7 @@ class ChiefEngineerService:
             (
                 "body_controls_2",
                 120,
-                1800,
+                4800,
                 "Return only the second sixth of the contract controls in exact visual order, "
                 "continuing after the first sixth. Every control must be a direct button child; "
                 "include legends and data-key attributes. No grid/container wrapper.",
@@ -1069,7 +1103,7 @@ class ChiefEngineerService:
             (
                 "body_controls_3",
                 120,
-                1800,
+                4800,
                 "Return only the third sixth of the contract controls in exact visual order, "
                 "continuing after the second sixth. Every control must be a direct button child; "
                 "include legends and data-key attributes. No grid/container wrapper.",
@@ -1078,7 +1112,7 @@ class ChiefEngineerService:
             (
                 "body_controls_4",
                 120,
-                1800,
+                4800,
                 "Return only the fourth sixth of the contract controls in exact visual order, "
                 "continuing after the third sixth. Every control must be a direct button child; "
                 "include legends and data-key attributes. No grid/container wrapper.",
@@ -1087,7 +1121,7 @@ class ChiefEngineerService:
             (
                 "body_controls_5",
                 120,
-                1800,
+                4800,
                 "Return only the fifth sixth of the contract controls in exact visual order, "
                 "continuing after the fourth sixth. Every control must be a direct button child; "
                 "include legends and data-key attributes. No grid/container wrapper.",
@@ -1096,7 +1130,7 @@ class ChiefEngineerService:
             (
                 "body_controls_6",
                 120,
-                1800,
+                4800,
                 "Return only the final sixth of the contract controls in exact visual order, "
                 "continuing after the fifth sixth through the last control. Every control must "
                 "be a direct button child; include legends and data-key attributes. No "
@@ -1106,7 +1140,7 @@ class ChiefEngineerService:
             (
                 "script_state",
                 500,
-                3200,
+                12000,
                 "Return only executable JavaScript declarations for product state, display "
                 "formatting, input helpers, and clear/reset. Do "
                 "not add event listeners or wrappers. Every function must be complete; no "
@@ -1116,7 +1150,7 @@ class ChiefEngineerService:
             (
                 "script_operations",
                 500,
-                3200,
+                12000,
                 "Return only executable JavaScript for the declared primary actions, state "
                 "transitions, calculations, and basic operation dispatch. Reuse the state and helper "
                 "names required by the contract; do not redeclare them, add event listeners, "
@@ -1126,7 +1160,7 @@ class ChiefEngineerService:
             (
                 "script_controls",
                 500,
-                3200,
+                9000,
                 "Return only executable JavaScript for shift handling, key lookup, button and "
                 "keyboard event wiring, and dispatch to the preceding helpers. Reuse shared "
                 "state names; do not redeclare core operations or emit wrappers, stubs, TODOs, "
@@ -1136,7 +1170,7 @@ class ChiefEngineerService:
             (
                 "script_advanced",
                 500,
-                3200,
+                12000,
                 "Return only executable JavaScript that appends the advanced operations and "
                 "domain behavior required by this task contract. Reuse the preceding shared "
                 "state and dispatch names; no wrappers, "
@@ -1160,6 +1194,9 @@ class ChiefEngineerService:
             instruction,
             user_content,
         ) in section_specs:
+            control_partition = _visual_control_partition(
+                section_name, task_contract.get("visual_acceptance_matrix")
+            )
             transport_instruction = (
                 "Return only the complete section content, without JSON, prose, or analysis."
                 if provider_name == "omniroute"
@@ -1243,7 +1280,9 @@ class ChiefEngineerService:
                                     stream=False,
                                 )
                         normalized_content = _normalize_visual_section_content(
-                            section_name, candidate.content
+                            section_name,
+                            candidate.content,
+                            control_partition=control_partition,
                         )
                         _validate_visual_section(
                             section_name, normalized_content, minimum_length, maximum_length
@@ -1342,7 +1381,9 @@ class ChiefEngineerService:
                     f"ladder: {last_error}"
                 ) from last_error
             sections[section_name] = _normalize_visual_section_content(
-                section_name, result.content
+                section_name,
+                result.content,
+                control_partition=control_partition,
             )
 
         controls_content = "\n".join(
@@ -1401,7 +1442,10 @@ def _compact_visual_repair_prompt(task_contract: dict[str, object]) -> str:
         "single_product_surface": "render one coherent product surface rather than a test stub or dashboard substitute",
         "stable_interactive_locators": "give every declared interactive element a stable semantic locator and keyboard-accessible state",
         "declared_visual_matrix": "materialize every row, column, label, legend, color, span, and action declared by the visual matrix",
-        "responsive_reference_convergence": "match the declared reference geometry at the contract viewport and verify responsive behavior without inventing controls",
+        "responsive_reference_convergence": (
+            "match the declared reference geometry at the contract viewport and "
+            "verify responsive behavior without inventing controls"
+        ),
     }
     guidance_text = " ".join(
         guidance[item]
@@ -1570,7 +1614,46 @@ def _extract_visual_section_content(raw_content: str) -> str:
     return content
 
 
-def _normalize_visual_section_content(name: str, content: str) -> str:
+def _visual_control_partition(
+    name: str, visual_acceptance_matrix: object
+) -> tuple[int, int] | None:
+    """Return the expected button interval for a declared visual matrix."""
+    if not name.startswith("body_controls_") or not isinstance(
+        visual_acceptance_matrix, list
+    ):
+        return None
+    entries = visual_acceptance_matrix
+    if not entries or not all(isinstance(entry, dict) for entry in entries):
+        return None
+    control_fields = {
+        "locator",
+        "row",
+        "column",
+        "label",
+        "labels",
+        "primary_label",
+        "secondary_label",
+        "action",
+    }
+    if not any(control_fields.intersection(entry) for entry in entries):
+        return None
+    try:
+        section_index = int(name.rsplit("_", 1)[1]) - 1
+    except (IndexError, ValueError):
+        return None
+    if not 0 <= section_index < 6:
+        return None
+    section_size = (len(entries) + 5) // 6
+    start = section_index * section_size
+    return start, min(len(entries), start + section_size)
+
+
+def _normalize_visual_section_content(
+    name: str,
+    content: str,
+    *,
+    control_partition: tuple[int, int] | None = None,
+) -> str:
     """Remove harmless response wrappers before validating a bounded section."""
     normalized = content.strip()
     if normalized.startswith("```") and normalized.endswith("```"):
@@ -1607,9 +1690,15 @@ def _normalize_visual_section_content(name: str, content: str) -> str:
         buttons = re.findall(
             r"<button\b[^>]*>.*?</button>", normalized, re.IGNORECASE | re.DOTALL
         )
-        # A model that ignored the sixth instruction commonly returns every
-        # control. Keep only the requested deterministic sixth in that case.
-        if len(buttons) > 16:
+        # A declared matrix gives each section a stable interval even when a
+        # model ignores the sixth instruction and returns every control.
+        if control_partition is not None:
+            start, end = control_partition
+            expected_count = max(0, end - start)
+            if len(buttons) > expected_count:
+                normalized = "\n".join(buttons[start:end]).strip()
+        # Without a matrix, preserve the historical content-driven fallback.
+        elif len(buttons) > 16:
             sixth = (len(buttons) + 5) // 6
             sixth_index = int(name.rsplit("_", 1)[1]) - 1
             start = sixth_index * sixth
@@ -1830,10 +1919,15 @@ def _visual_section_models(provider_name: str, requested_model: str) -> list[str
         # environments where a workspace config is intentionally absent.
         configured_routes = []
 
+    verified_routes = [
+        item.strip()
+        for item in os.getenv("LOCALFORGE_CLOUD_VERIFIED_ROUTES", "").split(",")
+        if item.strip()
+    ]
     free_routes = list(dict.fromkeys(configured_routes))
     if not free_routes:
         free_routes = ["auto/best-free"]
-    ladder = [preferred, *free_routes]
+    ladder = [preferred, *verified_routes, *free_routes]
     return list(dict.fromkeys(ladder))
 
 
@@ -1923,6 +2017,27 @@ def _provider_metadata(provider: BaseLLMProvider) -> dict[str, object]:
         metadata["primary_provider"] = str(provider.primary_provider_name)
         metadata["fallback_provider"] = str(getattr(provider, "fallback_provider_name", ""))
         metadata["used_fallback"] = bool(getattr(provider, "used_fallback", False))
+        failure_reason = getattr(provider, "primary_failure_reason", None)
+        if isinstance(failure_reason, str) and failure_reason:
+            metadata["primary_failure_reason"] = str(failure_reason)[:240]
+        selected = (
+            getattr(provider, "fallback", None)
+            if bool(getattr(provider, "used_fallback", False))
+            else getattr(provider, "primary", None)
+        )
+    else:
+        selected = provider
+    pricing = getattr(selected, "model_pricing", None)
+    selected_model = getattr(selected, "default_model", None)
+    if isinstance(pricing, dict) and isinstance(selected_model, str):
+        selected_prices = pricing.get(selected_model)
+        if isinstance(selected_prices, dict):
+            input_price = selected_prices.get("input_per_million")
+            output_price = selected_prices.get("output_per_million")
+            if isinstance(input_price, (int, float)) and isinstance(output_price, (int, float)):
+                metadata["pricing_input_per_million"] = float(input_price)
+                metadata["pricing_output_per_million"] = float(output_price)
+                metadata["pricing_measurement_source"] = "PROVIDER_CATALOG"
     return metadata
 
 

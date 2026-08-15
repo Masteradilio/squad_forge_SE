@@ -77,17 +77,45 @@ repeatability; that setting does not convert a blocked task into a successful
 product run. Optional Kubernetes profile application and Helm checks remain
 `NOT_PROVEN` unless those tools/services are explicitly available.
 
+### HP12C benchmark readiness
+
+The HP12C Platinum sample is a stress benchmark for autonomous delivery, not a
+proof that every PRD is already delivered autonomously. The two long runs
+reported by the Product Owner consumed approximately 25 hours and 17 hours;
+repository evidence also records provider/Chief Engineer timeouts, missing
+materialized visual tests, SQLite heartbeat contention, post-merge visual and
+security failures, and incomplete repair routing.
+
+Do not repeat the full benchmark until the prioritized readiness backlog in
+[docs/pendencias_correcoes.md](docs/pendencias_correcoes.md) is complete. The release bar is deliberately
+stricter than PR_READY: full_access must merge every task, run independent
+Security Auditor and interface-level Tester/Product Acceptance gates, return
+non-compliant work to the correct correction stage, and preserve a complete
+trace from PRD intake through the final product.
+
 ## What ForgeOS provides
 
 ### Model gateway and economy controls
 
-- All runtime model traffic is routed through the local OmniRoute-compatible
-  endpoint configured in `.localforge/config.yaml` or `.env`.
-- Preflight discovers the live catalog, verifies a usable structured route, and
-  records the selected model, provider, retries, and estimated cost.
-- The route ladder is finite and fail-closed. A missing gateway, authentication
-  failure, exhausted quota, or unavailable upstream is reported as an
-  infrastructure blocker rather than disguised as product success.
+- Runtime model traffic uses an explicit provider lane configured in
+  `.localforge/config.yaml` or `.env`: the local OmniRoute-compatible gateway
+  remains the economy-first route for ordinary agents, while OpenRouter and
+  NVIDIA are supported direct API lanes.
+- `OPENROUTER_PAID_MODEL` plus `OPENROUTER_API_KEY` select the paid OpenRouter
+  route as the default for Chief Engineer, critical repair, and final
+  validation. `OPENROUTER_FREE_MODEL` and `NVIDIA_LLM_MODEL` are bounded free
+  direct-provider fallback lanes. `OPENROUTER_MODEL` remains a compatibility
+  alias for the paid model.
+- An explicit `LOCALFORGE_CHIEF_PROVIDER` always wins. For example, an
+  explicitly selected OmniRoute Chief route can use the paid OpenRouter lane
+  and then the configured free routes after transient failures.
+- Preflight probes the primary route and, after a transient outage, the
+  configured fallback route. Authentication, billing, model-selection, and
+  contract errors remain visible instead of being hidden by fallback.
+- Provider circuits open after repeated transient failures for a finite
+  cooldown, preventing an unavailable route from consuming the entire Run.
+  Every selected provider, fallback decision, retry, and estimated cost is
+  recorded in the model-call ledger.
 - Structured Chief Engineer calls have a configurable bounded timeout through
   `LOCALFORGE_OMNIROUTE_STRUCTURED_TIMEOUT` (30-600 seconds; default 120).
 
@@ -241,9 +269,13 @@ requires an allowlisted ForgeOS handler and the Safety Kernel.
   timeline events, HITL approvals, and Helm templates are available as
   optional integration surfaces. They are not silently treated as live
   dependencies of the reference benchmark.
-- The frontend exposes mission, tasks, agents, skills, memory, safety, review,
-  and timeline surfaces, but a frontend build or hosted deployment is a
-  separate release gate.
+- The frontend exposes a single portfolio-oriented Chat + Pipeline workspace:
+  document upload and Scrum Master response sit below a five-lane delivery view
+  (Backlog, execution/correction, PR_READY/Merge, Security Auditor, and final
+  Tester). Post-merge lifecycle traces are visible in the same workspace, and
+  non-compliant work can return to correction. Skills, memory, safety, review,
+  and detailed telemetry remain available as secondary surfaces; a frontend build
+  or hosted deployment is a separate release gate.
 
 ### Reintegrated reliability and operations
 

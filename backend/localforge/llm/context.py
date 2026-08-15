@@ -1,5 +1,18 @@
 from contextvars import ContextVar
 
+
+class LLMCallBudgetExceeded(ValueError):
+    """Raised when a model request is rejected before provider dispatch."""
+
+    def __init__(self, task_run_id: int, current: int, limit: int) -> None:
+        self.task_run_id = task_run_id
+        self.current = current
+        self.limit = limit
+        super().__init__(
+            f"Task run {task_run_id} exceeded maximum LLM call budget of {limit} calls."
+        )
+
+
 # ContextVar tracking the active task_run_id in the execution thread/context
 active_task_run_id: ContextVar[int | None] = ContextVar("active_task_run_id", default=None)
 
@@ -48,7 +61,5 @@ async def check_and_increment_llm_calls(task_run_id: int, limit: int) -> None:
     """
     current = _llm_call_counters.get(task_run_id, 0)
     if current >= limit:
-        raise ValueError(
-            f"Task run {task_run_id} exceeded maximum LLM call budget of {limit} calls."
-        )
+        raise LLMCallBudgetExceeded(task_run_id, current, limit)
     _llm_call_counters[task_run_id] = current + 1

@@ -11,9 +11,11 @@ from localforge.cli.run import _run_chief_preflight
 from localforge.core.config import LocalForgeConfig, load_config
 from localforge.discovery.engine import PreFlightDiscoveryEngine
 from localforge.llm.base import LLMError, LLMHTTPError
+from localforge.llm.fallback import FallbackLLMProvider
 from localforge.llm.factory import build_chief_engineer_provider
 from localforge.llm.fake import FakeLLMProvider
 from localforge.llm.openai_compatible import OpenAICompatibleProvider
+from localforge.llm.openrouter import OpenRouterProvider
 from localforge.memory.graphify_engine import GraphifyEngine
 from localforge.memory.mempalace_service import MemPalaceService
 from localforge.memory.rule_synthesizer import RuleSynthesizer
@@ -438,6 +440,53 @@ async def test_cli_chief_preflight_probes_primary_before_fallback(monkeypatch) -
 
 
 @pytest.mark.asyncio
+async def test_cli_chief_preflight_uses_paid_fallback_after_transient_primary_failure(
+    monkeypatch,
+) -> None:
+    class Primary:
+        provider_name = "omniroute"
+        default_model = "free/model"
+
+        async def chat_completion(self, *args: object, **kwargs: object) -> str:
+            raise LLMHTTPError("upstream unavailable", status_code=503)
+
+    class Fallback:
+        provider_name = "openrouter"
+        default_model = "paid/model"
+
+        async def chat_completion(self, *args: object, **kwargs: object) -> str:
+            return '{"actions":[{"kind":"write_file","path":"probe.txt","content":"ok"}]}'
+
+    class Wrapped:
+        primary = Primary()
+        fallback = Fallback()
+
+    monkeypatch.setattr(
+        "localforge.cli.run.build_chief_engineer_provider",
+        lambda config: Wrapped(),
+    )
+    config = LocalForgeConfig.model_validate(
+        {
+            "chief_engineer": {
+                "provider": "omniroute",
+                "model": "free/model",
+                "fallback_provider": "openrouter",
+                "fallback_model": "paid/model",
+            }
+        }
+    )
+    task = Task(
+        project_id=1,
+        key="LF-PRD-002",
+        title="Fallback task",
+        description="Needs the Chief Engineer.",
+        metadata={"task_contract": {"seniority_class": "chief_only"}},
+    )
+
+    assert await _run_chief_preflight(config, [task]) is None
+
+
+@pytest.mark.asyncio
 async def test_cli_chief_preflight_falls_through_omniroute_aliases(monkeypatch) -> None:
     attempted: list[str] = []
     previous_chief_model = os.environ.get("LOCALFORGE_CHIEF_MODEL")
@@ -683,19 +732,46 @@ def test_omniroute_can_be_the_chief_engineer_execution_provider(monkeypatch) -> 
     assert provider.default_model == "auto/best-coding"
 
 
-def test_chief_engineer_factory_rejects_direct_provider() -> None:
+def test_chief_engineer_factory_builds_openrouter_provider() -> None:
     config = LocalForgeConfig.model_validate(
         {
             "chief_engineer": {
                 "provider": "openrouter",
                 "base_url": "https://openrouter.ai/api/v1",
                 "model": "paid/model",
+                "api_key": "sk-or-test",
             }
         }
     )
 
-    with pytest.raises(LLMError, match="requires.*OmniRoute"):
-        build_chief_engineer_provider(config)
+    provider = build_chief_engineer_provider(config)
+
+    assert isinstance(provider, OpenRouterProvider)
+    assert provider.provider_name == "openrouter"
+    assert provider.default_model == "paid/model"
+
+
+def test_chief_engineer_factory_builds_omniroute_with_openrouter_fallback() -> None:
+    config = LocalForgeConfig.model_validate(
+        {
+            "chief_engineer": {
+                "provider": "omniroute",
+                "base_url": "http://127.0.0.1:20128/v1",
+                "model": "auto/best-free",
+                "api_key": "gateway-key",
+                "fallback_provider": "openrouter",
+                "fallback_base_url": "https://openrouter.ai/api/v1",
+                "fallback_model": "paid/model",
+                "fallback_api_key": "sk-or-test",
+            }
+        }
+    )
+
+    provider = build_chief_engineer_provider(config)
+
+    assert isinstance(provider, FallbackLLMProvider)
+    assert provider.primary_provider_name == "omniroute"
+    assert provider.fallback_provider_name == "openrouter"
 
 
 def test_chief_environment_override_can_replace_paid_dotenv_route(tmp_path, monkeypatch) -> None:

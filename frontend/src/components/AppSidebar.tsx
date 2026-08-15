@@ -10,14 +10,13 @@ export type AppTab =
 
 // eslint-disable-next-line react-refresh/only-export-components
 export const CORE_MENUS: { id: AppTab; label: string; icon: string }[] = [
-  { id: 'chat', label: '1. PO Chat & Mission Control', icon: '💬' },
-  { id: 'kanban', label: '2. Kanban & Revisão de PRs', icon: '📋' },
+  { id: 'chat', label: '1. Chat + Pipeline/Kanban Workspace', icon: '💬' },
   { id: 'tests', label: '3. Telemetria & OpenTelemetry Tracing', icon: '📊' },
   { id: 'skills', label: '4. Skills & Agentes (Matt Pocock TDD)', icon: '🧩' },
   { id: 'settings', label: '5. Modelos (OmniRoute), BYOK & Live Preview', icon: '⚙️' },
 ];
 
-CORE_MENUS.splice(4, 0, { id: 'references', label: '5. Continuity, References & Automations', icon: 'R' });
+CORE_MENUS.splice(3, 0, { id: 'references', label: '5. Continuity, References & Automations', icon: 'R' });
 
 interface AppSidebarProps {
   projects: Project[];
@@ -102,7 +101,9 @@ export function AppSidebar({
 
       <nav aria-label="LocalForge sections" style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1 }}>
         {CORE_MENUS.map((menu) => {
-          const active = currentTab === menu.id;
+          const active = menu.id === 'chat'
+            ? currentTab === 'chat' || currentTab === 'kanban'
+            : currentTab === menu.id;
           return (
             <a
               key={menu.id}

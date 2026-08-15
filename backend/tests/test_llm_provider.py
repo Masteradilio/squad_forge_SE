@@ -60,6 +60,32 @@ async def test_openai_compatible_provider_list_models():
 
 
 @pytest.mark.anyio
+async def test_openrouter_compatible_catalog_keeps_reported_prices():
+    provider = OpenAICompatibleProvider(
+        base_url="https://openrouter.ai/api/v1",
+        default_model="provider/model",
+        provider_name="openrouter",
+    )
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {
+        "data": [
+            {
+                "id": "provider/model",
+                "pricing": {"prompt": "0.00000020", "completion": "0.00000080"},
+            }
+        ]
+    }
+
+    with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+        mock_get.return_value = mock_resp
+        assert await provider.list_models() == ["provider/model"]
+
+    assert provider.model_pricing["provider/model"]["input_per_million"] == pytest.approx(0.2)
+    assert provider.model_pricing["provider/model"]["output_per_million"] == pytest.approx(0.8)
+
+
+@pytest.mark.anyio
 async def test_openai_compatible_provider_chat_success():
     """Verify chat completions fetch model response content."""
     provider = OpenAICompatibleProvider(

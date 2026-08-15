@@ -100,6 +100,7 @@ def _omniroute_preflight(base_url: str) -> tuple[bool, list[str], dict[str, Any]
         return False, [], {
             "catalog": f"HTTP {catalog_status}: {catalog_body}",
             "completion": "not attempted",
+            "verified_routes": [],
         }
     catalog_routes = [
         str(item["id"])
@@ -116,6 +117,7 @@ def _omniroute_preflight(base_url: str) -> tuple[bool, list[str], dict[str, Any]
         return False, [], {
             "catalog": "reachable but no free or explicitly configured route was advertised",
             "completion": "not attempted",
+            "verified_routes": [],
         }
 
     failures: list[str] = []
@@ -139,10 +141,12 @@ def _omniroute_preflight(base_url: str) -> tuple[bool, list[str], dict[str, Any]
     }
     try:
         max_probe_routes = max(
-            1, int(_env_value("LOCALFORGE_CLOUD_PREFLIGHT_MAX_ROUTES") or 16)
+            1,
+            min(16, int(_env_value("LOCALFORGE_CLOUD_PREFLIGHT_MAX_ROUTES") or 16)),
         )
     except ValueError:
         max_probe_routes = 16
+    max_verified_routes = 4
     configured_preference = _env_value("LOCALFORGE_CLOUD_PREFERRED_FREE_ROUTES")
     preferred = [
         item.strip().lower()
@@ -172,6 +176,8 @@ def _omniroute_preflight(base_url: str) -> tuple[bool, list[str], dict[str, Any]
         if route in catalog_routes
         and not any(marker in route.lower() for marker in ("veo", "seedance"))
     ][:max_probe_routes]
+    verified_routes: list[str] = []
+    http_410_routes: list[str] = []
     for route in probe_routes:
         probe["model"] = route
         status, body = _request_json(
@@ -187,22 +193,32 @@ def _omniroute_preflight(base_url: str) -> tuple[bool, list[str], dict[str, Any]
         except json.JSONDecodeError:
             parsed = None
         if status == 200 and isinstance(parsed, dict) and parsed.get("actions"):
-            return True, catalog_routes, {
-                "catalog": (
-                    f"{len(free_routes)} free route(s) and "
-                    f"{len(catalog_routes)} catalog route(s) advertised"
-                ),
-                "completion": f"structured probe passed via {route}",
-                "verified_route": route,
-            }
+            verified_routes.append(route)
+            if len(verified_routes) >= max_verified_routes:
+                break
+            continue
+        if status == 410:
+            http_410_routes.append(route)
+            continue
         failures.append(f"{route}: HTTP {status}: {body}")
+    catalog_summary = (
+        f"{len(free_routes)} free route(s) and "
+        f"{len(catalog_routes)} catalog route(s) advertised"
+    )
+    if verified_routes:
+        return True, catalog_routes, {
+            "catalog": catalog_summary,
+            "completion": f"structured probe passed via {verified_routes[0]}",
+            "verified_route": verified_routes[0],
+            "verified_routes": verified_routes,
+            "http_410_routes": http_410_routes,
+        }
     return False, catalog_routes, {
-        "catalog": (
-            f"{len(free_routes)} free route(s) and "
-            f"{len(catalog_routes)} catalog route(s) advertised"
-        ),
+        "catalog": catalog_summary,
         "completion": "no candidate route completed the structured probe",
         "failures": failures,
+        "verified_routes": [],
+        "http_410_routes": http_410_routes,
     }
 
 
@@ -739,11 +755,34 @@ def main() -> int:
         print(f"BLOCKED: Docker sandbox pre-flight failed. Report: {report}")
         return 2
 
-    # Use the route that actually passed the structured probe. The generic
-    # auto/best-free alias can silently select a different upstream model.
+    # Use routes that actually passed the structured probe before catalog
+    # order. Generic aliases and stale catalog entries can select a different
+    # upstream model than the route the preflight exercised.
+    raw_verified_routes = preflight.get("verified_routes", [])
+    verified_routes = (
+        [str(item).strip() for item in raw_verified_routes if str(item).strip()]
+        if isinstance(raw_verified_routes, list)
+        else []
+    )
     verified_route = preflight.get("verified_route")
-    route = str(verified_route or (routes[0] if routes else "auto/best-free"))
-    ordered_routes = [route] + [item for item in routes if item != route]
+    if not verified_routes and verified_route:
+        verified_routes = [str(verified_route).strip()]
+    raw_http_410_routes = preflight.get("http_410_routes", [])
+    if isinstance(raw_http_410_routes, list):
+        http_410_routes = {
+            str(item).strip()
+            for item in raw_http_410_routes
+            if str(item).strip()
+        }
+    else:
+        http_410_routes = set()
+    catalog_routes = [item for item in routes if item not in http_410_routes]
+    ordered_routes = list(dict.fromkeys([*verified_routes, *catalog_routes]))
+    route = str(
+        verified_routes[0]
+        if verified_routes
+        else (ordered_routes[0] if ordered_routes else "auto/best-free")
+    )
     ladder = ",".join(ordered_routes[:8])
     os.environ.update(
         {
@@ -752,6 +791,7 @@ def main() -> int:
             "LOCALFORGE_FALLBACK_MODELS": ladder,
             "LOCALFORGE_CHIEF_FALLBACK_MODELS": ladder,
             "LOCALFORGE_CHIEF_VISUAL_FALLBACK_MODELS": ladder,
+            "LOCALFORGE_CLOUD_VERIFIED_ROUTES": ",".join(verified_routes),
             "LOCALFORGE_MAX_RUN_TIME": str(args.run_timeout),
             # Financial tasks can legitimately consume several bounded Chief
             # retries when OmniRoute returns consecutive timeouts. Keep this

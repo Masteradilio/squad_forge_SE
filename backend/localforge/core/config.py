@@ -9,6 +9,10 @@ from pydantic import BaseModel, Field, ValidationError, field_validator
 from localforge.models.enums import ReleasePromotionMode
 from localforge.services.pricing import DEFAULT_MAX_GATEWAY_CALLS, is_free_gateway_model
 
+DEFAULT_OPENROUTER_URL = "https://openrouter.ai/api/v1"
+DEFAULT_NVIDIA_URL = "https://integrate.api.nvidia.com/v1"
+SUPPORTED_LLM_PROVIDERS = {"omniroute", "openrouter", "nvidia"}
+
 # Default configuration dictionary used as baseline
 DEFAULT_CONFIG = {
     "version": 1,
@@ -27,6 +31,7 @@ DEFAULT_CONFIG = {
         "fallback_models": [
             "auto/coding:free",
         ],
+        "fallback_routes": [],
         "roles": {},
     },
     "chief_engineer": {
@@ -45,6 +50,7 @@ DEFAULT_CONFIG = {
         "fallback_base_url": None,
         "fallback_model": None,
         "fallback_api_key": None,
+        "fallback_routes": [],
         "fallback_after_seconds": 30.0,
         "timeout": 240.0,
         "omniroute_structured_timeout": 120.0,
@@ -107,6 +113,15 @@ class GitConfig(BaseModel):
     remote_url: str | None = Field(default=None)
 
 
+class ProviderRouteConfig(BaseModel):
+    """One explicit provider/model lane used after the primary route."""
+
+    provider: str
+    base_url: str | None = Field(default=None)
+    model: str | None = Field(default=None)
+    api_key: str | None = Field(default=None)
+
+
 class ModelsConfig(BaseModel):
     provider: str = Field(default="omniroute")
     base_url: str = Field(default="http://localhost:20128/v1")
@@ -117,6 +132,7 @@ class ModelsConfig(BaseModel):
             "auto/coding:free",
         ]
     )
+    fallback_routes: list[ProviderRouteConfig] = Field(default_factory=list)
     roles: dict[str, str] = Field(default_factory=dict)
 
 
@@ -141,6 +157,7 @@ class ChiefEngineerConfig(BaseModel):
     fallback_base_url: str | None = Field(default=None)
     fallback_model: str | None = Field(default=None)
     fallback_api_key: str | None = Field(default=None)
+    fallback_routes: list[ProviderRouteConfig] = Field(default_factory=list)
     fallback_after_seconds: float = Field(default=30.0)
     enabled: bool = Field(default=True)
     timeout: float = Field(default=240.0)
@@ -324,11 +341,13 @@ def load_config(cli_args: dict[str, Any] | None = None) -> LocalForgeConfig:
     # 1. Load from .localforge/config.yaml if it exists
     cwd = os.getcwd()
     config_path = os.path.join(cwd, ".localforge", "config.yaml")
+    workspace_config: dict[str, Any] = {}
     if os.path.exists(config_path):
         try:
             with open(config_path, encoding="utf-8") as f:
                 file_data = yaml.safe_load(f)
                 if isinstance(file_data, dict):
+                    workspace_config = file_data
                     merge_dicts(config_dict, file_data)
         except Exception as e:
             raise ValueError(f"Failed to parse workspace config file at {config_path}: {e}") from e
@@ -337,9 +356,8 @@ def load_config(cli_args: dict[str, Any] | None = None) -> LocalForgeConfig:
     env_file_path = _find_env_file(cwd)
     env_file_values: dict[str, str | None] = {}
     if env_file_path and os.path.exists(env_file_path):
-        # Vendor keys may still exist in legacy workspaces, but ForgeOS Cloud
-        # never infers a direct provider from them. Upstreams are configured in
-        # and reached exclusively through OmniRoute.
+        # Read vendor settings locally without exporting them to the process
+        # environment or including them in configuration diagnostics.
         env_file_values = {
             str(key): value
             for key, value in dotenv_values(env_file_path).items()
@@ -348,7 +366,8 @@ def load_config(cli_args: dict[str, Any] | None = None) -> LocalForgeConfig:
 
     def env_value(name: str) -> str | None:
         value = os.getenv(name)
-        return value if value is not None else env_file_values.get(name)
+        value = value if value is not None else env_file_values.get(name)
+        return value.strip() if isinstance(value, str) else value
 
     # OmniRoute is the only gateway boundary. Support its canonical aliases
     # directly so a .env containing OMNIROUTE_URL/API_KEY cannot be silently
@@ -417,6 +436,10 @@ def load_config(cli_args: dict[str, Any] | None = None) -> LocalForgeConfig:
             "chief_engineer",
             "omniroute_structured_timeout",
         ),
+        # The CLI benchmark flag exports this canonical budget override before
+        # starting the monitor. Keep it in the generic env-to-config boundary
+        # so the monitor and scheduler receive the same value.
+        "LOCALFORGE_MAX_RUN_TIME": ("budgets", "max_run_time"),
         "LOCALFORGE_MAX_TASK_DURATION": ("budgets", "max_task_duration"),
         "LOCALFORGE_MAX_PARALLEL_TASKS": ("budgets", "max_parallel_tasks"),
         "LOCALFORGE_MAX_REPAIR_ATTEMPTS": ("budgets", "max_repair_attempts"),
@@ -474,25 +497,180 @@ def load_config(cli_args: dict[str, Any] | None = None) -> LocalForgeConfig:
                 section, key = path
                 config_dict[section][key] = val
 
-    for section in ("models", "chief_engineer"):
-        provider = str(config_dict[section].get("provider", "")).lower()
-        if provider not in {"omniroute", "omni_route"}:
-            raise ValueError(
-                "ForgeOS Cloud is OmniRoute-only; "
-                f"{section}.provider cannot be '{provider or 'unset'}'."
+    chief_file_config = workspace_config.get("chief_engineer", {})
+    if not isinstance(chief_file_config, dict):
+        chief_file_config = {}
+    chief_model_explicit = (
+        "model" in chief_file_config or env_value("LOCALFORGE_CHIEF_MODEL") is not None
+    )
+    chief_base_url_explicit = (
+        "base_url" in chief_file_config
+        or env_value("LOCALFORGE_CHIEF_BASE_URL") is not None
+    )
+    chief_api_key_explicit = (
+        "api_key" in chief_file_config
+        or env_value("LOCALFORGE_CHIEF_API_KEY") is not None
+    )
+
+    # OPENROUTER_PAID_MODEL is the canonical paid lane. Keep the old name as
+    # a compatibility alias so existing installations do not silently lose
+    # their route during the migration.
+    openrouter_paid_model = env_value("OPENROUTER_PAID_MODEL") or env_value(
+        "OPENROUTER_MODEL"
+    )
+    openrouter_free_model = env_value("OPENROUTER_FREE_MODEL")
+    openrouter_api_key = env_value("OPENROUTER_API_KEY")
+    openrouter_url = env_value("OPENROUTER_URL")
+    nvidia_model = env_value("NVIDIA_LLM_MODEL")
+    nvidia_api_key = env_value("NVIDIA_API_KEY")
+    nvidia_url = env_value("NVIDIA_URL") or DEFAULT_NVIDIA_URL
+
+    # Free direct-provider lanes are declared once at the config boundary and
+    # consumed by both the Chief fallback factory and generic agent fallback
+    # code. They are never selected as the critical primary route.
+    free_routes: list[dict[str, str | None]] = []
+    if openrouter_free_model and openrouter_api_key:
+        free_routes.append(
+            {
+                "provider": "openrouter",
+                "base_url": openrouter_url or DEFAULT_OPENROUTER_URL,
+                "model": openrouter_free_model,
+                "api_key": openrouter_api_key,
+            }
+        )
+    if nvidia_model and nvidia_api_key:
+        free_routes.append(
+            {
+                "provider": "nvidia",
+                "base_url": nvidia_url,
+                "model": nvidia_model,
+                "api_key": nvidia_api_key,
+            }
+        )
+    if free_routes:
+        config_dict["models"]["fallback_routes"] = [
+            *config_dict["models"].get("fallback_routes", []),
+            *free_routes,
+        ]
+        config_dict["chief_engineer"]["fallback_routes"] = [
+            *config_dict["chief_engineer"].get("fallback_routes", []),
+            *free_routes,
+        ]
+    configured_chief_provider = str(
+        config_dict["chief_engineer"].get("provider", "")
+    ).strip().lower()
+
+    chief_provider_explicit = (
+        "provider" in chief_file_config
+        or env_value("LOCALFORGE_CHIEF_PROVIDER") is not None
+    )
+
+    # The paid OpenRouter lane is the default critical route. An explicit
+    # LOCALFORGE_CHIEF_PROVIDER always wins, including an explicit OmniRoute
+    # gateway route. Partial credentials remain visible to the provider
+    # factory instead of silently inventing a route.
+    if not chief_provider_explicit and openrouter_paid_model and openrouter_api_key:
+        config_dict["chief_engineer"].update(
+            {
+                "provider": "openrouter",
+                "base_url": openrouter_url or DEFAULT_OPENROUTER_URL,
+                "model": openrouter_paid_model,
+                "api_key": openrouter_api_key,
+            }
+        )
+        configured_chief_provider = "openrouter"
+    elif configured_chief_provider == "openrouter":
+        if not chief_base_url_explicit:
+            config_dict["chief_engineer"]["base_url"] = (
+                openrouter_url or DEFAULT_OPENROUTER_URL
             )
-        config_dict[section]["provider"] = "omniroute"
+        if not chief_model_explicit and openrouter_paid_model:
+            config_dict["chief_engineer"]["model"] = openrouter_paid_model
+        if not chief_api_key_explicit and openrouter_api_key:
+            config_dict["chief_engineer"]["api_key"] = openrouter_api_key
+    elif configured_chief_provider == "nvidia":
+        if not chief_base_url_explicit:
+            config_dict["chief_engineer"]["base_url"] = nvidia_url
+        if not chief_model_explicit and nvidia_model:
+            config_dict["chief_engineer"]["model"] = nvidia_model
+        if not chief_api_key_explicit and nvidia_api_key:
+            config_dict["chief_engineer"]["api_key"] = nvidia_api_key
+
+    for section in ("models", "chief_engineer"):
+        provider = str(config_dict[section].get("provider", "")).strip().lower()
+        if provider == "omni_route":
+            provider = "omniroute"
+        if provider not in SUPPORTED_LLM_PROVIDERS:
+            raise ValueError(
+                f"{section}.provider must be one of "
+                f"{', '.join(sorted(SUPPORTED_LLM_PROVIDERS))}; "
+                f"got '{provider or 'unset'}'."
+            )
+        config_dict[section]["provider"] = provider
+
+    fallback_provider = config_dict["chief_engineer"].get("fallback_provider")
+    fallback_provider_name = str(fallback_provider or "").strip().lower()
+    fallback_route_explicit = any(
+        field in chief_file_config or env_value(env_name) is not None
+        for field, env_name in {
+            "fallback_provider": "LOCALFORGE_CHIEF_FALLBACK_PROVIDER",
+            "fallback_base_url": "LOCALFORGE_CHIEF_FALLBACK_BASE_URL",
+            "fallback_model": "LOCALFORGE_CHIEF_FALLBACK_MODEL",
+            "fallback_api_key": "LOCALFORGE_CHIEF_FALLBACK_API_KEY",
+        }.items()
+    )
+    # If the operator kept an explicit OmniRoute primary route and supplied
+    # OpenRouter credentials, make the paid route the bounded last-resort
+    # fallback. An explicit fallback configuration always wins, including an
+    # explicit empty value used to disable the automatic lane.
+    if (
+        not fallback_route_explicit
+        and configured_chief_provider.replace("_", "") == "omniroute"
+        and openrouter_paid_model
+        and openrouter_api_key
+    ):
+        fallback_provider_name = "openrouter"
+        config_dict["chief_engineer"]["fallback_provider"] = fallback_provider_name
+    if fallback_provider_name == "omni_route":
+        fallback_provider_name = "omniroute"
+    if fallback_provider_name:
+        if fallback_provider_name not in SUPPORTED_LLM_PROVIDERS:
+            raise ValueError(
+                "chief_engineer.fallback_provider must be one of "
+                f"{', '.join(sorted(SUPPORTED_LLM_PROVIDERS))}; "
+                f"got '{fallback_provider_name}'."
+            )
+        config_dict["chief_engineer"]["fallback_provider"] = fallback_provider_name
+        if fallback_provider_name == "openrouter":
+            # Explicit fallback fields retain precedence over the canonical
+            # OpenRouter dotenv values. A missing key/model remains a factory
+            # error when the fallback is actually constructed.
+            if config_dict["chief_engineer"].get("fallback_base_url") is None:
+                config_dict["chief_engineer"]["fallback_base_url"] = (
+                    openrouter_url or DEFAULT_OPENROUTER_URL
+                )
+            if config_dict["chief_engineer"].get("fallback_model") is None:
+                config_dict["chief_engineer"]["fallback_model"] = openrouter_paid_model
+            if config_dict["chief_engineer"].get("fallback_api_key") is None:
+                config_dict["chief_engineer"]["fallback_api_key"] = openrouter_api_key
+        elif fallback_provider_name == "nvidia":
+            if config_dict["chief_engineer"].get("fallback_base_url") is None:
+                config_dict["chief_engineer"]["fallback_base_url"] = nvidia_url
+            if config_dict["chief_engineer"].get("fallback_model") is None:
+                config_dict["chief_engineer"]["fallback_model"] = nvidia_model
+            if config_dict["chief_engineer"].get("fallback_api_key") is None:
+                config_dict["chief_engineer"]["fallback_api_key"] = nvidia_api_key
+    else:
+        config_dict["chief_engineer"]["fallback_provider"] = None
 
     # 5. Validate with Pydantic
     try:
         config = LocalForgeConfig.model_validate(config_dict)
-        _validate_omniroute_endpoint(config.models.base_url, "models")
-        _validate_omniroute_endpoint(config.chief_engineer.base_url, "chief_engineer")
-        if config.chief_engineer.fallback_provider not in (None, "", "omniroute", "omni_route"):
-            raise ValueError(
-                "chief_engineer.fallback_provider must be omitted; ForgeOS Cloud is OmniRoute-only"
-            )
-        if config.chief_engineer.fallback_base_url:
+        if config.models.provider == "omniroute":
+            _validate_omniroute_endpoint(config.models.base_url, "models")
+        if config.chief_engineer.provider == "omniroute":
+            _validate_omniroute_endpoint(config.chief_engineer.base_url, "chief_engineer")
+        if config.chief_engineer.fallback_provider == "omniroute" and config.chief_engineer.fallback_base_url:
             _validate_omniroute_endpoint(
                 config.chief_engineer.fallback_base_url, "chief_engineer.fallback"
             )

@@ -2,6 +2,207 @@
 
 All notable changes to LocalForge OS will be documented in this file.
 
+## [HP12C Benchmark Readiness Handoff] - 2026-08-15
+
+### Added
+- Created docs/pendencias_correcoes.md with the prioritized P0/P1 remediation
+  backlog required before another HP12C full_access benchmark.
+- Recorded the concrete failure evidence from the long runs: provider and Chief
+  Engineer timeouts, absent materialized visual tests, SQLite heartbeat
+  contention, post-merge gate failures, and incomplete repair routing.
+
+### Changed
+- README now distinguishes the HP12C stress benchmark from a proven autonomous
+  release and links the readiness gate before another full run.
+- The handoff defines the release bar as PRD intake, executable contracts,
+  independent interface-level Tester/Product Acceptance, Security Auditor,
+  automatic correction routing, complete trace, merge evidence and final
+  product acceptance.
+
+### Validation
+- No HP12C benchmark was executed in this documentation phase.
+- Existing repository benchmark evidence was inspected read-only before writing
+  the handoff.
+
+## [Unified Chat and Delivery Workspace] - 2026-08-11
+
+### Added
+- Single portfolio-oriented workspace combining Scrum Master chat, document upload,
+  Kanban delivery lanes, PR merge actions, post-merge quality traces, Security
+  Auditor and final Tester visibility.
+- Explicit return-to-correction actions from PR_READY, Security Auditor and Tester
+  lanes, reusing the existing backend task transition contract.
+
+### Changed
+- The visible navigation now has one Chat + Pipeline/Kanban entry; hash route
+  /kanban remains accepted as a backwards-compatible alias.
+- The pipeline visually progresses from Backlog through execution, PR_READY/Merge,
+  Security Auditor and final Tester.
+
+### Tests
+- Added unified workspace lane mapping coverage and updated frontend navigation
+  and visual journey expectations.
+
+## [Provider Resilience and Paid Fallback] - 2026-08-11
+
+### Added
+- OpenRouter configuration from `OPENROUTER_PAID_MODEL`,
+  `OPENROUTER_FREE_MODEL`, `OPENROUTER_API_KEY`, and optional
+  `OPENROUTER_URL`; `OPENROUTER_MODEL` remains a compatibility alias.
+- Direct free-provider fallback lanes for OpenRouter and NVIDIA, with the
+  paid OpenRouter route as the default critical Chief Engineer lane.
+- Automatic OmniRoute-to-paid-OpenRouter fallback when the economy route is
+  explicit and paid credentials are present.
+- Preflight support for probing a transiently unavailable primary and then its
+  configured fallback.
+- In-memory provider circuit protection with bounded cooldown and redacted
+  fallback attribution.
+- SQLite lock classification and bounded fresh-transaction retry for task
+  heartbeats.
+
+### Changed
+- OpenRouter now uses the shared OpenAI-compatible transport, including the
+  global model-call budget, SSE/JSON normalization, upstream-error detection,
+  and secret redaction.
+- Fallback is restricted to timeout, connection, rate-limit, and provider-server
+  failures; 404 model/configuration errors remain visible.
+
+### Tests
+- Added provider fallback, circuit-breaker, OpenRouter configuration, preflight,
+  and SQLite contention regressions.
+- No benchmark or real provider call was executed in this phase.
+
+### Known Limitations
+- Ollama is intentionally not configured in this environment and remains a
+  future provider lane.
+- A paid provider raises reliability probability but cannot guarantee product
+  acceptance; visual, E2E, security, and release gates remain authoritative.
+
+## [Visual Recovery Diagnostic Preservation] - 2026-08-11
+
+### Fixed
+- A visual recovery attempt that exhausts its bounded Chief rounds now reaches
+  the existing visual validation failure path instead of being masked as a
+  missing Chief action.
+
+### Tests
+- Added coverage for preserving timeout/ladder diagnostics after recovery.
+
+## [Visual Gate Interactivity and Recovery Window] - 2026-08-11
+
+### Fixed
+- Visual structure validation now accepts explicitly locatable `role=button`
+  controls while still rejecting controls without stable locators.
+- The visual task ceiling now derives one finite recovery window from the
+  existing gateway budget, preserving the monotonic global cap.
+
+### Tests
+- Added regressions for ARIA button recognition and gateway-bounded recovery.
+
+## [Global Visual Recovery Budget] - 2026-08-11
+
+### Fixed
+- Visual generation and repair now share one monotonic task-run model-call
+  budget derived from the existing call and repair settings.
+- A failed initial visual recovery cannot re-enter the outer validation loop;
+  exhausted budgets persist a diagnostic and are escalated by the Scheduler.
+
+### Tests
+- Added regressions for the derived global cap, bounded reserve, and Scheduler
+  classification of an exhausted visual budget.
+
+## [Visual Gate Recovery Continuation] - 2026-08-11
+
+### Fixed
+- Preserved the distinction between a Chief production write followed by a
+  failed visual similarity gate and a task where no Chief action was applied.
+- Visual gate failures now continue through validation and bounded repair, while
+  the scheduler keeps them recoverable instead of classifying them as exhausted
+  Chief blockers.
+
+### Tests
+- Added pipeline and scheduler regressions for the similarity-gate recovery path.
+
+## [Visual Chief Recovery Budget Handoff] - 2026-08-11
+
+### Fixed
+- Typed the pre-dispatch LLM call-budget failure so it remains observable and
+  does not consume a call slot.
+- Visual Chief recovery now reserves one finite call window and switches from
+  a failed segmented generation to a complete-document retry, avoiding repeated
+  loss of already generated sections while preserving product and visual gates.
+
+### Tests
+- Added regressions for pre-call budget exhaustion, bounded recovery reserve,
+  and complete-document visual recovery routing.
+
+## [Run Timeout Environment Mapping] - 2026-08-11
+
+### Fixed
+- Mapped `LOCALFORGE_MAX_RUN_TIME` into `budgets.max_run_time`, allowing the
+  CLI benchmark `--run-timeout` export to configure the internal run monitor.
+
+### Tests
+- Added configuration regression coverage for a 14,400-second run budget.
+
+## [Visual Recovery Heartbeat Keepalive] - 2026-08-11
+
+### Changed
+- Added a bounded task keepalive inside `run_task`, using a fresh Unit of Work
+  while the pipeline awaits Chief Engineer, model, sandbox, or visual I/O.
+- Added a finite timeout for each visual Chief repair operation; timeout errors
+  remain explicit and are routed into the existing bounded recovery path.
+
+### Tests
+- Passed 88 focused pipeline and Chief Engineer tests.
+
+## [Non-Blocking Visual Validation] - 2026-08-10
+
+### Changed
+- Offloaded visual contract normalization, HTML structure validation,
+  screenshot capture, and fidelity-gate evaluation to worker threads.
+- Added a finite `LOCALFORGE_VISUAL_VALIDATION_TIMEOUT` budget with a 90-second
+  default and safe 15–180 second bounds; timeouts become repairable validation
+  failures through the existing resilient validation path.
+
+### Tests
+- Passed 86 focused pipeline and Chief Engineer tests.
+
+## [Initial Visual Chief Recovery] - 2026-08-10
+
+### Changed
+- Routed an initial visual Chief Engineer generation failure into the
+  existing bounded repair rounds before applying the V3 no-action guard.
+- Successful recovery now continues the pipeline without repeating the same
+  validation cycle; non-visual Chief-only behavior remains unchanged.
+
+### Tests
+- Passed 83 focused pipeline and Chief Engineer tests.
+
+## [Resilient Visual Repair Rounds] - 2026-08-10
+
+### Changed
+- Visual Chief Engineer repairs now continue through the next configured
+  bounded round when a repair attempt returns no plan, instead of stopping at
+  the first transient generation failure.
+- Non-visual tasks retain their immediate-break behavior, and visual failures
+  still return a bounded final failure with an observable summary.
+
+### Tests
+- Passed 81 focused pipeline and Chief Engineer tests.
+
+## [Bounded Visual LLM Budget] - 2026-08-10
+
+### Changed
+- Raised the visual task default model-call budget from the obsolete 96-call
+  ceiling to a finite, configurable 256-call lane, capped at 512 calls.
+- Applied the same normalized visual budget at initial task setup and Chief
+  Engineer escalation while preserving the ordinary 96-call cap for non-visual
+  tasks.
+
+### Tests
+- Passed 79 focused pipeline and Chief Engineer tests.
+
 ## [Generic Product Acceptance Contracts and Benchmark Reset] - 2026-08-10
 
 ### Added

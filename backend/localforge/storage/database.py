@@ -1,6 +1,7 @@
+import asyncio
 import os
-from collections.abc import AsyncGenerator
-from typing import Any
+from collections.abc import AsyncGenerator, Awaitable, Callable
+from typing import Any, TypeVar
 from urllib.parse import quote
 
 from sqlalchemy.ext.asyncio import (
@@ -33,6 +34,58 @@ def resolve_database_url() -> str:
 
 
 DATABASE_URL = resolve_database_url()
+
+T = TypeVar("T")
+
+
+def is_sqlite_lock_error(error: BaseException, db_url: str | None = None) -> bool:
+    """Identify transient SQLite writer contention without hiding other errors."""
+    if db_url is not None and not db_url.startswith("sqlite"):
+        return False
+    current: BaseException | None = error
+    while current is not None:
+        message = str(current).lower()
+        if any(
+            marker in message
+            for marker in (
+                "database is locked",
+                "database table is locked",
+                "sqlite_busy",
+                "sqlite_locked",
+            )
+        ):
+            return True
+        current = current.__cause__ or current.__context__
+    return False
+
+
+async def retry_sqlite_operation(  # noqa: UP047 - keep Python 3.11 compatibility for the public package
+    operation: Callable[[], Awaitable[T]],
+    *,
+    db_url: str | None = None,
+    attempts: int = 4,
+    initial_delay: float = 0.05,
+    max_delay: float = 1.0,
+) -> T:
+    """Retry a complete short SQLite operation after transient lock errors.
+
+    The operation must create and close its own transaction. Retrying only a
+    SQL statement would reuse a failed transaction and preserve the lock.
+    """
+    bounded_attempts = max(1, int(attempts))
+    delay = max(0.0, float(initial_delay))
+    for attempt in range(bounded_attempts):
+        try:
+            return await operation()
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            if not is_sqlite_lock_error(exc, db_url) or attempt + 1 >= bounded_attempts:
+                raise
+            if delay:
+                await asyncio.sleep(min(delay, max_delay))
+            delay = min(max(delay * 2, initial_delay), max_delay)
+    raise RuntimeError("retry_sqlite_operation exhausted without returning or raising")
 
 
 class DatabaseManager:

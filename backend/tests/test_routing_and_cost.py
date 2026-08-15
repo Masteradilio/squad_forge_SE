@@ -52,6 +52,32 @@ async def test_omniroute_preserves_gateway_reported_cost_without_snapshot(
 
 
 @pytest.mark.asyncio
+async def test_paid_openrouter_call_accepts_provider_catalog_pricing_without_snapshot(
+    db_session: AsyncSession,
+):
+    ledger_service = ModelCallLedgerService(db_session)
+    call = await ledger_service.record_call(
+        domain.ModelCallLedger(
+            project_id=1,
+            provider="openrouter",
+            model="provider/dynamic-model",
+            reason=ChiefEngineerCallReason.SEMANTIC_REPAIR_PLAN,
+            input_tokens=1000,
+            output_tokens=500,
+            estimated_cost_usd=999.0,
+            status="success",
+            metadata={
+                "pricing_input_per_million": 0.20,
+                "pricing_output_per_million": 0.80,
+            },
+        )
+    )
+
+    assert call.estimated_cost_usd == pytest.approx(0.0006)
+    assert call.metadata["pricing_measurement_source"] == "PROVIDER_CATALOG"
+
+
+@pytest.mark.asyncio
 async def test_free_omniroute_route_is_recorded_at_zero_cost(
     db_session: AsyncSession,
 ):

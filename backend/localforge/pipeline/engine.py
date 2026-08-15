@@ -13,7 +13,10 @@ from localforge.chief_engineer.service import ChiefEngineerService
 from localforge.core.config import load_config
 from localforge.gitops.adapter import GitAdapter
 from localforge.llm.base import LLMHTTPError, LLMTimeoutError, is_permanent_provider_error
-from localforge.llm.factory import build_chief_engineer_provider
+from localforge.llm.factory import (
+    build_chief_engineer_provider,
+    build_free_provider_ladder,
+)
 from localforge.llm.openai_compatible import OpenAICompatibleProvider
 from localforge.models import domain
 from localforge.models.enums import (
@@ -50,9 +53,10 @@ from localforge.services.fingerprint import (
     evaluate_attempt_progress,
     generate_error_fingerprint,
 )
-from localforge.services.pricing import is_free_gateway_model
+from localforge.services.pricing import DEFAULT_MAX_GATEWAY_CALLS, is_free_gateway_model
 from localforge.storage import UnitOfWork
 from localforge.storage.artifacts import ArtifactStore
+from localforge.storage.database import retry_sqlite_operation
 
 logger = logging.getLogger("localforge.pipeline")
 
@@ -60,6 +64,195 @@ logger = logging.getLogger("localforge.pipeline")
 # matcher can pick the closest candidate without re-reading the task
 # metadata on every action proposal.
 _ALLOWED_FILES_CACHE: dict[int, dict[str, str]] = {}
+
+# Visual repairs are assembled from several bounded sections and may need more
+# than one validation/recovery round. Keep this lane finite and configurable,
+# while preventing a stale/unsafe environment value from disabling protection.
+_VISUAL_MODEL_CALL_MIN = 24
+_VISUAL_MODEL_CALL_DEFAULT = 256
+_VISUAL_MODEL_CALL_MAX = 512
+_VISUAL_RECOVERY_CALL_RESERVE = 32
+_VISUAL_VALIDATION_TIMEOUT_DEFAULT = 90
+_VISUAL_VALIDATION_TIMEOUT_MIN = 15
+_VISUAL_VALIDATION_TIMEOUT_MAX = 180
+_VISUAL_REPAIR_TIMEOUT_DEFAULT = 300
+_VISUAL_REPAIR_TIMEOUT_MIN = 30
+_VISUAL_REPAIR_TIMEOUT_MAX = 900
+
+
+def _visual_model_call_limit() -> int:
+    """Return the bounded per-task model-call budget for visual work."""
+    try:
+        configured = int(
+            os.getenv(
+                "LOCALFORGE_VISUAL_MAX_ACTIVE_MODEL_CALLS",
+                str(_VISUAL_MODEL_CALL_DEFAULT),
+            )
+        )
+    except (TypeError, ValueError):
+        configured = _VISUAL_MODEL_CALL_DEFAULT
+    return min(max(configured, _VISUAL_MODEL_CALL_MIN), _VISUAL_MODEL_CALL_MAX)
+
+
+def _visual_global_model_call_limit(
+    config=None,
+    *,
+    active_model_calls: int | None = None,
+    repair_attempts: int | None = None,
+    gateway_calls: int | None = None,
+) -> int:
+    """Derive one monotonic model-call ceiling for a visual task run.
+
+    ``_visual_model_call_limit`` is intentionally permissive enough for the
+    segmented generation lane. It must not, however, become a fresh budget
+    every time the validation loop enters Chief recovery. Tie the run-wide
+    ceiling to the existing per-task call and repair settings, then fund at
+    most one additional recovery window from the gateway budget. The gateway
+    budget remains the hard upper bound, so entering repair cannot reopen a
+    fresh budget.
+    """
+    if config is None:
+        try:
+            config = load_config()
+        except Exception:
+            config = None
+    budgets = getattr(config, "budgets", None)
+    try:
+        calls_per_window = int(
+            active_model_calls
+            if active_model_calls is not None
+            else getattr(budgets, "max_active_model_calls", 4)
+        )
+    except (TypeError, ValueError):
+        calls_per_window = 4
+    try:
+        configured_rounds = int(
+            repair_attempts
+            if repair_attempts is not None
+            else getattr(budgets, "max_repair_attempts", 5)
+        )
+    except (TypeError, ValueError):
+        configured_rounds = 5
+    try:
+        absolute_rounds = int(getattr(budgets, "max_repair_attempts_absolute", configured_rounds))
+    except (TypeError, ValueError):
+        absolute_rounds = configured_rounds
+    try:
+        gateway_budget = int(
+            gateway_calls
+            if gateway_calls is not None
+            else getattr(budgets, "max_gateway_calls", DEFAULT_MAX_GATEWAY_CALLS)
+        )
+    except (TypeError, ValueError):
+        gateway_budget = DEFAULT_MAX_GATEWAY_CALLS
+
+    calls_per_window = max(1, calls_per_window)
+    bounded_rounds = min(max(0, configured_rounds), max(0, absolute_rounds))
+    base_window = calls_per_window * (bounded_rounds + 1)
+    gateway_budget = max(0, gateway_budget)
+    if gateway_budget == 0:
+        return 0
+    recovery_window = min(base_window, max(0, gateway_budget - base_window))
+    derived_limit = base_window + recovery_window
+    return min(_visual_model_call_limit(), gateway_budget, derived_limit)
+
+
+def _visual_validation_timeout_seconds() -> int:
+    """Return the finite timeout for each synchronous visual validation step."""
+    try:
+        configured = int(
+            os.getenv(
+                "LOCALFORGE_VISUAL_VALIDATION_TIMEOUT",
+                str(_VISUAL_VALIDATION_TIMEOUT_DEFAULT),
+            )
+        )
+    except (TypeError, ValueError):
+        configured = _VISUAL_VALIDATION_TIMEOUT_DEFAULT
+    return min(
+        max(configured, _VISUAL_VALIDATION_TIMEOUT_MIN),
+        _VISUAL_VALIDATION_TIMEOUT_MAX,
+    )
+
+
+def _visual_repair_timeout_seconds() -> int:
+    """Return the finite deadline for one visual Chief repair operation."""
+    try:
+        configured = int(
+            os.getenv(
+                "LOCALFORGE_VISUAL_REPAIR_TIMEOUT",
+                str(_VISUAL_REPAIR_TIMEOUT_DEFAULT),
+            )
+        )
+    except (TypeError, ValueError):
+        configured = _VISUAL_REPAIR_TIMEOUT_DEFAULT
+    return min(max(configured, _VISUAL_REPAIR_TIMEOUT_MIN), _VISUAL_REPAIR_TIMEOUT_MAX)
+
+
+def _task_heartbeat_interval_seconds() -> float:
+    """Return a bounded interval for the pipeline's local task keepalive."""
+    try:
+        configured = float(os.getenv("LOCALFORGE_TASK_HEARTBEAT_INTERVAL", "5"))
+    except (TypeError, ValueError):
+        configured = 5.0
+    return min(max(configured, 0.5), 30.0)
+
+
+def _prepare_visual_recovery_budget(
+    task_run_id: int,
+    command_summaries: list[str],
+    *,
+    reserve: int = _VISUAL_RECOVERY_CALL_RESERVE,
+    max_limit: int | None = None,
+) -> bool:
+    """Reserve a finite recovery window before a visual retry starts.
+
+    A segmented visual attempt can consume nearly the whole task-call budget
+    before its last section fails.  Retrying the same segmented plan in that
+    state only produces pre-dispatch ``ValueError`` failures.  Preserve the
+    task-wide counter, but extend the visual lane by one bounded reserve so a
+    complete-document recovery can still be attempted.  The hard module cap
+    remains finite and provider/run budgets remain authoritative.
+    """
+    from localforge.llm.context import (
+        get_llm_call_count,
+        get_llm_limit,
+        set_llm_limit,
+    )
+
+    current = get_llm_call_count(task_run_id)
+    limit = get_llm_limit(task_run_id, _VISUAL_MODEL_CALL_DEFAULT)
+    reserve = max(1, int(reserve))
+    hard_limit = (
+        max(1, int(max_limit))
+        if max_limit is not None
+        else _VISUAL_MODEL_CALL_MAX
+    )
+    remaining = limit - current
+    if remaining >= reserve:
+        return True
+    if limit >= hard_limit:
+        command_summaries.append(
+            "Visual recovery global model-call budget exhausted before provider dispatch: "
+            f"{current}/{hard_limit} calls used; {reserve} call(s) were required for the "
+            "next bounded recovery window."
+        )
+        return False
+
+    expanded_limit = min(
+        hard_limit,
+        max(limit + reserve, current + reserve),
+    )
+    set_llm_limit(task_run_id, expanded_limit)
+    command_summaries.append(
+        "Visual Chief Engineer recovery reserved a bounded model-call window after a "
+        f"near-exhaustion ({current}/{limit} -> {expanded_limit})."
+    )
+    return True
+
+
+def _is_llm_call_budget_error(error: object) -> bool:
+    """Recognize the local pre-call guard without conflating it with HTTP failure."""
+    return "exceeded maximum llm call budget" in str(error).lower()
 
 
 def _chief_model_sequence(
@@ -162,6 +355,48 @@ class RolePipelineEngine:
             self.run_id,
         )
 
+    async def _persist_task_heartbeat(self, task_run_id: int) -> bool:
+        """Persist one heartbeat through a fresh UoW, independent of pipeline I/O."""
+        manager = getattr(self.uow, "db_manager", None)
+        if manager is None:
+            return False
+
+        async def write_heartbeat() -> bool:
+            async with UnitOfWork(manager) as heartbeat_uow:
+                assert heartbeat_uow.tasks is not None
+                live_run = await heartbeat_uow.tasks.get_task_run(task_run_id)
+                if live_run is None or live_run.status != TaskRunStatus.RUNNING:
+                    return False
+                live_run.heartbeat_at = datetime.now(UTC)
+                await heartbeat_uow.tasks.update_task_run(live_run)
+                return True
+
+        try:
+            return await asyncio.wait_for(
+                retry_sqlite_operation(
+                    write_heartbeat,
+                    db_url=getattr(manager, "db_url", None),
+                ),
+                timeout=min(max(_task_heartbeat_interval_seconds() * 2, 1.0), 15.0),
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.warning(
+                "Pipeline heartbeat persistence failed for task_run=%s: %s",
+                task_run_id,
+                exc,
+            )
+            return True
+
+    async def _task_heartbeat_keepalive(self, task_run_id: int) -> None:
+        """Keep SQL liveness current while the core pipeline awaits long I/O."""
+        interval = _task_heartbeat_interval_seconds()
+        while True:
+            await asyncio.sleep(interval)
+            if not await self._persist_task_heartbeat(task_run_id):
+                return
+
     async def run_task(
         self,
         *,
@@ -195,12 +430,14 @@ class RolePipelineEngine:
             max_files = config.budgets.max_file_count
             max_diff = config.budgets.max_diff_growth
             max_llm_calls = config.budgets.max_active_model_calls
+            max_gateway_calls = config.budgets.max_gateway_calls
         except Exception:
             task_duration_limit = 600.0
             max_repair_limit = 3
             max_files = 10
             max_diff = 2000
             max_llm_calls = 4
+            max_gateway_calls = DEFAULT_MAX_GATEWAY_CALLS
 
         # Load overrides from run limits
         run = await self.uow.executions.get_run(self.run_id)
@@ -210,6 +447,7 @@ class RolePipelineEngine:
             max_files = run.resource_limits.get("max_file_count", max_files)
             max_diff = run.resource_limits.get("max_diff_growth", max_diff)
             max_llm_calls = run.resource_limits.get("max_active_model_calls", max_llm_calls)
+            max_gateway_calls = run.resource_limits.get("max_gateway_calls", max_gateway_calls)
         if isinstance(task.metadata, dict):
             task_duration_limit = float(
                 task.metadata.get("max_task_duration", task_duration_limit) or task_duration_limit
@@ -225,22 +463,16 @@ class RolePipelineEngine:
                     visual_task_timeout = 3600.0
                 task_duration_limit = max(task_duration_limit, visual_task_timeout)
                 max_diff = max(max_diff, getattr(config.budgets, "max_visual_diff_growth", 100000))
-                # Visual tasks may need a structured retry plus several
-                # bounded Chief repair rounds. Keep ordinary local tasks at
-                # the conservative global limit, but give visual convergence
-                # enough calls to generate the eight bounded sections. The
-                # Eight visual sections may each need one structured retry and
-                # a bounded model fallback. Keep this finite and separate
-                # from the ordinary Chief/local budget. The visual lane is
-                # intentionally larger so one failed section cannot consume
-                # the budget needed by the remaining sections.
-                try:
-                    visual_call_limit = int(
-                        os.getenv("LOCALFORGE_VISUAL_MAX_ACTIVE_MODEL_CALLS", "96")
-                    )
-                except ValueError:
-                    visual_call_limit = 96
-                max_llm_calls = max(max_llm_calls, min(max(visual_call_limit, 24), 96))
+                # Visual generation and repair share one task-run ceiling.
+                # Derive it from the existing call and repair budgets so a
+                # later validation round cannot silently reopen a fresh
+                # 256-call lane.
+                max_llm_calls = _visual_global_model_call_limit(
+                    config,
+                    active_model_calls=max_llm_calls,
+                    repair_attempts=max_repair_limit,
+                    gateway_calls=max_gateway_calls,
+                )
             elif isinstance(contract, dict) and contract.get("seniority_class") in {
                 "chief_only",
                 "chief_led",
@@ -267,7 +499,20 @@ class RolePipelineEngine:
                 chief_call_limit = int(os.getenv("LOCALFORGE_CHIEF_MAX_ACTIVE_MODEL_CALLS", "16"))
             except ValueError:
                 chief_call_limit = 16
-            max_llm_calls = max(max_llm_calls, min(max(chief_call_limit, 1), 96))
+            if isinstance(task.metadata["task_contract"], dict) and task.metadata[
+                "task_contract"
+            ].get("visual_required"):
+                max_llm_calls = min(
+                    max_llm_calls,
+                    _visual_global_model_call_limit(
+                        config,
+                        active_model_calls=max_llm_calls,
+                        repair_attempts=max_repair_limit,
+                        gateway_calls=max_gateway_calls,
+                    ),
+                )
+            else:
+                max_llm_calls = max(max_llm_calls, min(max(chief_call_limit, 1), 96))
             try:
                 chief_diff_limit = int(os.getenv("LOCALFORGE_CHIEF_MAX_DIFF_GROWTH", "20000"))
             except ValueError:
@@ -285,6 +530,9 @@ class RolePipelineEngine:
         reset_llm_call_counter(task_run_id)
         set_llm_limit(task_run_id, max_llm_calls)
 
+        heartbeat_task: asyncio.Task[None] | None = asyncio.create_task(
+            self._task_heartbeat_keepalive(task_run_id)
+        )
         try:
             # Run the core execution under wait_for timeout
             result = await asyncio.wait_for(
@@ -320,6 +568,12 @@ class RolePipelineEngine:
             await self.uow.tasks.update_task_status(task_id, TaskStatus.FAILED_SAFE)
             raise e
         finally:
+            if heartbeat_task is not None:
+                heartbeat_task.cancel()
+                try:
+                    await heartbeat_task
+                except asyncio.CancelledError:
+                    pass
             # Clear LLM context variables
             set_active_task_run_id(None)
 
@@ -718,6 +972,36 @@ class RolePipelineEngine:
             summary=f"{role.value} standard artifact",
         )
 
+    async def _run_initial_visual_chief_recovery(
+        self,
+        *,
+        task: domain.Task,
+        task_run: domain.TaskRun,
+        context: RoleContext,
+        editor: SafeFileEditor,
+        changed_files: list[str],
+        command_summaries: list[str],
+        validation_output: str,
+    ) -> bool:
+        """Reuse bounded visual repair when the first Chief action is absent."""
+        code, stdout, stderr = await self._run_chief_engineer_repair_rounds(
+            task=task,
+            task_run=task_run,
+            context=context,
+            editor=editor,
+            changed_files=changed_files,
+            command_summaries=command_summaries,
+            validation_output=validation_output,
+        )
+        if code == 0:
+            return True
+        diagnostic = compress_tool_output(stdout + stderr, max_chars=500)
+        command_summaries.append(
+            "Initial visual Chief Engineer recovery failed after bounded rounds."
+            + (f" Diagnostics: {diagnostic}" if diagnostic else "")
+        )
+        return False
+
     async def _execute_coder_actions(
         self,
         *,
@@ -783,6 +1067,9 @@ class RolePipelineEngine:
             max_repair = 0
 
         used_chief_engineer_initial = False
+        chief_production_action_applied = False
+        initial_visual_recovery_validated = False
+        visual_recovery_attempted = False
         from localforge.models.enums import TaskSeniorityClass
         from localforge.routing.capabilities import CapabilityDecision, LocalWorkerCapabilityRouter
         from localforge.routing.delegation import LocalWorkDelegationContract
@@ -881,7 +1168,7 @@ class RolePipelineEngine:
             visual_target = self._visual_actual_output_path(task)
             if visual_target and visual_target not in changed_files:
                 changed_files.append(visual_target)
-            used_chief_engineer_initial = await self._try_chief_engineer_repair(
+            initial_repair_operation = self._try_chief_engineer_repair(
                 task=task,
                 task_run=task_run,
                 context=context,
@@ -894,6 +1181,42 @@ class RolePipelineEngine:
                     "Rewrite the complete target file without omissions or brevity placeholders."
                 ),
             )
+            if self._is_visual_task(task):
+                try:
+                    used_chief_engineer_initial = await self._run_visual_repair_with_timeout(
+                        initial_repair_operation,
+                        label="initial Chief generation",
+                    )
+                except TimeoutError as exc:
+                    used_chief_engineer_initial = False
+                    command_summaries.append(str(exc))
+            else:
+                used_chief_engineer_initial = await initial_repair_operation
+            chief_production_action_applied = used_chief_engineer_initial
+            if not used_chief_engineer_initial and self._is_visual_task(task):
+                # The initial fallback owns the complete bounded visual
+                # recovery lane. Do not enter it again from the outer
+                # validation loop when that lane returns a failed gate.
+                visual_recovery_attempted = True
+                initial_visual_recovery_validated = (
+                    await self._run_initial_visual_chief_recovery(
+                        task=task,
+                        task_run=task_run,
+                        context=context,
+                        editor=editor,
+                        changed_files=changed_files,
+                        command_summaries=command_summaries,
+                        validation_output=(
+                            "Initial visual Chief Engineer generation returned no applied "
+                            "action. Continue with bounded visual recovery rounds."
+                        ),
+                    )
+                )
+                chief_production_action_applied = (
+                    initial_visual_recovery_validated
+                    or self._chief_production_action_applied(command_summaries)
+                )
+                used_chief_engineer_initial = initial_visual_recovery_validated
             await self._restore_regressed_required_products(
                 task=task,
                 task_run=task_run,
@@ -902,7 +1225,11 @@ class RolePipelineEngine:
                 changed_files=changed_files,
                 command_summaries=command_summaries,
             )
-        if not used_chief_engineer_initial:
+        if (
+            not used_chief_engineer_initial
+            and not chief_production_action_applied
+            and not visual_recovery_attempted
+        ):
             if raw_actions is None:
                 if (
                     decision.model_tier == "chief_engineer"
@@ -995,7 +1322,7 @@ class RolePipelineEngine:
             task_run=task_run,
             changed_files=changed_files,
         )
-        if changed_files:
+        if changed_files and not initial_visual_recovery_validated:
             task.metadata["changed_files"] = list(dict.fromkeys(changed_files))
             await self.uow.tasks.update_task(task)
             if self._should_run_pytest(task_run.worktree_path, changed_files) or self._is_visual_task(
@@ -1070,7 +1397,8 @@ class RolePipelineEngine:
                             + compress_tool_output(stdout + stderr, max_chars=500)
                         )
                     if self._is_visual_task(task) and self._has_task_contract(task):
-                        if not os.getenv("PYTEST_CURRENT_TEST"):
+                        if not os.getenv("PYTEST_CURRENT_TEST") and not visual_recovery_attempted:
+                            visual_recovery_attempted = True
                             code, stdout, stderr = await self._run_chief_engineer_repair_rounds(
                                 task=task,
                                 task_run=task_run,
@@ -1082,7 +1410,7 @@ class RolePipelineEngine:
                             )
                             if code == 0:
                                 break
-                        if attempt < max_repair:
+                        if attempt < max_repair and not visual_recovery_attempted:
                             continue
                     if attempt >= max_repair:
                         if (
@@ -1792,11 +2120,19 @@ class RolePipelineEngine:
                     visual_matrix = []
                 from localforge.visual.normalizer import apply_visual_contract_normalization
 
-                apply_visual_contract_normalization(
-                    html_abs_path, structure_rules=structure_rules
+                await self._run_visual_sync_check(
+                    lambda: apply_visual_contract_normalization(
+                        html_abs_path, structure_rules=structure_rules
+                    ),
+                    label="contract normalization",
                 )
-                structure_findings = validate_visual_html_structure(
-                    html_abs_path, structure_rules=structure_rules, visual_matrix=visual_matrix
+                structure_findings = await self._run_visual_sync_check(
+                    lambda: validate_visual_html_structure(
+                        html_abs_path,
+                        structure_rules=structure_rules,
+                        visual_matrix=visual_matrix,
+                    ),
+                    label="HTML structure validation",
                 )
                 if structure_findings:
                     code = 1
@@ -1807,8 +2143,11 @@ class RolePipelineEngine:
                     task_run.worktree_path, ".localforge", "visual_actual.png"
                 )
                 os.makedirs(os.path.dirname(actual_image_path), exist_ok=True)
-                success = capture_html_screenshot(
-                    html_abs_path, actual_image_path, viewport=visual_viewport
+                success = await self._run_visual_sync_check(
+                    lambda: capture_html_screenshot(
+                        html_abs_path, actual_image_path, viewport=visual_viewport
+                    ),
+                    label="HTML screenshot capture",
                 )
                 if not success:
                     code = 1
@@ -1825,11 +2164,14 @@ class RolePipelineEngine:
                         "Visual validation passed: HTML screenshot captured; no reference image configured."
                     )
                     return code, stdout, stderr
-                gate_res = VisualFidelityGate().evaluate(
-                    reference_image_path=ref_image_path,
-                    actual_image_path=actual_image_path,
-                    task_is_visual=True,
-                    min_similarity=visual_threshold,
+                gate_res = await self._run_visual_sync_check(
+                    lambda: VisualFidelityGate().evaluate(
+                        reference_image_path=ref_image_path,
+                        actual_image_path=actual_image_path,
+                        task_is_visual=True,
+                        min_similarity=visual_threshold,
+                    ),
+                    label="visual fidelity gate",
                 )
                 if not gate_res.passed:
                     code = 1
@@ -1846,6 +2188,29 @@ class RolePipelineEngine:
                         f"Visual validation passed: similarity {gate_res.metrics.get('similarity', 1.0):.3f} >= {visual_threshold}"
                     )
         return code, stdout, stderr
+
+    async def _run_visual_sync_check(self, operation, *, label: str):
+        """Run blocking visual tooling off the event loop with a finite timeout."""
+        timeout = _visual_validation_timeout_seconds()
+        try:
+            return await asyncio.wait_for(
+                asyncio.to_thread(operation),
+                timeout=timeout,
+            )
+        except asyncio.TimeoutError as exc:
+            raise TimeoutError(
+                f"Visual validation step '{label}' timed out after {timeout}s."
+            ) from exc
+
+    async def _run_visual_repair_with_timeout(self, operation, *, label: str):
+        """Await one visual Chief operation without allowing an unbounded wait."""
+        timeout = _visual_repair_timeout_seconds()
+        try:
+            return await asyncio.wait_for(operation, timeout=timeout)
+        except asyncio.TimeoutError as exc:
+            raise TimeoutError(
+                f"Visual Chief repair step '{label}' timed out after {timeout}s."
+            ) from exc
 
     async def _run_pytest_validation_resilient(
         self,
@@ -2210,6 +2575,76 @@ class RolePipelineEngine:
             )
         ]
 
+    async def _record_visual_global_budget_exhausted(
+        self,
+        *,
+        task: domain.Task,
+        task_run: domain.TaskRun,
+        command_summaries: list[str],
+        validation_output: str = "",
+    ) -> str:
+        """Persist one auditable terminal diagnostic for the visual call cap."""
+        from localforge.llm.context import get_llm_call_count, get_llm_limit
+
+        current = get_llm_call_count(task_run.id or 0) if task_run.id is not None else 0
+        limit = (
+            get_llm_limit(task_run.id or 0, _visual_global_model_call_limit())
+            if task_run.id is not None
+            else _visual_global_model_call_limit()
+        )
+        marker = "Visual recovery global model-call budget exhausted"
+        message = (
+            f"{marker}: {current}/{limit} calls used; no further Chief visual repair "
+            "dispatch is allowed."
+        )
+        if validation_output:
+            message += " Last gate diagnostic: " + compress_tool_output(
+                validation_output, max_chars=600
+            )
+        if not any(summary.startswith(marker) for summary in command_summaries):
+            command_summaries.append(message)
+
+        metadata = dict(task.metadata or {})
+        prior_budget = metadata.get("visual_recovery_budget")
+        already_recorded = (
+            isinstance(prior_budget, dict) and prior_budget.get("status") == "exhausted"
+        )
+        metadata["visual_recovery_budget"] = {
+            "status": "exhausted",
+            "scope": "task_run",
+            "task_run_id": task_run.id,
+            "calls_used": current,
+            "call_limit": limit,
+            "diagnostic": message[:1200],
+        }
+        tasks = getattr(self.uow, "tasks", None)
+        if tasks is not None and hasattr(tasks, "update_task"):
+            task.metadata = metadata
+            await tasks.update_task(task)
+        audits = getattr(self.uow, "audits", None)
+        if not already_recorded and audits is not None and task.project_id is not None:
+            await audits.append_audit_event(
+                domain.AuditEvent(
+                    project_id=task.project_id,
+                    run_id=self.run_id,
+                    task_id=task.id,
+                    actor_type=AuditEventActorType.SYSTEM,
+                    actor_id="pipeline-engine",
+                    event_type=AuditEventType.SYSTEM_EVENT,
+                    payload_redacted={
+                        "action": "visual_recovery_budget_exhausted",
+                        "task_key": task.key,
+                        "task_run_id": task_run.id,
+                        "calls_used": current,
+                        "call_limit": limit,
+                        "diagnostic": message[:1200],
+                    },
+                )
+            )
+        if not already_recorded and getattr(self.uow, "session", None) is not None:
+            await self._commit_checkpoint("visual recovery budget exhausted")
+        return message
+
     async def _try_chief_engineer_repair(
         self,
         *,
@@ -2227,32 +2662,50 @@ class RolePipelineEngine:
         config = load_config()
         if not config.chief_engineer.enabled or not config.chief_engineer.model:
             return False
+        visual_recovery_mode = self._is_visual_task(task) and preferred_model is not None
         # A local-assisted task may be escalated after its first validation
         # failure. Refresh the per-task budget at the escalation boundary so
         # the Chief's bounded model ladder is not still constrained by the
         # local worker's four-call default.
         if task_run.id is not None:
-            from localforge.llm.context import set_llm_limit
+            from localforge.llm.context import get_llm_limit, set_llm_limit
 
             try:
                 chief_call_limit = int(os.getenv("LOCALFORGE_CHIEF_MAX_ACTIVE_MODEL_CALLS", "16"))
             except ValueError:
                 chief_call_limit = 16
-            # A complete visual repair is segmented into bounded model
-            # calls. Keep one additional bounded pass available for a failed
-            # section or deterministic gate repair; do not let the generic
-            # Chief budget overwrite the visual task budget back to eight.
             if self._is_visual_task(task):
-                try:
-                    visual_call_limit = int(
-                        os.getenv("LOCALFORGE_VISUAL_MAX_ACTIVE_MODEL_CALLS", "96")
-                    )
-                except ValueError:
-                    visual_call_limit = 96
-                chief_call_limit = max(
-                    chief_call_limit, min(max(visual_call_limit, 24), 96)
-                )
-            set_llm_limit(task_run.id, min(max(chief_call_limit, 1), 96))
+                # The visual cap is established once at task-run start. A
+                # recovery round may reserve unused calls inside that cap,
+                # but must never replace it with a fresh generic Chief lane.
+                task_call_cap = _visual_global_model_call_limit(config)
+                current_limit = get_llm_limit(task_run.id, task_call_cap)
+                task_call_cap = min(current_limit, task_call_cap)
+                set_llm_limit(task_run.id, task_call_cap)
+            else:
+                set_llm_limit(task_run.id, min(max(chief_call_limit, 1), 96))
+            if visual_recovery_mode and not _prepare_visual_recovery_budget(
+                task_run.id,
+                command_summaries,
+                reserve=max(
+                    1,
+                    int(getattr(getattr(config, "budgets", None), "max_active_model_calls", 4)),
+                ),
+                max_limit=(
+                    task_call_cap
+                    if self._is_visual_task(task)
+                    else None
+                ),
+            ):
+                return False
+        if visual_recovery_mode and not any(
+            summary.startswith("Visual Chief Engineer recovery switched")
+            for summary in command_summaries
+        ):
+            command_summaries.append(
+                "Visual Chief Engineer recovery switched to one complete-document "
+                "generation after the previous segmented plan was not applied."
+            )
         try:
             provider = build_chief_engineer_provider(config)
             primary_model = config.chief_engineer.model
@@ -2798,21 +3251,27 @@ class RolePipelineEngine:
                         "sequence and preserve every executable assertion; never delete "
                         "the test or invent an alternate API just to make validation green."
                     )
+            repair_call_kwargs = {
+                "project_id": self.project_id,
+                "run_id": self.run_id,
+                "task_id": task.id,
+                "task_contract": task.metadata.get("task_contract", {}),
+                "changed_files_context": changed_files_context,
+                "validation_output": repair_validation_output,
+                "provider": provider,
+                "model": None,
+                "visual_reference_image_path": visual_reference_image_path,
+                "visual_actual_image_path": visual_actual_image_path,
+            }
             for repair_model in dict.fromkeys(repair_models):
                 try:
-                    plan = await ChiefEngineerService(
-                        self.uow, tracer=self.agent_harness.tracer
-                    ).plan_semantic_repair(
-                        project_id=self.project_id,
-                        run_id=self.run_id,
-                        task_id=task.id,
-                        task_contract=task.metadata.get("task_contract", {}),
-                        changed_files_context=changed_files_context,
-                        validation_output=repair_validation_output,
-                        provider=provider,
-                        model=repair_model,
-                        visual_reference_image_path=visual_reference_image_path,
-                        visual_actual_image_path=visual_actual_image_path,
+                    repair_call_kwargs["model"] = repair_model
+                    plan = await self._request_chief_repair_plan(
+                        service=ChiefEngineerService(
+                            self.uow, tracer=self.agent_harness.tracer
+                        ),
+                        visual_recovery_mode=visual_recovery_mode,
+                        **repair_call_kwargs,
                     )
                     break
                 except Exception as exc:
@@ -2844,9 +3303,11 @@ class RolePipelineEngine:
                 )
                 for repair_model in dict.fromkeys(text_models):
                     try:
-                        plan = await ChiefEngineerService(
-                            self.uow, tracer=self.agent_harness.tracer
-                        ).plan_semantic_repair(
+                        plan = await self._request_chief_repair_plan(
+                            service=ChiefEngineerService(
+                                self.uow, tracer=self.agent_harness.tracer
+                            ),
+                            visual_recovery_mode=visual_recovery_mode,
                             project_id=self.project_id,
                             run_id=self.run_id,
                             task_id=task.id,
@@ -2884,6 +3345,18 @@ class RolePipelineEngine:
                 "Chief Engineer repair unavailable: "
                 + error_message
             )
+            if _is_llm_call_budget_error(error_message):
+                command_summaries.append(
+                    "Chief Engineer model dispatch was rejected by the pre-call budget "
+                    "guard; the bounded visual recovery path will continue or fail closed."
+                )
+                if self._is_visual_task(task):
+                    await self._record_visual_global_budget_exhausted(
+                        task=task,
+                        task_run=task_run,
+                        command_summaries=command_summaries,
+                        validation_output=validation_output,
+                    )
             if is_permanent_provider_error(error_message):
                 raise ValueError(
                     "Chief Engineer provider is unavailable and requires operator action: "
@@ -2900,7 +3373,12 @@ class RolePipelineEngine:
             for path in self._canonical_test_paths(task)
             if not os.path.isfile(os.path.join(task_run.worktree_path, path))
         ]
-        if missing_canonical_tests:
+        # A visual task may intentionally create its canonical UI test in a
+        # later packaging/QA task.  Its visual gate and post-merge E2E gate
+        # remain authoritative while the product surface is being assembled;
+        # do not reject a complete Chief visual repair merely because the
+        # optional task-local pytest file does not exist yet.
+        if missing_canonical_tests and not self._is_visual_task(task):
             exact_test_actions = {
                 (proposal.path or "").replace("\\", "/").lstrip("/")
                 for proposal in plan.runtime_actions()
@@ -2956,6 +3434,26 @@ class RolePipelineEngine:
         )
         command_summaries.append(f"Chief Engineer repair applied: {plan.summary}")
         return True
+
+    async def _request_chief_repair_plan(
+        self,
+        *,
+        service: ChiefEngineerService,
+        visual_recovery_mode: bool,
+        **kwargs: object,
+    ):
+        """Use a complete visual retry after a segmented attempt lost its plan."""
+        if visual_recovery_mode:
+            return await service._plan_single_visual_repair(**kwargs)
+        return await service.plan_semantic_repair(**kwargs)
+
+    @staticmethod
+    def _chief_production_action_applied(command_summaries: list[str]) -> bool:
+        """Detect an applied Chief write even when its later gate failed."""
+        return any(
+            summary.startswith("Chief Engineer repair applied:")
+            for summary in command_summaries
+        )
 
     @staticmethod
     def _has_generated_selector_contract_mismatch(
@@ -5431,13 +5929,36 @@ const waitFor = async callback => callback();""".strip()
         )
         best_snapshot = self._snapshot_visual_files(task_run.worktree_path, changed_files)
         best_score = self._current_visual_score(task, task_run.worktree_path)
-        # Visual convergence often needs more than one CSS/layout correction.
-        # Keep the loop bounded by the configured repair budget instead of
-        # failing after three blind retries.
-        configured_rounds = int(load_config().budgets.max_repair_attempts)
-        round_limit = min(max(configured_rounds, 3), 5)
+        # Visual convergence may need more than one CSS/layout correction, but
+        # the internal round limit must remain subordinate to the task-run
+        # budget. Non-visual repair keeps its historical minimum of three
+        # rounds; visual work honors the configured value directly.
+        config = load_config()
+        configured_rounds = int(config.budgets.max_repair_attempts)
+        if self._is_visual_task(task):
+            absolute_rounds = int(
+                getattr(config.budgets, "max_repair_attempts_absolute", configured_rounds)
+            )
+            round_limit = min(max(configured_rounds, 1), max(absolute_rounds, 1), 5)
+        else:
+            round_limit = min(max(configured_rounds, 3), 5)
         for round_index in range(round_limit):
             if self._is_visual_task(task):
+                from localforge.llm.context import get_llm_call_count, get_llm_limit
+
+                global_limit = get_llm_limit(
+                    task_run.id or 0,
+                    _visual_global_model_call_limit(config),
+                )
+                if task_run.id is not None and get_llm_call_count(task_run.id) >= global_limit:
+                    stderr = await self._record_visual_global_budget_exhausted(
+                        task=task,
+                        task_run=task_run,
+                        command_summaries=command_summaries,
+                        validation_output=stdout + stderr,
+                    )
+                    stdout = ""
+                    break
                 self._refresh_visual_evidence(task, task_run.worktree_path)
             preferred_model: str | None = None
             if self._is_visual_task(task):
@@ -5463,7 +5984,7 @@ const waitFor = async callback => callback();""".strip()
                 if visual_models:
                     preferred_model = visual_models[round_index % len(visual_models)]
             await self._commit_checkpoint("Chief Engineer repair")
-            repaired = await self._try_chief_engineer_repair(
+            repair_operation = self._try_chief_engineer_repair(
                 task=task,
                 task_run=task_run,
                 context=context,
@@ -5473,6 +5994,17 @@ const waitFor = async callback => callback();""".strip()
                 validation_output=stdout + stderr,
                 preferred_model=preferred_model,
             )
+            if self._is_visual_task(task):
+                try:
+                    repaired = await self._run_visual_repair_with_timeout(
+                        repair_operation,
+                        label=f"bounded repair round {round_index + 1}",
+                    )
+                except TimeoutError as exc:
+                    repaired = False
+                    command_summaries.append(str(exc))
+            else:
+                repaired = await repair_operation
             await self._restore_regressed_required_products(
                 task=task,
                 task_run=task_run,
@@ -5482,6 +6014,37 @@ const waitFor = async callback => callback();""".strip()
                 command_summaries=command_summaries,
             )
             if not repaired:
+                if self._is_visual_task(task):
+                    budget_message = next(
+                        (
+                            summary
+                            for summary in reversed(command_summaries)
+                            if summary.startswith(
+                                "Visual recovery global model-call budget exhausted"
+                            )
+                        ),
+                        None,
+                    )
+                    if budget_message is not None:
+                        stderr = await self._record_visual_global_budget_exhausted(
+                            task=task,
+                            task_run=task_run,
+                            command_summaries=command_summaries,
+                            validation_output=stdout + stderr,
+                        )
+                        stdout = ""
+                        break
+                    if round_index < round_limit - 1:
+                        command_summaries.append(
+                            "Visual Chief Engineer repair returned no plan; continuing to "
+                            f"bounded round {round_index + 2}/{round_limit}."
+                        )
+                        continue
+                    command_summaries.append(
+                        "Visual Chief Engineer repair exhausted its bounded rounds without "
+                        "a repair plan."
+                    )
+                    break
                 missing_canonical_tests = [
                     path
                     for path in self._canonical_test_paths(task)
@@ -6234,8 +6797,8 @@ const waitFor = async callback => callback();""".strip()
                         break
                     # A free/freemium route may be rate-limited or stall while
                     # another configured OmniRoute alias is healthy. Continue
-                    # through the finite alias ladder before escalating to the
-                    # Chief; never fall back to a direct provider or Ollama.
+                    # through the finite alias ladder before trying the
+                    # configured direct free-provider routes or critical Chief.
                     logger.warning(
                         "OmniRoute model %s is temporarily unavailable (%s); trying the next configured alias.",
                         model,
@@ -6259,6 +6822,35 @@ const waitFor = async callback => callback();""".strip()
 
         try:
             config = load_config()
+            for free_provider in build_free_provider_ladder(config):
+                free_model = getattr(free_provider, "default_model", None)
+                if not free_model:
+                    continue
+                try:
+                    response = await free_provider.chat_completion(
+                        [{"role": "user", "content": prompt}],
+                        response_schema={"type": "object"},
+                        timeout=candidate_timeout,
+                        model=free_model,
+                    )
+                except Exception as free_exc:
+                    provider_name = getattr(free_provider, "provider_name", "free")
+                    failures.append(f"{provider_name}:{free_model}: {free_exc!r}")
+                    logger.warning(
+                        "Direct free provider %s model %s failed; trying the next route.",
+                        provider_name,
+                        free_model,
+                    )
+                    continue
+                if isinstance(response, str) and response.strip():
+                    logger.info(
+                        "Direct free provider fallback succeeded via %s:%s.",
+                        getattr(free_provider, "provider_name", "free"),
+                        free_model,
+                    )
+                    return response, str(free_model)
+                failures.append(f"{free_model}: empty response")
+
             if config.chief_engineer.enabled and config.chief_engineer.model:
                 chief_provider = build_chief_engineer_provider(config)
                 chief_models = list(

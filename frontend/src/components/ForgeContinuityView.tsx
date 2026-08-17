@@ -21,22 +21,27 @@ export function ForgeContinuityView({ projectId }: ForgeContinuityViewProps) {
   useEffect(() => {
     let cancelled = false;
     if (!projectId) return undefined;
-    setLoading(true);
-    Promise.all([
-      apiClient.fetchEngineeringSessions(projectId),
-      apiClient.fetchReferences(projectId),
-      apiClient.fetchAutomations(projectId),
-    ]).then(([nextSessions, nextSources, nextAutomations]) => {
-      if (cancelled) return;
-      setSessions(nextSessions);
-      setSources(nextSources);
-      setAutomations(nextAutomations);
-      setError(null);
-    }).catch((reason: unknown) => {
-      if (!cancelled) setError(reason instanceof Error ? reason.message : String(reason));
-    }).finally(() => {
-      if (!cancelled) setLoading(false);
-    });
+
+    void (async () => {
+      setLoading(true);
+      try {
+        const [nextSessions, nextSources, nextAutomations] = await Promise.all([
+          apiClient.fetchEngineeringSessions(projectId),
+          apiClient.fetchReferences(projectId),
+          apiClient.fetchAutomations(projectId),
+        ]);
+        if (cancelled) return;
+        setSessions(nextSessions);
+        setSources(nextSources);
+        setAutomations(nextAutomations);
+        setError(null);
+      } catch (reason: unknown) {
+        if (!cancelled) setError(reason instanceof Error ? reason.message : String(reason));
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
     return () => { cancelled = true; };
   }, [projectId]);
 

@@ -12,11 +12,11 @@ def test_config_pydantic_defaults():
     config = LocalForgeConfig()
     assert config.project.name == "Default Project"
     assert config.git.default_branch == "main"
-    assert config.models.provider == "omniroute"
-    assert config.models.base_url == "http://localhost:20128/v1"
-    assert config.models.default_model == "auto/best-free"
-    assert config.chief_engineer.provider == "omniroute"
-    assert config.chief_engineer.model == "auto/best-free"
+    assert config.models.provider == "llamacpp"
+    assert config.models.base_url == "http://localhost:8080/v1"
+    assert config.models.default_model == "qwen3.8-27b"
+    assert config.chief_engineer.provider == "llamacpp"
+    assert config.chief_engineer.model == "qwen3.8-27b"
     assert config.budgets.max_gateway_calls == DEFAULT_MAX_GATEWAY_CALLS
 
 
@@ -94,7 +94,7 @@ def test_load_config_precedence(tmp_path, monkeypatch):
     config = load_config()
     assert config.project.name == "File Project"
     assert config.git.default_branch == "develop"
-    assert config.models.default_model == "auto/best-free"
+    assert config.models.default_model == "qwen3.8-27b"
 
     # 3. Verification of Env override
     monkeypatch.setenv("LOCALFORGE_PROJECT_NAME", "Env Project")
@@ -124,29 +124,16 @@ def test_load_config_invalid_yaml(tmp_path, monkeypatch):
     assert "Failed to parse workspace config" in str(exc.value)
 
 
-def test_load_config_rejects_direct_inference_provider(tmp_path, monkeypatch):
+def test_load_config_rejects_unsupported_provider(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     lf_dir = tmp_path / ".localforge"
     lf_dir.mkdir()
     (lf_dir / "config.yaml").write_text(
-        "models:\n  provider: ollama\n  base_url: http://localhost:11434/v1\n",
+        "models:\n  provider: unsupported_vendor\n  base_url: http://localhost:11434/v1\n",
         encoding="utf-8",
     )
 
     with pytest.raises(ValueError, match="provider must be one of"):
-        load_config()
-
-
-def test_load_config_rejects_public_gateway_bypass(tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
-    lf_dir = tmp_path / ".localforge"
-    lf_dir.mkdir()
-    (lf_dir / "config.yaml").write_text(
-        "models:\n  provider: omniroute\n  base_url: https://api.openrouter.ai/v1\n",
-        encoding="utf-8",
-    )
-
-    with pytest.raises(ValueError, match="must point to the OmniRoute gateway"):
         load_config()
 
 

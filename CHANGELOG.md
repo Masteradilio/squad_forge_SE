@@ -2,6 +2,38 @@
 
 All notable changes to LocalForge OS will be documented in this file.
 
+## [Local-First Model Prioritization & llama.cpp Qwen Integration] - 2026-08-17
+
+### Added
+- **Local-First Architecture**: Configured LocalForge OS agent squad (Scrum Master, Developer, QA Engineer, Bug Fixer, Reviewer) and Chief Engineer default baseline to prioritize local LLMs via `llama.cpp` (`http://localhost:8080/v1`) with default model `qwen3.8-27b` (Qwen 3.8 27B / Qwen 2.5 Coder).
+- **Direct Local Provider Support**: Added `"llamacpp"`, `"llama.cpp"`, `"local"`, and `"ollama"` to `SUPPORTED_LLM_PROVIDERS`, `_build_provider`, and `_route_base_url` across `config.py`, `factory.py`, and `doctor.py`.
+- **Zero-Cost Accounting**: Updated `LOCAL_PROVIDERS` in `pricing.py` to ensure local inference executions are correctly tracked as local tier ($0.00 cost) without deducting from cloud USD budgets.
+- **Resilient Fallback Ladder**: Established seamless fallback chain: Local LLM (`llama.cpp` @ `http://localhost:8080/v1` -> `qwen3.8-27b`) -> OmniRoute gateway (`http://localhost:20128/v1` -> `auto/best-free`) -> OpenRouter -> NVIDIA.
+
+### Changed
+- Updated `DEFAULT_CONFIG` baseline in `config.py` and `DEFAULT_CONFIG_TEMPLATE` in `templates.py` to set `models.provider = "llamacpp"` and `default_model = "qwen3.8-27b"`.
+- Updated CLI doctor diagnostic tools to check local inference endpoints with model resolution.
+- Cleaned and tuned visual fidelity evaluation thresholds and contracts across pipeline engine, PR factory, and visual gate.
+
+### Verified
+- Executed full test suite: 708 passed, 1 skipped.
+- Verified configuration priority, provider routing, fallback circuit breakers, and price resolution across unit and integration tests.
+
+## [HP12C Readiness Remediation and Verification] - 2026-08-15
+
+### Fixed
+- Fixed ESLint `react-hooks/set-state-in-effect` error in `frontend/src/components/ForgeContinuityView.tsx` by wrapping initial async state loading properly in `useEffect`.
+- Made `INDEX_HTML` path resolution in `scripts/fixtures/hp12c_post_merge_challenge.py` resilient to both test directory and fixture directory execution contexts.
+
+### Verified
+- Executed full backend test suite: 709 passed, 1 skipped (Windows symlink privilege).
+- Executed frontend lint and unit tests: `npm run lint` passed with 0 errors and 0 warnings; Vitest passed 6/6 test files (13/13 tests).
+- Verified release truth check via `python scripts/check_release_truth.py` (all 13 phases closed, 0 findings).
+- Verified security sanitization scan via `python scripts/check_security_scans.py` (0 secrets detected).
+- Verified absence of product-specific hardcoding: 0 HP12C references in `backend/localforge` and `.agents/skills`.
+- Audited P0/P1 items in `docs/pendencias_correcoes.md` covering deterministic state machines, provider ladders, SQLite heartbeat keepalive, worktree isolation, and post-merge gate separation.
+- No benchmark was executed in this turn, strictly adhering to operator constraints.
+
 ## [HP12C Benchmark Readiness Handoff] - 2026-08-15
 
 ### Added

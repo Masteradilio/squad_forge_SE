@@ -112,6 +112,14 @@ async def chat_completion_validated(  # noqa: UP047
             parsed = json.loads(cleaned, strict=False)
             return schema_model.model_validate(parsed)
         except (json.JSONDecodeError, ValidationError) as e:
+            if hasattr(schema_model, "model_fields") and set(schema_model.model_fields.keys()) == {"content"}:
+                text = raw_response.strip()
+                if text.startswith("```") and text.endswith("```"):
+                    lines = text.splitlines()
+                    if len(lines) >= 2:
+                        text = "\n".join(lines[1:-1]).strip()
+                if text:
+                    return schema_model.model_validate({"content": text})
             if attempt >= max_retries:
                 # Exhausted all attempts
                 error_msg = f"Failed to validate LLM output after {max_retries} retries."

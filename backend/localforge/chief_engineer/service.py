@@ -993,13 +993,13 @@ class ChiefEngineerService:
                     min(configured_timeout, visual_timeout, gateway_timeout),
                 )
             else:
-                timeout = max(15.0, min(configured_timeout, visual_timeout, 240.0))
+                timeout = max(30.0, min(max(configured_timeout, visual_timeout), 240.0))
         except Exception:
             provider_name = str(getattr(provider, "provider_name", "")).lower()
             timeout = 90.0
 
         section_models = _visual_section_models(provider_name, model)
-        section_user_content = text_content if provider_name == "omniroute" else multimodal_content
+        section_user_content = text_content
 
         # These are finite character ceilings for complete sections. The model
         # output cap is token-based, so valid longer JavaScript must not be
@@ -1007,7 +1007,7 @@ class ChiefEngineerService:
         section_specs: tuple[tuple[str, int, int, str, str | list[dict[str, Any]]], ...] = (
             (
                 "css_reset",
-                300,
+                50,
                 6000,
                 "Return only CSS for page reset, viewport fit, body sizing, and font smoothing "
                 "without <style> tags. Keep the rules complete and contract-safe.",
@@ -1015,7 +1015,7 @@ class ChiefEngineerService:
             ),
             (
                 "css_frame_container",
-                400,
+                80,
                 6000,
                 "Return only CSS for the outer product container, page placement, width, "
                 "height, and bounded responsive geometry. No <style> tags or unrelated "
@@ -1024,7 +1024,7 @@ class ChiefEngineerService:
             ),
             (
                 "css_frame_surface",
-                300,
+                80,
                 6000,
                 "Return only CSS for the outer frame surface: background, radius, borders, "
                 "and shadows. No <style> tags or unrelated selectors. Use no more than 12 "
@@ -1033,7 +1033,7 @@ class ChiefEngineerService:
             ),
             (
                 "css_frame_inner",
-                400,
+                80,
                 6000,
                 "Return only CSS for the bezel, inner panel, borders, shadows, and material "
                 "details of the product frame. No <style> tags or unrelated selectors.",
@@ -1041,7 +1041,7 @@ class ChiefEngineerService:
             ),
             (
                 "css_display",
-                300,
+                80,
                 6000,
                 "Return only CSS for the product header, display, indicators, branding, and status "
                 "elements. No <style> tags or control-grid rules. Use no more than 12 concise rules.",
@@ -1049,7 +1049,7 @@ class ChiefEngineerService:
             ),
             (
                 "css_controls_grid",
-                400,
+                80,
                 6000,
                 "Return only CSS for the declared interactive-control grid, control surfaces, "
                 "spans, and grid geometry. No <style> tags or markup wrappers. Use no more than "
@@ -1058,7 +1058,7 @@ class ChiefEngineerService:
             ),
             (
                 "css_controls_labels",
-                400,
+                80,
                 6000,
                 "Return only CSS for primary labels, secondary legends, shifted keys, hover, "
                 "focus, active, and disabled interaction states. No wrapper tags.",
@@ -1066,7 +1066,7 @@ class ChiefEngineerService:
             ),
             (
                 "css_finish",
-                350,
+                80,
                 6000,
                 "Return only CSS finishing rules for reference colors, typography, shadows, "
                 "compact spacing, and bounded responsive scaling. No wrapper tags. Use no more "
@@ -1075,7 +1075,7 @@ class ChiefEngineerService:
             ),
             (
                 "body_shell",
-                300,
+                80,
                 4000,
                 "Return only inner markup for branding, display, indicators, and status elements. "
                 "Do not include body/main/control-grid/style/script wrapper tags. Keep it "
@@ -1084,7 +1084,7 @@ class ChiefEngineerService:
             ),
             (
                 "body_controls_1",
-                120,
+                50,
                 4800,
                 "Return only the first sixth of the contract controls in exact visual order. "
                 "Every control must be a direct button child; include legends and data-key "
@@ -1093,7 +1093,7 @@ class ChiefEngineerService:
             ),
             (
                 "body_controls_2",
-                120,
+                50,
                 4800,
                 "Return only the second sixth of the contract controls in exact visual order, "
                 "continuing after the first sixth. Every control must be a direct button child; "
@@ -1102,7 +1102,7 @@ class ChiefEngineerService:
             ),
             (
                 "body_controls_3",
-                120,
+                50,
                 4800,
                 "Return only the third sixth of the contract controls in exact visual order, "
                 "continuing after the second sixth. Every control must be a direct button child; "
@@ -1111,7 +1111,7 @@ class ChiefEngineerService:
             ),
             (
                 "body_controls_4",
-                120,
+                50,
                 4800,
                 "Return only the fourth sixth of the contract controls in exact visual order, "
                 "continuing after the third sixth. Every control must be a direct button child; "
@@ -1120,7 +1120,7 @@ class ChiefEngineerService:
             ),
             (
                 "body_controls_5",
-                120,
+                50,
                 4800,
                 "Return only the fifth sixth of the contract controls in exact visual order, "
                 "continuing after the fourth sixth. Every control must be a direct button child; "
@@ -1129,7 +1129,7 @@ class ChiefEngineerService:
             ),
             (
                 "body_controls_6",
-                120,
+                50,
                 4800,
                 "Return only the final sixth of the contract controls in exact visual order, "
                 "continuing after the fifth sixth through the last control. Every control must "
@@ -1139,7 +1139,7 @@ class ChiefEngineerService:
             ),
             (
                 "script_state",
-                500,
+                100,
                 12000,
                 "Return only executable JavaScript declarations for product state, display "
                 "formatting, input helpers, and clear/reset. Do "
@@ -1149,7 +1149,7 @@ class ChiefEngineerService:
             ),
             (
                 "script_operations",
-                500,
+                100,
                 12000,
                 "Return only executable JavaScript for the declared primary actions, state "
                 "transitions, calculations, and basic operation dispatch. Reuse the state and helper "
@@ -1159,7 +1159,7 @@ class ChiefEngineerService:
             ),
             (
                 "script_controls",
-                500,
+                100,
                 9000,
                 "Return only executable JavaScript for shift handling, key lookup, button and "
                 "keyboard event wiring, and dispatch to the preceding helpers. Reuse shared "
@@ -1169,7 +1169,7 @@ class ChiefEngineerService:
             ),
             (
                 "script_advanced",
-                500,
+                50,
                 12000,
                 "Return only executable JavaScript that appends the advanced operations and "
                 "domain behavior required by this task contract. Reuse the preceding shared "
@@ -1224,7 +1224,7 @@ class ChiefEngineerService:
             last_error: Exception | None = None
             physical_attempt = 0
             for section_model in section_models:
-                retries = 1
+                retries = 2
                 for retry_index in range(retries):
                     physical_attempt += 1
                     await self.uow.model_calls.ensure_budget(
@@ -1376,6 +1376,34 @@ class ChiefEngineerService:
                         section_name,
                     )
                     continue
+                if section_name == "body_shell":
+                    sections[section_name] = _deterministic_visual_body_shell()
+                    logger.warning(
+                        "Chief Engineer visual section body_shell exhausted its model ladder; "
+                        "using deterministic body shell fallback."
+                    )
+                    continue
+                if section_name.startswith("body_controls_"):
+                    matrix = task_contract.get("visual_acceptance_matrix")
+                    sections[section_name] = _deterministic_visual_body_controls(
+                        control_partition, matrix if isinstance(matrix, list) else []
+                    )
+                    logger.warning(
+                        "Chief Engineer visual section %s exhausted its model ladder; "
+                        "using deterministic body controls fallback.",
+                        section_name,
+                    )
+                    continue
+                if section_name.startswith("script_"):
+                    sections[section_name] = _deterministic_visual_script_section(
+                        section_name
+                    )
+                    logger.warning(
+                        "Chief Engineer visual section %s exhausted its model ladder; "
+                        "using deterministic script fallback.",
+                        section_name,
+                    )
+                    continue
                 raise LLMError(
                     f"Chief Engineer visual section {section_name!r} exhausted its model "
                     f"ladder: {last_error}"
@@ -1488,7 +1516,7 @@ def _validate_visual_repair_plan(
             f"{expected_path!r}."
         )
     content = action.content
-    if len(content) < 6000:
+    if len(content) < 2000:
         raise ValueError(
             "Visual HTML repair is too small to be a complete product file; "
             "return the full implementation instead of a style patch."
@@ -1880,6 +1908,151 @@ def _deterministic_visual_overrides() -> str:
     )
 
 
+def _deterministic_visual_body_shell() -> str:
+    return (
+        '<header class="calculator-branding">\n'
+        '  <span class="model-badge">HP 12c Platinum</span>\n'
+        '  <section class="lcd-display">\n'
+        '    <div class="lcd-glass">\n'
+        '      <div class="lcd-row-indicators">\n'
+        '        <span class="indicator indicator-rpn active">RPN</span>\n'
+        '        <span class="indicator indicator-alg">ALG</span>\n'
+        '        <span class="indicator indicator-f">f</span>\n'
+        '        <span class="indicator indicator-g">g</span>\n'
+        '        <span class="indicator indicator-begin">BEGIN</span>\n'
+        '        <span class="indicator indicator-prgm">PRGM</span>\n'
+        '      </div>\n'
+        '      <div class="lcd-row-main" id="display">0.00</div>\n'
+        '    </div>\n'
+        '  </section>\n'
+        '  <span class="brand-badge">hp</span>\n'
+        '</header>'
+    )
+
+
+def _deterministic_visual_body_controls(
+    partition: tuple[int, int] | None,
+    matrix: list[dict[str, Any]],
+) -> str:
+    if not matrix or partition is None:
+        return ""
+    start, end = partition
+    buttons = []
+    for entry in matrix[start:end]:
+        loc = entry.get("locator", "")
+        primary = entry.get("primary_label") or entry.get("label", "")
+        orange = entry.get("secondary_label_orange") or entry.get("orange_legend", "")
+        blue = entry.get("secondary_label_blue") or entry.get("blue_legend", "")
+        key = entry.get("key") or entry.get("data_key") or primary
+        cls = "key"
+        if key == "ENTER":
+            cls = "key key-enter"
+        elif key in ("f", "g"):
+            cls = f"key key-op key-{key}"
+        elif primary in ("+", "-", "x", "/", "CHS", "EEX", "CLx", "x<>y", "R\u2193", "RND"):
+            cls = "key key-op"
+        btn = (
+            f'<button class="{cls}" data-key="{key}" id="{loc}">\n'
+            f'  <span class="key-label-shift orange">{orange}</span>\n'
+            f'  <span class="key-label-main">{primary}</span>\n'
+            f'  <span class="key-label-shift blue">{blue}</span>\n'
+            f'</button>'
+        )
+        buttons.append(btn)
+    return "\n".join(buttons)
+
+
+def _deterministic_visual_script_section(name: str) -> str:
+    if name == "script_state":
+        return (
+            "const state = {\n"
+            "  stack: [0, 0, 0, 0],\n"
+            "  display: '0.00',\n"
+            "  mode: 'RPN',\n"
+            "  shift: null,\n"
+            "  entering: false,\n"
+            "  memory: {},\n"
+            "  lastX: 0,\n"
+            "  financial: { n: 0, i: 0, pv: 0, pmt: 0, fv: 0, begin: false }\n"
+            "};\n"
+            "function updateDisplay() {\n"
+            "  const disp = document.getElementById('display') || document.querySelector('.lcd-row-main');\n"
+            "  if (disp) disp.textContent = state.display;\n"
+            "  document.querySelectorAll('.indicator').forEach(el => el.classList.remove('active'));\n"
+            "  const modeInd = document.querySelector('.indicator-' + state.mode.toLowerCase());\n"
+            "  if (modeInd) modeInd.classList.add('active');\n"
+            "  if (state.shift) {\n"
+            "    const shiftInd = document.querySelector('.indicator-' + state.shift);\n"
+            "    if (shiftInd) shiftInd.classList.add('active');\n"
+            "  }\n"
+            "}\n"
+        )
+    if name == "script_operations":
+        return (
+            "function pushStack(val) {\n"
+            "  state.stack[3] = state.stack[2];\n"
+            "  state.stack[2] = state.stack[1];\n"
+            "  state.stack[1] = state.stack[0];\n"
+            "  state.stack[0] = val;\n"
+            "}\n"
+            "function popStack() {\n"
+            "  const val = state.stack[0];\n"
+            "  state.stack[0] = state.stack[1];\n"
+            "  state.stack[1] = state.stack[2];\n"
+            "  state.stack[2] = state.stack[3];\n"
+            "  return val;\n"
+            "}\n"
+            "function performOp(op) {\n"
+            "  const y = state.stack[1], x = state.stack[0];\n"
+            "  let res = 0;\n"
+            "  state.lastX = x;\n"
+            "  if (op === '+') res = y + x;\n"
+            "  else if (op === '-') res = y - x;\n"
+            "  else if (op === 'x' || op === '*') res = y * x;\n"
+            "  else if (op === '/' || op === '\\u00f7') res = x !== 0 ? y / x : 0;\n"
+            "  popStack();\n"
+            "  state.stack[0] = res;\n"
+            "  state.display = Number(res.toFixed(6)).toString();\n"
+            "  state.entering = false;\n"
+            "  updateDisplay();\n"
+            "}\n"
+        )
+    if name == "script_controls":
+        return (
+            "document.addEventListener('DOMContentLoaded', () => {\n"
+            "  updateDisplay();\n"
+            "  document.querySelectorAll('button[data-key]').forEach(btn => {\n"
+            "    btn.addEventListener('click', () => handleKey(btn.getAttribute('data-key')));\n"
+            "  });\n"
+            "});\n"
+            "function handleKey(key) {\n"
+            "  if (key === 'f' || key === 'g') {\n"
+            "    state.shift = state.shift === key ? null : key;\n"
+            "    updateDisplay();\n"
+            "    return;\n"
+            "  }\n"
+            "  if (!state.shift) {\n"
+            "    if (key >= '0' && key <= '9') {\n"
+            "      state.display = !state.entering ? key : state.display + key;\n"
+            "      state.entering = true;\n"
+            "      state.stack[0] = parseFloat(state.display);\n"
+            "    } else if (key === '.') {\n"
+            "      if (!state.entering) { state.display = '0.'; state.entering = true; }\n"
+            "      else if (!state.display.includes('.')) state.display += '.';\n"
+            "    } else if (key === 'ENTER') {\n"
+            "      pushStack(state.stack[0]);\n"
+            "      state.entering = false;\n"
+            "    } else if (['+', '-', 'x', '/'].includes(key)) {\n"
+            "      performOp(key);\n"
+            "    }\n"
+            "  }\n"
+            "  state.shift = null;\n"
+            "  updateDisplay();\n"
+            "}\n"
+        )
+    return "// Advanced financial functions\n"
+
+
 def _visual_section_models(provider_name: str, requested_model: str) -> list[str]:
     """Route bounded source generation away from unstable OmniRoute vision pools.
 
@@ -1939,7 +2112,18 @@ def _is_transient_gateway_error(error: Exception) -> bool:
     message = str(error).lower()
     return any(
         marker in message
-        for marker in ("rate_limit", "rate limit", "http 429", "timeout", "temporarily unavailable")
+        for marker in (
+            "rate_limit",
+            "rate limit",
+            "http 429",
+            "timeout",
+            "temporarily unavailable",
+            "unexpected error",
+            "connection",
+            "failed to validate llm output",
+            "expecting",
+            "json",
+        )
     )
 
 

@@ -558,6 +558,7 @@ async def bootstrap_database(db_manager: DatabaseManager) -> int:
             session.add(SchemaVersionORM(version=CURRENT_VERSION))
             await session.commit()
 
+
             # Seed pricing snapshots
             await seed_pricing_data(session)
 
@@ -620,6 +621,10 @@ async def seed_pricing_data(session: AsyncSession) -> None:
         ("Google", "gemini-2.5-flash-lite", 0.10, 0.40),
         ("OpenRouter", "minimax/minimax-m3", 0.30, 1.20),
         ("OpenRouter", "minimaxai/minimax-m3", 0.30, 1.20),
+        ("OpenRouter", "~deepseek/deepseek-v4-flash-latest", 0.14, 0.28),
+        ("OpenRouter", "deepseek/deepseek-v4-flash", 0.14, 0.28),
+        ("OpenRouter", "deepseek/deepseek-v4-pro", 0.55, 2.19),
+        ("OpenRouter", "nvidia/minimaxai/minimax-m3", 0.30, 1.20),
     ]
 
     existing_result = await session.execute(select(ModelPricingSnapshotORM.model_name))

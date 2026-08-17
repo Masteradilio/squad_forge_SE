@@ -9,9 +9,20 @@ from pydantic import BaseModel, Field, ValidationError, field_validator
 from localforge.models.enums import ReleasePromotionMode
 from localforge.services.pricing import DEFAULT_MAX_GATEWAY_CALLS, is_free_gateway_model
 
+DEFAULT_LLAMACPP_URL = "http://localhost:8080/v1"
+DEFAULT_OLLAMA_URL = "http://localhost:11434/v1"
+DEFAULT_OMNIROUTE_URL = "http://localhost:20128/v1"
 DEFAULT_OPENROUTER_URL = "https://openrouter.ai/api/v1"
 DEFAULT_NVIDIA_URL = "https://integrate.api.nvidia.com/v1"
-SUPPORTED_LLM_PROVIDERS = {"omniroute", "openrouter", "nvidia"}
+SUPPORTED_LLM_PROVIDERS = {
+    "llamacpp",
+    "llama.cpp",
+    "local",
+    "ollama",
+    "omniroute",
+    "openrouter",
+    "nvidia",
+}
 
 # Default configuration dictionary used as baseline
 DEFAULT_CONFIG = {
@@ -24,25 +35,30 @@ DEFAULT_CONFIG = {
         "remote_url": None,
     },
     "models": {
-        "provider": "omniroute",
-        "base_url": "http://localhost:20128/v1",
+        "provider": "llamacpp",
+        "base_url": "http://localhost:8080/v1",
         "api_key": None,
-        "default_model": "auto/best-free",
+        "default_model": "qwen3.8-27b",
         "fallback_models": [
+            "qwen3.8-27b",
+            "auto/best-free",
             "auto/coding:free",
         ],
         "fallback_routes": [],
         "roles": {},
     },
     "chief_engineer": {
-        "provider": "omniroute",
-        "base_url": "http://localhost:20128/v1",
-        "model": "auto/best-free",
+        "provider": "llamacpp",
+        "base_url": "http://localhost:8080/v1",
+        "model": "qwen3.8-27b",
         "api_key": None,
         "fallback_models": [
+            "qwen3.8-27b",
             "auto/coding:free",
+            "auto/best-free",
         ],
         "visual_fallback_models": [
+            "qwen3.8-27b",
             "auto/coding:free",
             "auto/best-free",
         ],
@@ -123,12 +139,14 @@ class ProviderRouteConfig(BaseModel):
 
 
 class ModelsConfig(BaseModel):
-    provider: str = Field(default="omniroute")
-    base_url: str = Field(default="http://localhost:20128/v1")
+    provider: str = Field(default="llamacpp")
+    base_url: str = Field(default="http://localhost:8080/v1")
     api_key: str | None = Field(default=None)
-    default_model: str = Field(default="auto/best-free")
+    default_model: str = Field(default="qwen3.8-27b")
     fallback_models: list[str] = Field(
         default_factory=lambda: [
+            "qwen3.8-27b",
+            "auto/best-free",
             "auto/coding:free",
         ]
     )
@@ -137,18 +155,21 @@ class ModelsConfig(BaseModel):
 
 
 class ChiefEngineerConfig(BaseModel):
-    provider: str = Field(default="omniroute")
-    base_url: str = Field(default="http://localhost:20128/v1")
-    model: str | None = Field(default="auto/best-free")
+    provider: str = Field(default="llamacpp")
+    base_url: str = Field(default="http://localhost:8080/v1")
+    model: str | None = Field(default="qwen3.8-27b")
     visual_model: str | None = Field(default=None)
     api_key: str | None = Field(default=None)
     fallback_models: list[str] = Field(
         default_factory=lambda: [
+            "qwen3.8-27b",
             "auto/coding:free",
+            "auto/best-free",
         ]
     )
     visual_fallback_models: list[str] = Field(
         default_factory=lambda: [
+            "qwen3.8-27b",
             "auto/coding:free",
             "auto/best-free",
         ]
@@ -565,10 +586,6 @@ def load_config(cli_args: dict[str, Any] | None = None) -> LocalForgeConfig:
         or env_value("LOCALFORGE_CHIEF_PROVIDER") is not None
     )
 
-    # The paid OpenRouter lane is the default critical route. An explicit
-    # LOCALFORGE_CHIEF_PROVIDER always wins, including an explicit OmniRoute
-    # gateway route. Partial credentials remain visible to the provider
-    # factory instead of silently inventing a route.
     if not chief_provider_explicit and openrouter_paid_model and openrouter_api_key:
         config_dict["chief_engineer"].update(
             {
@@ -619,13 +636,13 @@ def load_config(cli_args: dict[str, Any] | None = None) -> LocalForgeConfig:
             "fallback_api_key": "LOCALFORGE_CHIEF_FALLBACK_API_KEY",
         }.items()
     )
-    # If the operator kept an explicit OmniRoute primary route and supplied
+    # If the operator kept an explicit OmniRoute/local primary route and supplied
     # OpenRouter credentials, make the paid route the bounded last-resort
     # fallback. An explicit fallback configuration always wins, including an
     # explicit empty value used to disable the automatic lane.
     if (
         not fallback_route_explicit
-        and configured_chief_provider.replace("_", "") == "omniroute"
+        and configured_chief_provider.replace("_", "") in {"omniroute", "llamacpp", "llama.cpp", "local", "ollama"}
         and openrouter_paid_model
         and openrouter_api_key
     ):

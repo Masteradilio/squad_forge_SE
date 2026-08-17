@@ -9,7 +9,17 @@ BASELINE_MODELS: dict[str, dict[str, str]] = {
     "Google": {"large": "gemini-2.5-pro", "medium": "gemini-2.5-flash", "small": "gemini-2.5-flash-lite"},
 }
 
-LOCAL_PROVIDERS = {"ollama", "local", "localforge", "omniroute", "omni_route"}
+LOCAL_PROVIDERS = {
+    "llamacpp",
+    "llama.cpp",
+    "local",
+    "ollama",
+    "localforge",
+    "openai_compatible",
+    "openaicompatible",
+    "omniroute",
+    "omni_route",
+}
 # OmniRoute calls are bounded independently from paid-provider budgets. Keep
 # this finite default safe for callers that create a run without explicitly
 # copying the configured resource limits into its Run record.

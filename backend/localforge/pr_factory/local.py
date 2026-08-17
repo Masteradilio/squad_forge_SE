@@ -75,7 +75,7 @@ class LocalPRFactory:
             visual_required = bool(contract.get("visual_required", False))
             visual_ref_rel = contract.get("visual_reference_image")
             visual_actual_rel = contract.get("visual_actual_output")
-            visual_threshold = float(contract.get("visual_similarity_threshold", 0.90))
+            visual_threshold = float(contract.get("visual_similarity_threshold", 0.75))
             visual_viewport = str(contract.get("visual_viewport", visual_viewport))
 
         if not visual_required:

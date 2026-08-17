@@ -1,5 +1,8 @@
 from localforge.core.config import (
+    DEFAULT_LLAMACPP_URL,
     DEFAULT_NVIDIA_URL,
+    DEFAULT_OLLAMA_URL,
+    DEFAULT_OMNIROUTE_URL,
     DEFAULT_OPENROUTER_URL,
     LocalForgeConfig,
 )
@@ -8,8 +11,6 @@ from localforge.llm.fallback import FallbackLLMProvider
 from localforge.llm.nvidia import NvidiaProvider
 from localforge.llm.openai_compatible import OpenAICompatibleProvider
 from localforge.llm.openrouter import OpenRouterProvider
-
-DEFAULT_OMNIROUTE_URL = "http://localhost:20128/v1"
 
 
 def _build_provider(
@@ -20,6 +21,22 @@ def _build_provider(
     model: str | None,
     max_output_tokens: int,
 ) -> BaseLLMProvider:
+    if provider_name in {"llamacpp", "llama.cpp", "local"}:
+        return OpenAICompatibleProvider(
+            base_url=base_url or DEFAULT_LLAMACPP_URL,
+            api_key=api_key,
+            default_model=model or "qwen3.8-27b",
+            provider_name="llamacpp",
+            max_output_tokens=max_output_tokens,
+        )
+    if provider_name == "ollama":
+        return OpenAICompatibleProvider(
+            base_url=base_url or DEFAULT_OLLAMA_URL,
+            api_key=api_key,
+            default_model=model or "qwen3.8-27b",
+            provider_name="ollama",
+            max_output_tokens=max_output_tokens,
+        )
     if provider_name == "omniroute":
         return OpenAICompatibleProvider(
             base_url=base_url or DEFAULT_OMNIROUTE_URL,
@@ -71,6 +88,10 @@ def _route_base_url(provider_name: str, configured: str | None) -> str | None:
     ):
         return configured
     return {
+        "llamacpp": DEFAULT_LLAMACPP_URL,
+        "llama.cpp": DEFAULT_LLAMACPP_URL,
+        "local": DEFAULT_LLAMACPP_URL,
+        "ollama": DEFAULT_OLLAMA_URL,
         "omniroute": DEFAULT_OMNIROUTE_URL,
         "openrouter": DEFAULT_OPENROUTER_URL,
         "nvidia": DEFAULT_NVIDIA_URL,

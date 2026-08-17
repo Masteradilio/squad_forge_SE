@@ -167,7 +167,7 @@ async def check_omniroute() -> tuple[str, str, str]:
             base_url=provider_url,
             api_key=config.models.api_key,
             default_model=default_model,
-            provider_name="omniroute",
+            provider_name=config.models.provider,
         )
         available_models = await provider.list_models()
         if default_model in available_models:

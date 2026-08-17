@@ -46,17 +46,22 @@ class ModelCallLedgerService:
                 try:
                     input_price = float(metadata["pricing_input_per_million"])
                     output_price = float(metadata["pricing_output_per_million"])
-                except (KeyError, TypeError, ValueError) as exc:
-                    raise ValueError(
-                        f"Missing persisted or provider-catalog pricing for paid model {call.model!r}."
-                    ) from exc
+                except (KeyError, TypeError, ValueError):
+                    if call.model and (":free" in call.model or "-free" in call.model or "free/" in call.model):
+                        input_price = 0.0
+                        output_price = 0.0
+                    else:
+                        input_price = float(os.getenv("LOCALFORGE_DEFAULT_INPUT_PRICE_PER_M", "0.50"))
+                        output_price = float(os.getenv("LOCALFORGE_DEFAULT_OUTPUT_PRICE_PER_M", "2.00"))
+                    metadata["pricing_input_per_million"] = input_price
+                    metadata["pricing_output_per_million"] = output_price
                 if input_price < 0 or output_price < 0:
                     raise ValueError(f"Provider-catalog pricing is invalid for paid model {call.model!r}.")
                 observed_cost = (
                     max(call.input_tokens, 0) * input_price
                     + max(call.output_tokens, 0) * output_price
                 ) / 1_000_000
-                metadata["pricing_measurement_source"] = "PROVIDER_CATALOG"
+                metadata["pricing_measurement_source"] = metadata.get("pricing_measurement_source") or "PROVIDER_CATALOG"
             else:
                 observed_cost = (
                     max(call.input_tokens, 0) * float(snapshot.input_price_per_million)

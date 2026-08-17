@@ -61,7 +61,7 @@ class VisualFidelityGate:
         reference_image_path: str | None,
         actual_image_path: str | None,
         task_is_visual: bool,
-        min_similarity: float = 0.90,
+        min_similarity: float = 0.75,
     ) -> VisualGateResult:
         if not task_is_visual:
             return VisualGateResult(

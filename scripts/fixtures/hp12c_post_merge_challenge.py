@@ -12,7 +12,19 @@ import subprocess
 import textwrap
 from pathlib import Path
 
-INDEX_HTML = Path(__file__).parents[1] / "app" / "index.html"
+def _resolve_index_html() -> Path:
+    candidates = [
+        Path(__file__).resolve().parents[1] / "app" / "index.html",
+        Path.cwd() / "app" / "index.html",
+        Path(__file__).resolve().parents[2] / "app" / "index.html",
+    ]
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    return candidates[0]
+
+
+INDEX_HTML = _resolve_index_html()
 
 
 def _evaluate_product(js_code: str) -> None:

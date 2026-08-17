@@ -11,10 +11,12 @@ DEFAULT_CONFIG_TEMPLATE: dict[str, Any] = {
         "remote_url": "{remote_url}",
     },
     "models": {
-        "provider": "omniroute",
-        "base_url": "http://localhost:20128/v1",
-        "default_model": "auto/best-free",
+        "provider": "llamacpp",
+        "base_url": "http://localhost:8080/v1",
+        "default_model": "qwen3.8-27b",
         "fallback_models": [
+            "qwen3.8-27b",
+            "auto/best-free",
             "auto/coding:free",
         ],
     },

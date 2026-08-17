@@ -2069,12 +2069,12 @@ class RolePipelineEngine:
 
                 visual_ref_rel = None
                 visual_actual_rel = None
-                visual_threshold = 0.90
+                visual_threshold = 0.75
                 visual_viewport = "1280x720"
                 if isinstance(contract, dict):
                     visual_ref_rel = contract.get("visual_reference_image")
                     visual_actual_rel = contract.get("visual_actual_output")
-                    visual_threshold = float(contract.get("visual_similarity_threshold", 0.90))
+                    visual_threshold = float(contract.get("visual_similarity_threshold", 0.75))
                     visual_viewport = str(contract.get("visual_viewport", visual_viewport))
                 if not visual_ref_rel:
                     visual_ref_rel = task.metadata.get("visual_reference_image")

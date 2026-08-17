@@ -66,6 +66,7 @@ def _request_json(
     *,
     payload: dict[str, Any] | None = None,
     timeout: float,
+    api_key: str | None = None,
 ) -> tuple[int, dict[str, Any] | str]:
     data = json.dumps(payload).encode("utf-8") if payload is not None else None
     request = urllib.request.Request(
@@ -74,9 +75,9 @@ def _request_json(
         headers={"Content-Type": "application/json"} if data else {},
         method="POST" if data else "GET",
     )
-    api_key = _env_value("OMNIROUTE_API_KEY")
-    if api_key:
-        request.add_header("Authorization", f"Bearer {api_key}")
+    key = api_key or _env_value("OMNIROUTE_API_KEY")
+    if key:
+        request.add_header("Authorization", f"Bearer {key}")
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
             body = response.read().decode("utf-8", errors="replace")
@@ -96,6 +97,29 @@ def _omniroute_preflight(base_url: str) -> tuple[bool, list[str], dict[str, Any]
     catalog_status, catalog_body = _request_json(
         f"{base_url.rstrip('/')}/models", timeout=timeout
     )
+    api_key = _env_value("OMNIROUTE_API_KEY")
+    if catalog_status != 200 or not isinstance(catalog_body, dict):
+        openrouter_key = _env_value("OPENROUTER_API_KEY")
+        if openrouter_key:
+            openrouter_url = _env_value("OPENROUTER_URL") or "https://openrouter.ai/api/v1"
+            or_status, or_body = _request_json(
+                f"{openrouter_url.rstrip('/')}/models",
+                timeout=timeout,
+                api_key=openrouter_key,
+            )
+            if or_status == 200 and isinstance(or_body, dict):
+                base_url = openrouter_url
+                catalog_status = or_status
+                catalog_body = or_body
+                api_key = openrouter_key
+                os.environ["LOCALFORGE_MODEL_PROVIDER"] = "openrouter"
+                os.environ["LOCALFORGE_CHIEF_PROVIDER"] = "openrouter"
+                os.environ["LOCALFORGE_MODEL_BASE_URL"] = openrouter_url
+                os.environ["LOCALFORGE_CHIEF_BASE_URL"] = openrouter_url
+                os.environ["OPENROUTER_API_KEY"] = openrouter_key
+                os.environ["LOCALFORGE_CHIEF_API_KEY"] = openrouter_key
+                os.environ["LOCALFORGE_MODEL_API_KEY"] = openrouter_key
+
     if catalog_status != 200 or not isinstance(catalog_body, dict):
         return False, [], {
             "catalog": f"HTTP {catalog_status}: {catalog_body}",
@@ -113,6 +137,13 @@ def _omniroute_preflight(base_url: str) -> tuple[bool, list[str], dict[str, Any]
         for item in (_env_value("LOCALFORGE_CLOUD_PREFERRED_ROUTES") or "").split(",")
         if item.strip()
     ]
+    paid_model = _env_value("OPENROUTER_PAID_MODEL") or _env_value("OPENROUTER_MODEL")
+    if paid_model and paid_model not in configured_routes:
+        configured_routes.insert(0, paid_model)
+    free_model = _env_value("OPENROUTER_FREE_MODEL")
+    if free_model and free_model not in configured_routes:
+        configured_routes.append(free_model)
+
     if not free_routes and not configured_routes:
         return False, [], {
             "catalog": "reachable but no free or explicitly configured route was advertised",
@@ -184,6 +215,7 @@ def _omniroute_preflight(base_url: str) -> tuple[bool, list[str], dict[str, Any]
             f"{base_url.rstrip('/')}/chat/completions",
             payload=probe,
             timeout=timeout,
+            api_key=api_key,
         )
         content = ""
         if isinstance(body, dict):
@@ -247,6 +279,10 @@ def _run_command(
 ) -> tuple[int, str]:
     env = os.environ.copy()
     env["PYTHONPATH"] = str(ROOT / "backend")
+    root_env = dotenv_values(ROOT / ".env")
+    for key, value in root_env.items():
+        if value and key not in env:
+            env[key] = str(value)
     try:
         result = subprocess.run(
             [python, *args],
@@ -271,10 +307,6 @@ def _run_command(
 def _initialize_workspace(workspace: Path, python: str) -> None:
     workspace.mkdir(parents=True, exist_ok=True)
     runtime = workspace / ".localforge"
-    # Every acceptance run must start from a new database and worktree graph.
-    # Reusing a completed or partially initialized runtime makes task statuses,
-    # repair counters, and old blockers contaminate the next result. Product
-    # inputs and the workspace Git history remain untouched.
     if runtime.is_dir():
         shutil.rmtree(runtime)
     docs = workspace / "docs"
@@ -784,6 +816,7 @@ def main() -> int:
         else (ordered_routes[0] if ordered_routes else "auto/best-free")
     )
     ladder = ",".join(ordered_routes[:8])
+    openrouter_key = _env_value("OPENROUTER_API_KEY")
     os.environ.update(
         {
             "LOCALFORGE_DEFAULT_MODEL": route,
@@ -793,6 +826,15 @@ def main() -> int:
             "LOCALFORGE_CHIEF_VISUAL_FALLBACK_MODELS": ladder,
             "LOCALFORGE_CLOUD_VERIFIED_ROUTES": ",".join(verified_routes),
             "LOCALFORGE_MAX_RUN_TIME": str(args.run_timeout),
+            **(
+                {
+                    "OPENROUTER_API_KEY": openrouter_key,
+                    "LOCALFORGE_CHIEF_API_KEY": openrouter_key,
+                    "LOCALFORGE_MODEL_API_KEY": openrouter_key,
+                }
+                if openrouter_key
+                else {}
+            ),
             # Financial tasks can legitimately consume several bounded Chief
             # retries when OmniRoute returns consecutive timeouts. Keep this
             # finite and below the run-level recovery ceiling.

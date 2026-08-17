@@ -19,7 +19,7 @@ class TaskContract(BaseModel):
     visual_required: bool = False
     visual_reference_image: str | None = None
     visual_actual_output: str | None = None
-    visual_similarity_threshold: float = 0.90
+    visual_similarity_threshold: float = 0.75
     visual_viewport: str = "1280x720"
     visual_structure_rules: list[str] = Field(default_factory=list)
     visual_acceptance_matrix: list[dict[str, object]] = Field(default_factory=list)

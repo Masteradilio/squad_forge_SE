@@ -962,6 +962,19 @@
       if (el) el.remove();
     }
 
+    function formatMarkdown(text) {
+      if (!text) return '';
+      let html = text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+      html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+      html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
+      html = html.replace(/`([^`]+)`/g, '<code class="bg-slate-900 px-1 py-0.5 rounded text-cyan-300 font-mono text-[11px]">$1</code>');
+      html = html.replace(/\n/g, '<br/>');
+      return html;
+    }
+
     async function processQuestion(question) {
       appendMessage('user', question, false);
       conversationHistory.push({ role: 'user', content: question });
@@ -970,9 +983,9 @@
       let answer = null;
 
       try {
-        // Attempt live fetch to serverless Cloudflare / Vercel proxy
+        // Live fetch to serverless Cloudflare proxy with 45s timeout for LLM generation
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 7000);
+        const timeoutId = setTimeout(() => controller.abort(), 45000);
 
         const response = await fetch(SERVERLESS_BACKEND_ENDPOINT, {
           method: 'POST',
@@ -989,7 +1002,7 @@
         if (response.ok) {
           const data = await response.json();
           if (data.reply) {
-            answer = data.reply;
+            answer = formatMarkdown(data.reply);
           }
         }
       } catch (err) {
@@ -1006,7 +1019,7 @@
           answer = kb.pix;
         } else if (qLower.includes('credito') || qLower.includes('credit') || qLower.includes('risco') || qLower.includes('risk') || qLower.includes('pd') || qLower.includes('banpar') || qLower.includes('ifrs') || qLower.includes('scoring')) {
           answer = kb.credito;
-        } else if (qLower.includes('projeto') || qLower.includes('project') || qLower.includes('7') || qLower.includes('github') || qLower.includes('repo') || qLower.includes('squad') || qLower.includes('time_series') || qLower.includes('datasus')) {
+        } else if (qLower.includes('projeto') || qLower.includes('project') || qLower.includes('7') || qLower.includes('github') || qLower.includes('repo') || qLower.includes('squad') || qLower.includes('time_series') || qLower.includes('datasus') || qLower.includes('biblioteca') || qLower.includes('linguag')) {
           answer = kb.projetos;
         } else if (qLower.includes('formacao') || qLower.includes('educacao') || qLower.includes('education') || qLower.includes('mestrado') || qLower.includes('msc') || qLower.includes('certificac') || qLower.includes('aws') || qLower.includes('degree') || qLower.includes('curso')) {
           answer = kb.formacao;

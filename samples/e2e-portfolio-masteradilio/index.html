@@ -963,14 +963,94 @@
 
     function formatMarkdown(text) {
       if (!text) return '';
-      let html = text
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
-      html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-      html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
-      html = html.replace(/`([^`]+)`/g, '<code class="bg-slate-900 px-1 py-0.5 rounded text-cyan-300 font-mono text-[11px]">$1</code>');
-      html = html.replace(/\n/g, '<br/>');
+
+      let md = String(text).trim();
+
+      // Temporarily stash fenced code blocks so internal markdown is protected
+      const codeBlocks = [];
+      md = md.replace(/```([a-zA-Z0-9_\-]*)\n?([\s\S]*?)```/g, (match, lang, code) => {
+        const id = '__CODE_BLOCK_' + codeBlocks.length + '__';
+        const cleanCode = code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').trim();
+        const header = lang ? '<div class="bg-slate-900/90 px-3 py-1 text-[10px] text-slate-400 font-mono border-b border-slate-800 rounded-t-lg flex items-center justify-between"><span>' + lang + '</span><i class="fa-solid fa-code text-[10px]"></i></div>' : '';
+        codeBlocks.push('<div class="my-2.5 rounded-lg overflow-hidden border border-slate-700/80 shadow-md">' + header + '<pre class="p-3 bg-slate-950 text-cyan-300 font-mono text-[11px] overflow-x-auto leading-relaxed"><code>' + cleanCode + '</code></pre></div>');
+        return id;
+      });
+
+      // Split into lines for block-level elements
+      const lines = md.split('\n');
+      const formattedLines = [];
+
+      for (let i = 0; i < lines.length; i++) {
+        let line = lines[i].trim();
+
+        if (!line) {
+          formattedLines.push('<div class="h-1.5"></div>');
+          continue;
+        }
+
+        // Horizontal Rule: --- or ***
+        if (/^(\-{3,}|\*{3,}|_{3,})$/.test(line)) {
+          formattedLines.push('<hr class="my-3 border-slate-700/70" />');
+          continue;
+        }
+
+        // Headers: #, ##, ###, ####
+        if (/^####\s+(.*)/.test(line)) {
+          formattedLines.push(line.replace(/^####\s+(.*)/, '<h5 class="font-bold text-slate-200 text-xs mt-2.5 mb-1">$1</h5>'));
+          continue;
+        }
+        if (/^###\s+(.*)/.test(line)) {
+          formattedLines.push(line.replace(/^###\s+(.*)/, '<h4 class="font-bold text-white text-xs mt-3 mb-1.5 flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span><span>$1</span></h4>'));
+          continue;
+        }
+        if (/^##\s+(.*)/.test(line)) {
+          formattedLines.push(line.replace(/^##\s+(.*)/, '<h3 class="font-bold text-white text-sm mt-3.5 mb-1.5 border-b border-slate-700/60 pb-1">$1</h3>'));
+          continue;
+        }
+        if (/^#\s+(.*)/.test(line)) {
+          formattedLines.push(line.replace(/^#\s+(.*)/, '<h2 class="font-extrabold text-white text-sm mt-4 mb-2">$1</h2>'));
+          continue;
+        }
+
+        // Unordered List: - item, * item, • item
+        if (/^[\-\*\•]\s+(.*)/.test(line)) {
+          formattedLines.push(line.replace(/^[\-\*\•]\s+(.*)/, '<div class="ml-2 my-1 flex items-start gap-2"><span class="text-cyan-400 mt-0.5 text-xs leading-none">•</span><span class="flex-1 leading-relaxed">$1</span></div>'));
+          continue;
+        }
+
+        // Ordered List: 1. item, 2. item
+        if (/^(\d+)\.\s+(.*)/.test(line)) {
+          formattedLines.push(line.replace(/^(\d+)\.\s+(.*)/, '<div class="ml-2 my-1 flex items-start gap-2"><span class="text-cyan-400 font-mono font-bold text-[11px] leading-none">$1.</span><span class="flex-1 leading-relaxed">$2</span></div>'));
+          continue;
+        }
+
+        // Regular Paragraph Line
+        formattedLines.push('<p class="my-0.5 leading-relaxed">' + line + '</p>');
+      }
+
+      let html = formattedLines.join('');
+
+      // Restore code blocks
+      codeBlocks.forEach((block, idx) => {
+        html = html.replace('__CODE_BLOCK_' + idx + '__', block);
+      });
+
+      // Inline Bold: **bold** or __bold__
+      html = html.replace(/\*\*(.*?)\*\*/g, '<strong class="text-white font-semibold">$1</strong>');
+      html = html.replace(/__(.*?)__/g, '<strong class="text-white font-semibold">$1</strong>');
+
+      // Inline Italic: *italic*
+      html = html.replace(/\*([^\*\n]+)\*/g, '<em class="text-slate-300 italic">$1</em>');
+
+      // Inline Code: `code`
+      html = html.replace(/`([^`\n]+)`/g, '<code class="bg-slate-900 px-1.5 py-0.5 rounded text-cyan-300 font-mono text-[11px] border border-slate-700/60">$1</code>');
+
+      // Markdown Links: [label](url)
+      html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^\s\)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-cyan-400 underline hover:text-cyan-300 font-medium inline-flex items-center gap-0.5">$1 <i class="fa-solid fa-arrow-up-right-from-square text-[9px]"></i></a>');
+
+      // Raw URLs: https://...
+      html = html.replace(/(^|[\s(])(https?:\/\/[a-zA-Z0-9_\-\.\/\?%&=#\+]+)/g, '$1<a href="$2" target="_blank" rel="noopener noreferrer" class="text-cyan-400 underline hover:text-cyan-300 break-all inline-flex items-center gap-0.5">$2 <i class="fa-solid fa-arrow-up-right-from-square text-[9px]"></i></a>');
+
       return html;
     }
 

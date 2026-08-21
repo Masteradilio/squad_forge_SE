@@ -60,7 +60,7 @@
         <a href="#contato" class="hover:text-cyan-400 transition-colors" data-i18n="nav_contact">Contato</a>
       </nav>
 
-      <div class="flex items-center gap-2.5 sm:gap-3">
+      <div class="flex items-center gap-2 sm:gap-2.5">
         <div class="flex items-center bg-slate-900/90 border border-slate-700/80 rounded-lg p-1 text-xs font-semibold shadow-inner">
           <button id="btn-lang-pt" onclick="setLanguage('pt')" class="px-2.5 py-1 rounded-md transition-all flex items-center gap-1.5 bg-cyan-500 text-white shadow-sm">
             <span>🇧🇷</span> <span class="hidden sm:inline">PT-BR</span>
@@ -69,6 +69,14 @@
             <span>🇺🇸</span> <span class="hidden sm:inline">EN</span>
           </button>
         </div>
+
+        <!-- Download CV buttons in Navbar -->
+        <a href="assets/cv_adilio_farias_pt.html" target="_blank" class="hidden sm:inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-cyan-300 hover:text-cyan-200 border border-slate-700 text-xs font-semibold shadow-sm transition-all" title="Baixar Currículo PT-BR">
+          <span>🇧🇷</span> <span data-i18n="btn_cv_pt_short">CV (PT-BR)</span>
+        </a>
+        <a href="assets/cv_adilio_farias_en.html" target="_blank" class="hidden sm:inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-cyan-300 hover:text-cyan-200 border border-slate-700 text-xs font-semibold shadow-sm transition-all" title="Download Resume EN-US">
+          <span>🇺🇸</span> <span data-i18n="btn_cv_en_short">Resume (EN)</span>
+        </a>
 
         <a href="https://github.com/Masteradilio" target="_blank" rel="noopener noreferrer" class="p-2 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-200 hover:text-white transition-all text-sm" title="GitHub">
           <i class="fa-brands fa-github"></i>
@@ -90,105 +98,124 @@
       <a href="#skills" class="block py-2 text-slate-300 hover:text-cyan-400" onclick="toggleMobileMenu()" data-i18n="nav_skills">Habilidades</a>
       <a href="#assistente" class="block py-2 text-slate-300 hover:text-cyan-400" onclick="toggleMobileMenu()" data-i18n="nav_ai_bot">AI Assistant</a>
       <a href="#contato" class="block py-2 text-slate-300 hover:text-cyan-400" onclick="toggleMobileMenu()" data-i18n="nav_contact">Contato</a>
+      <div class="flex gap-2 pt-2 border-t border-slate-800">
+        <a href="assets/cv_adilio_farias_pt.html" target="_blank" class="flex-1 py-1.5 text-center rounded bg-slate-800 text-cyan-300 text-xs font-semibold">🇧🇷 CV (PT-BR)</a>
+        <a href="assets/cv_adilio_farias_en.html" target="_blank" class="flex-1 py-1.5 text-center rounded bg-slate-800 text-cyan-300 text-xs font-semibold">🇺🇸 Resume (EN)</a>
+      </div>
     </div>
   </header>
   <main class="flex-grow">
-    <section id="hero" class="pt-32 sm:pt-40 pb-16 sm:pb-24 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto flex flex-col lg:flex-row items-center justify-between gap-10 lg:gap-16">
+    <section id="hero" class="pt-32 sm:pt-40 pb-16 sm:pb-24 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto flex flex-col lg:flex-row items-center justify-between gap-10 lg:gap-14">
       <div class="lg:w-7/12 space-y-6 text-left">
         <div class="inline-flex flex-wrap items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-semibold tracking-wide">
           <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
           <span data-i18n="hero_badge">⚡ 100% Gerado de Forma Autônoma pelo Squad Forge SE via Modelo Local</span>
         </div>
         
-        <h1 class="text-3xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight leading-tight">
-          <span data-i18n="hero_title_1">Engenharia de IA,</span> <br/>
-          <span class="gradient-text" data-i18n="hero_title_2">Generative AI & MLOps</span> <br/>
-          <span data-i18n="hero_title_3">em Escala Real.</span>
+        <h1 class="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight leading-tight">
+          <span class="gradient-text" data-i18n="hero_title">Ciência de Dados, Engenharia de IA, RAG e Agentes de IA para ambientes corporativos</span>
         </h1>
 
-        <p class="text-sm sm:text-base lg:text-lg text-slate-300 leading-relaxed max-w-2xl" data-i18n="hero_description">
-          Sou <strong>Adilio Farias</strong>, <strong>Senior Data Scientist & AI/ML Engineer</strong> com histórico comprovado na arquitetura de sistemas agenticos autônomos, soluções corporativas de RAG & Graph RAG, modelagem preditiva de séries temporais e combate a fraudes em tempo real.
-        </p>
-
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 py-2">
-          <div class="p-3 sm:p-4 rounded-xl bg-slate-900/70 border border-slate-800">
-            <div class="text-xl sm:text-2xl font-bold text-cyan-400">10+</div>
-            <div class="text-[11px] sm:text-xs text-slate-400" data-i18n="metric_systems">Sistemas de IA em Produção</div>
+        <!-- Academic highlights cards -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-3.5 pt-2">
+          <div class="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 hover:border-cyan-500/40 transition-colors shadow-sm">
+            <div class="text-xs font-bold text-cyan-400 font-mono" data-i18n="acad_msc_title">Mestrado em IA</div>
+            <div class="text-[11px] text-slate-400 mt-1 font-sans" data-i18n="acad_msc_inst">AGTU (EUA - em andamento)</div>
           </div>
-          <div class="p-3 sm:p-4 rounded-xl bg-slate-900/70 border border-slate-800">
-            <div class="text-xl sm:text-2xl font-bold text-emerald-400">&lt;50ms</div>
-            <div class="text-[11px] sm:text-xs text-slate-400" data-i18n="metric_fraud">Latência Anti-Fraude PIX</div>
+          <div class="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 hover:border-emerald-500/40 transition-colors shadow-sm">
+            <div class="text-xs font-bold text-emerald-400 font-mono" data-i18n="acad_grad_title">Graduação em IA</div>
+            <div class="text-[11px] text-slate-400 mt-1 font-sans" data-i18n="acad_grad_inst">Braz Cubas</div>
           </div>
-          <div class="p-3 sm:p-4 rounded-xl bg-slate-900/70 border border-slate-800">
-            <div class="text-xl sm:text-2xl font-bold text-indigo-400">MSc AI</div>
-            <div class="text-[11px] sm:text-xs text-slate-400" data-i18n="metric_msc">Pesquisador em IA (AGTU)</div>
+          <div class="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 hover:border-indigo-500/40 transition-colors shadow-sm">
+            <div class="text-xs font-bold text-indigo-400 font-mono" data-i18n="acad_mba_title">MBA Gestão Projetos</div>
+            <div class="text-[11px] text-slate-400 mt-1 font-sans" data-i18n="acad_mba_inst">UNIASSELVI</div>
           </div>
-          <div class="p-3 sm:p-4 rounded-xl bg-slate-900/70 border border-slate-800">
-            <div class="text-xl sm:text-2xl font-bold text-amber-400">$0.00</div>
-            <div class="text-[11px] sm:text-xs text-slate-400" data-i18n="metric_cost">Custo Cloud de API (Local LLM)</div>
+          <div class="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 hover:border-amber-500/40 transition-colors shadow-sm">
+            <div class="text-xs font-bold text-amber-400 font-mono" data-i18n="acad_pos_title">Pós em Eng. de IA</div>
+            <div class="text-[11px] text-slate-400 mt-1 font-sans" data-i18n="acad_pos_inst">Data Science Academy</div>
           </div>
-        </div>
-
-        <div class="flex flex-wrap items-center gap-3 sm:gap-4 pt-2">
-          <a href="#projetos" class="px-5 sm:px-6 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 font-semibold text-xs sm:text-sm text-white shadow-lg shadow-cyan-500/20 flex items-center gap-2 transition-all">
-            <i class="fa-solid fa-laptop-code"></i> <span data-i18n="cta_explore">Explorar Projetos</span>
-          </a>
-          <a href="#forge-process" class="px-5 sm:px-6 py-3 rounded-xl glass-card hover:bg-slate-800/80 font-semibold text-xs sm:text-sm text-emerald-300 border border-emerald-500/40 flex items-center gap-2 transition-all">
-            <i class="fa-solid fa-network-wired"></i> <span data-i18n="cta_squad_proof">Evidências Squad Forge SE</span>
-          </a>
-        </div>
-
-        <div class="flex flex-wrap items-center gap-2.5 pt-1 text-xs font-medium">
-          <span class="text-slate-400 flex items-center gap-1.5"><i class="fa-solid fa-file-arrow-down text-cyan-400"></i> <span data-i18n="cv_download_label">Currículo:</span></span>
-          <a href="assets/cv_adilio_farias_pt.html" target="_blank" class="px-3 py-1.5 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-slate-200 border border-slate-700 hover:border-cyan-500/50 flex items-center gap-1.5 transition-all shadow-sm">
-            <span>🇧🇷</span> <span data-i18n="btn_cv_pt">Currículo (PT-BR)</span>
-          </a>
-          <a href="assets/cv_adilio_farias_en.html" target="_blank" class="px-3 py-1.5 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-slate-200 border border-slate-700 hover:border-cyan-500/50 flex items-center gap-1.5 transition-all shadow-sm">
-            <span>🇺🇸</span> <span data-i18n="btn_cv_en">Resume (EN)</span>
-          </a>
         </div>
       </div>
 
+      <!-- Quadro de Senioridade -->
       <div class="lg:w-5/12 w-full flex justify-center">
-        <div class="relative w-full max-w-md p-6 sm:p-7 rounded-2xl glass-card border border-brand-border/90 shadow-2xl glow-cyan">
-          <div class="flex items-center justify-between border-b border-slate-800 pb-4 mb-4">
-            <div class="flex items-center gap-3.5">
-              <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 via-cyan-400 to-emerald-400 flex items-center justify-center text-white text-xl font-bold shadow-md">
-                <i class="fa-solid fa-brain"></i>
+        <div class="relative w-full max-w-md p-6 sm:p-7 rounded-2xl glass-card border border-brand-border/90 shadow-2xl glow-cyan space-y-4">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 via-cyan-400 to-emerald-400 flex items-center justify-center text-white text-lg font-bold shadow-md">
+                <i class="fa-solid fa-chart-line"></i>
               </div>
               <div>
-                <h3 class="font-bold text-white text-sm sm:text-base">Adilio Farias</h3>
-                <p class="text-[11px] sm:text-xs text-slate-400 font-mono">Senior Data Scientist & AI Engineer</p>
+                <h3 class="font-bold text-white text-sm sm:text-base" data-i18n="seniority_card_title">Quadro de Senioridade</h3>
+                <p class="text-[11px] text-slate-400 font-mono" data-i18n="seniority_card_subtitle">Tempo de Atuação Profissional</p>
               </div>
             </div>
-            <span class="text-[10px] sm:text-xs px-2.5 py-1 rounded bg-cyan-950 text-cyan-400 border border-cyan-800 font-mono">Brasília, BR</span>
+            <span class="text-[10px] px-2.5 py-1 rounded bg-cyan-950 text-cyan-400 border border-cyan-800 font-mono font-semibold">Setor Financeiro</span>
           </div>
 
-          <div class="space-y-2.5 text-xs text-slate-300 font-mono">
-            <div class="flex justify-between items-center p-2 rounded-lg bg-slate-900/80">
-              <span class="text-slate-400" data-i18n="card_focus">Foco Principal:</span>
-              <span class="text-cyan-300 font-semibold">Generative AI, RAG & Fraud ML</span>
+          <div class="space-y-2 text-xs font-mono">
+            <div class="flex justify-between items-center p-2 rounded-lg bg-slate-900/80 border border-slate-800/60">
+              <span class="text-slate-300 font-sans font-medium" data-i18n="role_ds">Cientista de Dados</span>
+              <span class="text-cyan-300 font-bold" data-i18n="role_ds_time">3+ anos de atuação</span>
             </div>
-            <div class="flex justify-between items-center p-2 rounded-lg bg-slate-900/80">
-              <span class="text-slate-400" data-i18n="card_engine">Automação:</span>
-              <span class="text-emerald-300 font-semibold">Squad Forge SE Control Plane</span>
+            <div class="flex justify-between items-center p-2 rounded-lg bg-slate-900/80 border border-slate-800/60">
+              <span class="text-slate-300 font-sans font-medium" data-i18n="role_ai_eng">Engenheiro de IA/ML</span>
+              <span class="text-emerald-300 font-bold" data-i18n="role_ai_eng_time">2+ anos de atuação</span>
             </div>
-            <div class="flex justify-between items-center p-2 rounded-lg bg-slate-900/80">
-              <span class="text-slate-400" data-i18n="card_stack">Stack Chave:</span>
-              <span class="text-indigo-300 font-semibold">PyTorch, FastAPI, Kafka, Neo4j</span>
+            <div class="flex justify-between items-center p-2 rounded-lg bg-slate-900/80 border border-slate-800/60">
+              <span class="text-slate-300 font-sans font-medium" data-i18n="role_de">Engenheiro de Dados</span>
+              <span class="text-indigo-300 font-bold" data-i18n="role_de_time">2+ anos de atuação</span>
             </div>
-            <div class="flex justify-between items-center p-2 rounded-lg bg-slate-900/80">
-              <span class="text-slate-400" data-i18n="card_academic">Formação:</span>
-              <span class="text-amber-300 font-semibold">Mestrado em IA (AGTU)</span>
+            <div class="flex justify-between items-center p-2 rounded-lg bg-slate-900/80 border border-slate-800/60">
+              <span class="text-slate-300 font-sans font-medium" data-i18n="role_da">Analista de Dados</span>
+              <span class="text-blue-300 font-bold" data-i18n="role_da_time">2+ anos de atuação</span>
+            </div>
+            <div class="flex justify-between items-center p-2 rounded-lg bg-slate-900/80 border border-slate-800/60">
+              <span class="text-slate-300 font-sans font-medium" data-i18n="role_pm">Gerente de Projetos</span>
+              <span class="text-amber-300 font-bold" data-i18n="role_pm_time">4+ anos de atuação</span>
+            </div>
+            <div class="flex justify-between items-center p-2 rounded-lg bg-slate-900/80 border border-slate-800/60">
+              <span class="text-slate-300 font-sans font-medium" data-i18n="role_lead">Liderança de equipes</span>
+              <span class="text-purple-300 font-bold" data-i18n="role_lead_time">8+ anos de atuação</span>
             </div>
           </div>
 
-          <div class="mt-5 pt-4 border-t border-slate-800/80 flex justify-between items-center text-xs">
-            <span class="text-slate-400" data-i18n="card_github_label">Portfólio no GitHub:</span>
-            <a href="https://github.com/Masteradilio" target="_blank" class="text-cyan-400 hover:underline flex items-center gap-1 font-semibold">
-              7 Repositórios <i class="fa-solid fa-arrow-up-right-from-square"></i>
-            </a>
+          <div class="pt-2 border-t border-slate-800/80">
+            <p class="text-[10.5px] text-slate-400 italic leading-snug font-sans" data-i18n="seniority_card_note">
+              * Nota: Atuação desenvolvida por vezes de forma sobreposta entre funções (roles), e não de forma puramente seriada.
+            </p>
           </div>
+        </div>
+      </div>
+    </section>
+    <section id="sobre" class="py-16 sm:py-24 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto border-t border-slate-800/80">
+      <div class="glass-card rounded-2xl p-6 sm:p-10 border border-brand-border space-y-6 shadow-xl">
+        <div class="flex items-center gap-3.5 border-b border-slate-800 pb-5">
+          <div class="w-12 h-12 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center text-2xl font-bold shadow-sm">
+            <i class="fa-solid fa-user-tie"></i>
+          </div>
+          <div>
+            <div class="inline-flex items-center gap-2 px-3 py-0.5 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 text-xs font-semibold">
+              <span data-i18n="about_badge">Sobre Mim</span>
+            </div>
+            <h2 class="text-xl sm:text-3xl font-extrabold text-white mt-1" data-i18n="about_title">
+              Trajetória Profissional & Especialização
+            </h2>
+          </div>
+        </div>
+
+        <div class="space-y-4 text-xs sm:text-sm text-slate-300 leading-relaxed font-sans">
+          <p data-i18n="about_p1">
+            Olá! Sou o <strong>Adilio Farias</strong>, <strong>Engenheiro de IA/ML e Cientista de Dados</strong> com 16 anos de experiência no setor financeiro, combinando conhecimento de negócio bancário com atuação em Machine Learning, prevenção a fraudes e risco de crédito. Experiência no desenvolvimento e operacionalização de modelos de antifraude PIX e Probabilidade de Inadimplência, além de componentes de PD, LGD, EAD e EL/ECL aplicados à gestão de risco.
+          </p>
+
+          <p data-i18n="about_p2">
+            Atuação com <strong>Python, SQL, PySpark, Spark, MLOps e ecossistemas Big Data</strong>, incluindo preparação e transformação de dados, desenvolvimento e validação de modelos, automação de pipelines, monitoramento e soluções analíticas em produção. Entre as entregas recentes estão modelo antifraude PIX com <strong>Recall de 97% e FPR inferior a 1%</strong>, pipeline semanal de MLOps para milhões de transações e modelo de risco de crédito aplicado a aproximadamente <strong>700 mil clientes bancários</strong>.
+          </p>
+
+          <p data-i18n="about_p3">
+            Experiência anterior em gestão de projetos, produtos bancários, análise de crédito, relacionamento com clientes e operações financeiras, atuando na interface entre dados, risco, negócio, produto e tecnologia. <strong>Inglês avançado, nível C1 com fluência nível business</strong>.
+          </p>
         </div>
       </div>
     </section>
@@ -691,21 +718,35 @@
         nav_ai_bot: "AI Assistant",
         nav_contact: "Contato",
         hero_badge: "⚡ 100% Gerado de Forma Autônoma pelo Squad Forge SE via Modelo Local",
-        hero_title_1: "Engenharia de IA,",
-        hero_title_2: "Generative AI & MLOps",
-        hero_title_3: "em Escala Real.",
-        hero_description: "Sou <strong>Adilio Farias</strong>, <strong>Senior Data Scientist & AI/ML Engineer</strong> com histórico comprovado na arquitetura de sistemas agenticos autônomos, soluções corporativas de RAG & Graph RAG, modelagem preditiva de séries temporais e combate a fraudes em tempo real.",
-        metric_systems: "Sistemas de IA em Produção",
-        metric_fraud: "Latência Anti-Fraude PIX",
-        metric_msc: "Pesquisador em IA (AGTU)",
-        metric_cost: "Custo Cloud de API (Local LLM)",
-        cta_explore: "Explorar Projetos",
-        cta_squad_proof: "Evidências Squad Forge SE",
-        card_focus: "Foco Principal:",
-        card_engine: "Automação:",
-        card_stack: "Stack Chave:",
-        card_academic: "Formação:",
-        card_github_label: "Portfólio no GitHub:",
+        hero_title: "Ciência de Dados, Engenharia de IA, RAG e Agentes de IA para ambientes corporativos",
+        acad_msc_title: "Mestrado em IA",
+        acad_msc_inst: "AGTU (EUA - em andamento)",
+        acad_grad_title: "Graduação em IA",
+        acad_grad_inst: "Braz Cubas",
+        acad_mba_title: "MBA Gestão Projetos",
+        acad_mba_inst: "UNIASSELVI",
+        acad_pos_title: "Pós em Eng. de IA",
+        acad_pos_inst: "Data Science Academy",
+        seniority_card_title: "Quadro de Senioridade",
+        seniority_card_subtitle: "Tempo de Atuação Profissional",
+        role_ds: "Cientista de Dados",
+        role_ds_time: "3+ anos de atuação",
+        role_ai_eng: "Engenheiro de IA/ML",
+        role_ai_eng_time: "2+ anos de atuação",
+        role_de: "Engenheiro de Dados",
+        role_de_time: "2+ anos de atuação",
+        role_da: "Analista de Dados",
+        role_da_time: "2+ anos de atuação",
+        role_pm: "Gerente de Projetos",
+        role_pm_time: "4+ anos de atuação",
+        role_lead: "Liderança de equipes",
+        role_lead_time: "8+ anos de atuação",
+        seniority_card_note: "* Nota: Atuação desenvolvida por vezes de forma sobreposta entre funções (roles), e não de forma puramente seriada.",
+        about_badge: "Sobre Mim",
+        about_title: "Trajetória Profissional & Especialização",
+        about_p1: "Olá! Sou o <strong>Adilio Farias</strong>, <strong>Engenheiro de IA/ML e Cientista de Dados</strong> com 16 anos de experiência no setor financeiro, combinando conhecimento de negócio bancário com atuação em Machine Learning, prevenção a fraudes e risco de crédito. Experiência no desenvolvimento e operacionalização de modelos de antifraude PIX e Probabilidade de Inadimplência, além de componentes de PD, LGD, EAD e EL/ECL aplicados à gestão de risco.",
+        about_p2: "Atuação com <strong>Python, SQL, PySpark, Spark, MLOps e ecossistemas Big Data</strong>, incluindo preparação e transformação de dados, desenvolvimento e validação de modelos, automação de pipelines, monitoramento e soluções analíticas em produção. Entre as entregas recentes estão modelo antifraude PIX com <strong>Recall de 97% e FPR inferior a 1%</strong>, pipeline semanal de MLOps para milhões de transações e modelo de risco de crédito aplicado a aproximadamente <strong>700 mil clientes bancários</strong>.",
+        about_p3: "Experiência anterior em gestão de projetos, produtos bancários, análise de crédito, relacionamento com clientes e operações financeiras, atuando na interface entre dados, risco, negócio, produto e tecnologia. <strong>Inglês avançado, nível C1 com fluência nível business</strong>.",
         forge_section_title: "Como o Squad Forge SE Criou Este Site de Forma 100% Autônoma",
         forge_section_subtitle: "Pipeline determinístico de engenharia autônoma com modelo local (llama.cpp / qwen3.8-27b a $0.00 de custo)",
         forge_process_intro: "Este portfólio não foi codificado manualmente: foi inteiramente especificado via <strong>PRD (Product Requirements Document)</strong> e construído pelo <strong>Squad Forge SE</strong> — o Control Plane Open-Source de Engenharia de Software desenvolvido por Adilio Farias. A inferência de ponta a ponta utilizou o servidor local <code>llama.cpp</code> com o modelo <code>qwen3.8-27b</code> (Qwen 2.5 Coder 27B) com <strong>custo de nuvem de $0.00 USD</strong>.",
@@ -769,21 +810,35 @@
         nav_ai_bot: "AI Assistant",
         nav_contact: "Contact",
         hero_badge: "⚡ 100% Autonomously Generated by Squad Forge SE via Local LLM",
-        hero_title_1: "AI Engineering,",
-        hero_title_2: "Generative AI & MLOps",
-        hero_title_3: "at Real Scale.",
-        hero_description: "I am <strong>Adilio Farias</strong>, <strong>Senior Data Scientist & AI/ML Engineer</strong> with a proven track record in architecting autonomous agentic systems, enterprise RAG & Graph RAG solutions, time series predictive modeling, and real-time fraud detection.",
-        metric_systems: "AI Systems in Production",
-        metric_fraud: "PIX Anti-Fraud Latency",
-        metric_msc: "MSc AI Researcher (AGTU)",
-        metric_cost: "Cloud API Cost (Local LLM)",
-        cta_explore: "Explore Projects",
-        cta_squad_proof: "Squad Forge SE Proof",
-        card_focus: "Primary Focus:",
-        card_engine: "Automation:",
-        card_stack: "Key Stack:",
-        card_academic: "Education:",
-        card_github_label: "GitHub Portfolio:",
+        hero_title: "Data Science, AI Engineering, RAG & AI Agents for Enterprise Environments",
+        acad_msc_title: "MSc in AI",
+        acad_msc_inst: "AGTU (USA - in progress)",
+        acad_grad_title: "Degree in AI",
+        acad_grad_inst: "Braz Cubas",
+        acad_mba_title: "MBA Project Mgmt",
+        acad_mba_inst: "UNIASSELVI",
+        acad_pos_title: "Postgrad AI Eng.",
+        acad_pos_inst: "Data Science Academy",
+        seniority_card_title: "Seniority Breakdown",
+        seniority_card_subtitle: "Professional Experience Duration",
+        role_ds: "Data Scientist",
+        role_ds_time: "3+ years",
+        role_ai_eng: "AI/ML Engineer",
+        role_ai_eng_time: "2+ years",
+        role_de: "Data Engineer",
+        role_de_time: "2+ years",
+        role_da: "Data Analyst",
+        role_da_time: "2+ years",
+        role_pm: "Project Manager",
+        role_pm_time: "4+ years",
+        role_lead: "Team Leadership",
+        role_lead_time: "8+ years",
+        seniority_card_note: "* Note: Experience developed with concurrent overlapping roles rather than purely sequentially.",
+        about_badge: "About Me",
+        about_title: "Professional Background & Core Specialization",
+        about_p1: "Hello! I am <strong>Adilio Farias</strong>, an <strong>AI/ML Engineer and Senior Data Scientist</strong> with 16 years of experience in the financial sector, combining banking business acumen with hands-on Machine Learning expertise in fraud prevention and credit risk. Proven experience developing and operationalizing PIX anti-fraud and Probability of Default models, as well as PD, LGD, EAD, and EL/ECL risk components.",
+        about_p2: "Hands-on with <strong>Python, SQL, PySpark, Spark, MLOps, and Big Data ecosystems</strong>, including data prep/transformation, model validation, pipeline automation, drift monitoring, and production analytics. Recent deliveries include a PIX anti-fraud model with <strong>97% Recall and FPR &lt; 1%</strong>, a weekly MLOps pipeline for millions of transactions, and a credit risk model serving approximately <strong>700,000 banking customers</strong>.",
+        about_p3: "Prior background in project management, banking products, credit analysis, customer relationship management, and financial operations, operating across data, risk, business, product, and technology. <strong>Advanced English (C1 CEFR level, business fluency)</strong>.",
         forge_section_title: "How Squad Forge SE Autonomously Built This Website",
         forge_section_subtitle: "Deterministic autonomous engineering pipeline using local model (llama.cpp / qwen3.8-27b at $0.00 cost)",
         forge_process_intro: "This portfolio was not manually coded: it was specified entirely via a <strong>PRD (Product Requirements Document)</strong> and engineered by <strong>Squad Forge SE</strong> — the Open-Source Autonomous Software Engineering Control Plane created by Adilio Farias. End-to-end inference ran locally on <code>llama.cpp</code> with <code>qwen3.8-27b</code> (Qwen 2.5 Coder 27B) with <strong>$0.00 USD cloud API cost</strong>.",

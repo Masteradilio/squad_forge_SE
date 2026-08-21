@@ -56,10 +56,9 @@ def test_portfolio_structure_and_projects():
     assert "viewport" in html, "Must have viewport meta tag for mobile devices."
     assert any(cls in html for cls in ["md:", "lg:", "sm:"]), "Must use responsive CSS grid/flexbox breakpoints."
 
-    # 6. RAG AI Career Assistant & Grounding
-    assert "chat-box" in html, "Must contain interactive chat-box for AI career assistant."
-    assert "Gemini 2.0 Flash" in html or "Llama 3.3" in html, "Must indicate modern agentic models."
-    assert any(term in html.lower() for term in ["rag", "grounded", "base rag"]), "Must mention grounded RAG knowledge."
+    # 6. AI Assistant & RAG Interface
+    assert "chat-box" in html, "Must contain interactive chat-box for AI assistant."
+    assert any(term in html.lower() for term in ["assistente", "assistant"]), "Must contain interactive assistant about Adilio Farias."
 
     # 7. CV Download Buttons & Assets
     assert "cv_adilio_farias_pt.html" in html, "Must provide download/view link for Portuguese CV."

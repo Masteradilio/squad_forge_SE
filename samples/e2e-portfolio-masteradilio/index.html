@@ -605,7 +605,7 @@
       </div>
     </section>
 
-    <section id="assistente" class="py-16 sm:py-24 px-4 sm:px-6 lg:px-8 max-w-4xl mx-auto border-t border-slate-800/80">
+    <section id="assistente" class="py-16 sm:py-24 px-4 sm:px-6 lg:px-8 max-w-5xl mx-auto border-t border-slate-800/80">
       <div class="glass-card rounded-2xl p-6 sm:p-8 border border-cyan-500/40 shadow-2xl glow-cyan space-y-6">
         <div class="flex items-center justify-between border-b border-slate-800 pb-4">
           <div class="flex items-center gap-3">
@@ -634,19 +634,19 @@
           </div>
         </div>
 
-        <div class="p-4 rounded-xl bg-slate-950/90 border border-slate-800 h-72 overflow-y-auto space-y-3 font-sans text-xs" id="chat-box">
+        <div class="p-4 sm:p-6 rounded-xl bg-slate-950/90 border border-slate-800 h-[480px] sm:h-[540px] overflow-y-auto space-y-4 font-sans text-xs sm:text-sm" id="chat-box">
           <div class="flex gap-2.5">
-            <div class="w-6 h-6 rounded-full bg-cyan-500 flex items-center justify-center text-white text-[10px] font-bold shrink-0">AI</div>
-            <div class="p-3 rounded-xl rounded-tl-none bg-slate-800 text-slate-200 leading-relaxed max-w-[85%]" id="bot-welcome-msg">
+            <div class="w-7 h-7 rounded-full bg-cyan-500 flex items-center justify-center text-white text-[10px] font-bold shrink-0 shadow">AI</div>
+            <div class="p-4 rounded-xl rounded-tl-none bg-slate-800 text-slate-200 leading-relaxed max-w-[95%] w-full" id="bot-welcome-msg">
               Olá! Sou o assistente virtual de <strong>Adilio Farias</strong>. Estou conectado aos currículos completos e aos READMEs técnicos dos repositórios públicos. Pergunte o que quiser sobre minhas experiências, educação e projetos!
             </div>
           </div>
         </div>
 
         <form id="chat-form" class="flex gap-2">
-          <input type="text" id="chat-input" placeholder="Pergunte sobre experiências, formação, projetos ou contratação..." class="flex-1 px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500">
-          <button type="submit" id="chat-submit-btn" class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 font-semibold text-xs text-white transition-all flex items-center gap-1.5">
-            <span data-i18n="bot_send_btn">Perguntar</span> <i class="fa-solid fa-paper-plane text-[10px]"></i>
+          <input type="text" id="chat-input" placeholder="Pergunte sobre experiências, formação, projetos ou contratação..." class="flex-1 px-4 py-3 rounded-xl bg-slate-900 border border-slate-700 text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500">
+          <button type="submit" id="chat-submit-btn" class="px-6 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 font-semibold text-xs sm:text-sm text-white transition-all flex items-center gap-2">
+            <span data-i18n="bot_send_btn">Perguntar</span> <i class="fa-solid fa-paper-plane text-xs"></i>
           </button>
         </form>
         <p class="text-[11px] text-slate-400 italic text-center sm:text-left mt-2" data-i18n="chat_latency_note">Observação: é normal haver uma latência de até 60 segundos para receber a resposta do Agente.</p>
@@ -1003,9 +1003,9 @@
       const msgDiv = document.createElement('div');
       msgDiv.className = `flex gap-2.5 ${isUser ? 'justify-end' : ''}`;
       const avatar = isUser 
-        ? '<div class="w-6 h-6 rounded-full bg-blue-600 flex items-center justify-center text-white text-[10px] font-bold shrink-0 shadow">YOU</div>'
-        : '<div class="w-6 h-6 rounded-full bg-cyan-500 flex items-center justify-center text-white text-[10px] font-bold shrink-0 shadow">AI</div>';
-      const bubble = `<div class="p-3.5 rounded-xl ${isUser ? 'rounded-tr-none bg-cyan-600 text-white shadow-md' : 'rounded-tl-none bg-slate-800 text-slate-200 border border-slate-700/80 shadow-md'} leading-relaxed max-w-[88%] font-sans text-xs">${isHtml ? text : escapeHtml(text)}</div>`;
+        ? '<div class="w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center text-white text-[10px] font-bold shrink-0 shadow">YOU</div>'
+        : '<div class="w-7 h-7 rounded-full bg-cyan-500 flex items-center justify-center text-white text-[10px] font-bold shrink-0 shadow">AI</div>';
+      const bubble = `<div class="p-3.5 sm:p-4 rounded-xl ${isUser ? 'rounded-tr-none bg-cyan-600 text-white shadow-md' : 'rounded-tl-none bg-slate-800 text-slate-200 border border-slate-700/80 shadow-md'} leading-relaxed max-w-[95%] w-full font-sans text-xs sm:text-sm">${isHtml ? text : escapeHtml(text)}</div>`;
       msgDiv.innerHTML = isUser ? bubble + avatar : avatar + bubble;
       chatBox.appendChild(msgDiv);
       chatBox.scrollTop = chatBox.scrollHeight;
@@ -1023,12 +1023,12 @@
       msgDiv.id = 'thinking-indicator';
       msgDiv.className = 'flex gap-2.5 items-center';
       msgDiv.innerHTML = `
-        <div class="w-6 h-6 rounded-full bg-cyan-500 flex items-center justify-center text-white text-[10px] font-bold shrink-0">AI</div>
+        <div class="w-7 h-7 rounded-full bg-cyan-500 flex items-center justify-center text-white text-[10px] font-bold shrink-0 shadow">AI</div>
         <div class="p-3 rounded-xl rounded-tl-none bg-slate-800/80 text-cyan-300 border border-slate-700 flex items-center gap-2 text-xs">
           <span class="inline-block w-1.5 h-1.5 rounded-full bg-cyan-400 animate-bounce"></span>
           <span class="inline-block w-1.5 h-1.5 rounded-full bg-cyan-400 animate-bounce" style="animation-delay: 0.15s"></span>
           <span class="inline-block w-1.5 h-1.5 rounded-full bg-cyan-400 animate-bounce" style="animation-delay: 0.3s"></span>
-          <span class="text-[11px] text-slate-400 ml-1">Consultando RAG & Modelo...</span>
+          <span class="text-xs text-slate-400 ml-1">Consultando RAG & Modelo...</span>
         </div>
       `;
       chatBox.appendChild(msgDiv);
@@ -1045,7 +1045,7 @@
 
       let md = String(text).trim();
 
-      // Temporarily stash fenced code blocks so internal markdown is protected
+      // 1. Temporarily stash fenced code blocks so internal markdown is protected
       const codeBlocks = [];
       md = md.replace(/```([a-zA-Z0-9_\-]*)\n?([\s\S]*?)```/g, (match, lang, code) => {
         const id = '__CODE_BLOCK_' + codeBlocks.length + '__';
@@ -1055,7 +1055,47 @@
         return id;
       });
 
-      // Split into lines for block-level elements
+      // 2. Parse and stash Markdown Tables
+      const tableBlocks = [];
+      const tableRegex = /((?:\|[^\n]+\|\r?\n)(?:\|[\s\:\-\|]+\|\r?\n)(?:\|[^\n]+\|\r?\n?)+)/g;
+      md = md.replace(tableRegex, (match) => {
+        const id = '__TABLE_BLOCK_' + tableBlocks.length + '__';
+        const rows = match.trim().split('\n').map(r => r.trim());
+        if (rows.length < 2) return match;
+
+        const headerCells = rows[0].replace(/^\|/, '').replace(/\|$/, '').split('|').map(c => c.trim());
+        const alignSpecs = rows[1].replace(/^\|/, '').replace(/\|$/, '').split('|').map(c => {
+          const s = c.trim();
+          if (s.startsWith(':') && s.endsWith(':')) return 'text-center';
+          if (s.endsWith(':')) return 'text-right';
+          return 'text-left';
+        });
+
+        let thead = '<thead class="bg-slate-900 text-cyan-300 font-semibold border-b border-slate-700"><tr>';
+        headerCells.forEach((h, idx) => {
+          const align = alignSpecs[idx] || 'text-left';
+          thead += `<th class="p-2.5 sm:p-3 text-xs ${align} font-semibold">${h}</th>`;
+        });
+        thead += '</tr></thead>';
+
+        let tbody = '<tbody class="divide-y divide-slate-800/80 bg-slate-950/70">';
+        for (let r = 2; r < rows.length; r++) {
+          if (!rows[r].trim()) continue;
+          const dataCells = rows[r].replace(/^\|/, '').replace(/\|$/, '').split('|').map(c => c.trim());
+          tbody += '<tr class="hover:bg-slate-900/50 transition-colors">';
+          dataCells.forEach((d, idx) => {
+            const align = alignSpecs[idx] || 'text-left';
+            tbody += `<td class="p-2.5 sm:p-3 text-xs text-slate-300 leading-relaxed ${align}">${d}</td>`;
+          });
+          tbody += '</tr>';
+        }
+        tbody += '</tbody>';
+
+        tableBlocks.push(`<div class="my-3 overflow-x-auto rounded-lg border border-slate-700 shadow-lg"><table class="w-full text-left text-xs border-collapse min-w-[460px]">${thead}${tbody}</table></div>`);
+        return id;
+      });
+
+      // 3. Split into lines for block-level elements
       const lines = md.split('\n');
       const formattedLines = [];
 
@@ -1079,27 +1119,27 @@
           continue;
         }
         if (/^###\s+(.*)/.test(line)) {
-          formattedLines.push(line.replace(/^###\s+(.*)/, '<h4 class="font-bold text-white text-xs mt-3 mb-1.5 flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span><span>$1</span></h4>'));
+          formattedLines.push(line.replace(/^###\s+(.*)/, '<h4 class="font-bold text-white text-xs sm:text-sm mt-3 mb-1.5 flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span><span>$1</span></h4>'));
           continue;
         }
         if (/^##\s+(.*)/.test(line)) {
-          formattedLines.push(line.replace(/^##\s+(.*)/, '<h3 class="font-bold text-white text-sm mt-3.5 mb-1.5 border-b border-slate-700/60 pb-1">$1</h3>'));
+          formattedLines.push(line.replace(/^##\s+(.*)/, '<h3 class="font-bold text-white text-sm sm:text-base mt-3.5 mb-1.5 border-b border-slate-700/60 pb-1">$1</h3>'));
           continue;
         }
         if (/^#\s+(.*)/.test(line)) {
-          formattedLines.push(line.replace(/^#\s+(.*)/, '<h2 class="font-extrabold text-white text-sm mt-4 mb-2">$1</h2>'));
+          formattedLines.push(line.replace(/^#\s+(.*)/, '<h2 class="font-extrabold text-white text-base mt-4 mb-2">$1</h2>'));
           continue;
         }
 
         // Unordered List: - item, * item, • item
         if (/^[\-\*\•]\s+(.*)/.test(line)) {
-          formattedLines.push(line.replace(/^[\-\*\•]\s+(.*)/, '<div class="ml-2 my-1 flex items-start gap-2"><span class="text-cyan-400 mt-0.5 text-xs leading-none">•</span><span class="flex-1 leading-relaxed">$1</span></div>'));
+          formattedLines.push(line.replace(/^[\-\*\•]\s+(.*)/, '<div class="ml-2 my-1 flex items-start gap-2"><span class="text-cyan-400 mt-1 text-xs leading-none">•</span><span class="flex-1 leading-relaxed">$1</span></div>'));
           continue;
         }
 
         // Ordered List: 1. item, 2. item
         if (/^(\d+)\.\s+(.*)/.test(line)) {
-          formattedLines.push(line.replace(/^(\d+)\.\s+(.*)/, '<div class="ml-2 my-1 flex items-start gap-2"><span class="text-cyan-400 font-mono font-bold text-[11px] leading-none">$1.</span><span class="flex-1 leading-relaxed">$2</span></div>'));
+          formattedLines.push(line.replace(/^(\d+)\.\s+(.*)/, '<div class="ml-2 my-1 flex items-start gap-2"><span class="text-cyan-400 font-mono font-bold text-xs leading-none">$1.</span><span class="flex-1 leading-relaxed">$2</span></div>'));
           continue;
         }
 
@@ -1109,25 +1149,20 @@
 
       let html = formattedLines.join('');
 
-      // Restore code blocks
+      // 4. Restore tables and code blocks
+      tableBlocks.forEach((tbl, idx) => {
+        html = html.replace('__TABLE_BLOCK_' + idx + '__', tbl);
+      });
       codeBlocks.forEach((block, idx) => {
         html = html.replace('__CODE_BLOCK_' + idx + '__', block);
       });
 
-      // Inline Bold: **bold** or __bold__
+      // 5. Inline formatting
       html = html.replace(/\*\*(.*?)\*\*/g, '<strong class="text-white font-semibold">$1</strong>');
       html = html.replace(/__(.*?)__/g, '<strong class="text-white font-semibold">$1</strong>');
-
-      // Inline Italic: *italic*
       html = html.replace(/\*([^\*\n]+)\*/g, '<em class="text-slate-300 italic">$1</em>');
-
-      // Inline Code: `code`
       html = html.replace(/`([^`\n]+)`/g, '<code class="bg-slate-900 px-1.5 py-0.5 rounded text-cyan-300 font-mono text-[11px] border border-slate-700/60">$1</code>');
-
-      // Markdown Links: [label](url)
       html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^\s\)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-cyan-400 underline hover:text-cyan-300 font-medium inline-flex items-center gap-0.5">$1 <i class="fa-solid fa-arrow-up-right-from-square text-[9px]"></i></a>');
-
-      // Raw URLs: https://...
       html = html.replace(/(^|[\s(])(https?:\/\/[a-zA-Z0-9_\-\.\/\?%&=#\+]+)/g, '$1<a href="$2" target="_blank" rel="noopener noreferrer" class="text-cyan-400 underline hover:text-cyan-300 break-all inline-flex items-center gap-0.5">$2 <i class="fa-solid fa-arrow-up-right-from-square text-[9px]"></i></a>');
 
       return html;

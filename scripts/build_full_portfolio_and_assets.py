@@ -629,7 +629,10 @@ export default {
         apiKey = body.api_key;
       }
       if (!apiKey) {
-        apiKey = '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';
+        return new Response(JSON.stringify({ error: 'OPENROUTER_API_KEY is not configured. Please set the OPENROUTER_API_KEY environment variable in Cloudflare Worker settings.' }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+        });
       }
       apiKey = String(apiKey).trim().replace(/^["']|["']$/g, '');
 

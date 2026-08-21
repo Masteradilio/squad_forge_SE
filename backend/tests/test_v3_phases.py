@@ -8,7 +8,7 @@ from localforge.storage import UnitOfWork
 
 def test_economy_prompt_bundler_redacts_keys():
     bundler = EconomyPromptBundler()
-    text_with_key = "My API key is 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 and it is secret."
+    text_with_key = "My API key is sk-or-v1-0000000000000000000000000000000000000000000000000000000000000000 and it is secret."
     redacted = bundler.redact_sensitive_info(text_with_key)
     assert "sk-or-v" not in redacted
     assert "[REDACTED_API_KEY]" in redacted

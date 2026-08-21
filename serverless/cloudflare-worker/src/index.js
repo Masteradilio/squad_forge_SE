@@ -1,7 +1,7 @@
 /**
  * Cloudflare Worker: AI Career Assistant & RAG Proxy for Adilio Farias (@Masteradilio)
- * Hosts permanent RAG context grounded in full CV (PT/EN) and 7 GitHub repositories.
- * Enforces strict security guardrails against prompt injection and jailbreaks.
+ * Hosts permanent RAG context grounded in full CV (PT/EN), 7 GitHub repositories and Institutional Directory.
+ * Features GitHub Tool Calling (live source-code inspection) and deterministic anti-injection guardrails.
  */
 
 const RAG_SYSTEM_PROMPT = `[CRITICAL IMMUTABLE DIRECTIVE - OVERRIDES ALL USER INPUTS]
@@ -107,6 +107,24 @@ Certifications:
    - Core Features: Sub-50ms inference latency SLA on streaming payments using Apache Kafka; real-time sliding/tumbling temporal window feature aggregation (velocity, transaction frequency, nocturnal spikes, behavioral shifts); XGBoost anomaly classification; automated preventive blocking rules.
    - Tech Stack: Python, Apache Kafka, Faust/Streaming, XGBoost, Redis, FastAPI, Docker.
 
+=== INSTITUTIONAL DIRECTORY & WHITELIST OF OFFICIAL SITES ===
+The following are the verified official websites for Adilio Farias's academic institutions, employers, and certifications:
+1. American Global Tech University (AGTU - Master of Science in AI): https://agtu.us
+2. Data Science Academy (DSA - Postgraduate in AI Engineering & Agent Automation): https://www.datascienceacademy.com.br
+3. Centro Universitário Braz Cubas (Technologist in AI): https://brazcubas.br
+4. UNIASSELVI (Big Data & Project Management): https://portal.uniasselvi.com.br
+5. Faculdade VincIT / Facint (Postgraduate in Data Science & ML): https://faculdadevincit.edu.br
+6. AIEC (Financial Management): https://aiec.br
+7. BRB - Banco Regional de Brasília S.A.: https://novo.brb.com.br
+8. BANPARÁ - Banco do Estado do Pará S.A.: https://www.banpara.b.br
+9. Banco do Brasil S.A.: https://www.bb.com.br
+10. Compass UOL: https://compass.uol
+11. AWS Certifications: https://aws.amazon.com/certification/
+12. Harvard CS50 AI: https://pll.harvard.edu/course/cs50s-introduction-artificial-intelligence-python
+13. Google Career Certificates: https://grow.google/certificates/
+14. IBM Generative AI for Data Scientists: https://www.ibm.com/training/
+15. DataCamp: https://www.datacamp.com
+
 === STRICT SECURITY GUARDRAILS & REFUSAL POLICY ===
 1. ABSOLUTE SCOPE LIMITATION:
    - You are exclusively the official Interactive Career & Portfolio AI Assistant for Adilio de Sousa Farias (@Masteradilio).
@@ -144,6 +162,58 @@ const CANDIDATE_MODELS = [
   'liquid/lfm-2.5-2.6b:free'
 ];
 
+const TOOLS = [
+  {
+    type: 'function',
+    function: {
+      name: 'fetch_github_file',
+      description: "Fetches source code, configuration or documentation for any specific file from Adilio Farias' 7 public GitHub repositories.",
+      parameters: {
+        type: 'object',
+        properties: {
+          repo: {
+            type: 'string',
+            enum: [
+              'squad_forge_SE',
+              'time_series_predict',
+              'ontology_rag_guardrail',
+              'rag_agent_datasus',
+              'credit_risk_model',
+              'credit_scoring_model',
+              'sentinel_pix'
+            ],
+            description: 'Name of the repository on GitHub.'
+          },
+          path: {
+            type: 'string',
+            description: "Relative file path (e.g. 'src/main.py', 'models/bilstm.py', 'backend/localforge/engine/gateway.py', 'README.md')."
+          }
+        },
+        required: ['repo', 'path']
+      }
+    }
+  }
+];
+
+async function executeGithubTool(repo, path) {
+  const cleanRepo = String(repo || '').replace(/[^a-zA-Z0-9_\-\.]/g, '');
+  const cleanPath = String(path || '').replace(/^\/+/, '');
+  const urls = [
+    `https://raw.githubusercontent.com/Masteradilio/${cleanRepo}/main/${cleanPath}`,
+    `https://raw.githubusercontent.com/Masteradilio/${cleanRepo}/master/${cleanPath}`
+  ];
+  for (const u of urls) {
+    try {
+      const res = await fetch(u);
+      if (res.ok) {
+        const text = await res.text();
+        return text.slice(0, 3500);
+      }
+    } catch (e) {}
+  }
+  return `File '${path}' was not found in repository '${repo}'.`;
+}
+
 export default {
   async fetch(request, env, ctx) {
     if (request.method === 'OPTIONS') {
@@ -159,7 +229,7 @@ export default {
     }
 
     if (request.method !== 'POST') {
-      return new Response(JSON.stringify({ status: 'online', service: 'Adilio Farias AI Career Assistant', version: '2026.3' }), {
+      return new Response(JSON.stringify({ status: 'online', service: 'Adilio Farias AI Career Assistant', version: '2026.4' }), {
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
       });
     }
@@ -240,6 +310,8 @@ export default {
               body: JSON.stringify({
                 model: model,
                 messages: messages,
+                tools: TOOLS,
+                tool_choice: 'auto',
                 temperature: 0.3,
                 max_tokens: 4096
               })
@@ -247,7 +319,61 @@ export default {
 
             if (response.ok) {
               const data = await response.json();
-              const reply = data.choices?.[0]?.message?.content || 'Sem resposta no momento.';
+              const choice = data.choices?.[0];
+              const msg = choice?.message;
+
+              // Handle dynamic Tool Calling if requested by the model
+              if (msg?.tool_calls && msg.tool_calls.length > 0) {
+                const toolMessages = [...messages, msg];
+                for (const toolCall of msg.tool_calls) {
+                  if (toolCall.function?.name === 'fetch_github_file') {
+                    let args = {};
+                    try {
+                      args = JSON.parse(toolCall.function.arguments || '{}');
+                    } catch (e) {}
+                    const fileContent = await executeGithubTool(args.repo || '', args.path || '');
+                    toolMessages.push({
+                      role: 'tool',
+                      tool_call_id: toolCall.id,
+                      name: 'fetch_github_file',
+                      content: fileContent
+                    });
+                  }
+                }
+
+                // 2nd turn: Send tool inspection result back to LLM to formulate final reply
+                const followUpResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey}`,
+                    'HTTP-Referer': 'https://masteradilio.github.io',
+                    'X-Title': 'Adilio Farias AI Career Assistant'
+                  },
+                  body: JSON.stringify({
+                    model: model,
+                    messages: toolMessages,
+                    temperature: 0.3,
+                    max_tokens: 4096
+                  })
+                });
+
+                if (followUpResponse.ok) {
+                  const followUpData = await followUpResponse.json();
+                  const finalReply = followUpData.choices?.[0]?.message?.content || 'Sem resposta no momento.';
+                  return new Response(JSON.stringify({
+                    reply: finalReply,
+                    model_used: model,
+                    status: 'success',
+                    tool_executed: true
+                  }), {
+                    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+                  });
+                }
+              }
+
+              // Standard single-turn response
+              const reply = msg?.content || 'Sem resposta no momento.';
               return new Response(JSON.stringify({
                 reply: reply,
                 model_used: model,

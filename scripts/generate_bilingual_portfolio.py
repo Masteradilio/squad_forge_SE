@@ -1298,7 +1298,7 @@ def main():
     generate_assets()
     generate_serverless()
 
-    full_html = get_head() + get_nav() + get_hero() + get_forge() + get_projects() + get_skills_and_bot() + get_js()
+    full_html = get_head() + get_nav() + get_hero() + get_projects() + get_forge() + get_skills_and_bot() + get_js()
     
     p1 = pathlib.Path("samples/e2e-portfolio-masteradilio/index.html")
     p1.parent.mkdir(parents=True, exist_ok=True)

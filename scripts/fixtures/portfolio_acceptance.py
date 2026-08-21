@@ -91,6 +91,6 @@ def test_portfolio_assets_and_dist_package():
     worker_file = repo_root / "serverless" / "cloudflare-worker" / "src" / "index.js"
     assert worker_file.is_file(), "Cloudflare worker script must exist."
     worker_code = worker_file.read_text(encoding="utf-8")
-    assert "google/gemini-2.0-flash-exp:free" in worker_code, "Worker must route to latest free agentic models."
+    assert "openrouter/free" in worker_code, "Worker must route to latest free agentic models."
     assert "ADILIO FARIAS" in worker_code, "Worker must contain grounded RAG prompt."
 

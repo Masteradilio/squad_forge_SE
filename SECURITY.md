@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-LocalForge is pre-release software. Security fixes target the latest commit on the default
+Squad Forge SE is pre-release software. Security fixes target the latest commit on the default
 branch until the first stable release line is published.
 
 ## Reporting a vulnerability
@@ -17,7 +17,7 @@ Never include real secrets or third-party private source code.
 
 ## Security boundaries
 
-LocalForge executes model-proposed actions. Treat model output, imported PRDs, repository
+Squad Forge SE executes model-proposed actions. Treat model output, imported PRDs, repository
 content, skills, and external tool output as untrusted input.
 
 Default expectations:
@@ -30,5 +30,5 @@ Default expectations:
 - use conservative network and filesystem policies;
 - inspect third-party skills before enabling them.
 
-No autonomy or sandbox mode is a guarantee against malicious input. Run LocalForge with the
+No autonomy or sandbox mode is a guarantee against malicious input. Run Squad Forge SE with the
 least OS and repository privileges needed for the task.

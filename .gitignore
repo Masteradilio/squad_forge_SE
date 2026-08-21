@@ -43,6 +43,10 @@ node_modules/
 .next/
 out/
 coverage/
+playwright-report/
+test-results/
+frontend/e2e/playwright-report/
+frontend/e2e/test-results/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

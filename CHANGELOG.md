@@ -1,6 +1,34 @@
 # Changelog
 
-All notable changes to LocalForge OS will be documented in this file.
+All notable changes to Squad Forge SE will be documented in this file.
+
+## [Squad Forge SE Rebranding, GNU AGPLv3 License, Repository Sanitization & Bilingual Showcase] - 2026-08-21
+
+### Changed & Rebranded
+- **Official Rebranding to Squad Forge SE**:
+  - Rebranded the autonomous AI software engineering control plane from "LocalForge OS / ForgeOS" to **Squad Forge SE** across repository documentation, headers, governance files, and public presentation.
+- **License Migration to GNU Affero General Public License v3.0 (AGPL-3.0)**:
+  - Replaced legacy MIT license with the complete, official text of the **GNU AGPL-3.0** with copyright attributed to **Adilio de Sousa Farias (@Masteradilio)**.
+  - Updated `pyproject.toml` metadata (`license = "AGPL-3.0-or-later"` and AGPLv3+ classifier).
+  - Added AGPLv3 badge and license disclosure section in root `README.md`.
+- **Comprehensive Bilingual (PT-BR & EN-US) `README.md`**:
+  - Authored an executive, high-impact bilingual README tailored for international and Brazilian recruiters/leaders in Data Science and AI Engineering.
+  - Included fast language switcher navigation (`[🇺🇸 English (EN-US)]` / `[🇧🇷 Português (PT-BR)]`).
+  - Added direct showcase link to the live deployed portfolio: **`https://masteradilio.github.io`** with full breakdown of all 7 featured projects (`squad_forge_SE`, `time_series_predict`, `ontology_rag_guardrail`, `rag_agent_datasus`, `credit_risk_model`, `credit_scoring_model`, `sentinel_pix`).
+  - Rendered Mermaid flowchart of the Autonomous Multi-Agent Squad architecture (Scrum Master, Chief Engineer, Developer, QA Engineer, Bug Fixer, Security Auditor, Reviewer, PR Writer).
+  - Highlighted the **Local-First ($0.00 Cloud Cost)** execution strategy via `llama.cpp` (`Qwen 3.8 27B`), ActionGateway safety kernel, isolated Git worktrees, and quick-start instructions.
+
+### Sanitized & Cleaned
+- **General Repository Sanitization**:
+  - Untracked and purged local test execution artifacts: `frontend/e2e/test-results/` (traces/zips) and `frontend/e2e/playwright-report/`.
+  - Updated `.gitignore` and `frontend/.gitignore` with explicit ignore rules for Playwright reports, test results, and transient test traces.
+  - Removed outdated root execution summary (`run_summary.md`) and temporary generator scripts (`scripts/create_docs_step_by_step.py`, `scripts/create_new_portfolio_prd.py`).
+  - Updated governance documents (`SECURITY.md`, `CONTRIBUTING.md`, `SUPPORT.md`, `CODE_OF_CONDUCT.md`) to reflect the **Squad Forge SE** identity.
+
+### Verified & Audited
+- Automated security scan (`scripts/check_security_scans.py`): 0 secrets detected, sanitization integrity confirmed.
+- Core config & LLM provider test suite: 32/32 tests passing.
+- Frontend npm audit: 0 vulnerabilities found.
 
 ## [Real AI Career Assistant with Permanent Grounded RAG & GitHub Pages Package] - 2026-08-21
 

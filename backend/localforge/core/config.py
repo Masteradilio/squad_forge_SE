@@ -521,6 +521,10 @@ def load_config(cli_args: dict[str, Any] | None = None) -> LocalForgeConfig:
     chief_file_config = workspace_config.get("chief_engineer", {})
     if not isinstance(chief_file_config, dict):
         chief_file_config = {}
+    chief_provider_explicit = (
+        "provider" in chief_file_config
+        or env_value("LOCALFORGE_CHIEF_PROVIDER") is not None
+    )
     chief_model_explicit = (
         "model" in chief_file_config or env_value("LOCALFORGE_CHIEF_MODEL") is not None
     )
@@ -546,20 +550,25 @@ def load_config(cli_args: dict[str, Any] | None = None) -> LocalForgeConfig:
     nvidia_api_key = env_value("NVIDIA_API_KEY")
     nvidia_url = env_value("NVIDIA_URL") or DEFAULT_NVIDIA_URL
 
+    if not chief_provider_explicit and openrouter_paid_model and openrouter_api_key:
+        config_dict["chief_engineer"].update(
+            {
+                "provider": "openrouter",
+                "base_url": openrouter_url or DEFAULT_OPENROUTER_URL,
+                "model": openrouter_paid_model,
+                "api_key": openrouter_api_key,
+            }
+        )
+
     configured_chief_provider = str(
         config_dict["chief_engineer"].get("provider", "")
     ).strip().lower()
 
-    # 4-Tier LLM Administration Ladder:
-    # Tier 1: Local llama.cpp / Ollama (Primary)
-    # Tier 2: OmniRoute Gateway (:20128 auto/best-free)
-    # Tier 3: NVIDIA API (if configured)
-    # Tier 4: OpenRouter Paid (last-resort critical fallback from .env)
-    cascade_routes: list[dict[str, str | None]] = []
+    free_routes: list[dict[str, str | None]] = []
     
-    # Tier 2: OmniRoute gateway fallback
+    # Tier 2: OmniRoute gateway fallback when running local model
     if configured_chief_provider in {"llamacpp", "llama.cpp", "local", "ollama"}:
-        cascade_routes.append(
+        free_routes.append(
             {
                 "provider": "omniroute",
                 "base_url": DEFAULT_OMNIROUTE_URL,
@@ -568,9 +577,20 @@ def load_config(cli_args: dict[str, Any] | None = None) -> LocalForgeConfig:
             }
         )
 
-    # Tier 3: NVIDIA direct API route
+    # Tier 3: OpenRouter Free fallback
+    if openrouter_free_model and openrouter_api_key:
+        free_routes.append(
+            {
+                "provider": "openrouter",
+                "base_url": openrouter_url or DEFAULT_OPENROUTER_URL,
+                "model": openrouter_free_model,
+                "api_key": openrouter_api_key,
+            }
+        )
+
+    # Tier 3/4: NVIDIA direct API route
     if nvidia_model and nvidia_api_key:
-        cascade_routes.append(
+        free_routes.append(
             {
                 "provider": "nvidia",
                 "base_url": nvidia_url,
@@ -580,8 +600,13 @@ def load_config(cli_args: dict[str, Any] | None = None) -> LocalForgeConfig:
         )
 
     # Tier 4: OpenRouter Paid (last-resort critical fallback)
-    if openrouter_paid_model and openrouter_api_key:
-        cascade_routes.append(
+    if (
+        openrouter_paid_model
+        and openrouter_api_key
+        and configured_chief_provider in {"llamacpp", "llama.cpp", "local", "ollama"}
+        and not openrouter_free_model
+    ):
+        free_routes.append(
             {
                 "provider": "openrouter",
                 "base_url": openrouter_url or DEFAULT_OPENROUTER_URL,
@@ -589,24 +614,15 @@ def load_config(cli_args: dict[str, Any] | None = None) -> LocalForgeConfig:
                 "api_key": openrouter_api_key,
             }
         )
-    elif openrouter_free_model and openrouter_api_key:
-        cascade_routes.append(
-            {
-                "provider": "openrouter",
-                "base_url": openrouter_url or DEFAULT_OPENROUTER_URL,
-                "model": openrouter_free_model,
-                "api_key": openrouter_api_key,
-            }
-        )
 
-    if cascade_routes:
+    if free_routes:
         config_dict["models"]["fallback_routes"] = [
             *config_dict["models"].get("fallback_routes", []),
-            *cascade_routes,
+            *free_routes,
         ]
         config_dict["chief_engineer"]["fallback_routes"] = [
             *config_dict["chief_engineer"].get("fallback_routes", []),
-            *cascade_routes,
+            *free_routes,
         ]
 
     for section in ("models", "chief_engineer"):

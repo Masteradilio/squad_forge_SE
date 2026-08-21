@@ -1,6 +1,6 @@
-# Contributing to LocalForge OS
+# Contributing to Squad Forge SE
 
-LocalForge welcomes focused changes that improve safe, auditable, and economical
+Squad Forge SE welcomes focused changes that improve safe, auditable, and economical
 software-engineering automation.
 
 ## Before opening a change

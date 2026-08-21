@@ -1,6 +1,6 @@
 # Community Code of Conduct
 
-We want LocalForge discussions and collaboration to be technically rigorous, welcoming,
+We want Squad Forge SE discussions and collaboration to be technically rigorous, welcoming,
 and safe.
 
 Contributors must:

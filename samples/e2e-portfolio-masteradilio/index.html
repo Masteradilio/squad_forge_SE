@@ -638,7 +638,7 @@
           <div class="flex gap-2.5">
             <div class="w-6 h-6 rounded-full bg-cyan-500 flex items-center justify-center text-white text-[10px] font-bold shrink-0">AI</div>
             <div class="p-3 rounded-xl rounded-tl-none bg-slate-800 text-slate-200 leading-relaxed max-w-[85%]" id="bot-welcome-msg">
-              Olá! Sou o assistente virtual de <strong>Adilio Farias</strong>. Estou conectado aos currículos completos e aos READMEs técnicos dos 7 repositórios públicos. Pergunte o que quiser sobre minhas experiências, educação e projetos!
+              Olá! Sou o assistente virtual de <strong>Adilio Farias</strong>. Estou conectado aos currículos completos e aos READMEs técnicos dos repositórios públicos. Pergunte o que quiser sobre minhas experiências, educação e projetos!
             </div>
           </div>
         </div>
@@ -649,6 +649,7 @@
             <span data-i18n="bot_send_btn">Perguntar</span> <i class="fa-solid fa-paper-plane text-[10px]"></i>
           </button>
         </form>
+        <p class="text-[11px] text-slate-400 italic text-center sm:text-left mt-2" data-i18n="chat_latency_note">Observação: é normal haver uma latência de até 60 segundos para receber a resposta do Agente.</p>
       </div>
     </section>
 
@@ -754,6 +755,7 @@
         btn_cv_pt_short: "CV (PT-BR)",
         btn_cv_en_short: "Resume (EN)",
         rag_status_label: "Baixe meu currículo",
+        chat_latency_note: "Observação: é normal haver uma latência de até 60 segundos para receber a resposta do Agente.",
         contact_title: "Vamos Construir Soluções em IA Juntos?",
         contact_subtitle: "Disponível para posições de liderança técnica, contratação direta ou consultoria em sistemas de IA e ciência de dados.",
         footer_copyright: "&copy; 2026 Adilio Farias (@Masteradilio). Todos os direitos reservados.",
@@ -831,6 +833,7 @@
         btn_cv_pt_short: "CV (PT-BR)",
         btn_cv_en_short: "Resume (EN)",
         rag_status_label: "Download Resume",
+        chat_latency_note: "Note: it is normal to experience a latency of up to 60 seconds to receive the Agent's response.",
         contact_title: "Let's Build Great AI Solutions Together!",
         contact_subtitle: "Available for technical leadership roles, direct hiring, or consulting in AI systems and data science.",
         footer_copyright: "&copy; 2026 Adilio Farias (@Masteradilio). All rights reserved.",
@@ -897,22 +900,98 @@
       });
     });
 
-    const botGroundedKnowledge = {
-      pt: {
-        pix: "No <strong>BRB (Banco Regional de Brasília)</strong>, Adilio liderou o desenvolvimento end-to-end do modelo de prevenção a fraudes em transações PIX, atingindo <strong>97% de Recall com FPR < 1%</strong>. Além disso, estruturou uma pipeline semanal de MLOps para milhões de transações, reduziu o tempo de processamento de dados de mais de 2 horas para ~24 minutos (>80% de ganho) e implementou agentes de IA e RAG que reduziram em 41% o tempo de investigação operacional. No GitHub, o projeto <strong>sentinel_pix</strong> implementa essa arquitetura em tempo real com Apache Kafka e inferência sub-50ms.",
-        credito: "No <strong>BANPARÁ</strong>, Adilio desenvolveu e implantou em produção o modelo de <strong>Probabilidade de Inadimplência (PD)</strong> para ~700.000 clientes bancários (91% de acurácia), integrando componentes de PD, LGD, EAD e Perda Esperada (EL/ECL) conforme IFRS 9. Reduziu em 50% o tempo médio de análise manual e construiu uma solução RAG interna para consulta de 30 normas regulatórias. No GitHub, os projetos <strong>credit_risk_model</strong> (LightGBM/Optuna/SHAP) e <strong>credit_scoring_model</strong> (Scorecards WoE/IV e calibração KS) demonstram essa especialidade.",
-        projetos: "Os <strong>7 repositórios públicos</strong> no GitHub de Adilio (@Masteradilio) com seus READMEs técnicos completos são:<br/>• <strong>squad_forge_SE</strong>: Control plane open-source de engenharia de software autônoma com 8 agentes e governança local $0.00.<br/>• <strong>time_series_predict</strong>: Suíte de séries temporais não-lineares com Deep Learning (BiLSTM/TCN) e SARIMAX (MIT-510 no Mestrado em IA AGTU).<br/>• <strong>ontology_rag_guardrail</strong>: Governança semântica e Graph RAG (Neo4j) contra alucinações.<br/>• <strong>rag_agent_datasus</strong>: Agente RAG epidemiológico do Datasus (premiado no Desafio Indicium AI).<br/>• <strong>credit_risk_model</strong>: Pipeline de risco de crédito com LightGBM/XGBoost, Optuna e SHAP.<br/>• <strong>credit_scoring_model</strong>: Scorecards estatísticos WoE/IV e calibração KS.<br/>• <strong>sentinel_pix</strong>: Detecção de fraudes PIX em tempo real com Apache Kafka e latência sub-50ms.",
-        formacao: "<strong>Formação Acadêmica & Certificações:</strong><br/>• <strong>Mestrado (MSc) em Inteligência Artificial</strong> — American Global Tech University (AGTU - EUA, 2024-2026 em andamento).<br/>• <strong>Pós-Graduação em Automação de Processos com Agentes de IA</strong> — Data Science Academy (2025-2026).<br/>• <strong>Pós-Graduação em Engenharia de IA</strong> — Data Science Academy (2024-2025).<br/>• <strong>Tecnólogo em IA</strong> (Braz Cubas) e <strong>Tecnólogo em Big Data</strong> (UNIASSELVI).<br/>• <strong>Certificações</strong>: AWS Certified AI Practitioner, AWS Solutions Architect Associate, AWS Cloud Practitioner, Google Advanced Data Analytics, CS50 AI Harvard, IBM Generative AI for Data Scientists.<br/>• <strong>Idiomas</strong>: Português (Nativo) e Inglês Avançado (C1, nível executivo/negócios).",
-        default: "Adilio de Sousa Farias é <strong>Cientista de Dados Sênior e Engenheiro de IA/ML</strong> com mais de 15 anos no setor financeiro. Especialista em Prevenção a Fraudes (PIX), Risco de Crédito (IFRS 9, PD/LGD/EAD), MLOps em larga escala e Sistemas Agênticos com LLMs & RAG. Você pode baixar seu currículo em PDF/HTML no topo da página ou explorar seus 7 repositórios no GitHub!"
-      },
-      en: {
-        pix: "At <strong>BRB (Banco Regional de Brasília)</strong>, Adilio led the end-to-end Machine Learning model for PIX instant transaction fraud prevention, achieving <strong>97% Recall with FPR < 1%</strong>. He also engineered a weekly MLOps pipeline for millions of transactions, optimized data workflows reducing execution time from >2 hours to ~24 minutes (>80% speedup), and implemented LLM/RAG solutions cutting support investigation time by 41%. On GitHub, <strong>sentinel_pix</strong> implements this streaming architecture with Kafka and sub-50ms latency.",
-        credito: "At <strong>BANPARÁ</strong>, Adilio developed and operationalized in production a <strong>Probability of Default (PD)</strong> model classifying credit risk for ~700,000 banking customers with 91% accuracy. He engineered PD, LGD, EAD and Expected Loss (EL/ECL) components aligned with IFRS 9 standards, reducing manual review times by 50% and building an internal regulatory RAG system. On GitHub, check out <strong>credit_risk_model</strong> and <strong>credit_scoring_model</strong>!",
-        projetos: "Adilio's <strong>7 open-source projects</strong> on GitHub (@Masteradilio) with full technical READMEs are:<br/>• <strong>squad_forge_SE</strong>: Autonomous software engineering control plane with 8 agent roles.<br/>• <strong>time_series_predict</strong>: High-volatility time series forecasting with Deep Learning (BiLSTM/TCN) and SARIMAX (MIT-510 MSc AI at AGTU).<br/>• <strong>ontology_rag_guardrail</strong>: Semantic governance and Graph RAG (Neo4j) to prevent hallucinations.<br/>• <strong>rag_agent_datasus</strong>: Epidemiological RAG agent on Datasus SRAG data (Indicium AI challenge awardee).<br/>• <strong>credit_risk_model</strong>: Banking credit risk classification with LightGBM/XGBoost, Optuna and SHAP.<br/>• <strong>credit_scoring_model</strong>: Statistical credit scorecards with WoE/IV and KS calibration.<br/>• <strong>sentinel_pix</strong>: Real-time sub-50ms PIX anti-fraud streaming engine with Apache Kafka.",
-        formacao: "<strong>Academic Background & Certifications:</strong><br/>• <strong>MSc in Artificial Intelligence</strong> — American Global Tech University (AGTU - USA, 2024-2026 in progress).<br/>• <strong>Postgraduate in Process Automation with AI Agents</strong> — Data Science Academy (2025-2026).<br/>• <strong>Postgraduate in AI Engineering</strong> — Data Science Academy (2024-2025).<br/>• <strong>Degrees in AI</strong> (Braz Cubas) and <strong>Big Data & Analytics</strong> (UNIASSELVI).<br/>• <strong>Certifications</strong>: AWS Certified AI Practitioner, AWS Solutions Architect Associate, AWS Cloud Practitioner, Google Advanced Data Analytics, CS50 AI with Python (Harvard University), IBM Generative AI for Data Scientists.<br/>• <strong>Languages</strong>: Portuguese (Native) and English (Advanced C1, business-level professional).",
-        default: "Adilio de Sousa Farias is a <strong>Senior Data Scientist & AI/ML Engineer</strong> with 15+ years of financial sector expertise, specializing in Fraud Prevention (PIX), Credit Risk (IFRS 9, PD/LGD/EAD), High-Throughput MLOps, and Enterprise Agentic RAG Systems. You can download his resume at the top of this page or explore his 7 GitHub repositories!"
+    function calculateSimilarity(str1, str2) {
+      const s1 = String(str1 || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+      const s2 = String(str2 || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+      if (s1 === s2) return 1.0;
+      if (!s1 || !s2) return 0.0;
+
+      // Word Token Dice Similarity
+      const words1 = new Set(s1.split(' ').filter(w => w.length > 2));
+      const words2 = new Set(s2.split(' ').filter(w => w.length > 2));
+      let diceScore = 0.0;
+      if (words1.size > 0 && words2.size > 0) {
+        let intersection = 0;
+        words1.forEach(w => { if (words2.has(w)) intersection++; });
+        diceScore = (2.0 * intersection) / (words1.size + words2.size);
       }
-    };
+
+      // Levenshtein Matrix Similarity
+      const track = Array(s2.length + 1).fill(null).map(() => Array(s1.length + 1).fill(null));
+      for (let i = 0; i <= s1.length; i += 1) track[0][i] = i;
+      for (let j = 0; j <= s2.length; j += 1) track[j][0] = j;
+      for (let j = 1; j <= s2.length; j += 1) {
+        for (let i = 1; i <= s1.length; i += 1) {
+          const indicator = s1[i - 1] === s2[j - 1] ? 0 : 1;
+          track[j][i] = Math.min(
+            track[j][i - 1] + 1,
+            track[j - 1][i] + 1,
+            track[j - 1][i - 1] + indicator
+          );
+        }
+      }
+      const distance = track[s2.length][s1.length];
+      const maxLen = Math.max(s1.length, s2.length);
+      const levScore = 1.0 - (distance / maxLen);
+
+      return Math.max(diceScore, levScore);
+    }
+
+    const DETERMINISTIC_FAQ = [
+      {
+        triggers: [
+          "quem e o adilio",
+          "quem e adilio farias",
+          "fale sobre o adilio",
+          "apresente o adilio",
+          "resumo sobre adilio",
+          "perfil do adilio",
+          "who is adilio",
+          "who is adilio farias",
+          "tell me about adilio",
+          "summary of adilio"
+        ],
+        reply: {
+          pt: "Adilio de Sousa Farias é **Cientista de Dados Sênior e Engenheiro de IA/ML** com mais de 15 anos no setor financeiro. É especialista em **Prevenção a Fraudes (PIX)**, **Modelagem de Risco de Crédito (IFRS 9, PD/LGD/EAD)**, **MLOps em larga escala** e **Sistemas Agênticos com LLMs & RAG**.\n\nAtualmente realiza **Mestrado em Inteligência Artificial** na *American Global Tech University (AGTU)* e possui pós-graduações pela *Data Science Academy (DSA)*.",
+          en: "Adilio de Sousa Farias is a **Senior Data Scientist & AI/ML Engineer** with 15+ years in the banking/finance sector. He specializes in **PIX Fraud Prevention**, **Credit Risk Modeling (IFRS 9, PD/LGD/EAD)**, **High-Throughput MLOps**, and **Agentic RAG Systems**.\n\nHe is currently pursuing his **Master of Science in Artificial Intelligence** at *American Global Tech University (AGTU)*."
+        }
+      },
+      {
+        triggers: [
+          "como baixar o curriculo",
+          "onde baixo o curriculo",
+          "download do curriculo",
+          "baixar meu curriculo",
+          "onde posso baixar o cv",
+          "como baixar o resume",
+          "how to download the resume",
+          "where can i download the cv",
+          "download resume",
+          "download cv"
+        ],
+        reply: {
+          pt: "Você pode baixar o currículo completo de Adilio através dos botões no topo deste chat ou pelos links diretos abaixo:\n- [Curriculo em Português (PT-BR)](assets/cv_adilio_farias_pt.html)\n- [Resume em Inglês (EN-US)](assets/cv_adilio_farias_en.html)",
+          en: "You can download Adilio's full resume using the buttons at the top of this assistant or via the direct links below:\n- [Resume in English (EN-US)](assets/cv_adilio_farias_en.html)\n- [Curriculum in Portuguese (PT-BR)](assets/cv_adilio_farias_pt.html)"
+        }
+      },
+      {
+        triggers: [
+          "quais os contatos do adilio",
+          "qual o email do adilio",
+          "qual o linkedin do adilio",
+          "como entrar em contato com o adilio",
+          "como falar com o adilio",
+          "what is adilio email",
+          "how to contact adilio",
+          "what is adilio linkedin",
+          "contact info"
+        ],
+        reply: {
+          pt: "Você pode entrar em contato com Adilio Farias através dos seguintes canais oficiais:\n- **E-mail:** [adiliobb@gmail.com](mailto:adiliobb@gmail.com)\n- **LinkedIn:** [linkedin.com/in/adiliofarias](https://www.linkedin.com/in/adiliofarias)\n- **GitHub:** [github.com/Masteradilio](https://github.com/Masteradilio)",
+          en: "You can reach Adilio Farias through his verified official contact channels:\n- **Email:** [adiliobb@gmail.com](mailto:adiliobb@gmail.com)\n- **LinkedIn:** [linkedin.com/in/adiliofarias](https://www.linkedin.com/in/adiliofarias)\n- **GitHub:** [github.com/Masteradilio](https://github.com/Masteradilio)"
+        }
+      }
+    ];
 
     const chatBox = document.getElementById('chat-box');
     const chatForm = document.getElementById('chat-form');
@@ -926,7 +1005,7 @@
       const avatar = isUser 
         ? '<div class="w-6 h-6 rounded-full bg-blue-600 flex items-center justify-center text-white text-[10px] font-bold shrink-0 shadow">YOU</div>'
         : '<div class="w-6 h-6 rounded-full bg-cyan-500 flex items-center justify-center text-white text-[10px] font-bold shrink-0 shadow">AI</div>';
-      const bubble = `<div class="p-3 rounded-xl ${isUser ? 'rounded-tr-none bg-cyan-600 text-white shadow-md' : 'rounded-tl-none bg-slate-800 text-slate-200 border border-slate-700/80 shadow-md'} leading-relaxed max-w-[88%] font-sans text-xs">${isHtml ? text : escapeHtml(text)}</div>`;
+      const bubble = `<div class="p-3.5 rounded-xl ${isUser ? 'rounded-tr-none bg-cyan-600 text-white shadow-md' : 'rounded-tl-none bg-slate-800 text-slate-200 border border-slate-700/80 shadow-md'} leading-relaxed max-w-[88%] font-sans text-xs">${isHtml ? text : escapeHtml(text)}</div>`;
       msgDiv.innerHTML = isUser ? bubble + avatar : avatar + bubble;
       chatBox.appendChild(msgDiv);
       chatBox.scrollTop = chatBox.scrollHeight;
@@ -1061,50 +1140,56 @@
 
       let answer = null;
 
-      try {
-        // Live fetch to serverless Cloudflare proxy with 45s timeout for LLM generation
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 45000);
-
-        const response = await fetch(SERVERLESS_BACKEND_ENDPOINT, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            message: question,
-            history: conversationHistory.slice(-4),
-            model: 'openrouter/free'
-          }),
-          signal: controller.signal
-        });
-        clearTimeout(timeoutId);
-
-        if (response.ok) {
-          const data = await response.json();
-          if (data.reply) {
-            answer = formatMarkdown(data.reply);
+      // 1. Check if question matches predefined deterministic FAQ with >= 80% (0.80) similarity
+      for (const faq of DETERMINISTIC_FAQ) {
+        for (const trigger of faq.triggers) {
+          const sim = calculateSimilarity(question, trigger);
+          if (sim >= 0.80) {
+            const raw = faq.reply[currentLang] || faq.reply.pt;
+            answer = formatMarkdown(raw);
+            break;
           }
         }
-      } catch (err) {
-        // Network timeout / offline / CORS - will fallback gracefully
+        if (answer) break;
+      }
+
+      // 2. If not a deterministic FAQ, query the live LLM with a 75s timeout
+      if (!answer) {
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 75000);
+
+          const response = await fetch(SERVERLESS_BACKEND_ENDPOINT, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              message: question,
+              history: conversationHistory.slice(-4),
+              model: 'openrouter/free'
+            }),
+            signal: controller.signal
+          });
+          clearTimeout(timeoutId);
+
+          if (response.ok) {
+            const data = await response.json();
+            if (data.reply) {
+              answer = formatMarkdown(data.reply);
+            }
+          }
+        } catch (err) {
+          // LLM fetch timed out or network error
+        }
       }
 
       removeThinkingIndicator();
 
+      // 3. If LLM failed, show explicit failure notification (never a misleading project summary)
       if (!answer) {
-        // High-precision grounded RAG matcher
-        const qLower = question.toLowerCase();
-        const kb = botGroundedKnowledge[currentLang] || botGroundedKnowledge.pt;
-        if (qLower.includes('pix') || qLower.includes('fraude') || qLower.includes('fraud') || qLower.includes('sentinel') || qLower.includes('brb')) {
-          answer = kb.pix;
-        } else if (qLower.includes('credito') || qLower.includes('credit') || qLower.includes('risco') || qLower.includes('risk') || qLower.includes('pd') || qLower.includes('banpar') || qLower.includes('ifrs') || qLower.includes('scoring')) {
-          answer = kb.credito;
-        } else if (qLower.includes('projeto') || qLower.includes('project') || qLower.includes('7') || qLower.includes('github') || qLower.includes('repo') || qLower.includes('squad') || qLower.includes('time_series') || qLower.includes('datasus') || qLower.includes('biblioteca') || qLower.includes('linguag')) {
-          answer = kb.projetos;
-        } else if (qLower.includes('formacao') || qLower.includes('educacao') || qLower.includes('education') || qLower.includes('mestrado') || qLower.includes('msc') || qLower.includes('certificac') || qLower.includes('aws') || qLower.includes('degree') || qLower.includes('curso')) {
-          answer = kb.formacao;
-        } else {
-          answer = kb.default;
-        }
+        const errorMsg = (currentLang === 'en')
+          ? "⚠️ *Unable to reach the AI model at this moment (response timeout or connection instability). Please try asking again shortly.*"
+          : "⚠️ *Não conseguimos obter retorno do modelo de IA neste momento (tempo limite de resposta atingido ou instabilidade na conexão). Por favor, tente novamente em instantes.*";
+        answer = formatMarkdown(errorMsg);
       }
 
       conversationHistory.push({ role: 'assistant', content: answer });

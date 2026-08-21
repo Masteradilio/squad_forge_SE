@@ -1,6 +1,6 @@
-# ForgeOS
+# Squad Forge SE - An Agent Orquestrator for Software Engineering
 
-ForgeOS is a local-first, supervised software-engineering control plane. It
+Squad Forge SE is a local-first, supervised software-engineering control plane. It
 turns a Markdown PRD into bounded task contracts, isolated worktree changes,
 tests, reviews, risk and cost evidence, and a human-reviewable `PR_READY`
 result.

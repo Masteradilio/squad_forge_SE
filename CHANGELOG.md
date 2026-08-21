@@ -2,6 +2,64 @@
 
 All notable changes to LocalForge OS will be documented in this file.
 
+## [Real AI Career Assistant with Permanent Grounded RAG & GitHub Pages Package] - 2026-08-21
+
+### Added
+- **Real AI Career Assistant with Permanent Grounded RAG**:
+  - Embedded rich factual knowledge base covering Adilio Farias's 15+ years of banking experience, production deliverables (BRB PIX anti-fraud with 97% Recall and FPR < 1%, BANPARÁ Probability of Default with 91% accuracy / IFRS 9, Compass UOL, Banco do Brasil), academic credentials (AGTU MSc in AI, Data Science Academy specializations, Big Data & AI degrees), certifications (AWS Certified AI Practitioner, Solutions Architect, Google Advanced Analytics, CS50 AI Harvard), and all 7 GitHub repositories.
+  - Interactive chat container with thinking animations, quick-prompt pills, active model indicator badges, and 100% uptime fallback grounded engine.
+- **Serverless RAG Backend Proxy (`serverless/cloudflare-worker/` & `serverless/vercel-edge/`)**:
+  - Implemented Cloudflare Worker proxy with CORS support, dynamic history trimming, and cascading routing across latest free agentic models:
+    1. `google/gemini-2.0-flash-exp:free` (Primary agentic fast lane)
+    2. `meta-llama/llama-3.3-70b-instruct:free` (Fallback 1)
+    3. `deepseek/deepseek-r1:free` (Fallback 2)
+    4. `openrouter/free` (Fallback 3)
+  - Included deployment configuration (`wrangler.toml`, `package.json`, and comprehensive `README.md`).
+- **Downloadable Curriculum Assets (PT & EN)**:
+  - Generated print-to-PDF ready HTML and plain-text resumes in `assets/`:
+    - `assets/cv_adilio_farias_pt.html` & `cv_adilio_farias_pt.txt` (Brazilian Portuguese)
+    - `assets/cv_adilio_farias_en.html` & `cv_adilio_farias_en.txt` (English)
+  - Integrated direct download buttons in Hero, About, and AI Assistant sections.
+- **GitHub Domain Distribution Package (`dist/masteradilio.github.io/`)**:
+  - Packaged clean, production-ready standalone directory (`index.html`, `assets/`, `README.md`) ready for direct git commit and push to `https://github.com/Masteradilio/masteradilio.github.io`.
+
+### Verified
+- Automated acceptance suite (`scripts/fixtures/portfolio_acceptance.py`): 2/2 tests passed validating 7 projects, bilingual switching, RAG assistant, CV assets, and dist bundle.
+- Core config & 4-tier ladder suite (`backend/tests/test_core_config.py`): 16/16 tests passed.
+- Security scanner: 0 secrets detected, sanitization integrity verified.
+- Release truth verification passed.
+
+## [4-Tier LLM Administration Ladder & Masteradilio Bilingual Portfolio Benchmark] - 2026-08-21
+
+
+### Added
+- **4-Tier Hierarchical LLM Administration Ladder**: Formalized and implemented strict cascade fallback execution across all agents and Chief Engineer:
+  1. **Tier 1 (Local-First)**: Local `llama.cpp` (`http://localhost:8080/v1` with `qwen3.8-27b`) or `Ollama` local ($0.00 cost).
+  2. **Tier 2 (Gateway)**: `OmniRoute` gateway (`http://localhost:20128/v1` with `auto/best-free` or free coding routes).
+  3. **Tier 3 (Enterprise Inference)**: Direct `NVIDIA` inference API via `NVIDIA_LLM_MODEL` & `NVIDIA_API_KEY`.
+  4. **Tier 4 (Critical Bounded Fallback)**: Paid `OpenRouter` route via `OPENROUTER_PAID_MODEL` & `OPENROUTER_API_KEY` from `.env` as the last-resort lane.
+- **P0 Resilience Hardening**: Integrated exponential backoff and bounded lock retry in `transactions.py` to eliminate `database is locked` during concurrent SQLite commits.
+- **E2E Benchmark Suite for Masteradilio Professional Bilingual Portfolio (Squad Forge SE)**:
+  - Authored comprehensive PRD (`samples/e2e-portfolio-masteradilio/PRD.md`) tailored to Senior Data Scientist & AI/ML Engineer **Adilio Farias (Masteradilio)**.
+  - Showcases all 7 core public GitHub repositories with detailed architectural summaries:
+    1. `squad_forge_SE`: Autonomous software engineering control plane.
+    2. `time_series_predict`: Deep Learning & econometric time series suite (MIT-510 MSc AI).
+    3. `ontology_rag_guardrail`: Semantic governance & Knowledge Graph (Neo4j) guardrail for RAG.
+    4. `rag_agent_datasus`: Public health epidemiologic RAG agent (Indicium AI Challenge winner).
+    5. `credit_risk_model`: End-to-end banking credit risk classifier with LightGBM, XGBoost & SHAP.
+    6. `credit_scoring_model`: Statistical credit scorecards with WoE/IV and KS calibration.
+    7. `sentinel_pix`: Real-time sub-50ms PIX payment anomaly & fraud detection stream processor.
+  - Included a dedicated step-by-step visual breakdown of how **Squad Forge SE** autonomously built the site using local model `llama.cpp / qwen3.8-27b` at $0.00 cloud cost.
+  - Implemented top-right bilingual language switcher (PT-BR / EN) with dynamic DOM internationalization and interactive Career AI Assistant.
+  - Mobile-first responsive layout with hamburger menu, Tailwind CSS dark-mode styling, and category filters.
+  - Created acceptance test fixture (`scripts/fixtures/portfolio_acceptance.py`) and isolated benchmark workspace (`benchmarks/workspaces/portfolio-masteradilio/`).
+
+### Verified
+- Full pytest suite executed: 32 passed in provider and configuration suites, 16/16 in `test_core_config.py`.
+- Acceptance test fixture passed (`test_portfolio_structure_and_projects`).
+- Release truth script passed (`check_release_truth.py`).
+- Security scans passed with 0 secrets detected (`check_security_scans.py`).
+
 ## [Local-First Model Prioritization & llama.cpp Qwen Integration] - 2026-08-17
 
 ### Added

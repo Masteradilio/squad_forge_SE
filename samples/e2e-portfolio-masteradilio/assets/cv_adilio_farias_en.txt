@@ -1,0 +1,60 @@
+ADILIO DE SOUSA FARIAS
+Senior Data Scientist | Machine Learning | Fraud | Credit Risk | MLOps
+Brasília, Federal District, Brazil | Open to Hybrid & Remote
+LinkedIn: linkedin.com/in/adiliofarias | Email: adiliobb@gmail.com | GitHub: github.com/Masteradilio
+
+PROFESSIONAL SUMMARY
+Senior Data Scientist with 15+ years of experience in the financial sector, combining banking business expertise with Machine Learning applied to fraud prevention and credit risk. Experience developing and operationalizing PIX fraud detection and Probability of Default models, as well as PD, LGD, EAD and EL/ECL components for risk management. Recent deliveries include a PIX fraud model with 97% Recall and FPR below 1%, a weekly MLOps pipeline for millions of transactions, and a credit risk model applied to approximately 700,000 banking customers.
+
+CORE SKILLS
+- Data Science & Machine Learning: Python, SQL, Pandas, NumPy, Scikit-learn, PyTorch, statistical modeling, feature engineering, model validation, classification, imbalanced classes, Deep Learning.
+- Fraud & Credit Risk: Fraud prevention, PIX, Probability of Default, PD, LGD, EAD, EL/ECL, IFRS 9, risk classification and credit analysis.
+- Big Data & MLOps: PySpark, Spark, Hadoop, Hive, Impala, HDFS, Airflow, Oozie, MLOps, Docker, Git/GitLab.
+- Analytics & Cloud: Power BI, Streamlit, Matplotlib, Plotly, AWS, GCP and Databricks.
+- Generative AI: LLMs, RAG, AI agents and LangChain/LangGraph.
+
+PROFESSIONAL EXPERIENCE
+1. BRB - Banco Regional de Brasília S.A. (Jul 2025 - Jul 2026)
+   Data Scientist & Machine Learning | Brasília, Federal District, Brazil
+   - Led end-to-end development of Machine Learning model for PIX transaction fraud prevention, achieving 97% Recall and FPR below 1%.
+   - Built weekly MLOps pipeline for millions of transactions, automating data preparation, training, validation, artifact generation, drift monitoring and metric publishing.
+   - Optimized critical data-processing workflow, reducing execution time from >2 hours to ~24 minutes (>80% speedup).
+   - Developed ingestion and transformation pipelines used by five business areas, increasing data availability and reliability.
+   - Built dashboards and analytical applications with Power BI, Streamlit and Python reducing operational indicator monitoring time by 27%.
+   - Implemented LLM, RAG and AI-agent solutions reducing data investigation and tech-support time by 41%.
+
+2. BANPARÁ - Banco do Estado do Pará S.A. (Jan 2024 - Jun 2025)
+   Data Scientist | Belém, Pará, Brazil
+   - Developed and deployed Probability of Default model classifying credit risk of ~700,000 banking customers with 91% accuracy.
+   - Developed analytical components for PD, LGD, EAD and EL/ECL, integrating probability of default, exposure, recovery and risk stages in line with IFRS 9.
+   - Automated credit analysis and reassessment processes, reducing manual analyst review time by 50%.
+   - Automated Expected Loss calculations, improving standardization and auditability of results.
+   - Developed a RAG solution to query ~30 internal regulatory documents.
+
+3. COMPASS UOL (Mar 2023 - Aug 2023)
+   AWS Data Engineering Intern | Remote
+   - Developed data ingestion, transformation and analysis pipelines using Python, SQL, Pandas, NumPy, Apache Spark in AWS.
+   - Built solutions with IAM, EC2, VPC, Lambda, Step Functions, EMR, Glue, Athena and QuickSight (~80 GB of data).
+   - Automated ETL flows with AWS Glue and Lambda, reducing processing time by 67%.
+
+4. BANPARÁ - Banco do Estado do Pará S.A. (Dec 2020 - Jan 2024)
+   Project Manager | Belém, Pará, Brazil
+   - Managed nine software and digital banking projects (mobile apps, digital onboarding, credit products), delivering seven within planned schedules and budgets.
+
+5. BANCO DO BRASIL S.A. (Apr 2005 - Feb 2014)
+   Business Banking Assistant | Brasília, Federal District, Brazil
+   - Managed portfolio of ~110 corporate clients, managing BRL 40M in business assets and contributing to BRL 120M in corporate financing.
+
+EDUCATION
+- Master of Science in Artificial Intelligence: American Global Tech University - USA | 2024 - 2026 (in progress)
+- Postgraduate Specialization in Process Automation with AI Agents: Data Science Academy | 2025 - 2026 (in progress)
+- Postgraduate Specialization in AI Engineering: Data Science Academy | 2024 - 2025
+- Technologist Degree in Artificial Intelligence: Centro Universitário Braz Cubas | 2023 - 2025
+- Technologist Degree in Big Data and Analytics: UNIASSELVI | 2021 - 2023
+- Postgraduate Specialization in Data Science, ML and AI: Facint / VincIT | 2021 - 2022
+- MBA in Project Management: UNIASSELVI | 2020 - 2021
+- Technologist Degree in Financial Management: AIEC | 2012 - 2014
+
+CERTIFICATIONS & LANGUAGES
+- Certifications: AWS Certified AI Practitioner | AWS Certified Solutions Architect - Associate | AWS Certified Cloud Practitioner | Google Advanced Data Analytics | CS50 AI with Python (Harvard) | IBM Professional Certificate in Generative AI for Data Scientists | DataCamp Associate Data Scientist.
+- Languages: English: Advanced (CEFR C1, business-level professional) | Portuguese: Native.

@@ -1,0 +1,60 @@
+ADILIO DE SOUSA FARIAS
+Cientista de Dados Sênior | Machine Learning | Fraude | Risco de Crédito | MLOps
+Brasília/DF | Disponível para modelo híbrido em São Paulo e remoto
+LinkedIn: linkedin.com/in/adiliofarias | Email: adiliobb@gmail.com | GitHub: github.com/Masteradilio
+
+RESUMO PROFISSIONAL
+Cientista de Dados com mais de 15 anos de experiência no setor financeiro, combinando conhecimento de negócio bancário com Machine Learning aplicado à prevenção a fraudes e risco de crédito. Experiência no desenvolvimento e operacionalização de modelos de antifraude PIX e Probabilidade de Inadimplência, além de componentes de PD, LGD, EAD e EL/ECL aplicados à gestão de risco. Entregas recentes incluem modelo antifraude PIX com Recall de 97% e FPR inferior a 1%, pipeline semanal de MLOps para milhões de transações e modelo de risco de crédito aplicado a ~700 mil clientes.
+
+COMPETÊNCIAS-CHAVE
+- Data Science & Machine Learning: Python, SQL, Pandas, NumPy, Scikit-learn, PyTorch, modelagem estatística, feature engineering, validação de modelos, classificação, classes desbalanceadas, Deep Learning.
+- Fraude & Risco de Crédito: Prevenção a fraudes, PIX, Probabilidade de Inadimplência, PD, LGD, EAD, EL/ECL, IFRS 9, classificação de risco e análise de crédito.
+- Big Data & MLOps: PySpark, Spark, Hadoop, Hive, Impala, HDFS, Airflow, Oozie, MLOps, Docker, Git/GitLab.
+- Analytics & Cloud: Power BI, Streamlit, Matplotlib, Plotly, AWS, GCP e Databricks.
+- IA Generativa: LLMs, RAG, agentes de IA e LangChain/LangGraph.
+
+EXPERIÊNCIA PROFISSIONAL
+1. BRB - Banco Regional de Brasília S.A. (jul/2025 - jul/2026)
+   Cientista de Dados e Machine Learning | Brasília/DF
+   - Liderei o desenvolvimento end-to-end de modelo de Machine Learning para prevenção a fraudes em transações PIX, alcançando Recall de 97% e FPR inferior a 1%.
+   - Estruturei pipeline semanal de MLOps para milhões de transações, automatizando preparação de dados, treinamento, validação, geração de artefatos, monitoramento de drift e publicação de métricas.
+   - Otimizei workflow crítico de processamento de dados, reduzindo o tempo de execução de mais de 2 horas para aproximadamente 24 minutos, ganho superior a 80%.
+   - Desenvolvi pipelines de ingestão e transformação utilizados por cinco áreas de negócio, aumentando a disponibilidade e a confiabilidade dos dados analíticos.
+   - Construí dashboards e aplicações analíticas com Power BI, Streamlit e Python que reduziram em 27% o tempo necessário para acompanhamento de indicadores operacionais.
+   - Implementei soluções com LLMs, RAG e agentes de IA que reduziram em 41% o tempo de investigação e suporte técnico em processos de dados.
+
+2. BANPARÁ - Banco do Estado do Pará S.A. (jan/2024 - jun/2025)
+   Cientista de Dados | Belém/PA
+   - Desenvolvi e implantei em produção modelo de Probabilidade de Inadimplência utilizado na classificação de risco de aproximadamente 700 mil clientes bancários, alcançando acurácia de 91%.
+   - Desenvolvi componentes analíticos de PD, LGD, EAD e EL/ECL, integrando probabilidade de default, exposição, recuperação e estágios de risco segundo conceitos de IFRS 9.
+   - Automatizei processos de análise e reanálise de crédito, reduzindo em 50% o tempo médio das avaliações manuais realizadas pelos analistas.
+   - Automatizei o cálculo de Perda Esperada, aumentando padronização, rastreabilidade e confiabilidade dos resultados.
+   - Desenvolvi solução RAG para consulta a aproximadamente 30 documentos internos e apoiei áreas de negócio e tecnologia.
+
+3. COMPASS UOL (mar/2023 - ago/2023)
+   Estagiário em Engenharia de Dados AWS | Remoto
+   - Desenvolvi pipelines de ingestão, transformação e análise com Python, SQL, Pandas, NumPy e Apache Spark em ambiente AWS.
+   - Construí soluções com IAM, EC2, VPC, Lambda, Step Functions, EMR, Glue, Athena e QuickSight (~80 GB de dados).
+   - Automatizei fluxos ETL com AWS Glue e Lambda, reduzindo em 67% o tempo de processamento.
+
+4. BANPARÁ - Banco do Estado do Pará S.A. (dez/2020 - jan/2024)
+   Gerente de Projetos Pleno | Belém/PA
+   - Gerenciei nove projetos de software e digital banking, entregando 7 dentro dos prazos e orçamentos com Scrum.
+
+5. BANCO DO BRASIL S.A. (abr/2005 - fev/2014)
+   Assistente de Negócios | Brasília/DF
+   - Gerenciei carteira de ~110 clientes PJ, administrando R$ 40 milhões em negócios e gerando R$ 120 milhões em financiamentos empresariais.
+
+FORMAÇÃO ACADÊMICA
+- Mestrado em Inteligência Artificial: American Global Tech University - EUA | 2024 - 2026 (em andamento)
+- Pós-graduação em Automação de Processos com Agentes de IA: Data Science Academy | 2025 - 2026 (em andamento)
+- Pós-graduação em Engenharia de IA: Data Science Academy | 2024 - 2025
+- Tecnólogo em Inteligência Artificial: Centro Universitário Braz Cubas | 2023 - 2025
+- Tecnólogo em Big Data e Inteligência Analítica: UNIASSELVI | 2021 - 2023
+- Pós-graduação em Data Science, ML e IA: Facint / VincIT | 2021 - 2022
+- MBA em Gestão de Projetos: UNIASSELVI | 2020 - 2021
+- Tecnólogo em Gestão Financeira: AIEC | 2012 - 2014
+
+CERTIFICAÇÕES & IDIOMAS
+- Certificações: AWS Certified AI Practitioner | AWS Certified Solutions Architect - Associate | AWS Certified Cloud Practitioner | Google Advanced Data Analytics | CS50 AI with Python (Harvard) | IBM Professional Certificate in Generative AI for Data Scientists | DataCamp Associate Data Scientist.
+- Idiomas: Inglês: Avançado (C1, nível executivo/negócios) | Português: Nativo.

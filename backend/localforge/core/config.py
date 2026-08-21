@@ -546,21 +546,31 @@ def load_config(cli_args: dict[str, Any] | None = None) -> LocalForgeConfig:
     nvidia_api_key = env_value("NVIDIA_API_KEY")
     nvidia_url = env_value("NVIDIA_URL") or DEFAULT_NVIDIA_URL
 
-    # Free direct-provider lanes are declared once at the config boundary and
-    # consumed by both the Chief fallback factory and generic agent fallback
-    # code. They are never selected as the critical primary route.
-    free_routes: list[dict[str, str | None]] = []
-    if openrouter_free_model and openrouter_api_key:
-        free_routes.append(
+    configured_chief_provider = str(
+        config_dict["chief_engineer"].get("provider", "")
+    ).strip().lower()
+
+    # 4-Tier LLM Administration Ladder:
+    # Tier 1: Local llama.cpp / Ollama (Primary)
+    # Tier 2: OmniRoute Gateway (:20128 auto/best-free)
+    # Tier 3: NVIDIA API (if configured)
+    # Tier 4: OpenRouter Paid (last-resort critical fallback from .env)
+    cascade_routes: list[dict[str, str | None]] = []
+    
+    # Tier 2: OmniRoute gateway fallback
+    if configured_chief_provider in {"llamacpp", "llama.cpp", "local", "ollama"}:
+        cascade_routes.append(
             {
-                "provider": "openrouter",
-                "base_url": openrouter_url or DEFAULT_OPENROUTER_URL,
-                "model": openrouter_free_model,
-                "api_key": openrouter_api_key,
+                "provider": "omniroute",
+                "base_url": DEFAULT_OMNIROUTE_URL,
+                "model": "auto/best-free",
+                "api_key": None,
             }
         )
+
+    # Tier 3: NVIDIA direct API route
     if nvidia_model and nvidia_api_key:
-        free_routes.append(
+        cascade_routes.append(
             {
                 "provider": "nvidia",
                 "base_url": nvidia_url,
@@ -568,26 +578,10 @@ def load_config(cli_args: dict[str, Any] | None = None) -> LocalForgeConfig:
                 "api_key": nvidia_api_key,
             }
         )
-    if free_routes:
-        config_dict["models"]["fallback_routes"] = [
-            *config_dict["models"].get("fallback_routes", []),
-            *free_routes,
-        ]
-        config_dict["chief_engineer"]["fallback_routes"] = [
-            *config_dict["chief_engineer"].get("fallback_routes", []),
-            *free_routes,
-        ]
-    configured_chief_provider = str(
-        config_dict["chief_engineer"].get("provider", "")
-    ).strip().lower()
 
-    chief_provider_explicit = (
-        "provider" in chief_file_config
-        or env_value("LOCALFORGE_CHIEF_PROVIDER") is not None
-    )
-
-    if not chief_provider_explicit and openrouter_paid_model and openrouter_api_key:
-        config_dict["chief_engineer"].update(
+    # Tier 4: OpenRouter Paid (last-resort critical fallback)
+    if openrouter_paid_model and openrouter_api_key:
+        cascade_routes.append(
             {
                 "provider": "openrouter",
                 "base_url": openrouter_url or DEFAULT_OPENROUTER_URL,
@@ -595,23 +589,25 @@ def load_config(cli_args: dict[str, Any] | None = None) -> LocalForgeConfig:
                 "api_key": openrouter_api_key,
             }
         )
-        configured_chief_provider = "openrouter"
-    elif configured_chief_provider == "openrouter":
-        if not chief_base_url_explicit:
-            config_dict["chief_engineer"]["base_url"] = (
-                openrouter_url or DEFAULT_OPENROUTER_URL
-            )
-        if not chief_model_explicit and openrouter_paid_model:
-            config_dict["chief_engineer"]["model"] = openrouter_paid_model
-        if not chief_api_key_explicit and openrouter_api_key:
-            config_dict["chief_engineer"]["api_key"] = openrouter_api_key
-    elif configured_chief_provider == "nvidia":
-        if not chief_base_url_explicit:
-            config_dict["chief_engineer"]["base_url"] = nvidia_url
-        if not chief_model_explicit and nvidia_model:
-            config_dict["chief_engineer"]["model"] = nvidia_model
-        if not chief_api_key_explicit and nvidia_api_key:
-            config_dict["chief_engineer"]["api_key"] = nvidia_api_key
+    elif openrouter_free_model and openrouter_api_key:
+        cascade_routes.append(
+            {
+                "provider": "openrouter",
+                "base_url": openrouter_url or DEFAULT_OPENROUTER_URL,
+                "model": openrouter_free_model,
+                "api_key": openrouter_api_key,
+            }
+        )
+
+    if cascade_routes:
+        config_dict["models"]["fallback_routes"] = [
+            *config_dict["models"].get("fallback_routes", []),
+            *cascade_routes,
+        ]
+        config_dict["chief_engineer"]["fallback_routes"] = [
+            *config_dict["chief_engineer"].get("fallback_routes", []),
+            *cascade_routes,
+        ]
 
     for section in ("models", "chief_engineer"):
         provider = str(config_dict[section].get("provider", "")).strip().lower()
@@ -636,18 +632,15 @@ def load_config(cli_args: dict[str, Any] | None = None) -> LocalForgeConfig:
             "fallback_api_key": "LOCALFORGE_CHIEF_FALLBACK_API_KEY",
         }.items()
     )
-    # If the operator kept an explicit OmniRoute/local primary route and supplied
-    # OpenRouter credentials, make the paid route the bounded last-resort
-    # fallback. An explicit fallback configuration always wins, including an
-    # explicit empty value used to disable the automatic lane.
     if (
         not fallback_route_explicit
-        and configured_chief_provider.replace("_", "") in {"omniroute", "llamacpp", "llama.cpp", "local", "ollama"}
+        and configured_chief_provider.replace("_", "") == "omniroute"
         and openrouter_paid_model
         and openrouter_api_key
     ):
         fallback_provider_name = "openrouter"
         config_dict["chief_engineer"]["fallback_provider"] = fallback_provider_name
+
     if fallback_provider_name == "omni_route":
         fallback_provider_name = "omniroute"
     if fallback_provider_name:

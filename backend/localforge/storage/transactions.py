@@ -138,8 +138,17 @@ class UnitOfWork:
                     # a scheduler writer by attempting a needless commit.
                     await self.session.rollback()
                 else:
-                    # Commit changes on success
-                    await self.session.commit()
+                    # Commit changes on success with bounded lock retry
+                    import asyncio
+                    for attempt in range(3):
+                        try:
+                            await self.session.commit()
+                            break
+                        except Exception as commit_exc:
+                            if "locked" in str(commit_exc).lower() and attempt < 2:
+                                await asyncio.sleep(0.05 * (2 ** attempt))
+                                continue
+                            raise
             finally:
                 from localforge.services.model_calls import ModelCallLedgerService
 

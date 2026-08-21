@@ -247,3 +247,26 @@ def test_load_policy_validation(tmp_path):
     with pytest.raises(ValueError) as exc:
         load_policy(str(policy_file))
     assert "Policy validation failed" in str(exc.value)
+
+
+def test_four_tier_llm_ladder_configuration(tmp_path, monkeypatch):
+    """Verify that local llama.cpp primary configures OmniRoute -> NVIDIA -> OpenRouter Paid ladder."""
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".env").write_text(
+        "LOCALFORGE_CHIEF_PROVIDER=llamacpp\n"
+        "LOCALFORGE_CHIEF_BASE_URL=http://localhost:8080/v1\n"
+        "LOCALFORGE_CHIEF_MODEL=qwen3.8-27b\n"
+        "NVIDIA_LLM_MODEL=meta/llama-3.3-70b-instruct\n"
+        "NVIDIA_API_KEY=nvapi-test-key\n"
+        "OPENROUTER_PAID_MODEL=anthropic/claude-3.5-sonnet\n"
+        "OPENROUTER_API_KEY=sk-or-test-key\n",
+        encoding="utf-8",
+    )
+
+    config = load_config()
+
+    assert config.chief_engineer.provider == "llamacpp"
+    assert config.chief_engineer.model == "qwen3.8-27b"
+    providers = [r.provider for r in config.chief_engineer.fallback_routes]
+    assert providers == ["omniroute", "nvidia", "openrouter"]
+

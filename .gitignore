@@ -67,6 +67,7 @@ logs/
 *.db-journal
 artifacts/
 runs/
+graphify-out/
 
 # Git worktrees and generated branches
 .worktrees/

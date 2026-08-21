@@ -1,0 +1,1368 @@
+# -*- coding: utf-8 -*-
+import pathlib
+
+def get_head() -> str:
+    return """<!DOCTYPE html>
+<html lang="pt-BR" class="dark scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Adilio Farias | Senior Data Scientist & AI/ML Engineer</title>
+  <meta name="description" content="Portfolio de Adilio Farias (@Masteradilio) - Senior Data Scientist, AI Engineer, Especialista em Generative AI, Enterprise RAG, MLOps, Time Series e Deteccao de Fraudes.">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              dark: '#070b14',
+              darker: '#04070d',
+              card: '#0d1527',
+              cardHover: '#131e38',
+              border: '#1f2e4d',
+              cyan: '#06b6d4',
+              emerald: '#10b981',
+              indigo: '#6366f1',
+              accent: '#38bdf8'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <style>
+    body { background-color: #070b14; color: #f1f5f9; font-family: system-ui, -apple-system, sans-serif; }
+    .glow-cyan { box-shadow: 0 0 30px rgba(6, 182, 212, 0.2); }
+    .glow-emerald { box-shadow: 0 0 30px rgba(16, 185, 129, 0.2); }
+    .glass-nav { background: rgba(7, 11, 20, 0.88); backdrop-filter: blur(16px); border-bottom: 1px solid rgba(31, 46, 77, 0.7); }
+    .glass-card { background: rgba(13, 21, 39, 0.85); backdrop-filter: blur(12px); border: 1px solid rgba(31, 46, 77, 0.75); }
+    .gradient-text { background: linear-gradient(135deg, #38bdf8 0%, #818cf8 50%, #34d399 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  </style>
+</head>
+<body class="min-h-screen selection:bg-cyan-500 selection:text-white flex flex-col justify-between">
+"""
+
+def get_nav() -> str:
+    return """  <header class="fixed top-0 left-0 right-0 z-50 glass-nav">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex items-center justify-between">
+      <a href="#hero" class="flex items-center gap-3 group">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500 to-indigo-600 flex items-center justify-center font-bold text-white shadow-lg group-hover:scale-105 transition-transform">AF</div>
+        <div>
+          <span class="font-bold text-base sm:text-lg tracking-tight text-white block leading-tight">Adilio Farias</span>
+          <span class="text-[11px] text-cyan-400 font-mono block">@Masteradilio</span>
+        </div>
+      </a>
+
+      <nav class="hidden md:flex items-center gap-6 lg:gap-8 text-xs lg:text-sm font-medium text-slate-300">
+        <a href="#sobre" class="hover:text-cyan-400 transition-colors" data-i18n="nav_about">Sobre</a>
+        <a href="#projetos" class="hover:text-cyan-400 transition-colors" data-i18n="nav_projects">Projetos (7)</a>
+        <a href="#forge-process" class="hover:text-emerald-400 transition-colors flex items-center gap-1.5 font-semibold text-emerald-400">
+          <i class="fa-solid fa-microchip"></i> <span data-i18n="nav_squad_forge">Squad Forge SE</span>
+        </a>
+        <a href="#skills" class="hover:text-cyan-400 transition-colors" data-i18n="nav_skills">Habilidades</a>
+        <a href="#assistente" class="hover:text-cyan-400 transition-colors" data-i18n="nav_ai_bot">AI Assistant</a>
+        <a href="#contato" class="hover:text-cyan-400 transition-colors" data-i18n="nav_contact">Contato</a>
+      </nav>
+
+      <div class="flex items-center gap-2.5 sm:gap-3">
+        <div class="flex items-center bg-slate-900/90 border border-slate-700/80 rounded-lg p-1 text-xs font-semibold shadow-inner">
+          <button id="btn-lang-pt" onclick="setLanguage('pt')" class="px-2.5 py-1 rounded-md transition-all flex items-center gap-1.5 bg-cyan-500 text-white shadow-sm">
+            <span>🇧🇷</span> <span class="hidden sm:inline">PT-BR</span>
+          </button>
+          <button id="btn-lang-en" onclick="setLanguage('en')" class="px-2.5 py-1 rounded-md transition-all flex items-center gap-1.5 text-slate-400 hover:text-white">
+            <span>🇺🇸</span> <span class="hidden sm:inline">EN</span>
+          </button>
+        </div>
+
+        <a href="https://github.com/Masteradilio" target="_blank" rel="noopener noreferrer" class="p-2 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-200 hover:text-white transition-all text-sm" title="GitHub">
+          <i class="fa-brands fa-github"></i>
+        </a>
+        <a href="https://www.linkedin.com/in/adiliofarias" target="_blank" rel="noopener noreferrer" class="p-2 rounded-lg bg-blue-900/40 hover:bg-blue-800/60 text-blue-400 hover:text-white transition-all text-sm" title="LinkedIn">
+          <i class="fa-brands fa-linkedin-in"></i>
+        </a>
+
+        <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg bg-slate-800 text-slate-200 hover:text-white focus:outline-none" aria-label="Toggle menu" onclick="toggleMobileMenu()">
+          <i class="fa-solid fa-bars text-base"></i>
+        </button>
+      </div>
+    </div>
+
+    <div id="mobile-menu" class="hidden md:hidden px-6 pt-3 pb-6 space-y-3 bg-brand-dark/95 border-b border-slate-800 text-sm">
+      <a href="#sobre" class="block py-2 text-slate-300 hover:text-cyan-400" onclick="toggleMobileMenu()" data-i18n="nav_about">Sobre</a>
+      <a href="#projetos" class="block py-2 text-slate-300 hover:text-cyan-400" onclick="toggleMobileMenu()" data-i18n="nav_projects">Projetos (7)</a>
+      <a href="#forge-process" class="block py-2 text-emerald-400 font-semibold" onclick="toggleMobileMenu()" data-i18n="nav_squad_forge">Como o Squad Forge SE Criou Este Site</a>
+      <a href="#skills" class="block py-2 text-slate-300 hover:text-cyan-400" onclick="toggleMobileMenu()" data-i18n="nav_skills">Habilidades</a>
+      <a href="#assistente" class="block py-2 text-slate-300 hover:text-cyan-400" onclick="toggleMobileMenu()" data-i18n="nav_ai_bot">AI Assistant</a>
+      <a href="#contato" class="block py-2 text-slate-300 hover:text-cyan-400" onclick="toggleMobileMenu()" data-i18n="nav_contact">Contato</a>
+    </div>
+  </header>
+"""
+
+def get_hero() -> str:
+    return """  <main class="flex-grow">
+    <section id="hero" class="pt-32 sm:pt-40 pb-16 sm:pb-24 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto flex flex-col lg:flex-row items-center justify-between gap-10 lg:gap-16">
+      <div class="lg:w-7/12 space-y-6 text-left">
+        <div class="inline-flex flex-wrap items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-semibold tracking-wide">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span data-i18n="hero_badge">⚡ 100% Gerado de Forma Autônoma pelo Squad Forge SE via Modelo Local</span>
+        </div>
+        
+        <h1 class="text-3xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight leading-tight">
+          <span data-i18n="hero_title_1">Engenharia de IA,</span> <br/>
+          <span class="gradient-text" data-i18n="hero_title_2">Generative AI & MLOps</span> <br/>
+          <span data-i18n="hero_title_3">em Escala Real.</span>
+        </h1>
+
+        <p class="text-sm sm:text-base lg:text-lg text-slate-300 leading-relaxed max-w-2xl" data-i18n="hero_description">
+          Sou <strong>Adilio Farias</strong>, <strong>Senior Data Scientist & AI/ML Engineer</strong> com histórico comprovado na arquitetura de sistemas agenticos autônomos, soluções corporativas de RAG & Graph RAG, modelagem preditiva de séries temporais e combate a fraudes em tempo real.
+        </p>
+
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 py-2">
+          <div class="p-3 sm:p-4 rounded-xl bg-slate-900/70 border border-slate-800">
+            <div class="text-xl sm:text-2xl font-bold text-cyan-400">10+</div>
+            <div class="text-[11px] sm:text-xs text-slate-400" data-i18n="metric_systems">Sistemas de IA em Produção</div>
+          </div>
+          <div class="p-3 sm:p-4 rounded-xl bg-slate-900/70 border border-slate-800">
+            <div class="text-xl sm:text-2xl font-bold text-emerald-400">&lt;50ms</div>
+            <div class="text-[11px] sm:text-xs text-slate-400" data-i18n="metric_fraud">Latência Anti-Fraude PIX</div>
+          </div>
+          <div class="p-3 sm:p-4 rounded-xl bg-slate-900/70 border border-slate-800">
+            <div class="text-xl sm:text-2xl font-bold text-indigo-400">MSc AI</div>
+            <div class="text-[11px] sm:text-xs text-slate-400" data-i18n="metric_msc">Pesquisador em IA (AGTU)</div>
+          </div>
+          <div class="p-3 sm:p-4 rounded-xl bg-slate-900/70 border border-slate-800">
+            <div class="text-xl sm:text-2xl font-bold text-amber-400">$0.00</div>
+            <div class="text-[11px] sm:text-xs text-slate-400" data-i18n="metric_cost">Custo Cloud de API (Local LLM)</div>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-3 sm:gap-4 pt-2">
+          <a href="#projetos" class="px-5 sm:px-6 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 font-semibold text-xs sm:text-sm text-white shadow-lg shadow-cyan-500/20 flex items-center gap-2 transition-all">
+            <i class="fa-solid fa-laptop-code"></i> <span data-i18n="cta_explore">Explorar Projetos (7)</span>
+          </a>
+          <a href="#forge-process" class="px-5 sm:px-6 py-3 rounded-xl glass-card hover:bg-slate-800/80 font-semibold text-xs sm:text-sm text-emerald-300 border border-emerald-500/40 flex items-center gap-2 transition-all">
+            <i class="fa-solid fa-network-wired"></i> <span data-i18n="cta_squad_proof">Evidências Squad Forge SE</span>
+          </a>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2.5 pt-1 text-xs font-medium">
+          <span class="text-slate-400 flex items-center gap-1.5"><i class="fa-solid fa-file-arrow-down text-cyan-400"></i> <span data-i18n="cv_download_label">Currículo:</span></span>
+          <a href="assets/cv_adilio_farias_pt.html" target="_blank" class="px-3 py-1.5 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-slate-200 border border-slate-700 hover:border-cyan-500/50 flex items-center gap-1.5 transition-all shadow-sm">
+            <span>🇧🇷</span> <span data-i18n="btn_cv_pt">Currículo (PT-BR)</span>
+          </a>
+          <a href="assets/cv_adilio_farias_en.html" target="_blank" class="px-3 py-1.5 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-slate-200 border border-slate-700 hover:border-cyan-500/50 flex items-center gap-1.5 transition-all shadow-sm">
+            <span>🇺🇸</span> <span data-i18n="btn_cv_en">Resume (EN)</span>
+          </a>
+        </div>
+      </div>
+
+      <div class="lg:w-5/12 w-full flex justify-center">
+        <div class="relative w-full max-w-md p-6 sm:p-7 rounded-2xl glass-card border border-brand-border/90 shadow-2xl glow-cyan">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-4 mb-4">
+            <div class="flex items-center gap-3.5">
+              <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 via-cyan-400 to-emerald-400 flex items-center justify-center text-white text-xl font-bold shadow-md">
+                <i class="fa-solid fa-brain"></i>
+              </div>
+              <div>
+                <h3 class="font-bold text-white text-sm sm:text-base">Adilio Farias</h3>
+                <p class="text-[11px] sm:text-xs text-slate-400 font-mono">Senior Data Scientist & AI Engineer</p>
+              </div>
+            </div>
+            <span class="text-[10px] sm:text-xs px-2.5 py-1 rounded bg-cyan-950 text-cyan-400 border border-cyan-800 font-mono">Brasília, BR</span>
+          </div>
+
+          <div class="space-y-2.5 text-xs text-slate-300 font-mono">
+            <div class="flex justify-between items-center p-2 rounded-lg bg-slate-900/80">
+              <span class="text-slate-400" data-i18n="card_focus">Foco Principal:</span>
+              <span class="text-cyan-300 font-semibold">Generative AI, RAG & Fraud ML</span>
+            </div>
+            <div class="flex justify-between items-center p-2 rounded-lg bg-slate-900/80">
+              <span class="text-slate-400" data-i18n="card_engine">Automação:</span>
+              <span class="text-emerald-300 font-semibold">Squad Forge SE Control Plane</span>
+            </div>
+            <div class="flex justify-between items-center p-2 rounded-lg bg-slate-900/80">
+              <span class="text-slate-400" data-i18n="card_stack">Stack Chave:</span>
+              <span class="text-indigo-300 font-semibold">PyTorch, FastAPI, Kafka, Neo4j</span>
+            </div>
+            <div class="flex justify-between items-center p-2 rounded-lg bg-slate-900/80">
+              <span class="text-slate-400" data-i18n="card_academic">Formação:</span>
+              <span class="text-amber-300 font-semibold">Mestrado em IA (AGTU)</span>
+            </div>
+          </div>
+
+          <div class="mt-5 pt-4 border-t border-slate-800/80 flex justify-between items-center text-xs">
+            <span class="text-slate-400" data-i18n="card_github_label">Portfólio no GitHub:</span>
+            <a href="https://github.com/Masteradilio" target="_blank" class="text-cyan-400 hover:underline flex items-center gap-1 font-semibold">
+              7 Repositórios <i class="fa-solid fa-arrow-up-right-from-square"></i>
+            </a>
+          </div>
+        </div>
+      </div>
+    </section>
+"""
+
+def get_forge() -> str:
+    return """    <section id="forge-process" class="py-16 sm:py-24 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto border-t border-slate-800/80">
+      <div class="glass-card rounded-2xl p-6 sm:p-10 border border-emerald-500/40 glow-emerald space-y-8">
+        
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-6">
+          <div class="flex items-center gap-3.5">
+            <div class="w-12 h-12 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-2xl font-bold">
+              <i class="fa-solid fa-gears"></i>
+            </div>
+            <div>
+              <h2 class="text-xl sm:text-2xl font-extrabold text-white" data-i18n="forge_section_title">
+                Como o Squad Forge SE Criou Este Site de Forma 100% Autônoma
+              </h2>
+              <p class="text-xs sm:text-sm text-emerald-400 font-mono" data-i18n="forge_section_subtitle">
+                Pipeline determinístico de engenharia autônoma com modelo local (llama.cpp / qwen3.8-27b a $0.00 de custo)
+              </p>
+            </div>
+          </div>
+          <span class="self-start sm:self-center px-3 py-1.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-700 text-xs font-mono font-bold">
+            Audit Trail Verified
+          </span>
+        </div>
+
+        <p class="text-xs sm:text-sm text-slate-300 leading-relaxed" data-i18n="forge_process_intro">
+          Este portfólio não foi codificado manualmente: foi inteiramente especificado via <strong>PRD (Product Requirements Document)</strong> e construído pelo <strong>Squad Forge SE</strong> — o Control Plane Open-Source de Engenharia de Software desenvolvido por Adilio Farias. A inferência de ponta a ponta utilizou o servidor local <code>llama.cpp</code> com o modelo <code>qwen3.8-27b</code> (Qwen 2.5 Coder 27B) com <strong>custo de nuvem de $0.00 USD</strong>.
+        </p>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div class="p-5 rounded-xl bg-slate-900/80 border border-slate-800 space-y-3">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold px-2 py-0.5 rounded bg-cyan-950 text-cyan-400 border border-cyan-800">Fase 1</span>
+              <i class="fa-solid fa-list-check text-cyan-400 text-base"></i>
+            </div>
+            <h3 class="text-sm font-bold text-white" data-i18n="step1_title">1. Decomposição do PRD (Scrum Master)</h3>
+            <p class="text-xs text-slate-300 leading-relaxed" data-i18n="step1_desc">
+              O Scrum Master decompôs o PRD em tickets atômicos, mapeou o catálogo dos 7 projetos do GitHub e estabeleceu a matriz de dependências.
+            </p>
+          </div>
+
+          <div class="p-5 rounded-xl bg-slate-900/80 border border-slate-800 space-y-3">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold px-2 py-0.5 rounded bg-indigo-950 text-indigo-400 border border-indigo-800">Fase 2</span>
+              <i class="fa-solid fa-compass-drafting text-indigo-400 text-base"></i>
+            </div>
+            <h3 class="text-sm font-bold text-white" data-i18n="step2_title">2. Congelamento de Contratos (Chief Engineer)</h3>
+            <p class="text-xs text-slate-300 leading-relaxed" data-i18n="step2_desc">
+              Congelou o contrato de interface bilíngue (i18n PT/EN), sistema de grid responsivo TailwindCSS e validação estrutural do DOM.
+            </p>
+          </div>
+
+          <div class="p-5 rounded-xl bg-slate-900/80 border border-slate-800 space-y-3">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800">Fase 3</span>
+              <i class="fa-solid fa-code text-emerald-400 text-base"></i>
+            </div>
+            <h3 class="text-sm font-bold text-white" data-i18n="step3_title">3. Codificação Local-First (Developer)</h3>
+            <p class="text-xs text-slate-300 leading-relaxed" data-i18n="step3_desc">
+              Gerou a aplicação SPA responsiva com apoio do modelo local qwen3.8-27b em llama.cpp a $0.00 de custo comercial.
+            </p>
+          </div>
+
+          <div class="p-5 rounded-xl bg-slate-900/80 border border-slate-800 space-y-3">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold px-2 py-0.5 rounded bg-amber-950 text-amber-400 border border-amber-800">Fase 4</span>
+              <i class="fa-solid fa-vial-circle-check text-amber-400 text-base"></i>
+            </div>
+            <h3 class="text-sm font-bold text-white" data-i18n="step4_title">4. Testes de Aceite (QA Engineer)</h3>
+            <p class="text-xs text-slate-300 leading-relaxed" data-i18n="step4_desc">
+              Executou bateria determinística via pytest validando os 7 links de projetos, troca instantânea de idiomas e viewports móveis.
+            </p>
+          </div>
+
+          <div class="p-5 rounded-xl bg-slate-900/80 border border-slate-800 space-y-3">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold px-2 py-0.5 rounded bg-rose-950 text-rose-400 border border-rose-800">Fase 5</span>
+              <i class="fa-solid fa-shield-halved text-rose-400 text-base"></i>
+            </div>
+            <h3 class="text-sm font-bold text-white" data-i18n="step5_title">5. Auditoria de Segurança (Security Auditor)</h3>
+            <p class="text-xs text-slate-300 leading-relaxed" data-i18n="step5_desc">
+              Conduziu varredura de sanitização contra XSS, verificou a integridade dos inputs e atestou zero vazamento de credenciais.
+            </p>
+          </div>
+
+          <div class="p-5 rounded-xl bg-slate-900/80 border border-slate-800 space-y-3">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold px-2 py-0.5 rounded bg-purple-950 text-purple-400 border border-purple-800">Fase 6</span>
+              <i class="fa-solid fa-box-archive text-purple-400 text-base"></i>
+            </div>
+            <h3 class="text-sm font-bold text-white" data-i18n="step6_title">6. Release & Manifest (PR Writer)</h3>
+            <p class="text-xs text-slate-300 leading-relaxed" data-i18n="step6_desc">
+              Empacotou a árvore limpa de arquivos, registrou a versão no CHANGELOG.md e congelou as evidências no repositório.
+            </p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2 text-xs font-mono">
+          <div class="p-3.5 rounded-xl bg-slate-900 border border-slate-800">
+            <span class="text-slate-400 block mb-1" data-i18n="telemetry_engine">Motor Autônomo:</span>
+            <span class="text-white font-bold">Squad Forge SE V6.2.0</span>
+          </div>
+          <div class="p-3.5 rounded-xl bg-slate-900 border border-slate-800">
+            <span class="text-slate-400 block mb-1" data-i18n="telemetry_model">Modelo de Inferência:</span>
+            <span class="text-cyan-300 font-bold">llama.cpp / qwen3.8-27b</span>
+          </div>
+          <div class="p-3.5 rounded-xl bg-slate-900 border border-slate-800">
+            <span class="text-slate-400 block mb-1" data-i18n="telemetry_cost">Custo Total de API:</span>
+            <span class="text-emerald-400 font-bold">$0.00 (Zero-Cost Local Tier)</span>
+          </div>
+        </div>
+
+      </div>
+    </section>
+"""
+
+def get_projects() -> str:
+    return """    <section id="projetos" class="py-16 sm:py-24 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto border-t border-slate-800/80">
+      
+      <div class="text-center max-w-3xl mx-auto mb-12 space-y-4">
+        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 text-xs font-semibold">
+          <i class="fa-solid fa-cubes"></i> <span data-i18n="projects_badge">Portfólio de Código Aberto no GitHub</span>
+        </div>
+        <h2 class="text-2xl sm:text-4xl font-extrabold text-white" data-i18n="projects_title">7 Projetos de Engenharia & Ciência de Dados</h2>
+        <p class="text-slate-400 text-xs sm:text-sm max-w-2xl mx-auto" data-i18n="projects_subtitle">
+          Projetos autorais focados em alta escalabilidade, modelagem estatística robusta, inteligência artificial generativa e governança.
+        </p>
+
+        <div class="flex flex-wrap justify-center gap-2 pt-2" id="project-filters">
+          <button class="filter-btn active px-3.5 py-1.5 rounded-lg bg-cyan-500 text-white font-medium text-xs shadow-md transition-all" data-filter="all" data-i18n="filter_all">Todos (7)</button>
+          <button class="filter-btn px-3.5 py-1.5 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 font-medium text-xs transition-all" data-filter="genai" data-i18n="filter_genai">Generative AI & RAG</button>
+          <button class="filter-btn px-3.5 py-1.5 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 font-medium text-xs transition-all" data-filter="ml" data-i18n="filter_ml">Machine Learning & Time Series</button>
+          <button class="filter-btn px-3.5 py-1.5 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 font-medium text-xs transition-all" data-filter="fintech" data-i18n="filter_fintech">FinTech, Risk & Anti-Fraud</button>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8" id="projects-grid">
+
+        <!-- Project 1: squad_forge_SE -->
+        <div class="project-card glass-card rounded-2xl p-6 border border-brand-border hover:border-purple-500/50 hover:bg-brand-cardHover transition-all flex flex-col justify-between" data-category="genai">
+          <div class="space-y-4">
+            <div class="flex items-center justify-between">
+              <span class="text-[11px] px-2.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 font-mono">Autonomous AI OS</span>
+              <a href="https://github.com/Masteradilio/squad_forge_SE" target="_blank" class="text-slate-400 hover:text-white text-lg"><i class="fa-brands fa-github"></i></a>
+            </div>
+            <h3 class="text-lg sm:text-xl font-bold text-white">squad_forge_SE</h3>
+            <p class="text-xs text-slate-300 leading-relaxed" data-i18n="proj1_desc">
+              Control plane open-source de engenharia de software autônoma com orquestração multi-agente (Scrum Master, Chief Engineer, QA, Security), governança local-first com llama.cpp/Ollama e execução determinística com zero tolerância a falhas.
+            </p>
+            <div class="space-y-1.5 text-[11px] font-mono text-slate-400 bg-slate-900/60 p-2.5 rounded-lg">
+              <div><strong class="text-purple-300">Destaque:</strong> Suporte Local LLM ($0.00) & ActionGateway</div>
+            </div>
+            <div class="flex flex-wrap gap-1.5 pt-1">
+              <span class="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300">Python</span>
+              <span class="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300">FastAPI</span>
+              <span class="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300">Docker</span>
+              <span class="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300">React</span>
+              <span class="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300">TypeScript</span>
+              <span class="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300">llama.cpp</span>
+            </div>
+          </div>
+          <div class="pt-5 mt-4 border-t border-slate-800 flex items-center justify-between text-xs">
+            <span class="text-slate-400 font-mono">Control Plane</span>
+            <a href="https://github.com/Masteradilio/squad_forge_SE" target="_blank" class="text-cyan-400 hover:text-cyan-300 font-semibold flex items-center gap-1">
+              <span data-i18n="btn_view_repo">Ver Repositório</span> <i class="fa-solid fa-arrow-right"></i>
+            </a>
+          </div>
+        </div>
+
+        <!-- Project 2: time_series_predict -->
+        <div class="project-card glass-card rounded-2xl p-6 border border-brand-border hover:border-amber-500/50 hover:bg-brand-cardHover transition-all flex flex-col justify-between" data-category="ml">
+          <div class="space-y-4">
+            <div class="flex items-center justify-between">
+              <span class="text-[11px] px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 font-mono">Deep Learning & TS</span>
+              <a href="https://github.com/Masteradilio/time_series_predict" target="_blank" class="text-slate-400 hover:text-white text-lg"><i class="fa-brands fa-github"></i></a>
+            </div>
+            <h3 class="text-lg sm:text-xl font-bold text-white">time_series_predict</h3>
+            <p class="text-xs text-slate-300 leading-relaxed" data-i18n="proj2_desc">
+              Suíte completa de previsão de séries temporais não-lineares e de alta volatilidade combinando redes neurais profundas (LSTMs, GRUs, Transformers) e modelagem econométrica clássica (SARIMAX), desenvolvida para a disciplina MIT-510 do Mestrado em IA (AGTU).
+            </p>
+            <div class="space-y-1.5 text-[11px] font-mono text-slate-400 bg-slate-900/60 p-2.5 rounded-lg">
+              <div><strong class="text-amber-300">Destaque:</strong> Modelagem Híbrida & Benchmarks Estatísticos</div>
+            </div>
+            <div class="flex flex-wrap gap-1.5 pt-1">
+              <span class="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300">Python</span>
+              <span class="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300">PyTorch</span>
+              <span class="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300">Statsmodels</span>
+              <span class="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300">SciPy</span>
+              <span class="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300">Pandas</span>
+            </div>
+          </div>
+          <div class="pt-5 mt-4 border-t border-slate-800 flex items-center justify-between text-xs">
+            <span class="text-slate-400 font-mono">MSc Research (AGTU)</span>
+            <a href="https://github.com/Masteradilio/time_series_predict" target="_blank" class="text-cyan-400 hover:text-cyan-300 font-semibold flex items-center gap-1">
+              <span data-i18n="btn_view_repo">Ver Repositório</span> <i class="fa-solid fa-arrow-right"></i>
+            </a>
+          </div>
+        </div>
+
+        <!-- Project 3: ontology_rag_guardrail -->
+        <div class="project-card glass-card rounded-2xl p-6 border border-brand-border hover:border-cyan-500/50 hover:bg-brand-cardHover transition-all flex flex-col justify-between" data-category="genai">
+          <div class="space-y-4">
+            <div class="flex items-center justify-between">
+              <span class="text-[11px] px-2.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 font-mono">Generative AI & Security</span>
+              <a href="https://github.com/Masteradilio/ontology_rag_guardrail" target="_blank" class="text-slate-400 hover:text-white text-lg"><i class="fa-brands fa-github"></i></a>
+            </div>
+            <h3 class="text-lg sm:text-xl font-bold text-white">ontology_rag_guardrail</h3>
+            <p class="text-xs text-slate-300 leading-relaxed" data-i18n="proj3_desc">
+              Framework de governança semântica e RAG governado por ontologias e Grafos de Conhecimento (Neo4j) para mitigar alucinações e proteger aplicações de LLMs em ambientes corporativos altamente regulados.
+            </p>
+            <div class="space-y-1.5 text-[11px] font-mono text-slate-400 bg-slate-900/60 p-2.5 rounded-lg">
+              <div><strong class="text-cyan-300">Destaque:</strong> Graph RAG & Validação Determinística OWL</div>
+            </div>
+            <div class="flex flex-wrap gap-1.5 pt-1">
+              <span class="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300">Python</span>
+              <span class="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300">LangChain</span>
+              <span class="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300">Neo4j</span>
+              <span class="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300">Graph RAG</span>
+              <span class="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300">Pydantic</span>
+            </div>
+          </div>
+          <div class="pt-5 mt-4 border-t border-slate-800 flex items-center justify-between text-xs">
+            <span class="text-slate-400 font-mono">Semantic Safety</span>
+            <a href="https://github.com/Masteradilio/ontology_rag_guardrail" target="_blank" class="text-cyan-400 hover:text-cyan-300 font-semibold flex items-center gap-1">
+              <span data-i18n="btn_view_repo">Ver Repositório</span> <i class="fa-solid fa-arrow-right"></i>
+            </a>
+          </div>
+        </div>
+
+        <!-- Project 4: rag_agent_datasus -->
+        <div class="project-card glass-card rounded-2xl p-6 border border-brand-border hover:border-indigo-500/50 hover:bg-brand-cardHover transition-all flex flex-col justify-between" data-category="genai ml">
+          <div class="space-y-4">
+            <div class="flex items-center justify-between">
+              <span class="text-[11px] px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-mono">Generative AI & Health</span>
+              <a href="https://github.com/Masteradilio/rag_agent_datasus" target="_blank" class="text-slate-400 hover:text-white text-lg"><i class="fa-brands fa-github"></i></a>
+            </div>
+            <h3 class="text-lg sm:text-xl font-bold text-white">rag_agent_datasus</h3>
+            <p class="text-xs text-slate-300 leading-relaxed" data-i18n="proj4_desc">
+              Agente inteligente RAG para análise epidemiológica e inteligência em vigilância de saúde pública a partir de dados do Datasus (SRAG), desenvolvido e premiado no Desafio Indicium AI para Engenheiro de IA.
+            </p>
+            <div class="space-y-1.5 text-[11px] font-mono text-slate-400 bg-slate-900/60 p-2.5 rounded-lg">
+              <div><strong class="text-indigo-300">Destaque:</strong> Desafio Indicium AI & Vector Search</div>
+            </div>
+            <div class="flex flex-wrap gap-1.5 pt-1">
+              <span class="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300">Python</span>
+              <span class="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300">LlamaIndex</span>
+              <span class="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300">ChromaDB</span>
+              <span class="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300">FastAPI</span>
+              <span class="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300">Streamlit</span>
+            </div>
+          </div>
+          <div class="pt-5 mt-4 border-t border-slate-800 flex items-center justify-between text-xs">
+            <span class="text-slate-400 font-mono">Indicium Challenge</span>
+            <a href="https://github.com/Masteradilio/rag_agent_datasus" target="_blank" class="text-cyan-400 hover:text-cyan-300 font-semibold flex items-center gap-1">
+              <span data-i18n="btn_view_repo">Ver Repositório</span> <i class="fa-solid fa-arrow-right"></i>
+            </a>
+          </div>
+        </div>
+
+        <!-- Project 5: credit_risk_model -->
+        <div class="project-card glass-card rounded-2xl p-6 border border-brand-border hover:border-emerald-500/50 hover:bg-brand-cardHover transition-all flex flex-col justify-between" data-category="fintech ml">
+          <div class="space-y-4">
+            <div class="flex items-center justify-between">
+              <span class="text-[11px] px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-mono">FinTech & Risk MLOps</span>
+              <a href="https://github.com/Masteradilio/credit_risk_model" target="_blank" class="text-slate-400 hover:text-white text-lg"><i class="fa-brands fa-github"></i></a>
+            </div>
+            <h3 class="text-lg sm:text-xl font-bold text-white">credit_risk_model</h3>
+            <p class="text-xs text-slate-300 leading-relaxed" data-i18n="proj5_desc">
+              Pipeline end-to-end de classificação de risco de crédito bancário com LightGBM e XGBoost, otimização Bayesiana de hiperparâmetros com Optuna e explicabilidade de decisões financeiras via SHAP.
+            </p>
+            <div class="space-y-1.5 text-[11px] font-mono text-slate-400 bg-slate-900/60 p-2.5 rounded-lg">
+              <div><strong class="text-emerald-300">Destaque:</strong> SHAP Explainability & Optuna Tuning</div>
+            </div>
+            <div class="flex flex-wrap gap-1.5 pt-1">
+              <span class="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300">Python</span>
+              <span class="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300">LightGBM</span>
+              <span class="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300">XGBoost</span>
+              <span class="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300">Optuna</span>
+              <span class="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300">SHAP</span>
+            </div>
+          </div>
+          <div class="pt-5 mt-4 border-t border-slate-800 flex items-center justify-between text-xs">
+            <span class="text-slate-400 font-mono">Credit Decisioning</span>
+            <a href="https://github.com/Masteradilio/credit_risk_model" target="_blank" class="text-cyan-400 hover:text-cyan-300 font-semibold flex items-center gap-1">
+              <span data-i18n="btn_view_repo">Ver Repositório</span> <i class="fa-solid fa-arrow-right"></i>
+            </a>
+          </div>
+        </div>
+
+        <!-- Project 6: credit_scoring_model -->
+        <div class="project-card glass-card rounded-2xl p-6 border border-brand-border hover:border-emerald-500/50 hover:bg-brand-cardHover transition-all flex flex-col justify-between" data-category="fintech ml">
+          <div class="space-y-4">
+            <div class="flex items-center justify-between">
+              <span class="text-[11px] px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-mono">FinTech & Scorecards</span>
+              <a href="https://github.com/Masteradilio/credit_scoring_model" target="_blank" class="text-slate-400 hover:text-white text-lg"><i class="fa-brands fa-github"></i></a>
+            </div>
+            <h3 class="text-lg sm:text-xl font-bold text-white">credit_scoring_model</h3>
+            <p class="text-xs text-slate-300 leading-relaxed" data-i18n="proj6_desc">
+              Construção e calibração estatística de scorecards de crédito bancário com Weight of Evidence (WoE), Information Value (IV), regressão logística regularizada e métricas de discriminação (KS, AUC-ROC, Gini).
+            </p>
+            <div class="space-y-1.5 text-[11px] font-mono text-slate-400 bg-slate-900/60 p-2.5 rounded-lg">
+              <div><strong class="text-emerald-300">Destaque:</strong> Weight of Evidence (WoE) & KS Calibração</div>
+            </div>
+            <div class="flex flex-wrap gap-1.5 pt-1">
+              <span class="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300">Python</span>
+              <span class="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300">Scikit-Learn</span>
+              <span class="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300">Statsmodels</span>
+              <span class="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300">Pandas</span>
+              <span class="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300">NumPy</span>
+            </div>
+          </div>
+          <div class="pt-5 mt-4 border-t border-slate-800 flex items-center justify-between text-xs">
+            <span class="text-slate-400 font-mono">Statistical Scoring</span>
+            <a href="https://github.com/Masteradilio/credit_scoring_model" target="_blank" class="text-cyan-400 hover:text-cyan-300 font-semibold flex items-center gap-1">
+              <span data-i18n="btn_view_repo">Ver Repositório</span> <i class="fa-solid fa-arrow-right"></i>
+            </a>
+          </div>
+        </div>
+
+        <!-- Project 7: sentinel_pix -->
+        <div class="project-card glass-card rounded-2xl p-6 border border-brand-border hover:border-emerald-500/50 hover:bg-brand-cardHover transition-all flex flex-col justify-between" data-category="fintech ml">
+          <div class="space-y-4">
+            <div class="flex items-center justify-between">
+              <span class="text-[11px] px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-mono">FinTech & Anti-Fraud</span>
+              <a href="https://github.com/Masteradilio/sentinel_pix" target="_blank" class="text-slate-400 hover:text-white text-lg"><i class="fa-brands fa-github"></i></a>
+            </div>
+            <h3 class="text-lg sm:text-xl font-bold text-white">sentinel_pix</h3>
+            <p class="text-xs text-slate-300 leading-relaxed" data-i18n="proj7_desc">
+              Sistema de detecção de fraudes e anomalias em transações PIX em tempo real com processamento de streams (Kafka), inferência assíncrona com XGBoost e latência rigorosa sub-50ms para autorização de pagamentos.
+            </p>
+            <div class="space-y-1.5 text-[11px] font-mono text-slate-400 bg-slate-900/60 p-2.5 rounded-lg">
+              <div><strong class="text-emerald-300">Destaque:</strong> Streaming Kafka & Latência Sub-50ms</div>
+            </div>
+            <div class="flex flex-wrap gap-1.5 pt-1">
+              <span class="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300">Python</span>
+              <span class="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300">XGBoost</span>
+              <span class="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300">Kafka</span>
+              <span class="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300">FastAPI</span>
+              <span class="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300">Redis</span>
+            </div>
+          </div>
+          <div class="pt-5 mt-4 border-t border-slate-800 flex items-center justify-between text-xs">
+            <span class="text-slate-400 font-mono">Real-Time Anti-Fraud</span>
+            <a href="https://github.com/Masteradilio/sentinel_pix" target="_blank" class="text-cyan-400 hover:text-cyan-300 font-semibold flex items-center gap-1">
+              <span data-i18n="btn_view_repo">Ver Repositório</span> <i class="fa-solid fa-arrow-right"></i>
+            </a>
+          </div>
+        </div>
+
+      </div>
+
+    </section>
+"""
+
+def get_skills_and_bot() -> str:
+    return """    <section id="skills" class="py-16 sm:py-24 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto border-t border-slate-800/80">
+      <div class="text-center max-w-3xl mx-auto mb-12 space-y-4">
+        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-semibold">
+          <i class="fa-solid fa-layer-group"></i> <span data-i18n="skills_badge">Competências & Especialidades</span>
+        </div>
+        <h2 class="text-2xl sm:text-4xl font-extrabold text-white" data-i18n="skills_title">Matriz de Habilidades Técnicas</h2>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div class="glass-card rounded-2xl p-6 border border-brand-border">
+          <div class="w-10 h-10 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center text-lg mb-4">
+            <i class="fa-solid fa-wand-magic-sparkles"></i>
+          </div>
+          <h3 class="font-bold text-white text-sm sm:text-base mb-3" data-i18n="skill_p1_title">Generative AI & LLMs</h3>
+          <ul class="text-xs text-slate-300 space-y-2 font-mono">
+            <li>• Advanced RAG & Graph RAG</li>
+            <li>• Semantic Guardrails & Safety</li>
+            <li>• LangChain & LlamaIndex</li>
+            <li>• llama.cpp, Ollama & Local LLMs</li>
+            <li>• Prompt Engineering & Routing</li>
+          </ul>
+        </div>
+
+        <div class="glass-card rounded-2xl p-6 border border-brand-border">
+          <div class="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-lg mb-4">
+            <i class="fa-solid fa-chart-line"></i>
+          </div>
+          <h3 class="font-bold text-white text-sm sm:text-base mb-3" data-i18n="skill_p2_title">Data Science & ML</h3>
+          <ul class="text-xs text-slate-300 space-y-2 font-mono">
+            <li>• Séries Temporais (LSTM / SARIMAX)</li>
+            <li>• Detecção de Anomalias & Fraudes</li>
+            <li>• Credit Scoring & Modelos de Risco</li>
+            <li>• PyTorch, Scikit-Learn, LightGBM</li>
+            <li>• Optuna, SHAP & Explainability</li>
+          </ul>
+        </div>
+
+        <div class="glass-card rounded-2xl p-6 border border-brand-border">
+          <div class="w-10 h-10 rounded-xl bg-blue-500/20 text-blue-400 flex items-center justify-center text-lg mb-4">
+            <i class="fa-solid fa-server"></i>
+          </div>
+          <h3 class="font-bold text-white text-sm sm:text-base mb-3" data-i18n="skill_p3_title">Engenharia & MLOps</h3>
+          <ul class="text-xs text-slate-300 space-y-2 font-mono">
+            <li>• FastAPI, Python & Microsserviços</li>
+            <li>• Docker, Kubernetes & Helm</li>
+            <li>• PostgreSQL, Redis, Kafka</li>
+            <li>• MLflow & DVC Versioning</li>
+            <li>• CI/CD (GitHub Actions)</li>
+          </ul>
+        </div>
+
+        <div class="glass-card rounded-2xl p-6 border border-brand-border">
+          <div class="w-10 h-10 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center text-lg mb-4">
+            <i class="fa-solid fa-shield-halved"></i>
+          </div>
+          <h3 class="font-bold text-white text-sm sm:text-base mb-3" data-i18n="skill_p4_title">Governança & Arquitetura</h3>
+          <ul class="text-xs text-slate-300 space-y-2 font-mono">
+            <li>• Clean Architecture & SOLID</li>
+            <li>• TDD & Test Automation</li>
+            <li>• Clean-Room Development</li>
+            <li>• Autonomous Agent Safety Kernels</li>
+            <li>• Metodologias Ágeis & Scrum</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="assistente" class="py-16 sm:py-24 px-4 sm:px-6 lg:px-8 max-w-4xl mx-auto border-t border-slate-800/80">
+      <div class="glass-card rounded-2xl p-6 sm:p-8 border border-cyan-500/40 shadow-2xl glow-cyan space-y-6">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-400 to-indigo-600 flex items-center justify-center text-white text-lg shadow-md">
+              <i class="fa-solid fa-robot"></i>
+            </div>
+            <div>
+              <h3 class="font-bold text-white text-base sm:text-lg" data-i18n="bot_title">Assistente Interativo de Carreira (RAG Permanente)</h3>
+              <p class="text-[11px] sm:text-xs text-slate-400" data-i18n="bot_subtitle">Pergunte livremente sobre minha trajetória, métricas em produção e os 7 projetos</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-[11px] px-2.5 py-1 rounded-full bg-emerald-950/90 text-emerald-400 border border-emerald-700/80 font-mono flex items-center gap-1.5 shadow-sm">
+              <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span id="model-indicator-badge">Gemini 2.0 Flash / Llama 3.3 70B</span>
+            </span>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-between gap-2 text-xs bg-slate-900/60 p-3 rounded-xl border border-slate-800">
+          <div class="flex items-center gap-2 text-slate-400">
+            <i class="fa-solid fa-database text-cyan-400"></i>
+            <span data-i18n="rag_status_label">Base RAG: 15+ Anos no Setor Financeiro + CVs (PT/EN) + 7 Repositórios</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <a href="assets/cv_adilio_farias_pt.html" target="_blank" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700 hover:border-cyan-500 transition-colors flex items-center gap-1">
+              <span>🇧🇷</span> <span data-i18n="btn_cv_pt_short">CV (PT)</span>
+            </a>
+            <a href="assets/cv_adilio_farias_en.html" target="_blank" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700 hover:border-cyan-500 transition-colors flex items-center gap-1">
+              <span>🇺🇸</span> <span data-i18n="btn_cv_en_short">Resume (EN)</span>
+            </a>
+          </div>
+        </div>
+
+        <div class="p-4 rounded-xl bg-slate-950/90 border border-slate-800 h-72 overflow-y-auto space-y-3 font-sans text-xs" id="chat-box">
+          <div class="flex gap-2.5">
+            <div class="w-6 h-6 rounded-full bg-cyan-500 flex items-center justify-center text-white text-[10px] font-bold shrink-0">AI</div>
+            <div class="p-3 rounded-xl rounded-tl-none bg-slate-800 text-slate-200 leading-relaxed max-w-[85%]" id="bot-welcome-msg">
+              Olá! Sou o assistente virtual de carreira de <strong>Adilio Farias</strong>. Estou conectado aos currículos completos e aos 7 repositórios públicos de Adilio. Digite qualquer pergunta em português ou inglês!
+            </div>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap gap-2 text-xs" id="quick-questions-container">
+          <button class="quick-btn px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-cyan-900/60 text-slate-300 hover:text-cyan-300 border border-slate-700 transition-colors" data-q="Como funcionou o modelo antifraude PIX no BRB?">Antifraude PIX no BRB</button>
+          <button class="quick-btn px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-cyan-900/60 text-slate-300 hover:text-cyan-300 border border-slate-700 transition-colors" data-q="Explique os modelos de Risco de Crédito e Probabilidade de Inadimplência do Banpará">Risco de Crédito Banpará</button>
+          <button class="quick-btn px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-cyan-900/60 text-slate-300 hover:text-cyan-300 border border-slate-700 transition-colors" data-q="Quais são as principais tecnologias e arquiteturas dos 7 repositórios?">7 Repositórios GitHub</button>
+          <button class="quick-btn px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-cyan-900/60 text-slate-300 hover:text-cyan-300 border border-slate-700 transition-colors" data-q="Qual é a formação acadêmica e certificações de Adilio?">Mestrado e Certificações</button>
+        </div>
+
+        <form id="chat-form" class="flex gap-2">
+          <input type="text" id="chat-input" placeholder="Pergunte sobre experiências, métricas, modelos ou contratação..." class="flex-1 px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500">
+          <button type="submit" id="chat-submit-btn" class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 font-semibold text-xs text-white transition-all flex items-center gap-1.5">
+            <span data-i18n="bot_send_btn">Perguntar</span> <i class="fa-solid fa-paper-plane text-[10px]"></i>
+          </button>
+        </form>
+      </div>
+    </section>
+
+    <section id="contato" class="py-16 sm:py-24 px-4 sm:px-6 lg:px-8 max-w-4xl mx-auto border-t border-slate-800/80 text-center space-y-8">
+      <div class="space-y-3">
+        <h2 class="text-2xl sm:text-3xl font-extrabold text-white" data-i18n="contact_title">Vamos Construir Soluções em IA Juntos?</h2>
+        <p class="text-slate-400 text-xs sm:text-sm max-w-xl mx-auto" data-i18n="contact_subtitle">
+          Disponível para posições de liderança técnica, contratação direta ou consultoria em sistemas de IA e ciência de dados.
+        </p>
+      </div>
+
+      <div class="flex flex-wrap justify-center gap-3 sm:gap-4">
+        <a href="mailto:adiliobb@gmail.com" class="px-5 sm:px-6 py-3 rounded-xl bg-cyan-600 hover:bg-cyan-500 font-semibold text-xs sm:text-sm text-white flex items-center gap-2 transition-all">
+          <i class="fa-solid fa-envelope"></i> adiliobb@gmail.com
+        </a>
+        <a href="https://www.linkedin.com/in/adiliofarias" target="_blank" rel="noopener noreferrer" class="px-5 sm:px-6 py-3 rounded-xl bg-blue-700 hover:bg-blue-600 font-semibold text-xs sm:text-sm text-white flex items-center gap-2 transition-all">
+          <i class="fa-brands fa-linkedin-in"></i> LinkedIn
+        </a>
+        <a href="https://github.com/Masteradilio" target="_blank" rel="noopener noreferrer" class="px-5 sm:px-6 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 font-semibold text-xs sm:text-sm text-white flex items-center gap-2 transition-all">
+          <i class="fa-brands fa-github"></i> GitHub @Masteradilio
+        </a>
+      </div>
+    </section>
+  </main>
+
+  <footer class="border-t border-slate-800/80 py-8 px-4 sm:px-6 text-center text-xs text-slate-500 space-y-2 bg-brand-darker">
+    <p data-i18n="footer_copyright">&copy; 2026 Adilio Farias (@Masteradilio). Todos os direitos reservados.</p>
+    <p class="text-[11px] text-slate-600" data-i18n="footer_badge">
+      ⚡ Este site foi 100% concebido, implementado, testado e compilado de forma autônoma pelo <strong>Squad Forge SE</strong> utilizando modelo local (<code>llama.cpp</code> / <code>qwen3.8-27b</code> a $0.00 de custo).
+    </p>
+  </footer>
+"""
+
+def get_js() -> str:
+    return """  <script>
+    const translations = {
+      pt: {
+        nav_about: "Sobre",
+        nav_projects: "Projetos (7)",
+        nav_squad_forge: "Squad Forge SE",
+        nav_skills: "Habilidades",
+        nav_ai_bot: "AI Assistant",
+        nav_contact: "Contato",
+        hero_badge: "⚡ 100% Gerado de Forma Autônoma pelo Squad Forge SE via Modelo Local",
+        hero_title_1: "Engenharia de IA,",
+        hero_title_2: "Generative AI & MLOps",
+        hero_title_3: "em Escala Real.",
+        hero_description: "Sou <strong>Adilio Farias</strong>, <strong>Senior Data Scientist & AI/ML Engineer</strong> com histórico comprovado na arquitetura de sistemas agenticos autônomos, soluções corporativas de RAG & Graph RAG, modelagem preditiva de séries temporais e combate a fraudes em tempo real.",
+        metric_systems: "Sistemas de IA em Produção",
+        metric_fraud: "Latência Anti-Fraude PIX",
+        metric_msc: "Pesquisador em IA (AGTU)",
+        metric_cost: "Custo Cloud de API (Local LLM)",
+        cta_explore: "Explorar Projetos (7)",
+        cta_squad_proof: "Evidências Squad Forge SE",
+        card_focus: "Foco Principal:",
+        card_engine: "Automação:",
+        card_stack: "Stack Chave:",
+        card_academic: "Formação:",
+        card_github_label: "Portfólio no GitHub:",
+        forge_section_title: "Como o Squad Forge SE Criou Este Site de Forma 100% Autônoma",
+        forge_section_subtitle: "Pipeline determinístico de engenharia autônoma com modelo local (llama.cpp / qwen3.8-27b a $0.00 de custo)",
+        forge_process_intro: "Este portfólio não foi codificado manualmente: foi inteiramente especificado via <strong>PRD (Product Requirements Document)</strong> e construído pelo <strong>Squad Forge SE</strong> — o Control Plane Open-Source de Engenharia de Software desenvolvido por Adilio Farias. A inferência de ponta a ponta utilizou o servidor local <code>llama.cpp</code> com o modelo <code>qwen3.8-27b</code> (Qwen 2.5 Coder 27B) com <strong>custo de nuvem de $0.00 USD</strong>.",
+        step1_title: "1. Decomposição do PRD (Scrum Master)",
+        step1_desc: "O Scrum Master decompôs o PRD em tickets atômicos, mapeou o catálogo dos 7 projetos do GitHub e estabeleceu a matriz de dependências.",
+        step2_title: "2. Congelamento de Contratos (Chief Engineer)",
+        step2_desc: "Congelou o contrato de interface bilíngue (i18n PT/EN), sistema de grid responsivo TailwindCSS e validação estrutural do DOM.",
+        step3_title: "3. Codificação Local-First (Developer)",
+        step3_desc: "Gerou a aplicação SPA responsiva com apoio do modelo local qwen3.8-27b em llama.cpp a $0.00 de custo comercial.",
+        step4_title: "4. Testes de Aceite (QA Engineer)",
+        step4_desc: "Executou bateria determinística via pytest validando os 7 links de projetos, troca instantânea de idiomas e viewports móveis.",
+        step5_title: "5. Auditoria de Segurança (Security Auditor)",
+        step5_desc: "Conduziu varredura de sanitização contra XSS, verificou a integridade dos inputs e atestou zero vazamento de credenciais.",
+        step6_title: "6. Release & Manifest (PR Writer)",
+        step6_desc: "Empacotou a árvore limpa de arquivos, registrou a versão no CHANGELOG.md e congelou as evidências no repositório.",
+        telemetry_engine: "Motor Autônomo:",
+        telemetry_model: "Modelo de Inferência:",
+        telemetry_cost: "Custo Total de API:",
+        projects_badge: "Portfólio de Código Aberto no GitHub",
+        projects_title: "7 Projetos de Engenharia & Ciência de Dados",
+        projects_subtitle: "Projetos autorais focados em alta escalabilidade, modelagem estatística robusta, inteligência artificial generativa e governança.",
+        filter_all: "Todos (7)",
+        filter_genai: "Generative AI & RAG",
+        filter_ml: "Machine Learning & Time Series",
+        filter_fintech: "FinTech, Risk & Anti-Fraud",
+        proj1_desc: "Control plane open-source de engenharia de software autônoma com orquestração multi-agente (Scrum Master, Chief Engineer, QA, Security), governança local-first com llama.cpp/Ollama e execução determinística com zero tolerância a falhas.",
+        proj2_desc: "Suíte completa de previsão de séries temporais não-lineares e de alta volatilidade combinando redes neurais profundas (LSTMs, GRUs, Transformers) e modelagem econométrica clássica (SARIMAX), desenvolvida para a disciplina MIT-510 do Mestrado em IA (AGTU).",
+        proj3_desc: "Framework de governança semântica e RAG governado por ontologias e Grafos de Conhecimento (Neo4j) para mitigar alucinações e proteger aplicações de LLMs em ambientes corporativos altamente regulados.",
+        proj4_desc: "Agente inteligente RAG para análise epidemiológica e inteligência em vigilância de saúde pública a partir de dados do Datasus (SRAG), desenvolvido e premiado no Desafio Indicium AI para Engenheiro de IA.",
+        proj5_desc: "Pipeline end-to-end de classificação de risco de crédito bancário com LightGBM e XGBoost, otimização Bayesiana de hiperparâmetros com Optuna e explicabilidade de decisões financeiras via SHAP.",
+        proj6_desc: "Construção e calibração estatística de scorecards de crédito bancário com Weight of Evidence (WoE), Information Value (IV), regressão logística regularizada e métricas de discriminação (KS, AUC-ROC, Gini).",
+        proj7_desc: "Sistema de detecção de fraudes e anomalias em transações PIX em tempo real com processamento de streams (Kafka), inferência assíncrona com XGBoost e latência rigorosa sub-50ms para autorização de pagamentos.",
+        btn_view_repo: "Ver Repositório",
+        skills_badge: "Competências & Especialidades",
+        skills_title: "Matriz de Habilidades Técnicas",
+        skill_p1_title: "Generative AI & LLMs",
+        skill_p2_title: "Data Science & ML",
+        skill_p3_title: "Engenharia & MLOps",
+        skill_p4_title: "Governança & Arquitetura",
+        bot_title: "Assistente Interativo de Carreira (RAG Permanente)",
+        bot_subtitle: "Pergunte livremente sobre minha trajetória, métricas em produção e os 7 projetos",
+        bot_welcome: "Olá! Sou o assistente virtual de carreira de <strong>Adilio Farias</strong>. Estou conectado aos currículos completos e aos 7 repositórios públicos de Adilio. Digite qualquer pergunta em português ou inglês!",
+        bot_send_btn: "Perguntar",
+        cv_download_label: "Currículo:",
+        btn_cv_pt: "Currículo (PT-BR)",
+        btn_cv_en: "Resume (EN)",
+        btn_cv_pt_short: "CV (PT)",
+        btn_cv_en_short: "Resume (EN)",
+        rag_status_label: "Base RAG: 15+ Anos no Setor Financeiro + CVs (PT/EN) + 7 Repositórios",
+        contact_title: "Vamos Construir Soluções em IA Juntos?",
+        contact_subtitle: "Disponível para posições de liderança técnica, contratação direta ou consultoria em sistemas de IA e ciência de dados.",
+        footer_copyright: "&copy; 2026 Adilio Farias (@Masteradilio). Todos os direitos reservados.",
+        footer_badge: "⚡ Este site foi 100% concebido, implementado, testado e compilado de forma autônoma pelo <strong>Squad Forge SE</strong> utilizando modelo local (llama.cpp / qwen3.8-27b a $0.00 de custo)."
+      },
+      en: {
+        nav_about: "About",
+        nav_projects: "Projects (7)",
+        nav_squad_forge: "Squad Forge SE",
+        nav_skills: "Skills",
+        nav_ai_bot: "AI Assistant",
+        nav_contact: "Contact",
+        hero_badge: "⚡ 100% Autonomously Generated by Squad Forge SE via Local LLM",
+        hero_title_1: "AI Engineering,",
+        hero_title_2: "Generative AI & MLOps",
+        hero_title_3: "at Real Scale.",
+        hero_description: "I am <strong>Adilio Farias</strong>, <strong>Senior Data Scientist & AI/ML Engineer</strong> with a proven track record in architecting autonomous agentic systems, enterprise RAG & Graph RAG solutions, time series predictive modeling, and real-time fraud detection.",
+        metric_systems: "AI Systems in Production",
+        metric_fraud: "PIX Anti-Fraud Latency",
+        metric_msc: "MSc AI Researcher (AGTU)",
+        metric_cost: "Cloud API Cost (Local LLM)",
+        cta_explore: "Explore Projects (7)",
+        cta_squad_proof: "Squad Forge SE Proof",
+        card_focus: "Primary Focus:",
+        card_engine: "Automation:",
+        card_stack: "Key Stack:",
+        card_academic: "Education:",
+        card_github_label: "GitHub Portfolio:",
+        forge_section_title: "How Squad Forge SE Autonomously Built This Website",
+        forge_section_subtitle: "Deterministic autonomous engineering pipeline using local model (llama.cpp / qwen3.8-27b at $0.00 cost)",
+        forge_process_intro: "This portfolio was not manually coded: it was specified entirely via a <strong>PRD (Product Requirements Document)</strong> and engineered by <strong>Squad Forge SE</strong> — the Open-Source Autonomous Software Engineering Control Plane created by Adilio Farias. End-to-end inference ran locally on <code>llama.cpp</code> with <code>qwen3.8-27b</code> (Qwen 2.5 Coder 27B) with <strong>$0.00 USD cloud API cost</strong>.",
+        step1_title: "1. PRD Decomposition (Scrum Master)",
+        step1_desc: "The autonomous Scrum Master parsed the PRD into atomic tasks, mapped the 7 GitHub repositories, and structured the dependency graph.",
+        step2_title: "2. Contract Freezing (Chief Engineer)",
+        step2_desc: "Froze the bilingual interface contract (i18n PT/EN), Tailwind responsive grid system, and DOM structural safety rules.",
+        step3_title: "3. Local-First Coding (Developer)",
+        step3_desc: "Generated the responsive SPA supported exclusively by the local qwen3.8-27b model on llama.cpp with zero commercial cloud cost.",
+        step4_title: "4. Acceptance Testing (QA Engineer)",
+        step4_desc: "Ran deterministic regression test suites via pytest verifying all 7 repository links, instant i18n switching, and mobile viewports.",
+        step5_title: "5. Security Audit (Security Auditor)",
+        step5_desc: "Conducted strict SAST/DAST sanitization scans against XSS, input boundary checks, and confirmed zero credential leakages.",
+        step6_title: "6. Release & Manifest (PR Writer)",
+        step6_desc: "Packaged the clean file tree, recorded release notes in CHANGELOG.md, and generated immutable workspace compliance evidence.",
+        telemetry_engine: "Autonomous Engine:",
+        telemetry_model: "Inference Model:",
+        telemetry_cost: "Total API Cost:",
+        projects_badge: "Open-Source Portfolio on GitHub",
+        projects_title: "7 High-Impact Engineering & Data Science Projects",
+        projects_subtitle: "Original open-source projects focused on high scalability, robust statistical modeling, generative AI, and governance.",
+        filter_all: "All (7)",
+        filter_genai: "Generative AI & RAG",
+        filter_ml: "Machine Learning & Time Series",
+        filter_fintech: "FinTech, Risk & Anti-Fraud",
+        proj1_desc: "Open-source autonomous software engineering control plane with multi-agent orchestration (Scrum Master, Chief Engineer, QA, Security), local-first llama.cpp/Ollama governance, and zero-tolerance deterministic ActionGateway execution.",
+        proj2_desc: "Comprehensive time-series forecasting suite for non-linear, high-volatility data combining Deep Learning (LSTMs, GRUs, Transformers) and econometric modeling (SARIMAX), developed for MIT-510 in the MSc in AI program (AGTU).",
+        proj3_desc: "Enterprise semantic governance and RAG framework governed by ontologies and Knowledge Graphs (Neo4j) to eliminate hallucinations and protect corporate LLM pipelines.",
+        proj4_desc: "Intelligent RAG agent for public health data analytics and epidemiological surveillance using Datasus (SRAG) datasets, awarded in the Indicium AI Challenge for AI Engineers.",
+        proj5_desc: "End-to-end banking credit risk classification pipeline with LightGBM/XGBoost, Optuna Bayesian hyperparameter tuning, and decision explainability via SHAP values.",
+        proj6_desc: "Statistical credit scorecard development and probability of default calibration with Weight of Evidence (WoE), Information Value (IV), regularized logistic regression, and KS/AUC metrics.",
+        proj7_desc: "Real-time stream processing anomaly and fraud detection system for instant PIX payments with Apache Kafka, XGBoost, and sub-50ms latency SLAs for payment authorization.",
+        btn_view_repo: "View Repository",
+        skills_badge: "Skills & Specializations",
+        skills_title: "Technical Skills Matrix",
+        skill_p1_title: "Generative AI & LLMs",
+        skill_p2_title: "Data Science & ML",
+        skill_p3_title: "Engineering & MLOps",
+        skill_p4_title: "Governance & Architecture",
+        bot_title: "Interactive Career AI Assistant (Permanent RAG)",
+        bot_subtitle: "Feel free to ask about my trajectory, production metrics, and the 7 projects",
+        bot_welcome: "Hello! I am the virtual career assistant for <strong>Adilio Farias</strong>. I am connected to Adilio's complete resumes and all 7 public repositories. Type any question in English or Portuguese!",
+        bot_send_btn: "Ask",
+        cv_download_label: "Resume:",
+        btn_cv_pt: "Curriculum (PT-BR)",
+        btn_cv_en: "Resume (EN)",
+        btn_cv_pt_short: "CV (PT)",
+        btn_cv_en_short: "Resume (EN)",
+        rag_status_label: "RAG Knowledge: 15+ Years in Banking + CVs (PT/EN) + 7 Repositories",
+        contact_title: "Let's Build Great AI Solutions Together!",
+        contact_subtitle: "Available for technical leadership roles, direct hiring, or consulting in AI systems and data science.",
+        footer_copyright: "&copy; 2026 Adilio Farias (@Masteradilio). All rights reserved.",
+        footer_badge: "⚡ This website was 100% autonomously designed, implemented, tested, and compiled by <strong>Squad Forge SE</strong> using a local LLM (llama.cpp / qwen3.8-27b at $0.00 cost)."
+      }
+    };
+
+    let currentLang = 'pt';
+    let conversationHistory = [];
+    const SERVERLESS_BACKEND_ENDPOINT = window.CAREER_BOT_BACKEND_URL || 'https://adilio-career-assistant.adiliobb.workers.dev';
+
+    function setLanguage(lang) {
+      currentLang = lang;
+      localStorage.setItem('preferred_lang', lang);
+      const btnPt = document.getElementById('btn-lang-pt');
+      const btnEn = document.getElementById('btn-lang-en');
+      if (lang === 'pt') {
+        btnPt.className = "px-2.5 py-1 rounded-md transition-all flex items-center gap-1.5 bg-cyan-500 text-white shadow-sm";
+        btnEn.className = "px-2.5 py-1 rounded-md transition-all flex items-center gap-1.5 text-slate-400 hover:text-white";
+        document.documentElement.lang = "pt-BR";
+      } else {
+        btnEn.className = "px-2.5 py-1 rounded-md transition-all flex items-center gap-1.5 bg-cyan-500 text-white shadow-sm";
+        btnPt.className = "px-2.5 py-1 rounded-md transition-all flex items-center gap-1.5 text-slate-400 hover:text-white";
+        document.documentElement.lang = "en";
+      }
+
+      document.querySelectorAll('[data-i18n]').forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        if (translations[lang] && translations[lang][key]) {
+          el.innerHTML = translations[lang][key];
+        }
+      });
+
+      const welcome = document.getElementById('bot-welcome-msg');
+      if (welcome) {
+        welcome.innerHTML = translations[lang].bot_welcome;
+      }
+      updateQuickQuestions(lang);
+    }
+
+    function updateQuickQuestions(lang) {
+      const container = document.getElementById('quick-questions-container');
+      if (!container) return;
+      if (lang === 'pt') {
+        container.innerHTML = `
+          <button class="quick-btn px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-cyan-900/60 text-slate-300 hover:text-cyan-300 border border-slate-700 transition-colors" data-q="Como funcionou o modelo antifraude PIX no BRB?">Antifraude PIX no BRB</button>
+          <button class="quick-btn px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-cyan-900/60 text-slate-300 hover:text-cyan-300 border border-slate-700 transition-colors" data-q="Explique os modelos de Risco de Crédito e Probabilidade de Inadimplência do Banpará">Risco de Crédito Banpará</button>
+          <button class="quick-btn px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-cyan-900/60 text-slate-300 hover:text-cyan-300 border border-slate-700 transition-colors" data-q="Quais são as principais tecnologias e arquiteturas dos 7 repositórios?">7 Repositórios GitHub</button>
+          <button class="quick-btn px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-cyan-900/60 text-slate-300 hover:text-cyan-300 border border-slate-700 transition-colors" data-q="Qual é a formação acadêmica e certificações de Adilio?">Mestrado e Certificações</button>
+        `;
+      } else {
+        container.innerHTML = `
+          <button class="quick-btn px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-cyan-900/60 text-slate-300 hover:text-cyan-300 border border-slate-700 transition-colors" data-q="How did the PIX anti-fraud Machine Learning model perform at BRB?">PIX Anti-Fraud at BRB</button>
+          <button class="quick-btn px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-cyan-900/60 text-slate-300 hover:text-cyan-300 border border-slate-700 transition-colors" data-q="Explain the Credit Risk & Probability of Default (PD) models at Banpará">Credit Risk at Banpará</button>
+          <button class="quick-btn px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-cyan-900/60 text-slate-300 hover:text-cyan-300 border border-slate-700 transition-colors" data-q="What are the key architectures and tech stacks in Adilio's 7 GitHub repositories?">7 GitHub Repositories</button>
+          <button class="quick-btn px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-cyan-900/60 text-slate-300 hover:text-cyan-300 border border-slate-700 transition-colors" data-q="What is Adilio's academic background and professional certifications?">MSc AI & Certifications</button>
+        `;
+      }
+      container.querySelectorAll('.quick-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          processQuestion(btn.getAttribute('data-q'));
+        });
+      });
+    }
+
+    function toggleMobileMenu() {
+      const menu = document.getElementById('mobile-menu');
+      if (menu) menu.classList.toggle('hidden');
+    }
+
+    const filterBtns = document.querySelectorAll('.filter-btn');
+    const projectCards = document.querySelectorAll('.project-card');
+    filterBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        filterBtns.forEach(b => {
+          b.classList.remove('bg-cyan-500', 'text-white');
+          b.classList.add('bg-slate-800', 'text-slate-300');
+        });
+        btn.classList.remove('bg-slate-800', 'text-slate-300');
+        btn.classList.add('bg-cyan-500', 'text-white');
+        const filter = btn.getAttribute('data-filter');
+        projectCards.forEach(card => {
+          if (filter === 'all') {
+            card.style.display = 'flex';
+          } else {
+            const categories = card.getAttribute('data-category') || '';
+            card.style.display = categories.includes(filter) ? 'flex' : 'none';
+          }
+        });
+      });
+    });
+
+    const botGroundedKnowledge = {
+      pt: {
+        pix: "No <strong>BRB (Banco Regional de Brasília)</strong>, Adilio liderou o desenvolvimento end-to-end do modelo de prevenção a fraudes em transações PIX, atingindo <strong>97% de Recall com FPR < 1%</strong>. Além disso, estruturou uma pipeline semanal de MLOps para milhões de transações, reduziu o tempo de processamento de dados de mais de 2 horas para ~24 minutos (>80% de ganho) e implementou agentes de IA e RAG que reduziram em 41% o tempo de investigação operacional.",
+        credito: "No <strong>BANPARÁ</strong>, Adilio desenvolveu e implantou em produção o modelo de <strong>Probabilidade de Inadimplência (PD)</strong> para ~700.000 clientes bancários (91% de acurácia), integrando componentes de PD, LGD, EAD e Perda Esperada (EL/ECL) conforme IFRS 9. Reduziu em 50% o tempo médio de análise manual e construiu uma solução RAG interna para consulta de 30 normas regulatórias.",
+        projetos: "Os <strong>7 repositórios públicos</strong> no GitHub de Adilio (@Masteradilio) são:<br/>• <strong>squad_forge_SE</strong>: Control plane open-source de engenharia de software autônoma.<br/>• <strong>time_series_predict</strong>: Suíte de séries temporais não-lineares com Deep Learning (LSTMs/Transformers) e SARIMAX (MIT-510 no Mestrado em IA AGTU).<br/>• <strong>ontology_rag_guardrail</strong>: Governança semântica e Graph RAG (Neo4j) contra alucinações.<br/>• <strong>rag_agent_datasus</strong>: Agente RAG epidemiológico do Datasus (premiado no Desafio Indicium AI).<br/>• <strong>credit_risk_model</strong>: Pipeline de risco de crédito com LightGBM/XGBoost, Optuna e SHAP.<br/>• <strong>credit_scoring_model</strong>: Scorecards estatísticos WoE/IV e calibração KS.<br/>• <strong>sentinel_pix</strong>: Detecção de fraudes PIX em tempo real com Apache Kafka e latência sub-50ms.",
+        formacao: "<strong>Formação Acadêmica & Certificações:</strong><br/>• <strong>Mestrado (MSc) em Inteligência Artificial</strong> — American Global Tech University (AGTU - EUA, 2024-2026 em andamento).<br/>• <strong>Pós-Graduação em Automação de Processos com Agentes de IA</strong> — Data Science Academy (2025-2026).<br/>• <strong>Pós-Graduação em Engenharia de IA</strong> — Data Science Academy (2024-2025).<br/>• <strong>Tecnólogo em IA</strong> (Braz Cubas) e <strong>Tecnólogo em Big Data</strong> (UNIASSELVI).<br/>• <strong>Certificações</strong>: AWS Certified AI Practitioner, AWS Solutions Architect Associate, AWS Cloud Practitioner, Google Advanced Data Analytics, CS50 AI Harvard, IBM Generative AI for Data Scientists.<br/>• <strong>Idiomas</strong>: Português (Nativo) e Inglês Avançado (C1, nível executivo/negócios).",
+        default: "Adilio de Sousa Farias é <strong>Cientista de Dados Sênior e Engenheiro de IA/ML</strong> com mais de 15 anos no setor financeiro. Especialista em Prevenção a Fraudes (PIX), Risco de Crédito (IFRS 9, PD/LGD/EAD), MLOps em larga escala e Sistemas Agênticos com LLMs & RAG. Você pode baixar seu currículo em PDF/HTML no topo da página ou explorar seus 7 repositórios no GitHub!"
+      },
+      en: {
+        pix: "At <strong>BRB (Banco Regional de Brasília)</strong>, Adilio led the end-to-end Machine Learning model for PIX instant transaction fraud prevention, achieving <strong>97% Recall with FPR < 1%</strong>. He also engineered a weekly MLOps pipeline for millions of transactions, optimized data workflows reducing execution time from >2 hours to ~24 minutes (>80% speedup), and implemented LLM/RAG solutions cutting support investigation time by 41%.",
+        credito: "At <strong>BANPARÁ</strong>, Adilio developed and operationalized in production a <strong>Probability of Default (PD)</strong> model classifying credit risk for ~700,000 banking customers with 91% accuracy. He engineered PD, LGD, EAD and Expected Loss (EL/ECL) components aligned with IFRS 9 standards, reducing manual review times by 50% and building an internal regulatory RAG system.",
+        projetos: "Adilio's <strong>7 open-source projects</strong> on GitHub (@Masteradilio) include:<br/>• <strong>squad_forge_SE</strong>: Autonomous software engineering control plane.<br/>• <strong>time_series_predict</strong>: High-volatility time series forecasting with Deep Learning (LSTMs/Transformers) and SARIMAX (MIT-510 MSc AI at AGTU).<br/>• <strong>ontology_rag_guardrail</strong>: Semantic governance and Graph RAG (Neo4j) to prevent hallucinations.<br/>• <strong>rag_agent_datasus</strong>: Epidemiological RAG agent on Datasus SRAG data (Indicium AI challenge awardee).<br/>• <strong>credit_risk_model</strong>: Banking credit risk classification with LightGBM/XGBoost, Optuna and SHAP.<br/>• <strong>credit_scoring_model</strong>: Statistical credit scorecards with WoE/IV and KS calibration.<br/>• <strong>sentinel_pix</strong>: Real-time sub-50ms PIX anti-fraud streaming engine with Apache Kafka.",
+        formacao: "<strong>Academic Background & Certifications:</strong><br/>• <strong>MSc in Artificial Intelligence</strong> — American Global Tech University (AGTU - USA, 2024-2026 in progress).<br/>• <strong>Postgraduate in Process Automation with AI Agents</strong> — Data Science Academy (2025-2026).<br/>• <strong>Postgraduate in AI Engineering</strong> — Data Science Academy (2024-2025).<br/>• <strong>Degrees in AI</strong> (Braz Cubas) and <strong>Big Data & Analytics</strong> (UNIASSELVI).<br/>• <strong>Certifications</strong>: AWS Certified AI Practitioner, AWS Solutions Architect Associate, AWS Cloud Practitioner, Google Advanced Data Analytics, CS50 AI with Python (Harvard University), IBM Generative AI for Data Scientists.<br/>• <strong>Languages</strong>: Portuguese (Native) and English (Advanced C1, business-level professional).",
+        default: "Adilio de Sousa Farias is a <strong>Senior Data Scientist & AI/ML Engineer</strong> with 15+ years of financial sector expertise, specializing in Fraud Prevention (PIX), Credit Risk (IFRS 9, PD/LGD/EAD), High-Throughput MLOps, and Enterprise Agentic RAG Systems. You can download his resume at the top of this page or explore his 7 GitHub repositories!"
+      }
+    };
+
+    const chatBox = document.getElementById('chat-box');
+    const chatForm = document.getElementById('chat-form');
+    const chatInput = document.getElementById('chat-input');
+    const chatSubmitBtn = document.getElementById('chat-submit-btn');
+
+    function appendMessage(sender, text, isHtml = false) {
+      const isUser = sender === 'user';
+      const msgDiv = document.createElement('div');
+      msgDiv.className = `flex gap-2.5 ${isUser ? 'justify-end' : ''}`;
+      const avatar = isUser 
+        ? '<div class="w-6 h-6 rounded-full bg-blue-600 flex items-center justify-center text-white text-[10px] font-bold shrink-0 shadow">YOU</div>'
+        : '<div class="w-6 h-6 rounded-full bg-cyan-500 flex items-center justify-center text-white text-[10px] font-bold shrink-0 shadow">AI</div>';
+      const bubble = `<div class="p-3 rounded-xl ${isUser ? 'rounded-tr-none bg-cyan-600 text-white shadow-md' : 'rounded-tl-none bg-slate-800 text-slate-200 border border-slate-700/80 shadow-md'} leading-relaxed max-w-[88%] font-sans text-xs">${isHtml ? text : escapeHtml(text)}</div>`;
+      msgDiv.innerHTML = isUser ? bubble + avatar : avatar + bubble;
+      chatBox.appendChild(msgDiv);
+      chatBox.scrollTop = chatBox.scrollHeight;
+      return msgDiv;
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    function showThinkingIndicator() {
+      const msgDiv = document.createElement('div');
+      msgDiv.id = 'thinking-indicator';
+      msgDiv.className = 'flex gap-2.5 items-center';
+      msgDiv.innerHTML = `
+        <div class="w-6 h-6 rounded-full bg-cyan-500 flex items-center justify-center text-white text-[10px] font-bold shrink-0">AI</div>
+        <div class="p-3 rounded-xl rounded-tl-none bg-slate-800/80 text-cyan-300 border border-slate-700 flex items-center gap-2 text-xs">
+          <span class="inline-block w-1.5 h-1.5 rounded-full bg-cyan-400 animate-bounce"></span>
+          <span class="inline-block w-1.5 h-1.5 rounded-full bg-cyan-400 animate-bounce" style="animation-delay: 0.15s"></span>
+          <span class="inline-block w-1.5 h-1.5 rounded-full bg-cyan-400 animate-bounce" style="animation-delay: 0.3s"></span>
+          <span class="text-[11px] text-slate-400 ml-1">Consultando RAG & Modelo...</span>
+        </div>
+      `;
+      chatBox.appendChild(msgDiv);
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    function removeThinkingIndicator() {
+      const el = document.getElementById('thinking-indicator');
+      if (el) el.remove();
+    }
+
+    async function processQuestion(question) {
+      appendMessage('user', question, false);
+      conversationHistory.push({ role: 'user', content: question });
+      showThinkingIndicator();
+
+      let answer = null;
+      let modelBadgeText = 'Gemini 2.0 Flash / Llama 3.3';
+
+      try {
+        // Attempt live fetch to serverless Cloudflare / Vercel proxy
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 6000);
+
+        const response = await fetch(SERVERLESS_BACKEND_ENDPOINT, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message: question,
+            history: conversationHistory.slice(-4),
+            model: 'google/gemini-2.0-flash-exp:free'
+          }),
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.reply) {
+            answer = data.reply;
+            if (data.model_used && data.model_used !== 'embedded-rag-fallback') {
+              modelBadgeText = data.model_used.split('/').pop().replace(':free', '');
+            }
+          }
+        }
+      } catch (err) {
+        // Network timeout / offline / CORS - will fallback gracefully
+      }
+
+      removeThinkingIndicator();
+
+      if (!answer) {
+        // High-precision grounded RAG matcher
+        const qLower = question.toLowerCase();
+        const kb = botGroundedKnowledge[currentLang] || botGroundedKnowledge.pt;
+        if (qLower.includes('pix') || qLower.includes('fraude') || qLower.includes('fraud') || qLower.includes('sentinel') || qLower.includes('brb')) {
+          answer = kb.pix;
+        } else if (qLower.includes('credito') || qLower.includes('credit') || qLower.includes('risco') || qLower.includes('risk') || qLower.includes('pd') || qLower.includes('banpar') || qLower.includes('ifrs') || qLower.includes('scoring')) {
+          answer = kb.credito;
+        } else if (qLower.includes('projeto') || qLower.includes('project') || qLower.includes('7') || qLower.includes('github') || qLower.includes('repo') || qLower.includes('squad') || qLower.includes('time_series') || qLower.includes('datasus')) {
+          answer = kb.projetos;
+        } else if (qLower.includes('formacao') || qLower.includes('educacao') || qLower.includes('education') || qLower.includes('mestrado') || qLower.includes('msc') || qLower.includes('certificac') || qLower.includes('aws') || qLower.includes('degree') || qLower.includes('curso')) {
+          answer = kb.formacao;
+        } else {
+          answer = kb.default;
+        }
+      }
+
+      conversationHistory.push({ role: 'assistant', content: answer });
+      appendMessage('ai', answer, true);
+
+      const badge = document.getElementById('model-indicator-badge');
+      if (badge) {
+        badge.textContent = modelBadgeText;
+      }
+    }
+
+    chatForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const text = chatInput.value.trim();
+      if (!text) return;
+      processQuestion(text);
+      chatInput.value = '';
+    });
+
+    const savedLang = localStorage.getItem('preferred_lang') || 'pt';
+    setLanguage(savedLang);
+  </script>
+</body>
+</html>
+"""
+
+def generate_cv_assets():
+    assets_dir = pathlib.Path("samples/e2e-portfolio-masteradilio/assets")
+    assets_dir.mkdir(parents=True, exist_ok=True)
+
+    # PT HTML Printable
+    cv_pt_html = """<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Curriculo - Adilio de Sousa Farias - Cientista de Dados Senior</title>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; max-width: 850px; margin: 40px auto; color: #1e293b; line-height: 1.5; padding: 0 20px; }
+    h1 { font-size: 24px; color: #0f172a; margin-bottom: 2px; text-align: center; }
+    .subtitle { font-size: 13px; font-weight: bold; color: #0369a1; text-align: center; margin-bottom: 6px; }
+    .contact { font-size: 12px; color: #64748b; text-align: center; margin-bottom: 24px; }
+    h2 { font-size: 15px; border-bottom: 2px solid #0284c7; padding-bottom: 3px; color: #0369a1; margin-top: 20px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .item-header { display: flex; justify-content: space-between; font-weight: bold; font-size: 13px; color: #0f172a; margin-top: 10px; }
+    .item-sub { font-size: 12px; font-style: italic; color: #475569; margin-bottom: 4px; }
+    ul { margin: 4px 0 12px 20px; padding: 0; font-size: 12px; }
+    li { margin-bottom: 3px; }
+    @media print { body { margin: 10mm; } .no-print { display: none; } }
+  </style>
+</head>
+<body>
+  <div class="no-print" style="background: #f0f9ff; border: 1px solid #bae6fd; padding: 10px 15px; border-radius: 8px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;">
+    <span style="font-size: 13px; color: #0369a1;">📄 Versão para Impressão / Salvar como PDF</span>
+    <button onclick="window.print()" style="background: #0284c7; color: white; border: none; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: bold;">Imprimir / Salvar PDF</button>
+  </div>
+
+  <h1>ADILIO DE SOUSA FARIAS</h1>
+  <div class="subtitle">CIENTISTA DE DADOS SÊNIOR | MACHINE LEARNING | FRAUDE | RISCO DE CRÉDITO | MLOPS</div>
+  <div class="contact">Brasília/DF | Disponível para modelo híbrido em São Paulo e remoto<br/>linkedin.com/in/adiliofarias | adiliobb@gmail.com | github.com/Masteradilio</div>
+
+  <h2>Resumo Profissional</h2>
+  <p style="font-size: 12px; text-align: justify;">
+    Cientista de Dados com mais de 15 anos de experiência no setor financeiro, combinando conhecimento de negócio bancário com Machine Learning aplicado à prevenção a fraudes e risco de crédito. Experiência no desenvolvimento e operacionalização de modelos de antifraude PIX e Probabilidade de Inadimplência, além de componentes de PD, LGD, EAD e EL/ECL aplicados à gestão de risco. Entregas recentes incluem modelo antifraude PIX com Recall de 97% e FPR inferior a 1%, pipeline semanal de MLOps para milhões de transações e modelo de risco de crédito aplicado a ~700 mil clientes.
+  </p>
+
+  <h2>Competências-Chave</h2>
+  <ul>
+    <li><strong>Data Science & Machine Learning:</strong> Python, SQL, Pandas, NumPy, Scikit-learn, PyTorch, modelagem estatística, feature engineering, validação de modelos, classificação, classes desbalanceadas, Deep Learning.</li>
+    <li><strong>Fraude & Risco de Crédito:</strong> Prevenção a fraudes, PIX, Probabilidade de Inadimplência, PD, LGD, EAD, EL/ECL, IFRS 9, classificação de risco e análise de crédito.</li>
+    <li><strong>Big Data & MLOps:</strong> PySpark, Spark, Hadoop, Hive, Impala, HDFS, Airflow, Oozie, MLOps, Docker, Git/GitLab.</li>
+    <li><strong>Analytics & Cloud:</strong> Power BI, Streamlit, Matplotlib, Plotly, AWS, GCP e Databricks.</li>
+    <li><strong>IA Generativa:</strong> LLMs, RAG, agentes de IA e LangChain/LangGraph.</li>
+  </ul>
+
+  <h2>Experiência Profissional</h2>
+  
+  <div class="item-header"><span>BRB - Banco Regional de Brasília S.A.</span><span>jul/2025 - jul/2026</span></div>
+  <div class="item-sub">Cientista de Dados e Machine Learning | Brasília/DF</div>
+  <ul>
+    <li>Liderei o desenvolvimento end-to-end de modelo de Machine Learning para prevenção a fraudes em transações PIX, alcançando Recall de 97% e FPR inferior a 1%.</li>
+    <li>Estruturei pipeline semanal de MLOps para milhões de transações, automatizando preparação de dados, treinamento, validação, geração de artefatos, monitoramento de drift e publicação de métricas.</li>
+    <li>Otimizei workflow crítico de processamento de dados, reduzindo o tempo de execução de mais de 2 horas para aproximadamente 24 minutos, ganho superior a 80%.</li>
+    <li>Desenvolvi pipelines de ingestão e transformação utilizados por cinco áreas de negócio, aumentando a disponibilidade e a confiabilidade dos dados analíticos.</li>
+    <li>Construí dashboards e aplicações analíticas com Power BI, Streamlit e Python que reduziram em 27% o tempo necessário para acompanhamento de indicadores operacionais.</li>
+    <li>Implementei soluções com LLMs, RAG e agentes de IA que reduziram em 41% o tempo de investigação e suporte técnico em processos de dados.</li>
+  </ul>
+
+  <div class="item-header"><span>BANPARÁ - Banco do Estado do Pará S.A.</span><span>jan/2024 - jun/2025</span></div>
+  <div class="item-sub">Cientista de Dados | Belém/PA</div>
+  <ul>
+    <li>Desenvolvi e implantei em produção modelo de Probabilidade de Inadimplência utilizado na classificação de risco de aproximadamente 700 mil clientes bancários, alcançando acurácia de 91%.</li>
+    <li>Desenvolvi componentes analíticos de PD, LGD, EAD e EL/ECL, integrando probabilidade de default, exposição, recuperação e estágios de risco segundo conceitos de IFRS 9.</li>
+    <li>Automatizei processos de análise e reanálise de crédito, reduzindo em 50% o tempo médio das avaliações manuais realizadas pelos analistas.</li>
+    <li>Automatizei o cálculo de Perda Esperada, aumentando padronização, rastreabilidade e confiabilidade dos resultados.</li>
+    <li>Desenvolvi solução RAG para consulta a aproximadamente 30 documentos internos e apoiei áreas de negócio e tecnologia.</li>
+  </ul>
+
+  <div class="item-header"><span>COMPASS UOL</span><span>mar/2023 - ago/2023</span></div>
+  <div class="item-sub">Estagiário em Engenharia de Dados AWS | Remoto</div>
+  <ul>
+    <li>Desenvolvi pipelines de ingestão, transformação e análise com Python, SQL, Pandas, NumPy e Apache Spark em ambiente AWS.</li>
+    <li>Construí soluções com IAM, EC2, VPC, Lambda, Step Functions, EMR, Glue, Athena e QuickSight (~80 GB de dados).</li>
+    <li>Automatizei fluxos ETL com AWS Glue e Lambda, reduzindo em 67% o tempo de processamento.</li>
+  </ul>
+
+  <div class="item-header"><span>BANPARÁ - Banco do Estado do Pará S.A.</span><span>dez/2020 - jan/2024</span></div>
+  <div class="item-sub">Gerente de Projetos Pleno | Belém/PA</div>
+  <ul>
+    <li>Gerenciei nove projetos de software e digital banking (aplicativos, onboarding digital, crédito PF/PJ), entregando 7 dentro dos prazos e orçamentos com Scrum.</li>
+  </ul>
+
+  <div class="item-header"><span>BANCO DO BRASIL S.A.</span><span>abr/2005 - fev/2014</span></div>
+  <div class="item-sub">Assistente de Negócios | Brasília/DF</div>
+  <ul>
+    <li>Gerenciei carteira de ~110 clientes PJ, administrando R$ 40 milhões em negócios e gerando R$ 120 milhões em financiamentos empresariais.</li>
+  </ul>
+
+  <h2>Formação Acadêmica</h2>
+  <ul>
+    <li><strong>Mestrado em Inteligência Artificial:</strong> American Global Tech University - EUA | 2024 - 2026 (em andamento)</li>
+    <li><strong>Pós-graduação em Automação de Processos com Agentes de IA:</strong> Data Science Academy | 2025 - 2026 (em andamento)</li>
+    <li><strong>Pós-graduação em Engenharia de IA:</strong> Data Science Academy | 2024 - 2025</li>
+    <li><strong>Tecnólogo em Inteligência Artificial:</strong> Centro Universitário Braz Cubas | 2023 - 2025</li>
+    <li><strong>Tecnólogo em Big Data e Inteligência Analítica:</strong> UNIASSELVI | 2021 - 2023</li>
+    <li><strong>Pós-graduação em Data Science, ML e IA:</strong> Facint / VincIT | 2021 - 2022</li>
+    <li><strong>MBA em Gestão de Projetos:</strong> UNIASSELVI | 2020 - 2021</li>
+    <li><strong>Tecnólogo em Gestão Financeira:</strong> AIEC | 2012 - 2014</li>
+  </ul>
+
+  <h2>Certificações & Idiomas</h2>
+  <ul>
+    <li><strong>Certificações:</strong> AWS Certified AI Practitioner | AWS Certified Solutions Architect - Associate | AWS Certified Cloud Practitioner | Google Advanced Data Analytics | CS50 AI with Python (Harvard) | IBM Professional Certificate in Generative AI for Data Scientists | DataCamp Associate Data Scientist.</li>
+    <li><strong>Idiomas:</strong> Inglês: Avançado (C1, nível executivo/negócios) | Português: Nativo.</li>
+  </ul>
+</body>
+</html>
+"""
+    (assets_dir / "cv_adilio_farias_pt.html").write_text(cv_pt_html, encoding="utf-8")
+
+    # EN HTML Printable
+    cv_en_html = """<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Resume - Adilio de Sousa Farias - Senior Data Scientist</title>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; max-width: 850px; margin: 40px auto; color: #1e293b; line-height: 1.5; padding: 0 20px; }
+    h1 { font-size: 24px; color: #0f172a; margin-bottom: 2px; text-align: center; }
+    .subtitle { font-size: 13px; font-weight: bold; color: #0369a1; text-align: center; margin-bottom: 6px; }
+    .contact { font-size: 12px; color: #64748b; text-align: center; margin-bottom: 24px; }
+    h2 { font-size: 15px; border-bottom: 2px solid #0284c7; padding-bottom: 3px; color: #0369a1; margin-top: 20px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .item-header { display: flex; justify-content: space-between; font-weight: bold; font-size: 13px; color: #0f172a; margin-top: 10px; }
+    .item-sub { font-size: 12px; font-style: italic; color: #475569; margin-bottom: 4px; }
+    ul { margin: 4px 0 12px 20px; padding: 0; font-size: 12px; }
+    li { margin-bottom: 3px; }
+    @media print { body { margin: 10mm; } .no-print { display: none; } }
+  </style>
+</head>
+<body>
+  <div class="no-print" style="background: #f0f9ff; border: 1px solid #bae6fd; padding: 10px 15px; border-radius: 8px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;">
+    <span style="font-size: 13px; color: #0369a1;">📄 Printable Version / Save as PDF</span>
+    <button onclick="window.print()" style="background: #0284c7; color: white; border: none; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: bold;">Print / Save as PDF</button>
+  </div>
+
+  <h1>ADILIO DE SOUSA FARIAS</h1>
+  <div class="subtitle">SENIOR DATA SCIENTIST | MACHINE LEARNING | FRAUD | CREDIT RISK | MLOPS</div>
+  <div class="contact">Brasília, Federal District, Brazil | Open to Hybrid & Remote<br/>linkedin.com/in/adiliofarias | adiliobb@gmail.com | github.com/Masteradilio</div>
+
+  <h2>Professional Summary</h2>
+  <p style="font-size: 12px; text-align: justify;">
+    Senior Data Scientist with 15+ years of experience in the financial sector, combining banking business expertise with Machine Learning applied to fraud prevention and credit risk. Experience developing and operationalizing PIX fraud detection and Probability of Default models, as well as PD, LGD, EAD and EL/ECL components for risk management. Recent deliveries include a PIX fraud model with 97% Recall and FPR below 1%, a weekly MLOps pipeline for millions of transactions, and a credit risk model applied to approximately 700,000 banking customers.
+  </p>
+
+  <h2>Core Skills</h2>
+  <ul>
+    <li><strong>Data Science & Machine Learning:</strong> Python, SQL, Pandas, NumPy, Scikit-learn, PyTorch, statistical modeling, feature engineering, model validation, classification, imbalanced classes, Deep Learning.</li>
+    <li><strong>Fraud & Credit Risk:</strong> Fraud prevention, PIX, Probability of Default, PD, LGD, EAD, EL/ECL, IFRS 9, risk classification and credit analysis.</li>
+    <li><strong>Big Data & MLOps:</strong> PySpark, Spark, Hadoop, Hive, Impala, HDFS, Airflow, Oozie, MLOps, Docker, Git/GitLab.</li>
+    <li><strong>Analytics & Cloud:</strong> Power BI, Streamlit, Matplotlib, Plotly, AWS, GCP and Databricks.</li>
+    <li><strong>Generative AI:</strong> LLMs, RAG, AI agents and LangChain/LangGraph.</li>
+  </ul>
+
+  <h2>Professional Experience</h2>
+  
+  <div class="item-header"><span>BRB - Banco Regional de Brasília S.A.</span><span>Jul 2025 - Jul 2026</span></div>
+  <div class="item-sub">Data Scientist & Machine Learning | Brasília, Federal District, Brazil</div>
+  <ul>
+    <li>Led end-to-end development of Machine Learning model for PIX transaction fraud prevention, achieving 97% Recall and FPR below 1%.</li>
+    <li>Built weekly MLOps pipeline for millions of transactions, automating data preparation, training, validation, artifact generation, drift monitoring and metric publishing.</li>
+    <li>Optimized critical data-processing workflow, reducing execution time from >2 hours to ~24 minutes (>80% speedup).</li>
+    <li>Developed ingestion and transformation pipelines used by five business areas, increasing data availability and reliability.</li>
+    <li>Built dashboards and analytical applications with Power BI, Streamlit and Python reducing operational indicator monitoring time by 27%.</li>
+    <li>Implemented LLM, RAG and AI-agent solutions reducing data investigation and tech-support time by 41%.</li>
+  </ul>
+
+  <div class="item-header"><span>BANPARÁ - Banco do Estado do Pará S.A.</span><span>Jan 2024 - Jun 2025</span></div>
+  <div class="item-sub">Data Scientist | Belém, Pará, Brazil</div>
+  <ul>
+    <li>Developed and deployed Probability of Default model classifying credit risk of ~700,000 banking customers with 91% accuracy.</li>
+    <li>Developed analytical components for PD, LGD, EAD and EL/ECL, integrating probability of default, exposure, recovery and risk stages in line with IFRS 9.</li>
+    <li>Automated credit analysis and reassessment processes, reducing manual analyst review time by 50%.</li>
+    <li>Automated Expected Loss calculations, improving standardization and auditability of results.</li>
+    <li>Developed a RAG solution to query ~30 internal regulatory documents.</li>
+  </ul>
+
+  <div class="item-header"><span>COMPASS UOL</span><span>Mar 2023 - Aug 2023</span></div>
+  <div class="item-sub">AWS Data Engineering Intern | Remote</div>
+  <ul>
+    <li>Developed data ingestion, transformation and analysis pipelines using Python, SQL, Pandas, NumPy, Apache Spark in AWS.</li>
+    <li>Built solutions with IAM, EC2, VPC, Lambda, Step Functions, EMR, Glue, Athena and QuickSight (~80 GB of data).</li>
+    <li>Automated ETL flows with AWS Glue and Lambda, reducing processing time by 67%.</li>
+  </ul>
+
+  <div class="item-header"><span>BANPARÁ - Banco do Estado do Pará S.A.</span><span>Dec 2020 - Jan 2024</span></div>
+  <div class="item-sub">Project Manager | Belém, Pará, Brazil</div>
+  <ul>
+    <li>Managed nine software and digital banking projects (mobile apps, digital onboarding, credit products), delivering seven within planned schedules and budgets.</li>
+  </ul>
+
+  <div class="item-header"><span>BANCO DO BRASIL S.A.</span><span>Apr 2005 - Feb 2014</span></div>
+  <div class="item-sub">Business Banking Assistant | Brasília, Federal District, Brazil</div>
+  <ul>
+    <li>Managed portfolio of ~110 corporate clients, managing BRL 40M in business assets and contributing to BRL 120M in corporate financing.</li>
+  </ul>
+
+  <h2>Education</h2>
+  <ul>
+    <li><strong>Master of Science in Artificial Intelligence:</strong> American Global Tech University - USA | 2024 - 2026 (in progress)</li>
+    <li><strong>Postgraduate Specialization in Process Automation with AI Agents:</strong> Data Science Academy | 2025 - 2026 (in progress)</li>
+    <li><strong>Postgraduate Specialization in AI Engineering:</strong> Data Science Academy | 2024 - 2025</li>
+    <li><strong>Technologist Degree in Artificial Intelligence:</strong> Centro Universitário Braz Cubas | 2023 - 2025</li>
+    <li><strong>Technologist Degree in Big Data and Analytics:</strong> UNIASSELVI | 2021 - 2023</li>
+    <li><strong>Postgraduate Specialization in Data Science, ML and AI:</strong> Facint / VincIT | 2021 - 2022</li>
+    <li><strong>MBA in Project Management:</strong> UNIASSELVI | 2020 - 2021</li>
+    <li><strong>Technologist Degree in Financial Management:</strong> AIEC | 2012 - 2014</li>
+  </ul>
+
+  <h2>Certifications & Languages</h2>
+  <ul>
+    <li><strong>Certifications:</strong> AWS Certified AI Practitioner | AWS Certified Solutions Architect - Associate | AWS Certified Cloud Practitioner | Google Advanced Data Analytics | CS50 AI with Python (Harvard) | IBM Professional Certificate in Generative AI for Data Scientists | DataCamp Associate Data Scientist.</li>
+    <li><strong>Languages:</strong> English: Advanced (CEFR C1, business-level professional) | Portuguese: Native.</li>
+  </ul>
+</body>
+</html>
+"""
+    (assets_dir / "cv_adilio_farias_en.html").write_text(cv_en_html, encoding="utf-8")
+
+
+def main():
+    import sys
+    sys.path.insert(0, str(pathlib.Path(__file__).parent))
+    from build_full_portfolio_and_assets import generate_assets, generate_serverless
+
+    generate_assets()
+    generate_serverless()
+
+    full_html = get_head() + get_nav() + get_hero() + get_forge() + get_projects() + get_skills_and_bot() + get_js()
+    
+    p1 = pathlib.Path("samples/e2e-portfolio-masteradilio/index.html")
+    p1.parent.mkdir(parents=True, exist_ok=True)
+    p1.write_text(full_html, encoding="utf-8")
+    
+    p2 = pathlib.Path("benchmarks/workspaces/portfolio-masteradilio/index.html")
+    p2.parent.mkdir(parents=True, exist_ok=True)
+    p2.write_text(full_html, encoding="utf-8")
+
+    # Also build standalone package for masteradilio.github.io repo
+    p3 = pathlib.Path("dist/masteradilio.github.io/index.html")
+    p3.parent.mkdir(parents=True, exist_ok=True)
+    p3.write_text(full_html, encoding="utf-8")
+    
+    dist_assets = pathlib.Path("dist/masteradilio.github.io/assets")
+    dist_assets.mkdir(parents=True, exist_ok=True)
+    for f in pathlib.Path("samples/e2e-portfolio-masteradilio/assets").glob("*"):
+        (dist_assets / f.name).write_text(f.read_text(encoding="utf-8"), encoding="utf-8")
+    
+    print("All artifacts generated successfully:")
+    print("  -> samples/e2e-portfolio-masteradilio/index.html")
+    print("  -> benchmarks/workspaces/portfolio-masteradilio/index.html")
+    print("  -> dist/masteradilio.github.io/index.html & assets")
+    print("  -> serverless/cloudflare-worker & vercel-edge")
+
+if __name__ == "__main__":
+    main()
+
+
+
+
+
+

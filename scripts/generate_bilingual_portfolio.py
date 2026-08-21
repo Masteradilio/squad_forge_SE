@@ -1002,7 +1002,7 @@ def get_js() -> str:
           body: JSON.stringify({
             message: question,
             history: conversationHistory.slice(-4),
-            model: 'google/gemini-2.0-flash-exp:free'
+            model: 'openrouter/free'
           }),
           signal: controller.signal
         });

@@ -466,29 +466,30 @@ Certifications:
 const RAG_SYSTEM_PROMPT = `""" + rag_raw + """`;
 
 const CANDIDATE_MODELS = [
-  'google/gemini-2.0-flash-exp:free',
-  'meta-llama/llama-3.3-70b-instruct:free',
-  'deepseek/deepseek-r1:free',
-  'qwen/qwen-2.5-72b-instruct:free',
-  'openrouter/free'
+  'openrouter/free',
+  'nvidia/nemotron-3.5-lightning:free',
+  'google/gemma-4-26b-a4b-it:free',
+  'openai/gpt-oss-20b:free',
+  'z-ai/glm-5.2:free',
+  'liquid/lfm-2.5-2.6b:free'
 ];
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     if (request.method === 'OPTIONS') {
       return new Response(null, {
         status: 204,
         headers: {
           'Access-Control-Allow-Origin': '*',
           'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Title, HTTP-Referer',
           'Access-Control-Max-Age': '86400'
         }
       });
     }
 
     if (request.method !== 'POST') {
-      return new Response(JSON.stringify({ status: 'online', service: 'Adilio Farias AI Career Assistant', version: '2026.1' }), {
+      return new Response(JSON.stringify({ status: 'online', service: 'Adilio Farias AI Career Assistant', version: '2026.2' }), {
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
       });
     }
@@ -506,7 +507,17 @@ export default {
         });
       }
 
-      const apiKey = (env && env.OPENROUTER_API_KEY) ? env.OPENROUTER_API_KEY : '';
+      let apiKey = '';
+      if (env) {
+        apiKey = env.OPENROUTER_API_KEY || env.OPENROUTER_KEY || env.OPEN_ROUTER_KEY || env.API_KEY || env.OPENROUTER_TOKEN || '';
+      }
+      if (!apiKey && body.api_key) {
+        apiKey = body.api_key;
+      }
+      if (!apiKey) {
+        apiKey = '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';
+      }
+      apiKey = String(apiKey).trim().replace(/^["']|["']$/g, '');
 
       const messages = [
         { role: 'system', content: RAG_SYSTEM_PROMPT },
@@ -554,6 +565,8 @@ export default {
             lastError = err.message;
           }
         }
+      } else {
+        lastError = 'OPENROUTER_API_KEY is not configured in Cloudflare Worker Environment Variables.';
       }
 
       return new Response(JSON.stringify({
